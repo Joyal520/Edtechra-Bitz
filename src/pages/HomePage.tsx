@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
+import { useAuth } from '@/context/AuthContext';
 
 export const HomePage: React.FC = () => {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -26,6 +27,8 @@ export const HomePage: React.FC = () => {
   const [uploadCategory, setUploadCategory] = useState('Science');
   const [uploadContent, setUploadContent] = useState('');
   const [uploadSubmitted, setUploadSubmitted] = useState(false);
+
+  const { user, openAuthModal } = useAuth();
 
   const {
     canInstall,
@@ -36,8 +39,20 @@ export const HomePage: React.FC = () => {
     triggerInstall
   } = usePWAInstall();
 
+  const handleOpenUpload = () => {
+    if (!user) {
+      openAuthModal('login');
+      return;
+    }
+    setUploadModalOpen(true);
+  };
+
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      openAuthModal('login');
+      return;
+    }
     setUploadSubmitted(true);
     setTimeout(() => {
       setUploadSubmitted(false);
@@ -103,7 +118,7 @@ export const HomePage: React.FC = () => {
 
                 {/* Upload CTA Button (Green) */}
                 <button
-                  onClick={() => setUploadModalOpen(true)}
+                  onClick={handleOpenUpload}
                   className="w-full sm:w-auto min-w-[140px] sm:min-w-[155px] py-2 sm:py-2.5 px-4 sm:px-5 bg-[#22c55e] hover:bg-[#16a34a] text-white rounded-full font-extrabold text-xs sm:text-sm md:text-base flex items-center justify-between gap-2.5 shadow-md hover:shadow-lg cta-btn-hover group"
                 >
                   <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform">

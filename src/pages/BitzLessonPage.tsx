@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 import { YouTubeVideo, QuizQuestion } from '@/types';
 import { youtubeClient } from '@/services/youtubeClient';
+import { useAuth } from '@/context/AuthContext';
 
 export const BitzLessonPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [video, setVideo] = useState<YouTubeVideo | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeStep, setActiveStep] = useState<number>(1);
@@ -71,6 +73,7 @@ export const BitzLessonPage: React.FC = () => {
 
     try {
       await youtubeClient.saveProgress({
+        userId: user?.id || 'guest-user',
         videoId: video.youtube_video_id,
         watched: true,
         quizCompleted: true,

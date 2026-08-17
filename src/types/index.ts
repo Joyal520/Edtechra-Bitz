@@ -80,10 +80,37 @@ export interface Category {
 
 export interface UserProfile {
   id: string;
-  name: string;
-  avatarUrl?: string;
-  totalXp: number;
-  currentLevel: number;
-  streakDays: number;
-  completedLessonsCount: number;
+  email: string;
+  full_name?: string | null;
+  name?: string; // UI alias
+  avatar_url?: string | null;
+  avatarUrl?: string; // UI alias
+  role: 'student' | 'admin';
+  created_at: string;
+  updated_at?: string;
+  totalXp?: number;
+  currentLevel?: number;
+  streakDays?: number;
+  completedLessonsCount?: number;
 }
+
+export interface AdminStats {
+  totalUsers: number;
+  totalStudents: number;
+  totalAdmins: number;
+  newUsersToday: number;
+  newUsersThisWeek: number;
+  newUsersThisMonth: number;
+}
+
+export interface AdminUserListItem {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: 'student' | 'admin';
+  created_at: string;
+  last_sign_in_at?: string | null;
+}
+
+export type AuthModalMode = 'login' | 'signup' | 'forgot_password';

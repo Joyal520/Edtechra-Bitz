@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
 import {
   getCachedOrFetchShorts,
   fetchFromYouTubeAPI,
@@ -23,6 +24,11 @@ const PORT = process.env.PORT || 3005;
 
 app.use(cors());
 app.use(express.json());
+
+// Initialize server-side Supabase client
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // In-memory / file-based student progress store for resilient persistence
 const PROGRESS_FILE = path.resolve(__dirname, 'server/data/progress_cache.json');
@@ -46,7 +52,7 @@ function saveProgress(progress) {
 }
 
 // ============================================================================
-// API ROUTES
+// API ROUTES: YOUTUBE & LEARNING
 // ============================================================================
 
 // 1. GET /api/youtube/shorts - Retrieve synchronized Shorts feed with filters
@@ -160,7 +166,7 @@ app.put('/api/youtube/content/:id', (req, res) => {
 // 5. POST /api/youtube/progress - Save student progress
 app.post('/api/youtube/progress', (req, res) => {
   try {
-    const { userId = 'alex-walker', videoId, watched, watchProgress, quizCompleted, quizScore, quizTotal, completed } = req.body;
+    const { userId = 'guest-user', videoId, watched, watchProgress, quizCompleted, quizScore, quizTotal, completed } = req.body;
     const progressMap = loadProgress();
 
     if (!progressMap[userId]) {
@@ -246,6 +252,111 @@ app.get('/api/youtube/progress/:userId', async (req, res) => {
 });
 
 // ============================================================================
+// ADMIN API ROUTES (Strict Server-Side Authorization Enforced)
+// ============================================================================
+
+// Middleware: Verify Admin Authentication
+async function verifyAdminAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Missing or invalid token' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase server client not initialized' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const { data: { user }, error: userError } = await serverSupabase.auth.getUser(token);
+
+    if (userError || !user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid authentication session' });
+    }
+
+    // Query profiles table to verify role === 'admin'
+    const { data: profile, error: profileError } = await serverSupabase
+      .from('profiles')
+      .select('role, email')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Access Denied: Administrator role required.' });
+    }
+
+    req.adminUser = user;
+    req.adminProfile = profile;
+    next();
+  } catch (err) {
+    console.error('Admin auth verification error:', err);
+    res.status(500).json({ success: false, error: 'Internal authorization failure' });
+  }
+}
+
+// GET /api/admin/stats - Server verified admin stats
+app.get('/api/admin/stats', verifyAdminAuth, async (req, res) => {
+  try {
+    const { data: rpcStats, error: rpcError } = await serverSupabase.rpc('get_admin_dashboard_stats');
+    if (!rpcError && rpcStats) {
+      return res.json({ success: true, data: rpcStats });
+    }
+
+    const { data: allProfiles, error: pErr } = await serverSupabase.from('profiles').select('*');
+    if (pErr) throw pErr;
+
+    const list = allProfiles || [];
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const stats = {
+      totalUsers: list.length,
+      totalStudents: list.filter(p => p.role === 'student').length,
+      totalAdmins: list.filter(p => p.role === 'admin').length,
+      newUsersToday: list.filter(p => new Date(p.created_at).getTime() >= (now - oneDay)).length,
+      newUsersThisWeek: list.filter(p => new Date(p.created_at).getTime() >= (now - 7 * oneDay)).length,
+      newUsersThisMonth: list.filter(p => new Date(p.created_at).getTime() >= (now - 30 * oneDay)).length
+    };
+
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('Error in /api/admin/stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve admin stats' });
+  }
+});
+
+// GET /api/admin/users - Server verified admin users list
+app.get('/api/admin/users', verifyAdminAuth, async (req, res) => {
+  try {
+    const { search = '', role = 'all', sort = 'desc' } = req.query;
+
+    const { data: rpcUsers, error: rpcErr } = await serverSupabase.rpc('get_admin_users', {
+      p_search: search,
+      p_role: role,
+      p_sort: sort
+    });
+
+    if (!rpcErr && rpcUsers) {
+      return res.json({ success: true, data: rpcUsers });
+    }
+
+    let query = serverSupabase.from('profiles').select('*');
+    if (role !== 'all') query = query.eq('role', role);
+    if (search.trim()) {
+      query = query.or(`email.ilike.%${search.trim()}%,full_name.ilike.%${search.trim()}%`);
+    }
+    query = query.order('created_at', { ascending: sort === 'asc' });
+
+    const { data: users, error: qErr } = await query;
+    if (qErr) throw qErr;
+
+    res.json({ success: true, data: users || [] });
+  } catch (error) {
+    console.error('Error in /api/admin/users:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve admin users' });
+  }
+});
+
+// ============================================================================
 // PRODUCTION STATIC ASSET SERVING & SPA FALLBACK
 // ============================================================================
 const distPath = path.resolve(__dirname, 'dist');
@@ -268,4 +379,3 @@ if (process.env.VERCEL !== '1') {
 }
 
 export default app;
-
