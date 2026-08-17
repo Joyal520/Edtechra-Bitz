@@ -238,14 +238,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
+      console.log('[Supabase Auth Diagnostic] Initiating signInWithEmail for:', email.trim());
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password
       });
 
       if (error) {
+        console.warn('[Supabase Auth Diagnostic] Login error:', {
+          message: error.message,
+          status: error.status,
+          code: (error as any).code
+        });
+
+        if (error.message.toLowerCase().includes('not confirmed') || (error as any).code === 'email_not_confirmed') {
+          return {
+            error: 'Your email has not been confirmed yet. Please check your email inbox (and spam folder) for the confirmation link sent by Supabase.'
+          };
+        }
+
         return { error: error.message };
       }
+
+      console.log('[Supabase Auth Diagnostic] Login success:', {
+        userId: data.user?.id,
+        email: data.user?.email,
+        hasSession: Boolean(data.session)
+      });
 
       if (data.user) {
         setUser(data.user);
@@ -257,6 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       closeAuthModal();
       return {};
     } catch (err: any) {
+      console.error('[Supabase Auth Diagnostic] Unexpected login failure:', err);
       return { error: err.message || 'An unexpected error occurred during sign in.' };
     }
   };
@@ -275,6 +295,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
+      console.log('[Supabase Auth Diagnostic] Initiating signUpWithEmail for:', email.trim(), 'with name:', trimmedName);
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -288,8 +309,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        console.warn('[Supabase Auth Diagnostic] SignUp error:', {
+          message: error.message,
+          status: error.status,
+          code: (error as any).code
+        });
+
+        if (error.message.toLowerCase().includes('invalid')) {
+          return {
+            error: 'Please enter a valid email address with a recognized domain (e.g. name@gmail.com, name@outlook.com).'
+          };
+        }
+
         return { error: error.message };
       }
+
+      console.log('[Supabase Auth Diagnostic] SignUp response:', {
+        userId: data.user?.id,
+        email: data.user?.email,
+        confirmed: Boolean(data.user?.confirmed_at),
+        hasSession: Boolean(data.session)
+      });
 
       if (data.user && data.session) {
         setUser(data.user);
@@ -300,10 +340,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { message: 'Account created successfully!' };
       }
 
+      // If email confirmation is enabled on Supabase
       return {
-        message: 'Account created! Please check your email inbox to confirm your registration.'
+        message: 'Account created! Please check your email inbox (and spam folder) for the confirmation link to activate your account.'
       };
     } catch (err: any) {
+      console.error('[Supabase Auth Diagnostic] Unexpected signup failure:', err);
       return { error: err.message || 'An unexpected error occurred during registration.' };
     }
   };

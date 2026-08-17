@@ -301,3 +301,16 @@ CREATE POLICY "Users manage own learning progress"
   ON public.youtube_learning_progress FOR ALL
   USING (auth.uid() = user_id OR public.is_admin())
   WITH CHECK (auth.uid() = user_id OR public.is_admin());
+
+-- ============================================================================
+-- 6. Schema & Table Grants for Supabase Anon, Authenticated & Service Roles
+-- ============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
