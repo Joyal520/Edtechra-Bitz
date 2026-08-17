@@ -13,8 +13,11 @@ import {
   CheckCircle2,
   FileText,
   Image as ImageIcon,
-  Code
+  Code,
+  Download
 } from 'lucide-react';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
+import { InstallAppModal } from '@/components/InstallAppModal';
 
 export const HomePage: React.FC = () => {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -23,6 +26,15 @@ export const HomePage: React.FC = () => {
   const [uploadCategory, setUploadCategory] = useState('Science');
   const [uploadContent, setUploadContent] = useState('');
   const [uploadSubmitted, setUploadSubmitted] = useState(false);
+
+  const {
+    canInstall,
+    isInstalled,
+    isIOS,
+    iosModalOpen,
+    setIosModalOpen,
+    triggerInstall
+  } = usePWAInstall();
 
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +50,7 @@ export const HomePage: React.FC = () => {
   return (
     <div className="w-full space-y-10 sm:space-y-16 pb-12 sm:pb-20">
       {/* ========================================================================= */}
-      {/* 1. HERO SECTION WITH NEW VERTICAL PAPER-CUT ARTWORK                       */}
+      {/* 1. HERO SECTION WITH VERTICAL PAPER-CUT ARTWORK                           */}
       {/* ========================================================================= */}
       <section className="relative w-full max-w-6xl mx-auto px-2 sm:px-4 pt-1 sm:pt-2">
         <div className="relative rounded-3xl sm:rounded-[36px] overflow-hidden border border-stone-200/80 shadow-md bg-[#fbfbf7]">
@@ -101,6 +113,24 @@ export const HomePage: React.FC = () => {
                   <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/80 group-hover:translate-x-0.5 transition-transform" />
                 </button>
               </div>
+
+              {/* Install App Hero Option (Desktop & Mobile) */}
+              {!isInstalled && (
+                <div className="pt-2 sm:pt-2.5">
+                  <button
+                    onClick={triggerInstall}
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-white/90 hover:bg-white text-[#0f233a] border border-stone-200/90 hover:border-[#026fc3] rounded-full shadow-2xs hover:shadow-xs text-[11px] sm:text-xs font-extrabold transition-all group active:scale-95"
+                    title="Install EdTechra-Bitz PWA"
+                  >
+                    <div className="w-5 h-5 rounded-full bg-brand-50 text-[#026fc3] flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Download className="w-3 h-3 stroke-[2.5]" />
+                    </div>
+                    <span>Install App</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500 font-semibold group-hover:text-slate-700">Learn anywhere</span>
+                  </button>
+                </div>
+              )}
 
             </div>
           </div>
@@ -182,7 +212,51 @@ export const HomePage: React.FC = () => {
 
 
       {/* ========================================================================= */}
-      {/* 3. STUDENT UPLOAD MODAL (Post moderation, reflections, project sharing)   */}
+      {/* 3. PWA INSTALLATION SECTION (Brand-Aligned Microlearning Card)            */}
+      {/* ========================================================================= */}
+      {!isInstalled && (
+        <section className="w-full max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="bg-gradient-to-tr from-white via-white to-blue-50/60 border border-stone-200/90 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-6">
+            
+            <div className="flex items-center gap-4">
+              <img
+                src="/logo.png"
+                alt="EdTechra-Bitz Official Logo"
+                className="w-16 h-16 sm:w-18 sm:h-18 rounded-3xl object-cover shadow-sm ring-2 ring-[#026fc3]/20 shrink-0"
+              />
+              <div className="space-y-1 text-left">
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2.5 py-0.5 bg-brand-50 text-[#026fc3] text-[10px] font-extrabold rounded-md border border-brand-200 uppercase tracking-wider">
+                    Progressive Web App
+                  </span>
+                  <span className="text-xs text-slate-400 font-semibold">Free</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-[#0f233a]">
+                  Learn Anywhere on Your Device
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                  Install EdTechra-Bitz to your home screen or desktop for fast, fullscreen microlearning with offline lesson support.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto shrink-0">
+              <button
+                onClick={triggerInstall}
+                className="w-full sm:w-auto px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-extrabold rounded-2xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 group"
+              >
+                <Download className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
+                <span>Install App</span>
+              </button>
+            </div>
+
+          </div>
+        </section>
+      )}
+
+
+      {/* ========================================================================= */}
+      {/* 4. STUDENT UPLOAD MODAL (Post moderation, reflections, project sharing)   */}
       {/* ========================================================================= */}
       {uploadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
@@ -360,6 +434,15 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* iOS / PWA Installation Modal */}
+      <InstallAppModal
+        isOpen={iosModalOpen}
+        onClose={() => setIosModalOpen(false)}
+        isIOS={isIOS}
+        hasNativePrompt={canInstall && !isIOS}
+        onNativeInstall={triggerInstall}
+      />
     </div>
   );
 };
