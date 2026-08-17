@@ -14,9 +14,10 @@ interface AuthContextType {
   openAuthModal: (mode?: AuthModalMode) => void;
   closeAuthModal: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
-  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error?: string; message?: string }>;
-  signInWithGoogle: () => Promise<{ error?: string }>;
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error?: string; message?: string }>;
+  signInWithGoogle: (pendingName?: string) => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string; message?: string }>;
+  updateProfileName: (newName: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -48,12 +49,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Error fetching profile from Supabase:', error.message);
       }
 
+      // Check if there was a pending name saved from Step 1 before Google OAuth
+      let effectiveName = data?.full_name || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
+      const pendingName = localStorage.getItem('edtechra_pending_name');
+
+      if ((!effectiveName || effectiveName === currentUser.email?.split('@')[0]) && pendingName?.trim()) {
+        effectiveName = pendingName.trim();
+        // Update database with the pending name
+        try {
+          await supabase
+            .from('profiles')
+            .update({ full_name: effectiveName, updated_at: new Date().toISOString() })
+            .eq('id', currentUser.id);
+          localStorage.removeItem('edtechra_pending_name');
+        } catch (err) {
+          console.warn('[AuthContext] Error applying pending name:', err);
+        }
+      } else if (pendingName) {
+        localStorage.removeItem('edtechra_pending_name');
+      }
+
       if (data) {
         const userProfile: UserProfile = {
           id: data.id,
           email: data.email || currentUser.email || '',
-          full_name: data.full_name || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '',
-          name: data.full_name || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '',
+          full_name: effectiveName || data.full_name || '',
+          name: effectiveName || data.full_name || '',
           avatar_url: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
           avatarUrl: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
           role: data.role === 'admin' ? 'admin' : 'student',
@@ -63,13 +84,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return userProfile;
       }
 
-      // If profile record does not yet exist in table (e.g. before trigger runs), build temporary fallback from session
+      // Fallback profile if record doesn't exist yet
       const fallbackRole = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : 'student';
       const fallbackProfile: UserProfile = {
         id: currentUser.id,
         email: currentUser.email || '',
-        full_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '',
-        name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '',
+        full_name: effectiveName,
+        name: effectiveName,
         avatar_url: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
         avatarUrl: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
         role: fallbackRole,
@@ -89,6 +110,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (p) setProfile(p);
     }
   }, [user, fetchUserProfile]);
+
+  // Update profile name in database & local state
+  const updateProfileName = async (newName: string): Promise<{ error?: string }> => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      return { error: 'Please enter a valid name.' };
+    }
+
+    if (!user || !supabase) {
+      return { error: 'Not authenticated.' };
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: trimmed,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      setProfile((prev) => (prev ? { ...prev, full_name: trimmed, name: trimmed } : null));
+      closeAuthModal();
+      return {};
+    } catch (err: any) {
+      return { error: err.message || 'Failed to update name.' };
+    }
+  };
 
   // Initialize Session on mount
   useEffect(() => {
@@ -111,7 +164,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSession(currentSession);
             setUser(currentSession.user);
             const userProfile = await fetchUserProfile(currentSession.user);
-            if (isMounted) setProfile(userProfile);
+            if (isMounted) {
+              setProfile(userProfile);
+              // If user is authenticated via Google but has no name, prompt for name
+              if (!userProfile?.full_name?.trim()) {
+                setAuthModalMode('name_prompt');
+                setAuthModalOpen(true);
+              }
+            }
           } else {
             setSession(null);
             setUser(null);
@@ -138,7 +198,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (newSession?.user) {
             const userProfile = await fetchUserProfile(newSession.user);
-            if (isMounted) setProfile(userProfile);
+            if (isMounted) {
+              setProfile(userProfile);
+              // If user logged in and has empty name, show name prompt
+              if (!userProfile?.full_name?.trim()) {
+                setAuthModalMode('name_prompt');
+                setAuthModalOpen(true);
+              }
+            }
           } else {
             if (isMounted) setProfile(null);
           }
@@ -198,9 +265,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUpWithEmail = async (
     email: string,
     password: string,
-    fullName?: string
+    fullName: string
   ): Promise<{ error?: string; message?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
+
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      return { error: 'Please enter your name.' };
+    }
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -208,8 +280,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         password,
         options: {
           data: {
-            full_name: fullName?.trim() || '',
-            name: fullName?.trim() || ''
+            full_name: trimmedName,
+            name: trimmedName
           },
           emailRedirectTo: `${window.location.origin}`
         }
@@ -237,11 +309,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Sign In with Google OAuth
-  const signInWithGoogle = async (): Promise<{ error?: string }> => {
+  const signInWithGoogle = async (pendingName?: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
-      // Dynamic redirect URL supporting both localhost & production Vercel URL
+      if (pendingName?.trim()) {
+        localStorage.setItem('edtechra_pending_name', pendingName.trim());
+      }
+
       const redirectUrl = `${window.location.origin}`;
 
       const { error } = await supabase.auth.signInWithOAuth({
@@ -314,6 +389,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUpWithEmail,
         signInWithGoogle,
         resetPassword,
+        updateProfileName,
         signOut,
         refreshProfile
       }}

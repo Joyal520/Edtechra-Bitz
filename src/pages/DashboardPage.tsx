@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
+import { getTimeBasedGreeting } from '@/utils/greeting';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, openAuthModal } = useAuth();
@@ -45,9 +46,10 @@ export const DashboardPage: React.FC = () => {
   }, [userId]);
 
   const totalXP = 100 + (stats.totalCompleted * 50) + (stats.quizzesCompleted * 25);
-  const displayName = profile?.full_name || profile?.name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Explorer';
+  const displayName = profile?.full_name || profile?.name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Learner';
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
-  const initials = (displayName || 'E').slice(0, 2).toUpperCase();
+  const initials = (displayName || 'L').slice(0, 2).toUpperCase();
+  const greetingHeading = getTimeBasedGreeting(displayName);
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
@@ -81,7 +83,7 @@ export const DashboardPage: React.FC = () => {
       {/* Profile Header */}
       <div className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[3px] shadow-sm">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[3px] shadow-sm shrink-0">
             <div className="w-full h-full rounded-[22px] bg-amber-100 flex items-center justify-center font-black text-2xl overflow-hidden">
               {avatarUrl ? (
                 <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
@@ -91,8 +93,8 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-[#0f233a]">{displayName}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black text-[#0f233a] tracking-tight">{greetingHeading}</h1>
               {isAdmin ? (
                 <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-black rounded-lg border border-purple-200 flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
@@ -101,12 +103,15 @@ export const DashboardPage: React.FC = () => {
               ) : (
                 <span className="px-2.5 py-0.5 bg-brand-50 text-brand-700 text-xs font-extrabold rounded-lg border border-brand-200 flex items-center gap-1">
                   <GraduationCap className="w-3.5 h-3.5 text-brand-600" />
-                  Student Explorer
+                  Student
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 font-mono">
-              {user?.email || 'Guest Mode'} • Microlearning on @EdTechraBitz Shorts
+            <p className="text-xs text-slate-500 mt-1">
+              {user?.email ? (
+                <span className="font-mono text-slate-400">{user.email} • </span>
+              ) : null}
+              Microlearning on @EdTechraBitz Shorts
             </p>
           </div>
         </div>

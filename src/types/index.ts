@@ -113,4 +113,4 @@ export interface AdminUserListItem {
   last_sign_in_at?: string | null;
 }
 
-export type AuthModalMode = 'login' | 'signup' | 'forgot_password';
+export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt';

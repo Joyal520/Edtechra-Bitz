@@ -11,12 +11,15 @@ import {
   Download,
   CheckCircle2,
   ShieldCheck,
-  LogOut
+  LogOut,
+  ChevronDown,
+  User as UserIcon
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
 import { AuthModal } from '@/components/AuthModal';
 import { useAuth } from '@/context/AuthContext';
+import { getFirstName } from '@/utils/greeting';
 
 export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -206,10 +209,10 @@ export const AppLayout: React.FC = () => {
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-[#026fc3]/40 transition-all"
+                  className="flex items-center gap-1.5 sm:gap-2 p-1 pr-2.5 rounded-full hover:bg-slate-100/90 transition-all border border-stone-200/80 bg-white shadow-2xs group"
                   aria-label="User Profile Menu"
                 >
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-2xs shrink-0 overflow-hidden">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs shrink-0 overflow-hidden">
                     {avatarUrl ? (
                       <img
                         src={avatarUrl}
@@ -217,11 +220,15 @@ export const AppLayout: React.FC = () => {
                         className="w-full h-full rounded-full object-cover bg-amber-100"
                       />
                     ) : (
-                      <div className="w-full h-full rounded-full bg-amber-100 flex items-center justify-center font-bold text-xs text-slate-800">
+                      <div className="w-full h-full rounded-full bg-amber-100 flex items-center justify-center font-black text-xs text-slate-800">
                         {initials}
                       </div>
                     )}
                   </div>
+                  <span className="font-extrabold text-xs text-[#0f233a] max-w-[85px] sm:max-w-[120px] truncate">
+                    {getFirstName(displayName)}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${userDropdownOpen ? 'rotate-180 text-[#026fc3]' : 'group-hover:text-slate-600'}`} />
                 </button>
 
                 {/* Dropdown Menu */}
@@ -255,7 +262,16 @@ export const AppLayout: React.FC = () => {
                         className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#026fc3] transition-colors"
                       >
                         <LayoutGrid className="w-4 h-4 text-slate-400" />
-                        <span>Student Dashboard</span>
+                        <span>Dashboard</span>
+                      </Link>
+
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#026fc3] transition-colors"
+                      >
+                        <UserIcon className="w-4 h-4 text-slate-400" />
+                        <span>Profile</span>
                       </Link>
 
                       {isAdmin && (
@@ -265,7 +281,7 @@ export const AppLayout: React.FC = () => {
                           className="flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-50 transition-colors"
                         >
                           <ShieldCheck className="w-4 h-4 text-purple-600" />
-                          <span>Admin Control Center</span>
+                          <span>Admin Panel</span>
                         </Link>
                       )}
                     </div>
@@ -276,7 +292,7 @@ export const AppLayout: React.FC = () => {
                         className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left"
                       >
                         <LogOut className="w-4 h-4" />
-                        <span>Sign Out</span>
+                        <span>Log Out</span>
                       </button>
                     </div>
                   </div>
@@ -430,7 +446,7 @@ export const AppLayout: React.FC = () => {
                   }
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Admin Control Center</span>
+                  <span>Admin Panel</span>
                 </NavLink>
               )}
 
