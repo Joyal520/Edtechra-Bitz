@@ -114,6 +114,89 @@ export const BitzLessonPage: React.FC = () => {
     );
   }
 
+  const isUpcoming = video.status === 'upcoming' || video.learning_content?.status === 'upcoming';
+
+  if (isUpcoming) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6 pb-16">
+        {/* Top Action Bar */}
+        <div className="flex items-center justify-between">
+          <Link
+            to="/explore"
+            className="inline-flex items-center gap-1.5 text-xs font-extrabold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-1.5 rounded-2xl shadow-xs transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Explore
+          </Link>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full flex items-center gap-1 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" /> Upcoming Lesson
+            </span>
+          </div>
+        </div>
+
+        {/* Lesson Header */}
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="px-2.5 py-0.5 bg-amber-500 text-white text-[10px] font-extrabold rounded-md uppercase tracking-wider">
+              {video.category}
+            </span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {video.duration_formatted || 'Short (15s)'}
+            </span>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs text-slate-400 font-semibold">
+              {new Date(video.published_at).toLocaleDateString()}
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-[#0f233a] tracking-tight">
+            {video.title}
+          </h1>
+        </div>
+
+        {/* Video Player */}
+        <div className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-sm space-y-6">
+          <div className="relative aspect-[9/16] max-w-[300px] mx-auto bg-black rounded-3xl overflow-hidden shadow-xl border border-slate-200">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${video.youtube_video_id}?autoplay=0&rel=0&playsinline=1`}
+              title={video.title}
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+
+          {/* Upcoming Notice Card */}
+          <div className="p-5 bg-gradient-to-br from-amber-50/90 to-orange-50/50 border border-amber-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2 text-amber-900 font-extrabold text-sm sm:text-base">
+              <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Interactive Learning Content In Production</span>
+            </div>
+            <p className="text-xs text-amber-800/90 leading-relaxed">
+              {video.description || `This Short is newly detected from @EdTechraBitz. Key takeaway summaries, 3 essential vocabulary terms, and interactive 3-question mastery checks are currently being prepared.`}
+            </p>
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <Link
+                to="/explore"
+                className="px-4 py-2 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-bold rounded-xl transition-all shadow-xs"
+              >
+                Browse Published Lessons
+              </Link>
+              <a
+                href={video.youtube_url || `https://www.youtube.com/watch?v=${video.youtube_video_id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-white border border-amber-200 text-amber-900 hover:bg-amber-100/50 text-xs font-bold rounded-xl transition-all"
+              >
+                Watch on YouTube
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const steps = [
     { id: 1, name: 'Watch', icon: Play },
     { id: 2, name: 'Understand', icon: BookOpen },

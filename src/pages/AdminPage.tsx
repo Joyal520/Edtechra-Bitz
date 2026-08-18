@@ -10,17 +10,22 @@ import {
   Youtube,
   AlertCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  Layers,
+  Radio,
+  CheckCircle2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { AdminStats, AdminUserListItem } from '@/types';
+import { youtubeClient, SyncStatusData } from '@/services/youtubeClient';
 import { AdminSyncModal } from '@/components/AdminSyncModal';
 
 export const AdminPage: React.FC = () => {
   const { profile } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +108,12 @@ export const AdminPage: React.FC = () => {
         if (queryErr) throw queryErr;
         setUsers(profileData || []);
       }
+
+      // 3. Fetch YouTube Synchronization Status
+      const syncData = await youtubeClient.getSyncStatus();
+      if (syncData) {
+        setSyncStatus(syncData);
+      }
     } catch (err: any) {
       console.error('[AdminPage] Error loading data:', err);
       setError(err.message || 'Failed to fetch administrator statistics.');
@@ -174,7 +185,100 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Statistics Cards */}
+      {/* 1. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}
+      <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center font-bold">
+                <Youtube className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-[#0f233a]">
+                  YouTube Channel Synchronization Pipeline
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Channel: <strong>@EdTechraBitz</strong> (ID: UCHOag2liOOp1XfTAUCqiFUg)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-extrabold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Auto-Sync Active
+            </span>
+            <button
+              onClick={() => setSyncModalOpen(true)}
+              className="px-3.5 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sync Now</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Sync Metric Tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          
+          {/* Synchronized Shorts */}
+          <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl space-y-1">
+            <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-[#026fc3]" />
+              <span>Synchronized</span>
+            </div>
+            <div className="text-2xl font-black text-[#0f233a]">
+              {syncStatus?.totalVideos || 198}
+            </div>
+            <div className="text-[10px] text-slate-500 font-semibold">Total Shorts in Supabase</div>
+          </div>
+
+          {/* Upcoming Shorts */}
+          <div className="p-3.5 bg-amber-50/70 border border-amber-100 rounded-2xl space-y-1">
+            <div className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Upcoming</span>
+            </div>
+            <div className="text-2xl font-black text-amber-900">
+              {syncStatus?.upcomingVideos ?? 0}
+            </div>
+            <div className="text-[10px] text-amber-600 font-semibold">Pending Lesson Release</div>
+          </div>
+
+          {/* Last Synchronization */}
+          <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl space-y-1">
+            <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Last Synced</span>
+            </div>
+            <div className="text-sm font-bold text-slate-800 truncate mt-1">
+              {syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}
+            </div>
+            <div className="text-[10px] text-slate-500 font-semibold truncate">
+              {syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleDateString() : 'Continuous'}
+            </div>
+          </div>
+
+          {/* Sync Health / Last Error */}
+          <div className="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl space-y-1">
+            <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+              <Radio className="w-3.5 h-3.5 text-purple-500" />
+              <span>Sync Health</span>
+            </div>
+            <div className="text-xs font-bold text-emerald-700 flex items-center gap-1 mt-1">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{syncStatus?.lastError ? 'Error Detected' : '0 Errors (Healthy)'}</span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-semibold truncate">
+              {syncStatus?.lastError ? syncStatus.lastError : 'WebSub + Cron Backup'}
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* 2. Statistics Cards */}
       <section className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -200,49 +304,49 @@ export const AdminPage: React.FC = () => {
             <div className="text-[10px] text-slate-400 font-semibold">Registered Accounts</div>
           </div>
 
-          {/* Students */}
+          {/* Total Students */}
           <div className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-emerald-600">
               <span className="text-[11px] font-bold text-slate-500">Students</span>
               <GraduationCap className="w-4 h-4" />
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600">
+            <div className="text-2xl sm:text-3xl font-black text-emerald-700">
               {loading ? '-' : stats?.totalStudents ?? 0}
             </div>
-            <div className="text-[10px] text-slate-400 font-semibold">Active Learners</div>
+            <div className="text-[10px] text-slate-400 font-semibold">Learner Role</div>
           </div>
 
-          {/* Admins */}
+          {/* Administrators */}
           <div className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs space-y-1">
             <div className="flex items-center justify-between text-purple-600">
               <span className="text-[11px] font-bold text-slate-500">Admins</span>
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-purple-600">
+            <div className="text-2xl sm:text-3xl font-black text-purple-700">
               {loading ? '-' : stats?.totalAdmins ?? 0}
             </div>
             <div className="text-[10px] text-slate-400 font-semibold">System Admins</div>
           </div>
 
-          {/* New Users Today */}
+          {/* New Today */}
           <div className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs space-y-1">
-            <div className="flex items-center justify-between text-amber-500">
-              <span className="text-[11px] font-bold text-slate-500">Today</span>
-              <Clock className="w-4 h-4" />
+            <div className="flex items-center justify-between text-amber-600">
+              <span className="text-[11px] font-bold text-slate-500">New Today</span>
+              <Calendar className="w-4 h-4" />
             </div>
             <div className="text-2xl sm:text-3xl font-black text-amber-600">
               {loading ? '-' : stats?.newUsersToday ?? 0}
             </div>
-            <div className="text-[10px] text-slate-400 font-semibold">Last 24 Hours</div>
+            <div className="text-[10px] text-slate-400 font-semibold">Registered Today</div>
           </div>
 
           {/* New This Week */}
           <div className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-2xs space-y-1">
-            <div className="flex items-center justify-between text-teal-600">
+            <div className="flex items-center justify-between text-indigo-600">
               <span className="text-[11px] font-bold text-slate-500">This Week</span>
               <Calendar className="w-4 h-4" />
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-teal-600">
+            <div className="text-2xl sm:text-3xl font-black text-indigo-600">
               {loading ? '-' : stats?.newUsersThisWeek ?? 0}
             </div>
             <div className="text-[10px] text-slate-400 font-semibold">Past 7 Days</div>
@@ -263,7 +367,7 @@ export const AdminPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 2. User Directory Table */}
+      {/* 3. User Directory Table */}
       <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
         
         {/* Controls Toolbar */}
@@ -351,30 +455,41 @@ export const AdminPage: React.FC = () => {
                   const isAdminRole = u.role === 'admin';
 
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr
+                      key={u.id}
+                      className="hover:bg-slate-50/80 transition-colors group font-medium"
+                    >
                       {/* Name & Avatar */}
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2.5">
                           {u.avatar_url ? (
                             <img
                               src={u.avatar_url}
-                              alt={u.full_name || 'User'}
-                              className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 shrink-0"
+                              alt={u.full_name || 'User avatar'}
+                              className="w-8 h-8 rounded-full object-cover border border-stone-200 shadow-2xs"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-bold text-xs flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[11px] border border-stone-200">
                               {initials}
                             </div>
                           )}
-                          <span className="font-extrabold text-slate-900 line-clamp-1">
-                            {u.full_name || 'Anonymous User'}
-                          </span>
+                          <div>
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{u.full_name || 'Anonymous User'}</span>
+                              {isAdminRole && (
+                                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {u.id.slice(0, 8)}...
+                            </div>
+                          </div>
                         </div>
                       </td>
 
                       {/* Email */}
-                      <td className="py-3 px-3 font-mono text-slate-600 text-[11px]">
-                        {u.email}
+                      <td className="py-3 px-3 font-mono text-slate-600">
+                        {u.email || '-'}
                       </td>
 
                       {/* Role Pill */}

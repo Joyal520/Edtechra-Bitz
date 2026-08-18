@@ -7,9 +7,13 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import {
   getCachedOrFetchShorts,
-  fetchFromYouTubeAPI,
+  syncYouTubeChannel,
+  getSyncStatus,
   loadLocalCache,
-  saveLocalCache
+  saveLocalCache,
+  VERIFIED_CHANNEL_ID,
+  WEBSUB_TOPIC_URL,
+  WEBSUB_HUB_URL
 } from './server/youtubeService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +27,8 @@ const app = express();
 const PORT = process.env.PORT || 3005;
 
 app.use(cors());
+// Accept raw Atom XML from YouTube PubSubHubbub webhooks, as well as JSON
+app.use(express.text({ type: ['application/atom+xml', 'application/xml', 'text/xml', 'text/plain'] }));
 app.use(express.json());
 
 // Initialize server-side Supabase client
@@ -68,7 +74,7 @@ app.get('/api/youtube/shorts', async (req, res) => {
 
     // Filter by category
     if (category && category !== 'All') {
-      shorts = shorts.filter(s => s.category.toLowerCase() === category.toLowerCase());
+      shorts = shorts.filter(s => s.category?.toLowerCase() === category.toLowerCase());
     }
 
     // Filter by difficulty
@@ -80,10 +86,10 @@ app.get('/api/youtube/shorts', async (req, res) => {
     if (search && search.trim()) {
       const q = search.toLowerCase();
       shorts = shorts.filter(s => {
-        const titleMatch = s.title.toLowerCase().includes(q);
-        const descMatch = s.description.toLowerCase().includes(q);
-        const catMatch = s.category.toLowerCase().includes(q);
-        const vocabMatch = s.learning_content?.vocabulary?.some(v => v.word.toLowerCase().includes(q));
+        const titleMatch = s.title?.toLowerCase().includes(q);
+        const descMatch = s.description?.toLowerCase().includes(q);
+        const catMatch = s.category?.toLowerCase().includes(q);
+        const vocabMatch = s.learning_content?.vocabulary?.some(v => v.word?.toLowerCase().includes(q));
         return titleMatch || descMatch || catMatch || vocabMatch;
       });
     }
@@ -123,21 +129,80 @@ app.get('/api/youtube/video/:id', async (req, res) => {
 // 3. POST /api/youtube/sync - Trigger sync with @EdTechraBitz YouTube channel
 app.post('/api/youtube/sync', async (req, res) => {
   try {
-    console.log('[API] Syncing latest videos from @EdTechraBitz...');
-    const updatedVideos = await fetchFromYouTubeAPI();
-    res.json({
-      success: true,
-      message: `Synchronized ${updatedVideos.length} Shorts from @EdTechraBitz`,
-      count: updatedVideos.length,
-      lastSync: new Date().toISOString()
-    });
+    console.log('[API] Triggering channel synchronization from @EdTechraBitz...');
+    const result = await syncYouTubeChannel('manual');
+    res.json(result);
   } catch (error) {
     console.error('Error in /api/youtube/sync:', error);
     res.status(500).json({ success: false, error: 'Failed to sync with YouTube' });
   }
 });
 
-// 4. PUT /api/youtube/content/:id - Admin edit vocabulary, quiz, or status
+// 4. GET /api/youtube/sync-status - Retrieve synchronization metrics for Admin Panel
+app.get('/api/youtube/sync-status', (req, res) => {
+  res.json({
+    success: true,
+    stats: getSyncStatus(),
+    channelId: VERIFIED_CHANNEL_ID,
+    webSubTopic: WEBSUB_TOPIC_URL,
+    webSubHub: WEBSUB_HUB_URL
+  });
+});
+
+// 5. WEBSUB / PUBSUBHUBBUB WEBHOOK ENDPOINT FOR REAL-TIME DETECTION
+// GET /api/youtube/webhook - Google Hub verification challenge
+app.get('/api/youtube/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const topic = req.query['hub.topic'];
+  const challenge = req.query['hub.challenge'];
+
+  console.log(`[WebSub Webhook Verification] mode=${mode}, topic=${topic}`);
+  if (challenge) {
+    console.log(`[WebSub Webhook Verification] Challenge accepted, returning 200.`);
+    return res.status(200).send(challenge);
+  }
+  res.status(200).send('EdTechra-Bitz WebSub Webhook Endpoint Active');
+});
+
+// POST /api/youtube/webhook - Incoming push notification from YouTube upon new upload
+app.post('/api/youtube/webhook', async (req, res) => {
+  console.log(`\n[WebSub Webhook Notification] Received at ${new Date().toISOString()}`);
+  
+  // Acknowledge immediately to Google PubSubHubbub with 200 OK
+  res.status(200).send('Notification received');
+
+  try {
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const videoIdMatch = rawBody.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
+    const videoId = videoIdMatch ? videoIdMatch[1] : null;
+
+    if (videoId) {
+      console.log(`[WebSub Webhook] New video published: ${videoId}`);
+    } else {
+      console.log('[WebSub Webhook] Feed update notification received.');
+    }
+
+    // Trigger automatic synchronization to discover & ingest the new video
+    await syncYouTubeChannel('webhook');
+  } catch (err) {
+    console.error('[WebSub Webhook Notification Error]:', err);
+  }
+});
+
+// 6. SCHEDULED BACKUP CRON ENDPOINT
+// GET /api/youtube/cron-sync - For Vercel Cron, external crons, or background triggers
+app.all('/api/youtube/cron-sync', async (req, res) => {
+  try {
+    console.log(`[Cron Sync] Triggered at ${new Date().toISOString()}`);
+    const result = await syncYouTubeChannel('cron');
+    res.json(result);
+  } catch (err) {
+    console.error('[Cron Sync Error]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. PUT /api/youtube/content/:id - Admin edit vocabulary, quiz, or status
 app.put('/api/youtube/content/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -163,7 +228,7 @@ app.put('/api/youtube/content/:id', (req, res) => {
   }
 });
 
-// 5. POST /api/youtube/progress - Save student progress
+// 8. POST /api/youtube/progress - Save student progress
 app.post('/api/youtube/progress', (req, res) => {
   try {
     const { userId = 'guest-user', videoId, watched, watchProgress, quizCompleted, quizScore, quizTotal, completed } = req.body;
@@ -182,53 +247,50 @@ app.post('/api/youtube/progress', (req, res) => {
       quiz_completed: quizCompleted !== undefined ? quizCompleted : prev.quiz_completed || false,
       quiz_score: quizScore !== undefined ? quizScore : prev.quiz_score || 0,
       quiz_total: quizTotal !== undefined ? quizTotal : prev.quiz_total || 3,
-      completed: completed !== undefined ? completed : (prev.completed || (watched && quizCompleted)),
+      completed: completed !== undefined ? completed : prev.completed || false,
       last_watched_at: new Date().toISOString()
     };
 
     saveProgress(progressMap);
     res.json({ success: true, data: progressMap[userId][videoId] });
   } catch (error) {
-    console.error('Error saving progress:', error);
+    console.error('Error in /api/youtube/progress:', error);
     res.status(500).json({ success: false, error: 'Failed to save progress' });
   }
 });
 
-// 6. GET /api/youtube/progress/:userId - Get progress summary for Dashboard
+// 9. GET /api/youtube/progress/:userId - Get progress stats for dashboard
 app.get('/api/youtube/progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const progressMap = loadProgress();
     const userProgress = progressMap[userId] || {};
-    const progressList = Object.values(userProgress);
 
+    const progressList = Object.values(userProgress);
     const shorts = await getCachedOrFetchShorts();
     const shortsMap = new Map(shorts.map(s => [s.youtube_video_id, s]));
 
-    const completedList = progressList.filter(p => p.completed);
-    const quizList = progressList.filter(p => p.quiz_completed);
-    const totalQuizScore = quizList.reduce((acc, curr) => acc + (curr.quiz_score / curr.quiz_total), 0);
-    const avgQuizScore = quizList.length > 0 ? Math.round((totalQuizScore / quizList.length) * 100) : 0;
-
-    let vocabLearnedCount = 0;
-    completedList.forEach(p => {
-      const vid = shortsMap.get(p.youtube_video_id);
-      if (vid?.learning_content?.vocabulary) {
-        vocabLearnedCount += vid.learning_content.vocabulary.length;
-      }
-    });
+    const shortsWatched = progressList.filter(p => p.watched).length;
+    const quizzesCompleted = progressList.filter(p => p.quiz_completed).length;
+    const totalQuizScore = progressList.reduce((acc, p) => acc + (p.quiz_score || 0), 0);
+    const totalQuizPossible = progressList.reduce((acc, p) => acc + (p.quiz_total || 3), 0);
+    const averageQuizScore = totalQuizPossible > 0 ? Math.round((totalQuizScore / totalQuizPossible) * 100) : 0;
+    const vocabularyLearned = progressList.filter(p => p.completed).length * 3;
+    const totalCompleted = progressList.filter(p => p.completed).length;
+    const learningProgressPercent = Math.min(100, Math.round((totalCompleted / Math.max(1, shorts.length)) * 100));
 
     const recentHistory = progressList
+      .filter(p => p.last_watched_at)
       .sort((a, b) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
       .slice(0, 5)
       .map(p => {
         const vid = shortsMap.get(p.youtube_video_id);
         return {
           id: p.youtube_video_id,
-          title: vid?.title || 'Educational Short',
-          category: vid?.category || 'Science',
-          score: `${p.quiz_score}/${p.quiz_total}`,
-          completed: p.completed,
+          title: vid ? vid.title : 'Microlearning Bit',
+          category: vid ? vid.category : 'General',
+          score: `${p.quiz_score || 0}/${p.quiz_total || 3}`,
+          completed: p.completed || false,
           date: p.last_watched_at
         };
       });
@@ -236,146 +298,34 @@ app.get('/api/youtube/progress/:userId', async (req, res) => {
     res.json({
       success: true,
       stats: {
-        shortsWatched: progressList.filter(p => p.watched).length,
-        quizzesCompleted: quizList.length,
-        averageQuizScore: avgQuizScore,
-        learningProgressPercent: shorts.length > 0 ? Math.round((completedList.length / shorts.length) * 100) : 0,
-        vocabularyLearned: vocabLearnedCount,
-        totalCompleted: completedList.length,
+        shortsWatched,
+        quizzesCompleted,
+        averageQuizScore,
+        learningProgressPercent,
+        vocabularyLearned,
+        totalCompleted,
         recentHistory
       }
     });
   } catch (error) {
-    console.error('Error fetching progress:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve progress' });
+    console.error('Error in /api/youtube/progress/:userId:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve user progress' });
   }
 });
 
-// ============================================================================
-// ADMIN API ROUTES (Strict Server-Side Authorization Enforced)
-// ============================================================================
-
-// Middleware: Verify Admin Authentication
-async function verifyAdminAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Missing or invalid token' });
-    }
-
-    if (!serverSupabase) {
-      return res.status(500).json({ success: false, error: 'Supabase server client not initialized' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error: userError } = await serverSupabase.auth.getUser(token);
-
-    if (userError || !user) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid authentication session' });
-    }
-
-    // Query profiles table to verify role === 'admin'
-    const { data: profile, error: profileError } = await serverSupabase
-      .from('profiles')
-      .select('role, email')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profileError || profile?.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Access Denied: Administrator role required.' });
-    }
-
-    req.adminUser = user;
-    req.adminProfile = profile;
-    next();
-  } catch (err) {
-    console.error('Admin auth verification error:', err);
-    res.status(500).json({ success: false, error: 'Internal authorization failure' });
-  }
-}
-
-// GET /api/admin/stats - Server verified admin stats
-app.get('/api/admin/stats', verifyAdminAuth, async (req, res) => {
-  try {
-    const { data: rpcStats, error: rpcError } = await serverSupabase.rpc('get_admin_dashboard_stats');
-    if (!rpcError && rpcStats) {
-      return res.json({ success: true, data: rpcStats });
-    }
-
-    const { data: allProfiles, error: pErr } = await serverSupabase.from('profiles').select('*');
-    if (pErr) throw pErr;
-
-    const list = allProfiles || [];
-    const now = Date.now();
-    const oneDay = 24 * 60 * 60 * 1000;
-    const stats = {
-      totalUsers: list.length,
-      totalStudents: list.filter(p => p.role === 'student').length,
-      totalAdmins: list.filter(p => p.role === 'admin').length,
-      newUsersToday: list.filter(p => new Date(p.created_at).getTime() >= (now - oneDay)).length,
-      newUsersThisWeek: list.filter(p => new Date(p.created_at).getTime() >= (now - 7 * oneDay)).length,
-      newUsersThisMonth: list.filter(p => new Date(p.created_at).getTime() >= (now - 30 * oneDay)).length
-    };
-
-    res.json({ success: true, data: stats });
-  } catch (error) {
-    console.error('Error in /api/admin/stats:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve admin stats' });
-  }
-});
-
-// GET /api/admin/users - Server verified admin users list
-app.get('/api/admin/users', verifyAdminAuth, async (req, res) => {
-  try {
-    const { search = '', role = 'all', sort = 'desc' } = req.query;
-
-    const { data: rpcUsers, error: rpcErr } = await serverSupabase.rpc('get_admin_users', {
-      p_search: search,
-      p_role: role,
-      p_sort: sort
-    });
-
-    if (!rpcErr && rpcUsers) {
-      return res.json({ success: true, data: rpcUsers });
-    }
-
-    let query = serverSupabase.from('profiles').select('*');
-    if (role !== 'all') query = query.eq('role', role);
-    if (search.trim()) {
-      query = query.or(`email.ilike.%${search.trim()}%,full_name.ilike.%${search.trim()}%`);
-    }
-    query = query.order('created_at', { ascending: sort === 'asc' });
-
-    const { data: users, error: qErr } = await query;
-    if (qErr) throw qErr;
-
-    res.json({ success: true, data: users || [] });
-  } catch (error) {
-    console.error('Error in /api/admin/users:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve admin users' });
-  }
-});
-
-// ============================================================================
-// PRODUCTION STATIC ASSET SERVING & SPA FALLBACK
-// ============================================================================
-const distPath = path.resolve(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(distPath, 'index.html'));
+// Periodic background backup sync (runs every 60 minutes if server daemon is active)
+const BACKUP_SYNC_INTERVAL = 60 * 60 * 1000;
+setInterval(() => {
+  console.log('[Daemon Scheduler] Running periodic backup YouTube synchronization...');
+  syncYouTubeChannel('scheduled_backup').catch(err => {
+    console.error('[Daemon Scheduler Error]:', err.message);
   });
-}
-
-// Warm up initial cache on start
-if (process.env.VERCEL !== '1') {
-  getCachedOrFetchShorts()
-    .then(shorts => console.log(`[Server] Initialized with ${shorts.length} @EdTechraBitz Shorts.`))
-    .catch(err => console.error('[Server Init Warning]:', err.message));
-
-  app.listen(PORT, () => {
-    console.log(`[Server] EdTechra-Bitz API Server running on port ${PORT}`);
-  });
-}
+}, BACKUP_SYNC_INTERVAL);
 
 export default app;
+
+if (process.env.NODE_ENV !== 'production' || process.env.SERVE_STANDALONE === 'true') {
+  app.listen(PORT, () => {
+    console.log(`EdTechra-Bitz API Server listening on port ${PORT}`);
+  });
+}

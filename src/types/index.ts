@@ -1,6 +1,6 @@
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 
-export type ContentStatus = 'draft' | 'published' | 'archived';
+export type ContentStatus = 'draft' | 'published' | 'archived' | 'upcoming';
 
 export interface VocabularyWord {
   word: string;
@@ -41,6 +41,7 @@ export interface YouTubeVideo {
   like_count: number;
   category: string;
   difficulty?: Difficulty;
+  status?: ContentStatus;
   learning_content?: YouTubeLearningContent;
 }
 
