@@ -23,12 +23,13 @@ export const AuthModal: React.FC = () => {
     signUpWithEmail,
     signInWithGoogle,
     resetPassword,
-    updateProfileName
+    updateProfileName,
+    profile
   } = useAuth();
 
   const [mode, setMode] = useState<AuthModalMode>(authModalMode);
   const [signupStep, setSignupStep] = useState<1 | 2>(1);
-  const [fullName, setFullName] = useState('');
+  const [fullName, setFullName] = useState(() => profile?.full_name || localStorage.getItem('edtechra_user_name') || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -43,9 +44,13 @@ export const AuthModal: React.FC = () => {
     if (authModalMode === 'signup') {
       setSignupStep(1);
     }
+    const currentName = profile?.full_name || localStorage.getItem('edtechra_user_name') || '';
+    if (currentName) {
+      setFullName(currentName);
+    }
     setError(null);
     setSuccessMessage(null);
-  }, [authModalMode, authModalOpen]);
+  }, [authModalMode, authModalOpen, profile]);
 
   if (!authModalOpen) return null;
 
@@ -70,6 +75,8 @@ export const AuthModal: React.FC = () => {
     e.preventDefault();
     setError(null);
     if (!validateName(fullName)) return;
+    const trimmed = fullName.trim();
+    updateProfileName(trimmed);
     setSignupStep(2);
   };
 

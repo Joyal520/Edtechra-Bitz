@@ -66,7 +66,8 @@ export const AppLayout: React.FC = () => {
     navigate('/');
   };
 
-  const displayName = profile?.full_name || profile?.name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+  const storedLocalName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
+  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || storedLocalName?.trim() || (user?.email ? user.email.split('@')[0] : 'User');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 

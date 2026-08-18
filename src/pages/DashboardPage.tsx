@@ -46,7 +46,8 @@ export const DashboardPage: React.FC = () => {
   }, [userId]);
 
   const totalXP = 100 + (stats.totalCompleted * 50) + (stats.quizzesCompleted * 25);
-  const displayName = profile?.full_name || profile?.name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Learner';
+  const storedLocalName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
+  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || storedLocalName?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'L').slice(0, 2).toUpperCase();
   const greetingHeading = getTimeBasedGreeting(displayName);

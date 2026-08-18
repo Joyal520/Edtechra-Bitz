@@ -55,13 +55,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
-      // Check if there was a pending name saved from Step 1 before Google OAuth
-      let effectiveName = data?.full_name || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
+      // Check stored user name
+      const storedName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
+      let effectiveName = data?.full_name || storedName || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
       const pendingName = localStorage.getItem('edtechra_pending_name');
 
-      if ((!effectiveName || effectiveName === currentUser.email?.split('@')[0]) && pendingName?.trim()) {
-        effectiveName = pendingName.trim();
-        // Update database with the pending name
+      if ((!data?.full_name || data.full_name === currentUser.email?.split('@')[0]) && effectiveName.trim()) {
+        effectiveName = effectiveName.trim();
+        // Update database with the effective name
         try {
           await supabase
             .from('profiles')
@@ -69,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .eq('id', currentUser.id);
           localStorage.removeItem('edtechra_pending_name');
         } catch (err) {
-          console.warn('[AuthContext] Error applying pending name:', err);
+          console.warn('[AuthContext] Error applying name to database:', err);
         }
       } else if (pendingName) {
         localStorage.removeItem('edtechra_pending_name');
@@ -120,36 +121,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, fetchUserProfile]);
 
-  // Update profile name in database & local state
+  // Update profile name in database, local storage & state
   const updateProfileName = async (newName: string): Promise<{ error?: string }> => {
     const trimmed = newName.trim();
     if (!trimmed) {
       return { error: 'Please enter a valid name.' };
     }
 
-    if (!user || !supabase) {
-      return { error: 'Not authenticated.' };
-    }
+    localStorage.setItem('edtechra_user_name', trimmed);
+    localStorage.setItem('edtechra_guest_name', trimmed);
+    localStorage.setItem('edtechra_pending_name', trimmed);
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: trimmed,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+    if (user && supabase) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: trimmed,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
 
-      if (error) {
-        return { error: error.message };
+        if (error) {
+          console.warn('[AuthContext] Error updating database profile name:', error.message);
+        }
+      } catch (err: any) {
+        console.warn('[AuthContext] Database update exception:', err);
       }
-
-      setProfile((prev) => (prev ? { ...prev, full_name: trimmed, name: trimmed } : null));
-      closeAuthModal();
-      return {};
-    } catch (err: any) {
-      return { error: err.message || 'Failed to update name.' };
     }
+
+    setProfile((prev) => {
+      if (prev) {
+        return { ...prev, full_name: trimmed, name: trimmed, updated_at: new Date().toISOString() };
+      }
+      return {
+        id: user?.id || 'guest',
+        email: user?.email || '',
+        full_name: trimmed,
+        name: trimmed,
+        role: user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : 'student',
+        created_at: new Date().toISOString()
+      };
+    });
+
+    closeAuthModal();
+    return {};
   };
 
   // Initialize Session on mount
