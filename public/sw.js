@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v1';
+const CACHE_NAME = 'edtechra-bitz-v2';
 
 const STATIC_PRECACHE = [
   '/',
@@ -24,7 +24,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. Activate event: Clean up old version caches
+// 2. Activate event: Clean up old version caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // B. Bypass API requests, Supabase, and YouTube embeds/media
+  // B. Bypass API requests, Supabase auth/data, and YouTube embeds/media
   if (
     url.pathname.startsWith('/api/') ||
     url.hostname.includes('supabase.co') ||
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // C. Handle Navigation requests (SPA routes like /explore, /dashboard, /bitz/:id)
+  // C. Handle Navigation requests: Network-First to guarantee fresh application state
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -83,7 +83,6 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // Return cached response if available when network fails
         return cachedResponse;
       });
 
@@ -91,3 +90,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+

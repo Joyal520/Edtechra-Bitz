@@ -32,7 +32,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
 
-  const isAdmin = Boolean(profile?.role === 'admin');
+  const isAdmin = Boolean(
+    user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' &&
+    (profile?.role === 'admin' || user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com')
+  );
 
   // Fetch or safely ensure profile from Supabase
   const fetchUserProfile = useCallback(async (currentUser: User): Promise<UserProfile | null> => {
@@ -43,10 +46,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('profiles')
         .select('*')
         .eq('id', currentUser.id)
-        .maybeSingle();
+        .single();
 
       if (error) {
-        console.warn('[AuthContext] Error fetching profile from Supabase:', error.message);
+        console.warn('[Supabase Profile Query] Notice:', {
+          code: error.code,
+          message: error.message
+        });
       }
 
       // Check if there was a pending name saved from Step 1 before Google OAuth
@@ -69,6 +75,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('edtechra_pending_name');
       }
 
+      const isUserAdmin = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+      const resolvedRole = isUserAdmin ? (data?.role === 'admin' ? 'admin' : 'admin') : (data?.role === 'admin' ? 'student' : (data?.role || 'student'));
+
       if (data) {
         const userProfile: UserProfile = {
           id: data.id,
@@ -77,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: effectiveName || data.full_name || '',
           avatar_url: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
           avatarUrl: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
-          role: data.role === 'admin' ? 'admin' : 'student',
+          role: resolvedRole,
           created_at: data.created_at || currentUser.created_at,
           updated_at: data.updated_at
         };
@@ -85,15 +94,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Fallback profile if record doesn't exist yet
-      const fallbackRole = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : 'student';
+      const fallbackName = effectiveName || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || '';
       const fallbackProfile: UserProfile = {
         id: currentUser.id,
         email: currentUser.email || '',
-        full_name: effectiveName,
-        name: effectiveName,
+        full_name: fallbackName,
+        name: fallbackName,
         avatar_url: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
         avatarUrl: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
-        role: fallbackRole,
+        role: resolvedRole,
         created_at: currentUser.created_at
       };
 
@@ -148,6 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
 
     async function initSession() {
+      setIsLoading(true);
       if (!supabase) {
         setIsLoading(false);
         return;
@@ -163,9 +173,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (currentSession?.user) {
             setSession(currentSession);
             setUser(currentSession.user);
+
+            // Safe session diagnostic log
+            console.log('AUTH SESSION:', {
+              hasSession: true,
+              userId: currentSession.user.id,
+              email: currentSession.user.email
+            });
+
             const userProfile = await fetchUserProfile(currentSession.user);
             if (isMounted) {
               setProfile(userProfile);
+
+              // Safe profile diagnostic log
+              console.log('PROFILE:', {
+                id: userProfile?.id,
+                email: userProfile?.email,
+                fullName: userProfile?.full_name,
+                role: userProfile?.role
+              });
+
               // If user is authenticated via Google but has no name, prompt for name
               if (!userProfile?.full_name?.trim()) {
                 setAuthModalMode('name_prompt');
@@ -176,12 +203,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSession(null);
             setUser(null);
             setProfile(null);
+            console.log('AUTH SESSION:', {
+              hasSession: false,
+              userId: undefined,
+              email: undefined
+            });
           }
         }
       } catch (e) {
         console.error('[AuthContext] Session init failure:', e);
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -190,16 +224,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Subscribe to auth state changes (OAuth redirect, sign in, sign out, token refresh)
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (_event, newSession) => {
+        async (event, newSession) => {
           if (!isMounted) return;
 
+          console.log(`[Supabase Auth] onAuthStateChange event: ${event}`);
           setSession(newSession);
           setUser(newSession?.user || null);
+
+          console.log('AUTH SESSION:', {
+            hasSession: Boolean(newSession),
+            userId: newSession?.user?.id,
+            email: newSession?.user?.email
+          });
 
           if (newSession?.user) {
             const userProfile = await fetchUserProfile(newSession.user);
             if (isMounted) {
               setProfile(userProfile);
+
+              console.log('PROFILE:', {
+                id: userProfile?.id,
+                email: userProfile?.email,
+                fullName: userProfile?.full_name,
+                role: userProfile?.role
+              });
+
               // If user logged in and has empty name, show name prompt
               if (!userProfile?.full_name?.trim()) {
                 setAuthModalMode('name_prompt');
