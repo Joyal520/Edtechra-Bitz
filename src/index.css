@@ -56,20 +56,60 @@
 }
 
 .cta-btn-hover {
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .cta-btn-hover:hover {
   transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(2, 111, 195, 0.25);
 }
 
-.cta-btn-hover:active {
-  transform: translateY(0px) scale(0.99);
+.cta-btn-hover-green:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(34, 197, 94, 0.28);
 }
 
-/* Torn paper edge mask / SVG divider */
-.torn-paper-edge {
-  position: relative;
+.cta-btn-hover:active, .cta-btn-hover-green:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+/* Keyframe Animations for Hero Entrance */
+@keyframes heroFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes paperPlaneGlide {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(8px, -6px) rotate(1.2deg);
+  }
+}
+
+@keyframes slowCloudFloat {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(6px, -4px);
+  }
 }
 
 @keyframes float-subtle {
@@ -79,6 +119,39 @@
   50% {
     transform: translateY(-4px);
   }
+}
+
+/* Animation Utility Classes with smooth bezier easing */
+.animate-hero-1 {
+  animation: heroFadeUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+
+.animate-hero-2 {
+  animation: heroFadeUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.18s both;
+}
+
+.animate-hero-3 {
+  animation: heroFadeUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.30s both;
+}
+
+.animate-hero-4 {
+  animation: heroFadeUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.42s both;
+}
+
+.animate-hero-5 {
+  animation: heroFadeUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.54s both;
+}
+
+.animate-hero-bg {
+  animation: heroFadeIn 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-plane-glide {
+  animation: paperPlaneGlide 6s ease-in-out infinite;
+}
+
+.animate-cloud-float {
+  animation: slowCloudFloat 8s ease-in-out infinite;
 }
 
 .animate-float-subtle {

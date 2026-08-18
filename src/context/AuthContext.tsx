@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { UserProfile, AuthModalMode } from '@/types';
+import { UserProfile, AuthModalMode, AuthIntent } from '@/types';
 
 interface AuthContextType {
   user: User | null;
@@ -11,8 +11,11 @@ interface AuthContextType {
   isLoading: boolean;
   authModalOpen: boolean;
   authModalMode: AuthModalMode;
-  openAuthModal: (mode?: AuthModalMode) => void;
+  pendingIntent: AuthIntent;
+  openAuthModal: (mode?: AuthModalMode, intent?: AuthIntent) => void;
   closeAuthModal: () => void;
+  setPendingIntent: (intent: AuthIntent) => void;
+  executePendingIntent: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
   signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error?: string; message?: string }>;
   signInWithGoogle: (pendingName?: string) => Promise<{ error?: string }>;
@@ -30,7 +33,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
+  const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('signup');
+  const [pendingIntent, setPendingIntent] = useState<AuthIntent>(null);
 
   const isAdmin = Boolean(
     user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' &&
@@ -62,7 +66,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if ((!data?.full_name || data.full_name === currentUser.email?.split('@')[0]) && effectiveName.trim()) {
         effectiveName = effectiveName.trim();
-        // Update database with the effective name
         try {
           await supabase
             .from('profiles')
@@ -77,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const isUserAdmin = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
-      const resolvedRole = isUserAdmin ? (data?.role === 'admin' ? 'admin' : 'admin') : (data?.role === 'admin' ? 'student' : (data?.role || 'student'));
+      const resolvedRole = isUserAdmin ? 'admin' : (data?.role === 'admin' ? 'student' : (data?.role || 'student'));
 
       if (data) {
         const userProfile: UserProfile = {
@@ -121,6 +124,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, fetchUserProfile]);
 
+  // Execute and clear any pending navigation/action after successful login/onboarding
+  const executePendingIntent = useCallback(() => {
+    let intentToRun = pendingIntent;
+    if (!intentToRun) {
+      const saved = localStorage.getItem('edtechra_pending_intent');
+      if (saved) {
+        try {
+          intentToRun = JSON.parse(saved);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (intentToRun) {
+      localStorage.removeItem('edtechra_pending_intent');
+      setPendingIntent(null);
+
+      if (intentToRun.type === 'navigate' && intentToRun.path) {
+        window.dispatchEvent(new CustomEvent('edtechra:navigate', { detail: intentToRun.path }));
+      } else if (intentToRun.type === 'action' && intentToRun.action === 'upload') {
+        window.dispatchEvent(new CustomEvent('edtechra:open_upload_modal'));
+      }
+    }
+  }, [pendingIntent]);
+
   // Update profile name in database, local storage & state
   const updateProfileName = async (newName: string): Promise<{ error?: string }> => {
     const trimmed = newName.trim();
@@ -134,17 +163,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (user && supabase) {
       try {
-        const { error } = await supabase
+        await supabase
           .from('profiles')
           .update({
             full_name: trimmed,
             updated_at: new Date().toISOString()
           })
           .eq('id', user.id);
-
-        if (error) {
-          console.warn('[AuthContext] Error updating database profile name:', error.message);
-        }
       } catch (err: any) {
         console.warn('[AuthContext] Database update exception:', err);
       }
@@ -165,6 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     closeAuthModal();
+    executePendingIntent();
     return {};
   };
 
@@ -190,40 +216,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSession(currentSession);
             setUser(currentSession.user);
 
-            // Safe session diagnostic log
-            console.log('AUTH SESSION:', {
-              hasSession: true,
-              userId: currentSession.user.id,
-              email: currentSession.user.email
-            });
-
             const userProfile = await fetchUserProfile(currentSession.user);
             if (isMounted) {
               setProfile(userProfile);
 
-              // Safe profile diagnostic log
-              console.log('PROFILE:', {
-                id: userProfile?.id,
-                email: userProfile?.email,
-                fullName: userProfile?.full_name,
-                role: userProfile?.role
-              });
-
-              // If user is authenticated via Google but has no name, prompt for name
-              if (!userProfile?.full_name?.trim()) {
+              // Check if user has no display name, prompt for name onboarding
+              const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === currentSession.user.email?.split('@')[0];
+              if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
                 setAuthModalMode('name_prompt');
                 setAuthModalOpen(true);
+              } else {
+                // Check if there was a pending intent from Google OAuth redirect
+                const savedIntent = localStorage.getItem('edtechra_pending_intent');
+                if (savedIntent) {
+                  executePendingIntent();
+                }
               }
             }
           } else {
             setSession(null);
             setUser(null);
             setProfile(null);
-            console.log('AUTH SESSION:', {
-              hasSession: false,
-              userId: undefined,
-              email: undefined
-            });
           }
         }
       } catch (e) {
@@ -237,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initSession();
 
-    // Subscribe to auth state changes (OAuth redirect, sign in, sign out, token refresh)
+    // Subscribe to auth state changes
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, newSession) => {
@@ -247,28 +260,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession(newSession);
           setUser(newSession?.user || null);
 
-          console.log('AUTH SESSION:', {
-            hasSession: Boolean(newSession),
-            userId: newSession?.user?.id,
-            email: newSession?.user?.email
-          });
-
           if (newSession?.user) {
             const userProfile = await fetchUserProfile(newSession.user);
             if (isMounted) {
               setProfile(userProfile);
 
-              console.log('PROFILE:', {
-                id: userProfile?.id,
-                email: userProfile?.email,
-                fullName: userProfile?.full_name,
-                role: userProfile?.role
-              });
-
-              // If user logged in and has empty name, show name prompt
-              if (!userProfile?.full_name?.trim()) {
+              const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === newSession.user.email?.split('@')[0];
+              if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
                 setAuthModalMode('name_prompt');
                 setAuthModalOpen(true);
+              } else {
+                executePendingIntent();
               }
             }
           } else {
@@ -287,10 +289,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       isMounted = false;
     };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, executePendingIntent]);
 
-  const openAuthModal = (mode: AuthModalMode = 'login') => {
+  const openAuthModal = (mode: AuthModalMode = 'signup', intent?: AuthIntent) => {
     setAuthModalMode(mode);
+    if (intent !== undefined) {
+      setPendingIntent(intent);
+      if (intent) {
+        localStorage.setItem('edtechra_pending_intent', JSON.stringify(intent));
+      } else {
+        localStorage.removeItem('edtechra_pending_intent');
+      }
+    }
     setAuthModalOpen(true);
   };
 
@@ -303,45 +313,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
-      console.log('[Supabase Auth Diagnostic] Initiating signInWithEmail for:', email.trim());
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password
       });
 
       if (error) {
-        console.warn('[Supabase Auth Diagnostic] Login error:', {
-          message: error.message,
-          status: error.status,
-          code: (error as any).code
-        });
-
         if (error.message.toLowerCase().includes('not confirmed') || (error as any).code === 'email_not_confirmed') {
           return {
-            error: 'Your email has not been confirmed yet. Please check your email inbox (and spam folder) for the confirmation link sent by Supabase.'
+            error: 'Your email has not been confirmed yet. Please check your email inbox for the confirmation link.'
           };
         }
-
         return { error: error.message };
       }
-
-      console.log('[Supabase Auth Diagnostic] Login success:', {
-        userId: data.user?.id,
-        email: data.user?.email,
-        hasSession: Boolean(data.session)
-      });
 
       if (data.user) {
         setUser(data.user);
         setSession(data.session);
         const userProfile = await fetchUserProfile(data.user);
         setProfile(userProfile);
+
+        const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === data.user.email?.split('@')[0];
+        if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
+          setAuthModalMode('name_prompt');
+          return {};
+        }
       }
 
       closeAuthModal();
+      executePendingIntent();
       return {};
     } catch (err: any) {
-      console.error('[Supabase Auth Diagnostic] Unexpected login failure:', err);
       return { error: err.message || 'An unexpected error occurred during sign in.' };
     }
   };
@@ -355,62 +357,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) return { error: 'Supabase is not configured' };
 
     const trimmedName = fullName.trim();
-    if (!trimmedName) {
-      return { error: 'Please enter your name.' };
-    }
 
     try {
-      console.log('[Supabase Auth Diagnostic] Initiating signUpWithEmail for:', email.trim(), 'with name:', trimmedName);
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
           data: {
-            full_name: trimmedName,
-            name: trimmedName
+            full_name: trimmedName || '',
+            name: trimmedName || ''
           },
           emailRedirectTo: `${window.location.origin}`
         }
       });
 
       if (error) {
-        console.warn('[Supabase Auth Diagnostic] SignUp error:', {
-          message: error.message,
-          status: error.status,
-          code: (error as any).code
-        });
-
         if (error.message.toLowerCase().includes('invalid')) {
           return {
-            error: 'Please enter a valid email address with a recognized domain (e.g. name@gmail.com, name@outlook.com).'
+            error: 'Please enter a valid email address with a recognized domain (e.g. name@gmail.com).'
           };
         }
-
         return { error: error.message };
       }
 
-      console.log('[Supabase Auth Diagnostic] SignUp response:', {
-        userId: data.user?.id,
-        email: data.user?.email,
-        confirmed: Boolean(data.user?.confirmed_at),
-        hasSession: Boolean(data.session)
-      });
+      if (trimmedName) {
+        localStorage.setItem('edtechra_user_name', trimmedName);
+      }
 
       if (data.user && data.session) {
         setUser(data.user);
         setSession(data.session);
         const userProfile = await fetchUserProfile(data.user);
         setProfile(userProfile);
+
+        if (!trimmedName && !userProfile?.full_name?.trim()) {
+          setAuthModalMode('name_prompt');
+          return {};
+        }
+
         closeAuthModal();
+        executePendingIntent();
         return { message: 'Account created successfully!' };
       }
 
-      // If email confirmation is enabled on Supabase
       return {
-        message: 'Account created! Please check your email inbox (and spam folder) for the confirmation link to activate your account.'
+        message: 'Account created! Please check your email inbox for the confirmation link to activate your account.'
       };
     } catch (err: any) {
-      console.error('[Supabase Auth Diagnostic] Unexpected signup failure:', err);
       return { error: err.message || 'An unexpected error occurred during registration.' };
     }
   };
@@ -422,6 +415,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (pendingName?.trim()) {
         localStorage.setItem('edtechra_pending_name', pendingName.trim());
+        localStorage.setItem('edtechra_user_name', pendingName.trim());
       }
 
       const redirectUrl = `${window.location.origin}`;
@@ -453,16 +447,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}`
+        redirectTo: `${window.location.origin}/reset-password`
       });
 
-      if (error) {
-        return { error: error.message };
-      }
-
-      return { message: 'Password reset link sent to your email.' };
+      if (error) return { error: error.message };
+      return { message: 'Password reset link sent! Check your inbox.' };
     } catch (err: any) {
-      return { error: err.message || 'Failed to send password reset email.' };
+      return { error: err.message || 'Failed to send reset link.' };
     }
   };
 
@@ -472,12 +463,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         await supabase.auth.signOut();
       } catch (err) {
-        console.error('[AuthContext] Sign out error:', err);
+        console.warn('[AuthContext] SignOut error:', err);
       }
     }
     setUser(null);
     setSession(null);
     setProfile(null);
+    localStorage.removeItem('edtechra_user_name');
+    localStorage.removeItem('edtechra_pending_intent');
   };
 
   return (
@@ -490,8 +483,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         authModalOpen,
         authModalMode,
+        pendingIntent,
         openAuthModal,
         closeAuthModal,
+        setPendingIntent,
+        executePendingIntent,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
@@ -506,7 +502,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');

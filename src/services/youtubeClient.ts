@@ -148,14 +148,21 @@ export const youtubeClient = {
     }
 
     try {
-      const { data, error } = await supabase
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let query = supabase
         .from('youtube_videos')
         .select(`
           *,
           youtube_learning_content (*)
-        `)
-        .or(`youtube_video_id.eq.${id},id.eq.${id}`)
-        .maybeSingle();
+        `);
+
+      if (isUuid) {
+        query = query.or(`youtube_video_id.eq.${id},id.eq.${id}`);
+      } else {
+        query = query.eq('youtube_video_id', id);
+      }
+
+      const { data, error } = await query.maybeSingle();
 
       if (error) {
         console.warn(`[YouTube Client] Supabase getVideo error for ${id}, using API fallback:`, error.message);
@@ -270,6 +277,28 @@ export const youtubeClient = {
     }
   },
 
+  // Helper: Read local progress map from localStorage
+  getLocalProgressMap(): { [videoId: string]: UserLearningProgress } {
+    try {
+      const stored = localStorage.getItem('edtechra_bitz_progress_map');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading local progress map:', e);
+    }
+    return {};
+  },
+
+  // Helper: Save local progress map to localStorage
+  setLocalProgressMap(map: { [videoId: string]: UserLearningProgress }) {
+    try {
+      localStorage.setItem('edtechra_bitz_progress_map', JSON.stringify(map));
+    } catch (e) {
+      console.warn('Error writing local progress map:', e);
+    }
+  },
+
   // 5. Save Student Progress (Preserves exact youtube_video_id & progress schema)
   async saveProgress(progress: {
     userId?: string;
@@ -281,48 +310,102 @@ export const youtubeClient = {
     quizTotal?: number;
     completed?: boolean;
   }): Promise<UserLearningProgress | null> {
+    const userId = progress.userId || 'guest-user';
+    const videoId = progress.videoId;
+
+    // 1. Immediately update LocalStorage
+    const localMap = this.getLocalProgressMap();
+    const prev = localMap[videoId] || {} as any;
+    const newScore = progress.quizScore !== undefined ? progress.quizScore : (prev.quiz_score || 0);
+    const updatedRow: UserLearningProgress = {
+      user_id: userId,
+      youtube_video_id: videoId,
+      watched: progress.watched !== undefined ? progress.watched : (prev.watched ?? false),
+      watch_progress: progress.watchProgress !== undefined ? progress.watchProgress : (prev.watch_progress ?? 0),
+      quiz_completed: progress.quizCompleted !== undefined ? progress.quizCompleted : (prev.quiz_completed ?? false),
+      quiz_score: newScore,
+      quiz_total: progress.quizTotal !== undefined ? progress.quizTotal : (prev.quiz_total ?? 3),
+      completed: progress.completed !== undefined ? progress.completed : (prev.completed ?? false),
+      last_watched_at: new Date().toISOString()
+    };
+    localMap[videoId] = updatedRow;
+    this.setLocalProgressMap(localMap);
+
     try {
-      // If user is authenticated with a valid UUID and Supabase client is available, persist directly
+      // 2. Persist to Supabase if authenticated
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (supabase && progress.userId && isUuid.test(progress.userId)) {
-        const { data, error } = await supabase
+        await supabase
           .from('youtube_learning_progress')
           .upsert({
             user_id: progress.userId,
             youtube_video_id: progress.videoId,
-            watched: progress.watched ?? false,
-            watch_progress: progress.watchProgress ?? 0,
-            quiz_completed: progress.quizCompleted ?? false,
-            quiz_score: progress.quizScore ?? 0,
-            quiz_total: progress.quizTotal ?? 3,
-            completed: progress.completed ?? false,
-            last_watched_at: new Date().toISOString(),
+            watched: updatedRow.watched,
+            watch_progress: updatedRow.watch_progress,
+            quiz_completed: updatedRow.quiz_completed,
+            quiz_score: updatedRow.quiz_score,
+            quiz_total: updatedRow.quiz_total,
+            completed: updatedRow.completed,
+            last_watched_at: updatedRow.last_watched_at,
             updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,youtube_video_id' })
-          .select()
-          .maybeSingle();
-
-        if (!error && data) {
-          return data as UserLearningProgress;
-        }
+          }, { onConflict: 'user_id,youtube_video_id' });
       }
 
-      // Also persist to local server progress store for resilience
-      const response = await fetch(`${API_BASE}/progress`, {
+      // 3. Persist to local server progress store for resilience
+      fetch(`${API_BASE}/progress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: progress.userId || 'guest-user',
+          userId,
           ...progress
         })
-      });
-      if (!response.ok) return null;
-      const json = await response.json();
-      return json.data;
+      }).catch(() => {});
+
+      return updatedRow;
     } catch (error) {
       console.error('[YouTube Client] Error saving progress:', error);
-      return null;
+      return updatedRow;
     }
+  },
+
+  // 5b. Get Progress Map for Level Progression & Locking
+  async getProgressMap(userId = 'guest-user'): Promise<{ [videoId: string]: UserLearningProgress }> {
+    const localMap = this.getLocalProgressMap();
+
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (supabase && userId && isUuid.test(userId)) {
+        const { data, error } = await supabase
+          .from('youtube_learning_progress')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (!error && data) {
+          const remoteMap: { [videoId: string]: UserLearningProgress } = {};
+          data.forEach(row => {
+            remoteMap[row.youtube_video_id] = row;
+          });
+          const merged = { ...localMap, ...remoteMap };
+          this.setLocalProgressMap(merged);
+          return merged;
+        }
+      }
+
+      // Fallback to server API
+      const res = await fetch(`${API_BASE}/progress-map/${encodeURIComponent(userId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          const merged = { ...localMap, ...json.data };
+          this.setLocalProgressMap(merged);
+          return merged;
+        }
+      }
+    } catch (e) {
+      console.warn('[YouTube Client] Fallback to local progress map:', e);
+    }
+
+    return localMap;
   },
 
   // 6. Get User Progress Summary for Dashboard
@@ -344,7 +427,7 @@ export const youtubeClient = {
           const averageQuizScore = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : 0;
           const totalCompleted = progressRows.filter(r => r.completed).length;
           const vocabularyLearned = totalCompleted * 3;
-          const learningProgressPercent = Math.min(100, Math.round((totalCompleted / 198) * 100));
+          const learningProgressPercent = Math.min(100, Math.round((totalCompleted / 20) * 100));
 
           return {
             shortsWatched,
@@ -356,6 +439,31 @@ export const youtubeClient = {
             recentHistory: []
           };
         }
+      }
+
+      // Fallback to local storage calculation
+      const localMap = this.getLocalProgressMap();
+      const rows = Object.values(localMap);
+      if (rows.length > 0) {
+        const shortsWatched = rows.filter(r => r.watched).length;
+        const quizzes = rows.filter(r => r.quiz_completed);
+        const quizzesCompleted = quizzes.length;
+        const totalScore = quizzes.reduce((sum, r) => sum + (r.quiz_score || 0), 0);
+        const totalPossible = quizzes.reduce((sum, r) => sum + (r.quiz_total || 3), 0);
+        const averageQuizScore = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : 0;
+        const totalCompleted = rows.filter(r => r.completed).length;
+        const vocabularyLearned = totalCompleted * 3;
+        const learningProgressPercent = Math.min(100, Math.round((totalCompleted / 20) * 100));
+
+        return {
+          shortsWatched,
+          quizzesCompleted,
+          averageQuizScore,
+          learningProgressPercent,
+          vocabularyLearned,
+          totalCompleted,
+          recentHistory: []
+        };
       }
 
       // Fallback to API progress

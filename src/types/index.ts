@@ -115,3 +115,8 @@ export interface AdminUserListItem {
 }
 
 export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt';
+
+export type AuthIntent =
+  | { type: 'navigate'; path: string }
+  | { type: 'action'; action: 'upload' | string; payload?: any }
+  | null;

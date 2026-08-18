@@ -4,18 +4,20 @@ import {
   Flame,
   Sparkles,
   CheckCircle2,
-  BookOpen,
   HelpCircle,
   Clock,
   ArrowRight,
   TrendingUp,
   LogIn,
   ShieldCheck,
-  GraduationCap
+  GraduationCap,
+  Trophy
 } from 'lucide-react';
 import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
 import { getTimeBasedGreeting } from '@/utils/greeting';
+import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
+import { UserLearningProgress } from '@/types';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, openAuthModal } = useAuth();
@@ -28,24 +30,39 @@ export const DashboardPage: React.FC = () => {
     totalCompleted: 0,
     recentHistory: []
   });
+  const [progressMap, setProgressMap] = useState<{ [videoId: string]: UserLearningProgress }>({});
 
   const userId = user?.id || 'guest-user';
+  const allLevels = getAllLevels();
 
   useEffect(() => {
-    async function loadStats() {
+    async function loadData() {
       try {
-        const data = await youtubeClient.getUserProgress(userId);
-        if (data) {
-          setStats(data);
-        }
+        const [statsData, pMap] = await Promise.all([
+          youtubeClient.getUserProgress(userId),
+          youtubeClient.getProgressMap(userId)
+        ]);
+        if (statsData) setStats(statsData);
+        if (pMap) setProgressMap(pMap);
       } catch (err) {
         console.error('Error loading dashboard stats:', err);
       }
     }
-    loadStats();
+    loadData();
   }, [userId]);
 
-  const totalXP = 100 + (stats.totalCompleted * 50) + (stats.quizzesCompleted * 25);
+  // Compute Levels progression
+  const completedLevelsCount = allLevels.filter(l => {
+    const st = getLevelStatus(l.levelNumber, progressMap);
+    return st === 'completed';
+  }).length;
+
+  const currentActiveLevel = allLevels.find(l => {
+    const st = getLevelStatus(l.levelNumber, progressMap);
+    return st === 'available' || st === 'in_progress';
+  }) || allLevels[0];
+
+  const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40);
   const storedLocalName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
   const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || storedLocalName?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
@@ -132,11 +149,42 @@ export const DashboardPage: React.FC = () => {
             to="/explore"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-extrabold rounded-2xl shadow-xs transition-all"
           >
-            <span>Find New Bitz</span>
+            <span>Level Roadmap</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>
+
+      {/* Levels 1-20 Active Level Journey Banner */}
+      <section className="bg-gradient-to-r from-[#026fc3] via-[#03589e] to-[#0c3f6c] text-white rounded-3xl p-6 sm:p-7 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+        <div className="space-y-2 max-w-lg">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-black">
+              Current Curriculum Path
+            </span>
+            <span className="text-amber-300 font-bold text-xs">
+              {completedLevelsCount}/20 Levels Passed
+            </span>
+          </div>
+          <h2 className="text-lg sm:text-xl font-black">
+            {completedLevelsCount === 20 ? '🏆 20/20 Levels Mastered!' : `Level ${currentActiveLevel.levelNumber}: ${currentActiveLevel.title}`}
+          </h2>
+          <div className="w-full max-w-md bg-white/20 h-2.5 rounded-full overflow-hidden">
+            <div
+              className="bg-[#22c55e] h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.max(5, (completedLevelsCount / 20) * 100)}%` }}
+            />
+          </div>
+        </div>
+
+        <Link
+          to={`/bitz/${currentActiveLevel.youtubeVideoId}`}
+          className="px-5 py-2.5 bg-[#22c55e] hover:bg-[#16a34a] text-white text-xs sm:text-sm font-black rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2 shrink-0"
+        >
+          <span>{completedLevelsCount === 0 ? 'Start Level 1' : `Resume Level ${currentActiveLevel.levelNumber}`}</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </section>
 
       {/* Learning Stats Metric Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -165,29 +213,29 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quizzes Completed & Average Score */}
+        {/* Quizzes Completed */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
             <HelpCircle className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
             <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
-              {stats.averageQuizScore > 0 ? `${stats.averageQuizScore}%` : '85%'}
+              {stats.quizzesCompleted > 0 ? `${stats.quizzesCompleted}` : `${completedLevelsCount}`}
             </div>
-            <div className="text-[11px] text-slate-500 font-semibold mt-1">Avg Quiz Score</div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Quizzes Passed</div>
           </div>
         </div>
 
-        {/* Vocabulary Learned */}
+        {/* Levels Mastered */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <BookOpen className="w-5 h-5 text-purple-600" />
+            <Trophy className="w-5 h-5 text-purple-600" />
           </div>
           <div>
             <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
-              {stats.vocabularyLearned > 0 ? `${stats.vocabularyLearned} Words` : '12 Words'}
+              {completedLevelsCount}/20
             </div>
-            <div className="text-[11px] text-slate-500 font-semibold mt-1">Vocab Learned</div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Levels Mastered</div>
           </div>
         </div>
 
@@ -205,11 +253,10 @@ export const DashboardPage: React.FC = () => {
 
         <div className="space-y-3.5 pt-1">
           {[
-            { topic: 'Science & Physics', progress: 75, color: 'bg-emerald-500' },
-            { topic: 'Psychology & Focus', progress: 60, color: 'bg-brand-500' },
-            { topic: 'English & Grammar', progress: 50, color: 'bg-purple-500' },
-            { topic: 'Nature & Wildlife', progress: 40, color: 'bg-amber-500' },
-            { topic: 'Life Skills & Wisdom', progress: 30, color: 'bg-teal-500' },
+            { topic: 'Psychology & Habit Formation', progress: Math.min(100, (completedLevelsCount * 12) + 25), color: 'bg-brand-500' },
+            { topic: 'English Vocabulary & Grammar Rules', progress: Math.min(100, (completedLevelsCount * 10) + 20), color: 'bg-purple-500' },
+            { topic: 'Science & Physics Discoveries', progress: Math.min(100, (completedLevelsCount * 8) + 30), color: 'bg-emerald-500' },
+            { topic: 'Life Skills & Health Habits', progress: Math.min(100, (completedLevelsCount * 10) + 15), color: 'bg-amber-500' },
           ].map((item) => (
             <div key={item.topic} className="space-y-1.5">
               <div className="flex justify-between text-xs font-bold text-slate-700">
@@ -231,94 +278,54 @@ export const DashboardPage: React.FC = () => {
       <section className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">
         <h2 className="text-base sm:text-lg font-extrabold text-[#0f233a] flex items-center gap-2">
           <Clock className="w-4 h-4 text-[#026fc3]" />
-          Recent Learning History
+          Recent Levels & Quizzes Completed
         </h2>
 
         <div className="space-y-2.5">
-          {stats.recentHistory.length > 0 ? (
-            stats.recentHistory.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-50 border border-stone-200/60 hover:border-brand-300 transition-all text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-extrabold text-slate-900 line-clamp-1">{item.title}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {item.category} • {new Date(item.date).toLocaleDateString()}
+          {allLevels
+            .filter(lvl => progressMap[lvl.youtubeVideoId]?.completed || progressMap[lvl.youtubeVideoId]?.watched)
+            .slice(0, 5)
+            .map((lvl) => {
+              const p = progressMap[lvl.youtubeVideoId];
+              return (
+                <div
+                  key={lvl.levelNumber}
+                  className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-50 border border-stone-200/60 hover:border-brand-300 transition-all text-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-slate-900 line-clamp-1">
+                        Level {lvl.levelNumber}: {lvl.title}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Quiz Score: {p?.quiz_score || 3}/3 • {p?.completed ? 'Completed' : 'In Progress'}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    {item.score}
-                  </span>
                   <Link
-                    to={`/bitz/${item.id}`}
+                    to={`/bitz/${lvl.youtubeVideoId}`}
                     className="px-3 py-1 bg-white border border-slate-200 hover:border-brand-500 text-slate-700 font-bold rounded-xl text-[11px] shadow-2xs"
                   >
                     Review
                   </Link>
                 </div>
-              </div>
-            ))
-          ) : (
-            [
-              {
-                id: '9I0-lpeaAiE',
-                title: 'What If Gravity Suddenly Went to Zero?',
-                category: 'Science',
-                score: '3/3 (100%)',
-                date: 'Today'
-              },
-              {
-                id: '8eoHwBK93Wo',
-                title: 'Starting Your Morning With Your Phone',
-                category: 'Psychology',
-                score: '3/3 (100%)',
-                date: 'Yesterday'
-              },
-              {
-                id: '2o2PQXGbsmc',
-                title: 'Why Is “Colonel” Pronounced “Kernel”?',
-                category: 'English',
-                score: '2/3 (67%)',
-                date: '2 days ago'
-              },
-            ].map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-50 border border-stone-200/60 hover:border-brand-300 transition-all text-xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-extrabold text-slate-900 line-clamp-1">{item.title}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {item.category} • {item.date}
-                    </div>
-                  </div>
-                </div>
+              );
+            })}
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    {item.score}
-                  </span>
-                  <Link
-                    to={`/bitz/${item.id}`}
-                    className="px-3 py-1 bg-white border border-slate-200 hover:border-brand-500 text-slate-700 font-bold rounded-xl text-[11px] shadow-2xs"
-                  >
-                    Review
-                  </Link>
-                </div>
-              </div>
-            ))
+          {allLevels.filter(lvl => progressMap[lvl.youtubeVideoId]?.completed || progressMap[lvl.youtubeVideoId]?.watched).length === 0 && (
+            <div className="p-6 text-center text-slate-400 text-xs space-y-2">
+              <p>No completed levels yet.</p>
+              <Link
+                to="/explore"
+                className="inline-block px-4 py-1.5 bg-[#026fc3] text-white rounded-xl font-bold"
+              >
+                Start Level 1
+              </Link>
+            </div>
           )}
         </div>
       </section>

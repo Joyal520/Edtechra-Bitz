@@ -239,13 +239,19 @@ app.post('/api/youtube/progress', (req, res) => {
     }
 
     const prev = progressMap[userId][videoId] || {};
+    const newScore = quizScore !== undefined ? quizScore : prev.quiz_score || 0;
+    const bestScore = Math.max(prev.best_quiz_score || 0, newScore);
+    const attempts = (prev.attempts_count || 0) + (quizScore !== undefined ? 1 : 0);
+
     progressMap[userId][videoId] = {
       user_id: userId,
       youtube_video_id: videoId,
       watched: watched !== undefined ? watched : prev.watched || false,
       watch_progress: watchProgress !== undefined ? watchProgress : prev.watch_progress || 0,
       quiz_completed: quizCompleted !== undefined ? quizCompleted : prev.quiz_completed || false,
-      quiz_score: quizScore !== undefined ? quizScore : prev.quiz_score || 0,
+      quiz_score: newScore,
+      best_quiz_score: bestScore,
+      attempts_count: attempts,
       quiz_total: quizTotal !== undefined ? quizTotal : prev.quiz_total || 3,
       completed: completed !== undefined ? completed : prev.completed || false,
       last_watched_at: new Date().toISOString()
@@ -256,6 +262,21 @@ app.post('/api/youtube/progress', (req, res) => {
   } catch (error) {
     console.error('Error in /api/youtube/progress:', error);
     res.status(500).json({ success: false, error: 'Failed to save progress' });
+  }
+});
+
+// 8b. GET /api/youtube/progress-map/:userId - Retrieve raw progress map for level locking logic
+app.get('/api/youtube/progress-map/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const progressMap = loadProgress();
+    res.json({
+      success: true,
+      data: progressMap[userId] || {}
+    });
+  } catch (error) {
+    console.error('Error in /api/youtube/progress-map/:userId:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve progress map' });
   }
 });
 
