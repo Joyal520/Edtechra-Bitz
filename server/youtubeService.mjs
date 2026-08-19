@@ -13,7 +13,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const VERIFIED_CHANNEL_ID = 'UCHOag2liOOp1XfTAUCqiFUg';
 export const VERIFIED_UPLOADS_PLAYLIST_ID = 'UUHOag2liOOp1XfTAUCqiFUg';
@@ -24,12 +23,42 @@ const CACHE_DIR = path.resolve(__dirname, 'data');
 const CACHE_FILE = path.resolve(CACHE_DIR, 'youtube_cache.json');
 const SYNC_STATUS_FILE = path.resolve(CACHE_DIR, 'sync_status.json');
 
-// Supabase client for server-side operations
-const supabase = (SUPABASE_URL && SUPABASE_KEY)
-  ? createClient(SUPABASE_URL, SUPABASE_KEY, {
+// Helper: Get Supabase client with maximum legitimate server-side authorization
+export function getServerSupabaseClient(userToken = null) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  const url = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!url) return null;
+
+  // 1. Privileged server-side execution via service_role key (bypasses RLS safely on backend)
+  if (serviceRoleKey) {
+    return createClient(url, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false }
-    })
-  : null;
+    });
+  }
+
+  // 2. Authenticated admin request execution via user JWT token (satisfies is_admin() RLS)
+  if (userToken && anonKey) {
+    return createClient(url, anonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${userToken}`
+        }
+      },
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  }
+
+  // 3. Fallback client using anon key
+  if (anonKey) {
+    return createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+  }
+
+  return null;
+}
 
 // Ensure cache directory exists
 if (!fs.existsSync(CACHE_DIR)) {
@@ -170,12 +199,44 @@ export function saveLocalCache(videos) {
 // CORE SYNCHRONIZATION ENGINE
 // ============================================================================
 
-export async function syncYouTubeChannel(triggerSource = 'manual') {
+export async function syncYouTubeChannel(triggerSource = 'manual', userToken = null) {
   const startTime = Date.now();
   console.log(`\n================================================================`);
   console.log(`[YouTube Sync Started] Trigger: ${triggerSource} | Time: ${new Date().toISOString()}`);
   console.log(`Channel: @EdTechraBitz (${VERIFIED_CHANNEL_ID})`);
   console.log(`================================================================`);
+
+  const activeSupabase = getServerSupabaseClient(userToken);
+
+  // If manual trigger with userToken, verify caller is indeed an administrator
+  if (triggerSource === 'manual' && userToken && activeSupabase) {
+    try {
+      const { data: { user }, error: userErr } = await activeSupabase.auth.getUser(userToken);
+      if (userErr || !user) {
+        throw new Error('Authentication required: Invalid or expired administrator session.');
+      }
+      const { data: profile, error: profileErr } = await activeSupabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profileErr || profile?.role !== 'admin') {
+        throw new Error('Access Denied: Administrator privilege required to synchronize channel.');
+      }
+      console.log(`[YouTube Sync] Authenticated admin request: ${user.email} (${user.id})`);
+    } catch (authError) {
+      console.error('[YouTube Sync Auth Error]:', authError.message);
+      return {
+        success: false,
+        message: authError.message,
+        count: loadLocalCache().length,
+        newCount: 0,
+        upcomingCount: 0,
+        error: authError.message
+      };
+    }
+  }
 
   if (!YOUTUBE_API_KEY) {
     const errorMsg = 'YOUTUBE_API_KEY is not configured on server.';
@@ -240,8 +301,8 @@ export async function syncYouTubeChannel(triggerSource = 'manual') {
 
     // 3. Load Existing Videos from Supabase to prevent overwriting existing content
     const existingDbMap = new Map();
-    if (supabase) {
-      const { data: dbVideos } = await supabase
+    if (activeSupabase) {
+      const { data: dbVideos } = await activeSupabase
         .from('youtube_videos')
         .select(`youtube_video_id, title, category, difficulty, status, youtube_learning_content(*)`);
 
@@ -346,27 +407,27 @@ export async function syncYouTubeChannel(triggerSource = 'manual') {
     console.log(`• Total videos in channel: ${allVideoDetails.length}`);
 
     // 5. Ingest any new videos into Supabase (if Supabase is available)
-    if (supabase && newVideosToInsert.length > 0) {
+    if (activeSupabase && newVideosToInsert.length > 0) {
       console.log(`[YouTube Sync] Ingesting ${newVideosToInsert.length} new records into Supabase...`);
       
-      const { error: vInsertErr } = await supabase
+      const { error: vInsertErr } = await activeSupabase
         .from('youtube_videos')
         .upsert(newVideosToInsert, { onConflict: 'youtube_video_id' });
 
       if (vInsertErr) {
         console.error('[YouTube Sync Error] Failed to insert new videos into youtube_videos:', vInsertErr.message);
-        throw vInsertErr;
+        throw new Error(`Database error on youtube_videos: ${vInsertErr.message}`);
       } else {
         console.log(`✓ Inserted ${newVideosToInsert.length} new records into public.youtube_videos with status='upcoming'.`);
       }
 
-      const { error: cInsertErr } = await supabase
+      const { error: cInsertErr } = await activeSupabase
         .from('youtube_learning_content')
         .upsert(newContentToInsert, { onConflict: 'youtube_video_id' });
 
       if (cInsertErr) {
         console.error('[YouTube Sync Error] Failed to insert new learning content:', cInsertErr.message);
-        throw cInsertErr;
+        throw new Error(`Database error on youtube_learning_content: ${cInsertErr.message}`);
       } else {
         console.log(`✓ Inserted ${newContentToInsert.length} new learning records into public.youtube_learning_content with status='upcoming'.`);
       }

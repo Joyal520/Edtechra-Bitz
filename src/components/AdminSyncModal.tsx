@@ -152,7 +152,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
         </div>
 
         {/* Result Alerts */}
-        {syncResult && (
+        {syncResult && syncResult.success && (
           <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <div>

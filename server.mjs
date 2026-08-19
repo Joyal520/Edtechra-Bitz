@@ -15,6 +15,15 @@ import {
   WEBSUB_TOPIC_URL,
   WEBSUB_HUB_URL
 } from './server/youtubeService.mjs';
+import {
+  buildPresignedUpload,
+  buildObjectKey,
+  buildPublicUrl,
+  deleteObjects,
+  validateImageUpload
+} from './server/r2Service.mjs';
+import { getR2Config } from './server/r2Config.mjs';
+import { moderatePostContent } from './server/moderationService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,12 +38,87 @@ const PORT = process.env.PORT || 3005;
 app.use(cors());
 // Accept raw Atom XML from YouTube PubSubHubbub webhooks, as well as JSON
 app.use(express.text({ type: ['application/atom+xml', 'application/xml', 'text/xml', 'text/plain'] }));
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 
 // Initialize server-side Supabase client
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+
+// Helper: Verify Supabase User Token from Request Authorization Header
+async function verifyAuthUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  if (!token || !serverSupabase) return null;
+
+  try {
+    const { data: { user }, error } = await serverSupabase.auth.getUser(token);
+    if (error || !user) return null;
+
+    // Retrieve user profile
+    const { data: profile } = await serverSupabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url, role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    return {
+      user,
+      profile: profile || {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Student',
+        email: user.email || '',
+        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+        role: user.email === 'roshanjoyal520@gmail.com' ? 'admin' : 'student'
+      }
+    };
+  } catch (err) {
+    console.error('[verifyAuthUser error]:', err);
+    return null;
+  }
+}
+
+// In-memory / file-based student posts store for resilient persistence
+const POSTS_FILE = path.resolve(__dirname, 'server/data/posts_cache.json');
+const LIKES_FILE = path.resolve(__dirname, 'server/data/likes_cache.json');
+
+function loadPostsCache() {
+  try {
+    if (fs.existsSync(POSTS_FILE)) {
+      return JSON.parse(fs.readFileSync(POSTS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading posts cache:', e);
+  }
+  return [];
+}
+
+function savePostsCache(posts) {
+  try {
+    fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving posts cache:', e);
+  }
+}
+
+function loadLikesCache() {
+  try {
+    if (fs.existsSync(LIKES_FILE)) {
+      return JSON.parse(fs.readFileSync(LIKES_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading likes cache:', e);
+  }
+  return {};
+}
+
+function saveLikesCache(likes) {
+  try {
+    fs.writeFileSync(LIKES_FILE, JSON.stringify(likes, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving likes cache:', e);
+  }
+}
 
 // In-memory / file-based student progress store for resilient persistence
 const PROGRESS_FILE = path.resolve(__dirname, 'server/data/progress_cache.json');
@@ -130,11 +214,19 @@ app.get('/api/youtube/video/:id', async (req, res) => {
 app.post('/api/youtube/sync', async (req, res) => {
   try {
     console.log('[API] Triggering channel synchronization from @EdTechraBitz...');
-    const result = await syncYouTubeChannel('manual');
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+    const result = await syncYouTubeChannel('manual', token);
+
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Error in /api/youtube/sync:', error);
-    res.status(500).json({ success: false, error: 'Failed to sync with YouTube' });
+    res.status(500).json({ success: false, error: error.message || 'Failed to sync with YouTube' });
   }
 });
 
@@ -342,6 +434,601 @@ setInterval(() => {
     console.error('[Daemon Scheduler Error]:', err.message);
   });
 }, BACKUP_SYNC_INTERVAL);
+
+// ============================================================================
+// API ROUTES: STUDENT POST FEED & CLOUDFLARE R2 STORAGE
+// ============================================================================
+
+// 1. POST /api/posts/presign-upload - Generate secure presigned upload URL for direct R2 upload
+app.post('/api/posts/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to upload media.' });
+    }
+
+    const { filename, contentType = 'image/webp', size } = req.body;
+
+    try {
+      validateImageUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const objectKey = buildObjectKey({
+      userId: authData.user.id,
+      filename,
+      contentType
+    });
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in /api/posts/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate upload URL' });
+  }
+});
+
+// 2. POST /api/posts - Create student post record
+app.post('/api/posts', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to create a post.' });
+    }
+
+    const {
+      caption,
+      image_url,
+      image_object_key,
+      storage_provider = 'r2',
+      image_width,
+      image_height,
+      image_size_bytes,
+      image_format = 'webp'
+    } = req.body;
+
+    if (!caption || !caption.trim()) {
+      return res.status(400).json({ success: false, error: 'Post caption is required.' });
+    }
+
+    if (!image_url || !image_object_key) {
+      return res.status(400).json({ success: false, error: 'Uploaded square image is required.' });
+    }
+
+    const now = new Date().toISOString();
+    const newPost = {
+      id: crypto.randomUUID(),
+      user_id: authData.user.id,
+      caption: caption.trim(),
+      image_url,
+      image_object_key,
+      storage_provider,
+      status: 'pending',
+      moderation_status: 'pending',
+      moderation_reason: null,
+      moderated_at: null,
+      likes_count: 0,
+      comments_count: 0,
+      image_width: image_width ? Number(image_width) : null,
+      image_height: image_height ? Number(image_height) : null,
+      image_size_bytes: image_size_bytes ? Number(image_size_bytes) : null,
+      image_format,
+      created_at: now,
+      updated_at: now
+    };
+
+    // 2. Perform Automated AI Moderation via OpenAI omni-moderation-latest
+    const moderation = await moderatePostContent({
+      postId: newPost.id,
+      imageUrl: image_url,
+      caption: newPost.caption
+    });
+
+    const postWithAuthor = {
+      ...newPost,
+      author: authData.profile
+    };
+
+    // Case 1: AI Rejected -> Delete R2 file, update status to rejected, return guidelines error
+    if (moderation.status === 'rejected') {
+      console.log(`[Moderation] Post ${newPost.id} REJECTED by AI. Reason: ${moderation.reason}. Deleting R2 media...`);
+      newPost.status = 'rejected';
+      newPost.moderation_status = 'rejected';
+      newPost.moderation_reason = moderation.reason;
+      newPost.moderated_at = new Date().toISOString();
+
+      // Delete the R2 image object immediately to prevent orphaned storage
+      try {
+        await deleteObjects([image_object_key]);
+      } catch (delErr) {
+        console.error('[R2 Cleanup Warning] Failed to delete rejected post image:', delErr.message);
+      }
+
+      // Save rejected record to cache for auditing
+      const postsCache = loadPostsCache();
+      postsCache.unshift(newPost);
+      savePostsCache(postsCache);
+
+      if (serverSupabase) {
+        try {
+          await serverSupabase.from('student_posts').insert([newPost]);
+        } catch (sbErr) {
+          // Ignore
+        }
+      }
+
+      return res.status(422).json({
+        success: false,
+        error: "This image cannot be published because it does not meet EdTechra's community guidelines.",
+        moderation: {
+          status: 'rejected',
+          reason: moderation.reason
+        }
+      });
+    }
+
+    // Case 2: AI Uncertain / API Error -> Mark for manual admin review (DO NOT publish)
+    if (moderation.status === 'review') {
+      console.log(`[Moderation] Post ${newPost.id} marked for ADMIN REVIEW. Reason: ${moderation.reason}`);
+      newPost.status = 'review';
+      newPost.moderation_status = 'review';
+      newPost.moderation_reason = moderation.reason;
+      newPost.moderated_at = new Date().toISOString();
+
+      const postsCache = loadPostsCache();
+      postsCache.unshift(newPost);
+      savePostsCache(postsCache);
+
+      if (serverSupabase) {
+        try {
+          await serverSupabase.from('student_posts').insert([newPost]);
+        } catch (sbErr) {
+          console.warn('[Supabase student_posts insert notice]:', sbErr.message);
+        }
+      }
+
+      return res.status(202).json({
+        success: true,
+        message: 'Your post is waiting for review.',
+        data: {
+          ...newPost,
+          author: authData.profile
+        },
+        moderation: {
+          status: 'review',
+          reason: moderation.reason
+        }
+      });
+    }
+
+    // Case 3: AI Approved -> Mark approved and publish to public feed
+    newPost.status = 'approved';
+    newPost.moderation_status = 'approved';
+    newPost.moderation_reason = moderation.reason;
+    newPost.moderated_at = new Date().toISOString();
+
+    // Save to resilient local posts cache
+    const postsCache = loadPostsCache();
+    postsCache.unshift(newPost);
+    savePostsCache(postsCache);
+
+    // Save to Supabase student_posts table if available
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('student_posts').insert([newPost]);
+      } catch (sbErr) {
+        console.warn('[Supabase student_posts insert notice]:', sbErr.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...newPost,
+        author: authData.profile
+      },
+      moderation: {
+        status: 'approved'
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/posts:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create student post' });
+  }
+});
+
+// 3. GET /api/posts - Retrieve paginated student posts ordered newest -> oldest (APPROVED ONLY)
+app.get('/api/posts', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const sort = req.query.sort || 'newest';
+
+    const authData = await verifyAuthUser(req);
+    const currentUserId = authData?.user?.id || null;
+
+    let allPosts = loadPostsCache();
+    const likesMap = loadLikesCache();
+
+    // If Supabase is available, attempt to query latest records
+    if (serverSupabase) {
+      try {
+        const { data: dbPosts, error: dbErr } = await serverSupabase
+          .from('student_posts')
+          .select('*, profiles(id, full_name, email, avatar_url, role)')
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false });
+
+        if (!dbErr && Array.isArray(dbPosts) && dbPosts.length > 0) {
+          allPosts = dbPosts.map(p => ({
+            ...p,
+            author: p.profiles || {
+              id: p.user_id,
+              full_name: 'Student',
+              email: '',
+              role: 'student'
+            }
+          }));
+          savePostsCache(allPosts);
+        }
+      } catch (e) {
+        // Fallback to cache
+      }
+    }
+
+    // Attach profile info from profiles cache / metadata for cached items
+    if (serverSupabase && allPosts.length > 0 && !allPosts[0].author) {
+      try {
+        const userIds = Array.from(new Set(allPosts.map(p => p.user_id)));
+        const { data: profiles } = await serverSupabase
+          .from('profiles')
+          .select('id, full_name, email, avatar_url, role')
+          .in('id', userIds);
+
+        const profileMap = new Map((profiles || []).map(pr => [pr.id, pr]));
+        allPosts = allPosts.map(p => ({
+          ...p,
+          author: profileMap.get(p.user_id) || {
+            id: p.user_id,
+            full_name: 'EdTechra Student',
+            email: '',
+            role: 'student'
+          }
+        }));
+      } catch (e) {
+        // Keep existing
+      }
+    }
+
+    // STRICT FEED FILTER: Only approved posts appear in the public feed
+    allPosts = allPosts.filter(p => p.status === 'approved');
+
+    // Sorting
+    if (sort === 'popular') {
+      allPosts.sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
+    } else {
+      // Default: Newest first (created_at DESC, secondary id tiebreaker)
+      allPosts.sort((a, b) => {
+        const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return String(b.id).localeCompare(String(a.id));
+      });
+    }
+
+    const total = allPosts.length;
+    const startIndex = (page - 1) * limit;
+    const paginated = allPosts.slice(startIndex, startIndex + limit);
+
+    // Attach per-user like state
+    const formattedPosts = paginated.map(p => {
+      const postLikes = likesMap[p.id] || [];
+      const isLiked = currentUserId ? postLikes.includes(currentUserId) : false;
+      const actualCount = Math.max(p.likes_count || 0, postLikes.length);
+      return {
+        ...p,
+        likes_count: actualCount,
+        is_liked_by_me: isLiked
+      };
+    });
+
+    res.json({
+      success: true,
+      posts: formattedPosts,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: startIndex + limit < total
+    });
+  } catch (error) {
+    console.error('Error in GET /api/posts:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve post feed' });
+  }
+});
+
+// 4. DELETE /api/posts/:id - Delete student post & delete associated R2 object
+app.delete('/api/posts/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to delete posts.' });
+    }
+
+    const { id } = req.params;
+    const postsCache = loadPostsCache();
+    const postIndex = postsCache.findIndex(p => p.id === id);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Post not found.' });
+    }
+
+    const post = postsCache[postIndex];
+
+    // Ownership & Admin verification
+    const isOwner = post.user_id === authData.user.id;
+    const isAdmin = authData.profile.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Permission denied: You cannot delete another student\'s post.' });
+    }
+
+    // 1. Delete associated media object from Cloudflare R2 bucket
+    if (post.image_object_key) {
+      try {
+        await deleteObjects([post.image_object_key]);
+        console.log(`[R2] Deleted object: ${post.image_object_key}`);
+      } catch (r2Err) {
+        console.error('[R2 Delete Warning]:', r2Err.message);
+      }
+    }
+
+    // 2. Remove from local cache
+    postsCache.splice(postIndex, 1);
+    savePostsCache(postsCache);
+
+    // 3. Remove from Supabase student_posts table
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('student_posts').delete().eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase delete student_posts notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Post and media deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/posts/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete post' });
+  }
+});
+
+// 5. POST /api/posts/:id/like - Toggle like on post
+app.post('/api/posts/:id/like', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to like posts.' });
+    }
+
+    const { id } = req.params;
+    const userId = authData.user.id;
+
+    const likesMap = loadLikesCache();
+    if (!likesMap[id]) {
+      likesMap[id] = [];
+    }
+
+    const userLikedIndex = likesMap[id].indexOf(userId);
+    let liked = false;
+
+    if (userLikedIndex >= 0) {
+      likesMap[id].splice(userLikedIndex, 1);
+      liked = false;
+    } else {
+      likesMap[id].push(userId);
+      liked = true;
+    }
+
+    saveLikesCache(likesMap);
+
+    // Update posts cache count
+    const postsCache = loadPostsCache();
+    const pIdx = postsCache.findIndex(p => p.id === id);
+    if (pIdx >= 0) {
+      postsCache[pIdx].likes_count = likesMap[id].length;
+      savePostsCache(postsCache);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        liked,
+        likesCount: likesMap[id].length
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/posts/:id/like:', error);
+    res.status(500).json({ success: false, error: 'Failed to update like status' });
+  }
+});
+
+// 6. POST /api/posts/rollback-upload - Rollback orphaned R2 object if post creation failed
+app.post('/api/posts/rollback-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Unauthorized.' });
+    }
+
+    const { objectKey } = req.body;
+    if (objectKey && typeof objectKey === 'string') {
+      await deleteObjects([objectKey]);
+      console.log(`[R2 Rollback] Cleaned up orphaned object: ${objectKey}`);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in /api/posts/rollback-upload:', error);
+    res.status(500).json({ success: false, error: 'Rollback failed' });
+  }
+});
+
+// 7. GET /api/posts/r2-status - Safe diagnostic endpoint for R2 configuration
+app.get('/api/posts/r2-status', (req, res) => {
+  const config = getR2Config();
+  res.json({
+    success: true,
+    isConfigured: config.isConfigured,
+    bucket: config.bucket,
+    publicBaseUrl: config.publicBaseUrl,
+    endpointHost: config.endpoint ? new URL(config.endpoint).host : null
+  });
+});
+
+// 8. GET /api/admin/moderation/posts - Admin-only queue for review / pending / rejected posts
+app.get('/api/admin/moderation/posts', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+
+    const filterStatus = req.query.status || 'review'; // 'review' | 'pending' | 'rejected' | 'all'
+    let allPosts = loadPostsCache();
+
+    if (serverSupabase) {
+      try {
+        let query = serverSupabase
+          .from('student_posts')
+          .select('*, profiles(id, full_name, email, avatar_url, role)')
+          .order('created_at', { ascending: false });
+
+        if (filterStatus !== 'all') {
+          query = query.eq('status', filterStatus);
+        }
+
+        const { data: dbPosts, error: dbErr } = await query;
+        if (!dbErr && Array.isArray(dbPosts)) {
+          allPosts = dbPosts.map(p => ({
+            ...p,
+            author: p.profiles || {
+              id: p.user_id,
+              full_name: 'Student',
+              email: '',
+              role: 'student'
+            }
+          }));
+        }
+      } catch (e) {
+        // Fallback to cache
+      }
+    }
+
+    if (filterStatus !== 'all') {
+      allPosts = allPosts.filter(p => p.status === filterStatus);
+    }
+
+    res.json({
+      success: true,
+      posts: allPosts,
+      total: allPosts.length
+    });
+  } catch (error) {
+    console.error('Error in GET /api/admin/moderation/posts:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve moderation queue.' });
+  }
+});
+
+// 9. POST /api/admin/moderation/posts/:id/action - Admin approve or reject action
+app.post('/api/admin/moderation/posts/:id/action', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+
+    const { id } = req.params;
+    const { action, reason = '' } = req.body; // action: 'approve' | 'reject'
+
+    if (action !== 'approve' && action !== 'reject') {
+      return res.status(400).json({ success: false, error: 'Invalid action. Must be approve or reject.' });
+    }
+
+    const postsCache = loadPostsCache();
+    const postIndex = postsCache.findIndex(p => p.id === id);
+
+    if (postIndex === -1) {
+      return res.status(404).json({ success: false, error: 'Post not found.' });
+    }
+
+    const post = postsCache[postIndex];
+    const now = new Date().toISOString();
+
+    if (action === 'approve') {
+      post.status = 'approved';
+      post.moderation_status = 'approved';
+      post.moderation_reason = reason || 'Manually approved by admin.';
+      post.moderated_at = now;
+      post.updated_at = now;
+    } else {
+      post.status = 'rejected';
+      post.moderation_status = 'rejected';
+      post.moderation_reason = reason || 'Manually rejected by admin.';
+      post.moderated_at = now;
+      post.updated_at = now;
+
+      // Clean up R2 media object
+      if (post.image_object_key) {
+        try {
+          await deleteObjects([post.image_object_key]);
+          console.log(`[Admin Action] Deleted rejected R2 object: ${post.image_object_key}`);
+        } catch (r2Err) {
+          console.error('[Admin Action R2 Delete Warning]:', r2Err.message);
+        }
+      }
+    }
+
+    postsCache[postIndex] = post;
+    savePostsCache(postsCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('student_posts')
+          .update({
+            status: post.status,
+            moderation_status: post.moderation_status,
+            moderation_reason: post.moderation_reason,
+            moderated_at: post.moderated_at,
+            updated_at: post.updated_at
+          })
+          .eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase update moderation notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Post ${action === 'approve' ? 'approved' : 'rejected'} successfully.`,
+      data: post
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/moderation/posts/:id/action:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to process moderation action.' });
+  }
+});
 
 export default app;
 

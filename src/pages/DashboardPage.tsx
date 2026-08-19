@@ -17,7 +17,7 @@ import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
 import { getTimeBasedGreeting } from '@/utils/greeting';
 import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
-import { UserLearningProgress } from '@/types';
+import { UserLearningProgress, CategoryProgress } from '@/types';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, isLoading, openAuthModal } = useAuth();
@@ -31,24 +31,39 @@ export const DashboardPage: React.FC = () => {
     recentHistory: []
   });
   const [progressMap, setProgressMap] = useState<{ [videoId: string]: UserLearningProgress }>({});
+  const [categoryProgress, setCategoryProgress] = useState<CategoryProgress[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState<boolean>(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
   const userId = user?.id || 'guest-user';
   const allLevels = getAllLevels();
 
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
       try {
-        const [statsData, pMap] = await Promise.all([
+        setCategoriesLoading(true);
+        setCategoriesError(null);
+        const [statsData, pMap, catProg] = await Promise.all([
           youtubeClient.getUserProgress(userId),
-          youtubeClient.getProgressMap(userId)
+          youtubeClient.getProgressMap(userId),
+          youtubeClient.getCategoryProgress(userId)
         ]);
+        if (!isMounted) return;
         if (statsData) setStats(statsData);
         if (pMap) setProgressMap(pMap);
-      } catch (err) {
+        if (catProg) setCategoryProgress(catProg);
+      } catch (err: any) {
         console.error('Error loading dashboard stats:', err);
+        if (isMounted) setCategoriesError(err?.message || 'Failed to load progress');
+      } finally {
+        if (isMounted) setCategoriesLoading(false);
       }
     }
     loadData();
+    return () => {
+      isMounted = false;
+    };
   }, [userId]);
 
   if (isLoading) {
@@ -259,27 +274,70 @@ export const DashboardPage: React.FC = () => {
           <span className="text-xs font-bold text-slate-400">Adaptive Progress</span>
         </div>
 
-        <div className="space-y-3.5 pt-1">
-          {[
-            { topic: 'Psychology & Habit Formation', progress: Math.min(100, (completedLevelsCount * 12) + 25), color: 'bg-brand-500' },
-            { topic: 'English Vocabulary & Grammar Rules', progress: Math.min(100, (completedLevelsCount * 10) + 20), color: 'bg-purple-500' },
-            { topic: 'Science & Physics Discoveries', progress: Math.min(100, (completedLevelsCount * 8) + 30), color: 'bg-emerald-500' },
-            { topic: 'Life Skills & Health Habits', progress: Math.min(100, (completedLevelsCount * 10) + 15), color: 'bg-amber-500' },
-          ].map((item) => (
-            <div key={item.topic} className="space-y-1.5">
-              <div className="flex justify-between text-xs font-bold text-slate-700">
-                <span>{item.topic}</span>
-                <span className="text-slate-500">{item.progress}%</span>
+        {categoriesLoading ? (
+          <div className="space-y-3.5 pt-1 animate-pulse">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold">
+                  <div className="h-3.5 bg-slate-200 rounded-md w-44"></div>
+                  <div className="h-3.5 bg-slate-200 rounded-md w-8"></div>
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-slate-200 rounded-full w-1/4"></div>
+                </div>
               </div>
-              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                  style={{ width: `${item.progress}%` }}
-                />
+            ))}
+          </div>
+        ) : categoriesError ? (
+          <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-700 font-medium flex items-center justify-between">
+            <span>Unable to load topic progress records.</span>
+            <button
+              onClick={() => {
+                setCategoriesLoading(true);
+                setCategoriesError(null);
+                youtubeClient.getCategoryProgress(userId)
+                  .then((cp) => {
+                    setCategoryProgress(cp);
+                    setCategoriesLoading(false);
+                  })
+                  .catch((e) => {
+                    console.error(e);
+                    setCategoriesError(e.message);
+                    setCategoriesLoading(false);
+                  });
+              }}
+              className="text-xs font-bold underline hover:text-rose-900 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        ) : categoryProgress.length === 0 ? (
+          <div className="p-4 text-center text-xs text-slate-400 font-medium">
+            No curriculum topics found.
+          </div>
+        ) : (
+          <div className="space-y-3.5 pt-1">
+            {categoryProgress.map((item) => (
+              <div key={item.category} className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <span>{item.displayTitle}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      ({item.completedLessons}/{item.totalLessons})
+                    </span>
+                  </span>
+                  <span className="text-slate-500 font-mono font-bold">{item.progressPercent}%</span>
+                </div>
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
+                    style={{ width: `${item.progressPercent}%` }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Recent Learning Activity History */}

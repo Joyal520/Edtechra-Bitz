@@ -79,6 +79,16 @@ export interface Category {
   color?: string;
 }
 
+export interface CategoryProgress {
+  category: string;
+  displayTitle: string;
+  totalLessons: number;
+  completedLessons: number;
+  progressPercent: number;
+  color: string;
+  order?: number;
+}
+
 export interface UserProfile {
   id: string;
   email: string;

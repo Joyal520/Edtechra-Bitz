@@ -1,7 +1,19 @@
-import { YouTubeVideo, UserLearningProgress, ContentStatus } from '@/types';
+import { YouTubeVideo, UserLearningProgress, ContentStatus, CategoryProgress } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 const API_BASE = '/api/youtube';
+
+export const CATEGORY_DISPLAY_CONFIG: Record<string, { displayTitle: string; color: string; order: number }> = {
+  'Psychology': { displayTitle: 'Psychology & Habit Formation', color: 'bg-brand-500', order: 1 },
+  'English': { displayTitle: 'English Vocabulary & Grammar Rules', color: 'bg-purple-500', order: 2 },
+  'Science': { displayTitle: 'Science & Physics Discoveries', color: 'bg-emerald-500', order: 3 },
+  'Life Skills': { displayTitle: 'Life Skills & Health Habits', color: 'bg-amber-500', order: 4 },
+  'Nature': { displayTitle: 'Nature & Wildlife Secrets', color: 'bg-teal-500', order: 5 },
+  'Space': { displayTitle: 'Space & Astronomy Discoveries', color: 'bg-indigo-500', order: 6 },
+  'History': { displayTitle: 'History & World Civilizations', color: 'bg-orange-500', order: 7 },
+  'Technology': { displayTitle: 'Technology & Digital Innovation', color: 'bg-cyan-500', order: 8 },
+  'Mysteries': { displayTitle: 'Mysteries & Critical Thinking', color: 'bg-rose-500', order: 9 }
+};
 
 export interface ShortsQueryParams {
   category?: string;
@@ -222,11 +234,28 @@ export const youtubeClient = {
   // 3. Trigger Channel Synchronization (Admin)
   async syncChannel(): Promise<{ success: boolean; message: string; count: number; newCount?: number; upcomingCount?: number; stats?: SyncStatusData }> {
     try {
-      const response = await fetch(`${API_BASE}/sync`, { method: 'POST' });
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
       }
-      return await response.json();
+
+      const response = await fetch(`${API_BASE}/sync`, {
+        method: 'POST',
+        headers
+      });
+
+      const data = await response.json();
+      if (!response.ok || data.success === false) {
+        throw new Error(data.message || data.error || `HTTP error ${response.status}`);
+      }
+
+      return data;
     } catch (error) {
       console.error('[YouTube Client] Sync error:', error);
       throw error;
@@ -484,6 +513,111 @@ export const youtubeClient = {
         totalCompleted: 0,
         recentHistory: []
       };
+    }
+  },
+
+  // 7. Get Dynamic Category/Topic Progress Calculated from Real Student Activity
+  async getCategoryProgress(userId = 'guest-user'): Promise<CategoryProgress[]> {
+    try {
+      let videos: Array<{ id: string; youtube_video_id: string; category?: string; status?: string }> = [];
+
+      // 1. Fetch lightweight curriculum list
+      if (supabase) {
+        const { data: dbVideos, error: dbErr } = await supabase
+          .from('youtube_videos')
+          .select('id, youtube_video_id, category, status');
+
+        if (!dbErr && dbVideos && dbVideos.length > 0) {
+          videos = dbVideos;
+        }
+      }
+
+      // Fallback if Supabase query returned 0
+      if (videos.length === 0) {
+        const fallbackShorts = await this.getShorts();
+        videos = fallbackShorts.map(s => ({
+          id: s.id,
+          youtube_video_id: s.youtube_video_id,
+          category: s.category,
+          status: s.status
+        }));
+      }
+
+      // 2. Fetch authenticated student completion records
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const completedSet = new Set<string>();
+
+      if (supabase && userId && isUuid.test(userId)) {
+        const { data: progressRows, error: pErr } = await supabase
+          .from('youtube_learning_progress')
+          .select('youtube_video_id, completed')
+          .eq('user_id', userId);
+
+        if (!pErr && progressRows) {
+          progressRows.forEach(r => {
+            if (r.completed) {
+              completedSet.add(r.youtube_video_id);
+            }
+          });
+        }
+      }
+
+      // Merge local progress map for offline/guest resilience
+      const localMap = this.getLocalProgressMap();
+      Object.values(localMap).forEach(row => {
+        if (row.completed && row.youtube_video_id) {
+          completedSet.add(row.youtube_video_id);
+        }
+      });
+
+      // 3. Aggregate real lessons count and completed count per category
+      const categoryMap: Record<string, { total: number; completed: number }> = {};
+
+      videos.forEach(v => {
+        // Skip archived or draft content
+        if (v.status === 'archived' || v.status === 'draft') return;
+
+        const cat = (v.category || 'General').trim();
+        if (!categoryMap[cat]) {
+          categoryMap[cat] = { total: 0, completed: 0 };
+        }
+        categoryMap[cat].total += 1;
+
+        if (completedSet.has(v.youtube_video_id) || completedSet.has(v.id)) {
+          categoryMap[cat].completed += 1;
+        }
+      });
+
+      // 4. Transform into CategoryProgress objects with display formatting
+      const results: CategoryProgress[] = Object.entries(categoryMap)
+        .filter(([_, data]) => data.total > 0)
+        .map(([cat, data]) => {
+          const cfg = CATEGORY_DISPLAY_CONFIG[cat] || {
+            displayTitle: `${cat} Discoveries`,
+            color: 'bg-slate-500',
+            order: 99
+          };
+
+          const progressPercent = data.total > 0
+            ? Math.min(100, Math.max(0, Math.round((data.completed / data.total) * 100)))
+            : 0;
+
+          return {
+            category: cat,
+            displayTitle: cfg.displayTitle,
+            totalLessons: data.total,
+            completedLessons: data.completed,
+            progressPercent,
+            color: cfg.color,
+            order: cfg.order
+          };
+        })
+        .sort((a, b) => (a.order || 99) - (b.order || 99));
+
+      return results;
+    } catch (error) {
+      console.error('[YouTube Client] Error calculating category progress:', error);
+      throw error;
     }
   }
 };
