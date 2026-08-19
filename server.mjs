@@ -917,6 +917,38 @@ app.get('/api/posts/r2-status', (req, res) => {
   });
 });
 
+// HEALTH CHECK: GET /api/health - Shows which environment variables are configured (no secrets leaked)
+app.get('/api/health', (req, res) => {
+  const checks = {
+    VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    VITE_SUPABASE_ANON_KEY: !!process.env.VITE_SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    R2_ACCESS_KEY_ID: !!process.env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: !!process.env.R2_SECRET_ACCESS_KEY,
+    R2_ENDPOINT: !!process.env.R2_ENDPOINT,
+    R2_BUCKET: !!process.env.R2_BUCKET,
+    R2_PUBLIC_URL: !!process.env.R2_PUBLIC_URL,
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+    YOUTUBE_API_KEY: !!process.env.YOUTUBE_API_KEY
+  };
+
+  const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+  const serverSupabaseReady = !!serverSupabase;
+
+  res.json({
+    status: missing.length === 0 ? 'healthy' : 'unhealthy',
+    serverSupabaseInitialized: serverSupabaseReady,
+    env: checks,
+    missing,
+    message: missing.length === 0
+      ? 'All environment variables are configured.'
+      : `MISSING environment variables: ${missing.join(', ')}. Add them in Vercel Dashboard → Settings → Environment Variables, then redeploy.`,
+    nodeEnv: process.env.NODE_ENV || 'undefined',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 8. GET /api/admin/moderation/posts - Admin-only queue for review / pending / rejected posts
 app.get('/api/admin/moderation/posts', async (req, res) => {
   try {
