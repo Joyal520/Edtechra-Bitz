@@ -1,24 +1,30 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { UserProfile, AuthModalMode, AuthIntent } from '@/types';
+import { UserProfile, AuthModalMode, AuthIntent, AuthState } from '@/types';
 
 interface AuthContextType {
+  authState: AuthState;
   user: User | null;
   session: Session | null;
   profile: UserProfile | null;
   isAdmin: boolean;
   isLoading: boolean;
+  isAuthenticated: boolean;
+  isProfileComplete: boolean;
   authModalOpen: boolean;
   authModalMode: AuthModalMode;
+  oauthErrorMessage: string | null;
   pendingIntent: AuthIntent;
   openAuthModal: (mode?: AuthModalMode, intent?: AuthIntent) => void;
   closeAuthModal: () => void;
+  clearOAuthError: () => void;
+  requireAuth: (destination?: AuthIntent | string, onSuccess?: () => void) => Promise<boolean>;
   setPendingIntent: (intent: AuthIntent) => void;
   executePendingIntent: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
-  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error?: string; message?: string }>;
-  signInWithGoogle: (pendingName?: string) => Promise<{ error?: string }>;
+  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error?: string; message?: string; sessionEstablished?: boolean }>;
+  signInWithGoogle: () => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string; message?: string }>;
   updateProfileName: (newName: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -27,21 +33,60 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Pure helper function: Check if user has completed display name onboarding
+export const checkIsProfileComplete = (currentUser: User | null, currentProfile: UserProfile | null): boolean => {
+  if (!currentUser) return false;
+  const fullName = currentProfile?.full_name?.trim() || currentUser.user_metadata?.full_name?.trim() || currentUser.user_metadata?.name?.trim();
+  if (!fullName) return false;
+  
+  const emailPrefix = currentUser.email?.split('@')[0]?.trim().toLowerCase();
+  if (emailPrefix && fullName.toLowerCase() === emailPrefix) {
+    if (currentUser.user_metadata?.onboarding_completed) return true;
+    return false;
+  }
+  return true;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [authState, setAuthState] = useState<AuthState>('loading');
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('signup');
-  const [pendingIntent, setPendingIntent] = useState<AuthIntent>(null);
+  const [oauthErrorMessage, setOauthErrorMessage] = useState<string | null>(null);
+  const [pendingIntent, setPendingIntentState] = useState<AuthIntent>(null);
+
+  // Keep a ref of pendingIntent to avoid stale closures during asynchronous auth flows
+  const pendingIntentRef = useRef<AuthIntent>(null);
+  const setPendingIntent = useCallback((intent: AuthIntent) => {
+    pendingIntentRef.current = intent;
+    setPendingIntentState(intent);
+    if (intent) {
+      try {
+        localStorage.setItem('edtechra_pending_intent', JSON.stringify(intent));
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      try {
+        localStorage.removeItem('edtechra_pending_intent');
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
+  const isLoading = authState === 'loading';
+  const isAuthenticated = authState === 'authenticated' && Boolean(user);
+  const isProfileComplete = Boolean(isAuthenticated && checkIsProfileComplete(user, profile));
 
   const isAdmin = Boolean(
     user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' &&
     (profile?.role === 'admin' || user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com')
   );
 
-  // Fetch or safely ensure profile from Supabase
+  // Safely fetch or resolve user profile from Supabase
   const fetchUserProfile = useCallback(async (currentUser: User): Promise<UserProfile | null> => {
     if (!supabase) return null;
 
@@ -50,37 +95,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('profiles')
         .select('*')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        console.warn('[Supabase Profile Query] Notice:', {
-          code: error.code,
-          message: error.message
-        });
+        console.warn('[Supabase Profile Query] Notice:', error.message);
       }
 
-      // Check stored user name
-      const storedName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
-      let effectiveName = data?.full_name || storedName || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
-      const pendingName = localStorage.getItem('edtechra_pending_name');
-
-      if ((!data?.full_name || data.full_name === currentUser.email?.split('@')[0]) && effectiveName.trim()) {
-        effectiveName = effectiveName.trim();
-        try {
-          await supabase
-            .from('profiles')
-            .update({ full_name: effectiveName, updated_at: new Date().toISOString() })
-            .eq('id', currentUser.id);
-          localStorage.removeItem('edtechra_pending_name');
-        } catch (err) {
-          console.warn('[AuthContext] Error applying name to database:', err);
-        }
-      } else if (pendingName) {
-        localStorage.removeItem('edtechra_pending_name');
-      }
+      const metaName = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || '';
+      const effectiveName = data?.full_name?.trim() || metaName.trim() || '';
 
       const isUserAdmin = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
-      const resolvedRole = isUserAdmin ? 'admin' : (data?.role === 'admin' ? 'student' : (data?.role || 'student'));
+      const resolvedRole = isUserAdmin ? 'admin' : (data?.role === 'admin' ? 'admin' : (data?.role || 'student'));
 
       if (data) {
         const userProfile: UserProfile = {
@@ -98,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Fallback profile if record doesn't exist yet
-      const fallbackName = effectiveName || currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || '';
+      const fallbackName = effectiveName || currentUser.email?.split('@')[0] || '';
       const fallbackProfile: UserProfile = {
         id: currentUser.id,
         email: currentUser.email || '',
@@ -126,20 +151,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Execute and clear any pending navigation/action after successful login/onboarding
   const executePendingIntent = useCallback(() => {
-    let intentToRun = pendingIntent;
+    let intentToRun = pendingIntentRef.current;
     if (!intentToRun) {
-      const saved = localStorage.getItem('edtechra_pending_intent');
-      if (saved) {
-        try {
+      try {
+        const saved = localStorage.getItem('edtechra_pending_intent');
+        if (saved) {
           intentToRun = JSON.parse(saved);
-        } catch (e) {
-          // ignore
         }
+      } catch (e) {
+        // ignore
       }
     }
 
     if (intentToRun) {
-      localStorage.removeItem('edtechra_pending_intent');
       setPendingIntent(null);
 
       if (intentToRun.type === 'navigate' && intentToRun.path) {
@@ -148,102 +172,238 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         window.dispatchEvent(new CustomEvent('edtechra:open_upload_modal'));
       }
     }
-  }, [pendingIntent]);
+  }, [setPendingIntent]);
 
-  // Update profile name in database, local storage & state
+  // Update profile name in Supabase database & Auth metadata
   const updateProfileName = async (newName: string): Promise<{ error?: string }> => {
     const trimmed = newName.trim();
     if (!trimmed) {
       return { error: 'Please enter a valid name.' };
     }
-
-    localStorage.setItem('edtechra_user_name', trimmed);
-    localStorage.setItem('edtechra_guest_name', trimmed);
-    localStorage.setItem('edtechra_pending_name', trimmed);
-
-    if (user && supabase) {
-      try {
-        await supabase
-          .from('profiles')
-          .update({
-            full_name: trimmed,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
-      } catch (err: any) {
-        console.warn('[AuthContext] Database update exception:', err);
-      }
+    if (trimmed.length < 2) {
+      return { error: 'Name must be at least 2 characters.' };
     }
 
-    setProfile((prev) => {
-      if (prev) {
-        return { ...prev, full_name: trimmed, name: trimmed, updated_at: new Date().toISOString() };
+    if (!user || !supabase) {
+      return { error: 'You must be authenticated to update your profile.' };
+    }
+
+    try {
+      // 1. Upsert into public.profiles table
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: user.id,
+            email: user.email,
+            full_name: trimmed,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'id' }
+        );
+
+      if (dbError) {
+        console.warn('[AuthContext] Database profile upsert notice:', dbError.message);
       }
-      return {
-        id: user?.id || 'guest',
-        email: user?.email || '',
+
+      // 2. Update Supabase Auth metadata
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            full_name: trimmed,
+            name: trimmed,
+            onboarding_completed: true
+          }
+        });
+      } catch (metaErr) {
+        console.warn('[AuthContext] Auth metadata update notice:', metaErr);
+      }
+
+      // 3. Update local state
+      setProfile((prev) => ({
+        id: user.id,
+        email: user.email || '',
         full_name: trimmed,
         name: trimmed,
-        role: user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : 'student',
-        created_at: new Date().toISOString()
-      };
-    });
+        avatar_url: prev?.avatar_url || user.user_metadata?.avatar_url || '',
+        avatarUrl: prev?.avatarUrl || user.user_metadata?.avatar_url || '',
+        role: user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : (prev?.role || 'student'),
+        created_at: prev?.created_at || user.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
 
-    closeAuthModal();
-    executePendingIntent();
-    return {};
+      // 4. Close modal and execute pending destination
+      closeAuthModal();
+      executePendingIntent();
+
+      return {};
+    } catch (err: any) {
+      console.error('[AuthContext] updateProfileName exception:', err);
+      return { error: err.message || 'Failed to save name.' };
+    }
   };
 
-  // Initialize Session on mount
+  // Open modal helper with single-instance protection
+  const openAuthModal = useCallback((mode: AuthModalMode = 'signup', intent?: AuthIntent) => {
+    setAuthModalMode(mode);
+    if (intent !== undefined) {
+      setPendingIntent(intent);
+    }
+    setAuthModalOpen(true);
+  }, [setPendingIntent]);
+
+  const closeAuthModal = useCallback(() => {
+    setAuthModalOpen(false);
+  }, []);
+
+  const clearOAuthError = useCallback(() => {
+    setOauthErrorMessage(null);
+  }, []);
+
+  // Centralized Authentication Guard for protected actions
+  const requireAuth = useCallback(async (
+    destination?: AuthIntent | string,
+    onSuccess?: () => void
+  ): Promise<boolean> => {
+    let normalizedIntent: AuthIntent = null;
+    if (typeof destination === 'string') {
+      normalizedIntent = { type: 'navigate', path: destination };
+    } else if (destination) {
+      normalizedIntent = destination;
+    }
+
+    // Step 1: If currently loading, wait for the session resolution
+    if (authState === 'loading') {
+      if (!supabase) {
+        openAuthModal('signup', normalizedIntent);
+        return false;
+      }
+
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession?.user) {
+          // Authenticated!
+          if (onSuccess) {
+            onSuccess();
+          } else if (normalizedIntent?.type === 'navigate' && normalizedIntent.path) {
+            window.dispatchEvent(new CustomEvent('edtechra:navigate', { detail: normalizedIntent.path }));
+          }
+          return true;
+        }
+      } catch (e) {
+        // Fallback to unauthenticated
+      }
+
+      openAuthModal('signup', normalizedIntent);
+      return false;
+    }
+
+    // Step 2: If already authenticated, continue immediately
+    if (authState === 'authenticated' && user) {
+      // Check if profile is complete
+      const isComplete = checkIsProfileComplete(user, profile);
+      if (!isComplete) {
+        if (normalizedIntent) setPendingIntent(normalizedIntent);
+        setAuthModalMode('name_prompt');
+        setAuthModalOpen(true);
+        return false;
+      }
+
+      if (onSuccess) {
+        onSuccess();
+      } else if (normalizedIntent?.type === 'navigate' && normalizedIntent.path) {
+        window.dispatchEvent(new CustomEvent('edtechra:navigate', { detail: normalizedIntent.path }));
+      }
+      return true;
+    }
+
+    // Step 3: If unauthenticated, save intent and open modal
+    openAuthModal('signup', normalizedIntent);
+    return false;
+  }, [authState, user, profile, openAuthModal, setPendingIntent]);
+
+  // Initial Session Hydration on mount + Auth State Change Listener
   useEffect(() => {
     let isMounted = true;
 
     async function initSession() {
-      setIsLoading(true);
       if (!supabase) {
-        setIsLoading(false);
+        if (isMounted) setAuthState('unauthenticated');
+        return;
+      }
+
+      // Check for OAuth callback error in URL parameters or hash
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+      const errorParam = searchParams.get('error') || hashParams.get('error');
+      const errorCode = searchParams.get('error_code') || hashParams.get('error_code');
+      const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
+
+      if (errorParam || errorCode || errorDescription) {
+        console.warn('[Supabase Auth] OAuth redirect error detected in URL:', {
+          error: errorParam,
+          errorCode,
+          errorDescription
+        });
+
+        // Clean query/hash parameters from URL without reloading
+        const cleanPath = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanPath);
+
+        if (isMounted) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setAuthState('unauthenticated');
+
+          const friendlyMsg = errorDescription
+            ? decodeURIComponent(errorDescription.replace(/\+/g, ' '))
+            : 'Google sign-in could not be completed. Please try again or sign in with email.';
+
+          setOauthErrorMessage(friendlyMsg);
+          setAuthModalMode('oauth_error');
+          setAuthModalOpen(true);
+        }
         return;
       }
 
       try {
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         if (error) {
-          console.warn('[AuthContext] Error getting initial session:', error.message);
+          console.warn('[AuthContext] Error retrieving session:', error.message);
         }
 
-        if (isMounted) {
-          if (currentSession?.user) {
-            setSession(currentSession);
-            setUser(currentSession.user);
+        if (!isMounted) return;
 
-            const userProfile = await fetchUserProfile(currentSession.user);
-            if (isMounted) {
-              setProfile(userProfile);
+        if (currentSession?.user) {
+          setSession(currentSession);
+          setUser(currentSession.user);
+          setAuthState('authenticated');
 
-              // Check if user has no display name, prompt for name onboarding
-              const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === currentSession.user.email?.split('@')[0];
-              if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
-                setAuthModalMode('name_prompt');
-                setAuthModalOpen(true);
-              } else {
-                // Check if there was a pending intent from Google OAuth redirect
-                const savedIntent = localStorage.getItem('edtechra_pending_intent');
-                if (savedIntent) {
-                  executePendingIntent();
-                }
-              }
+          const userProfile = await fetchUserProfile(currentSession.user);
+          if (isMounted) {
+            setProfile(userProfile);
+
+            const isComplete = checkIsProfileComplete(currentSession.user, userProfile);
+            if (!isComplete) {
+              setAuthModalMode('name_prompt');
+              setAuthModalOpen(true);
+            } else {
+              setAuthModalOpen(false);
+              executePendingIntent();
             }
-          } else {
-            setSession(null);
-            setUser(null);
-            setProfile(null);
           }
+        } else {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setAuthState('unauthenticated');
         }
       } catch (e) {
-        console.error('[AuthContext] Session init failure:', e);
-      } finally {
+        console.error('[AuthContext] Session initialization error:', e);
         if (isMounted) {
-          setIsLoading(false);
+          setAuthState('unauthenticated');
         }
       }
     }
@@ -256,27 +416,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         async (event, newSession) => {
           if (!isMounted) return;
 
-          console.log(`[Supabase Auth] onAuthStateChange event: ${event}`);
-          setSession(newSession);
-          setUser(newSession?.user || null);
+          console.log(`[Supabase Auth] event: ${event}`);
 
           if (newSession?.user) {
-            const userProfile = await fetchUserProfile(newSession.user);
-            if (isMounted) {
-              setProfile(userProfile);
+            setSession(newSession);
+            setUser(newSession.user);
+            setAuthState('authenticated');
 
-              const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === newSession.user.email?.split('@')[0];
-              if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
-                setAuthModalMode('name_prompt');
-                setAuthModalOpen(true);
-              } else {
-                executePendingIntent();
+            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+              const userProfile = await fetchUserProfile(newSession.user);
+              if (isMounted) {
+                setProfile(userProfile);
+
+                const isComplete = checkIsProfileComplete(newSession.user, userProfile);
+                if (!isComplete) {
+                  setAuthModalMode('name_prompt');
+                  setAuthModalOpen(true);
+                } else {
+                  setAuthModalOpen(false);
+                  executePendingIntent();
+                }
               }
             }
           } else {
-            if (isMounted) setProfile(null);
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setAuthState('unauthenticated');
           }
-          setIsLoading(false);
         }
       );
 
@@ -291,50 +458,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [fetchUserProfile, executePendingIntent]);
 
-  const openAuthModal = (mode: AuthModalMode = 'signup', intent?: AuthIntent) => {
-    setAuthModalMode(mode);
-    if (intent !== undefined) {
-      setPendingIntent(intent);
-      if (intent) {
-        localStorage.setItem('edtechra_pending_intent', JSON.stringify(intent));
-      } else {
-        localStorage.removeItem('edtechra_pending_intent');
-      }
-    }
-    setAuthModalOpen(true);
-  };
-
-  const closeAuthModal = () => {
-    setAuthModalOpen(false);
-  };
-
   // Sign In with Email & Password
   const signInWithEmail = async (email: string, password: string): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      return { error: 'Please enter your email address.' };
+    }
+    if (!password) {
+      return { error: 'Please enter your password.' };
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: trimmedEmail,
         password
       });
 
       if (error) {
-        if (error.message.toLowerCase().includes('not confirmed') || (error as any).code === 'email_not_confirmed') {
+        const errorCode = (error as any).code || '';
+        const errorMessage = error.message || '';
+
+        if (errorCode === 'email_not_confirmed' || errorMessage.toLowerCase().includes('not confirmed')) {
           return {
             error: 'Your email has not been confirmed yet. Please check your email inbox for the confirmation link.'
           };
         }
-        return { error: error.message };
+        if (errorCode === 'invalid_credentials' || errorMessage.toLowerCase().includes('invalid login credentials')) {
+          return { error: 'Incorrect email or password. Please try again.' };
+        }
+        return { error: errorMessage || 'Sign in failed. Please try again.' };
       }
 
-      if (data.user) {
-        setUser(data.user);
+      if (data.user && data.session) {
         setSession(data.session);
+        setUser(data.user);
+        setAuthState('authenticated');
+
         const userProfile = await fetchUserProfile(data.user);
         setProfile(userProfile);
 
-        const hasNoName = !userProfile?.full_name?.trim() || userProfile?.full_name === data.user.email?.split('@')[0];
-        if (hasNoName && !localStorage.getItem('edtechra_user_name')) {
+        const isComplete = checkIsProfileComplete(data.user, userProfile);
+        if (!isComplete) {
           setAuthModalMode('name_prompt');
           return {};
         }
@@ -352,56 +518,130 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUpWithEmail = async (
     email: string,
     password: string,
-    fullName: string
-  ): Promise<{ error?: string; message?: string }> => {
+    fullName?: string
+  ): Promise<{ error?: string; message?: string; sessionEstablished?: boolean }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
-    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+    const trimmedName = (fullName || '').trim();
+
+    if (!trimmedEmail) {
+      return { error: 'Please enter an email address.' };
+    }
+    if (!password || password.length < 6) {
+      return { error: 'Password must be at least 6 characters long.' };
+    }
 
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
         options: {
           data: {
-            full_name: trimmedName || '',
-            name: trimmedName || ''
+            full_name: trimmedName,
+            name: trimmedName
           },
           emailRedirectTo: `${window.location.origin}`
         }
       });
 
       if (error) {
-        if (error.message.toLowerCase().includes('invalid')) {
+        const errorCode = (error as any).code || '';
+        const errorMessage = error.message || '';
+
+        if (errorCode === 'email_address_invalid') {
           return {
             error: 'Please enter a valid email address with a recognized domain (e.g. name@gmail.com).'
           };
         }
-        return { error: error.message };
+        if (errorCode === 'weak_password') {
+          return {
+            error: 'Password is too weak. Please use at least 6 characters.'
+          };
+        }
+        if (errorCode === 'user_already_exists') {
+          return {
+            error: 'An account with this email already exists. Please log in instead.'
+          };
+        }
+        if (errorCode === 'over_email_send_rate_limit' || errorCode === 'over_request_rate_limit') {
+          return {
+            error: 'Too many signup attempts. Please wait a few minutes before trying again.'
+          };
+        }
+        if (errorCode === 'signup_disabled') {
+          return {
+            error: 'New user registration is currently disabled. Please contact support.'
+          };
+        }
+        if (errorCode === 'validation_failed') {
+          return {
+            error: errorMessage || 'Validation failed. Please check your registration details.'
+          };
+        }
+
+        // Return actual Supabase error message without masking
+        return { error: errorMessage || 'Registration failed. Please try again.' };
       }
 
-      if (trimmedName) {
-        localStorage.setItem('edtechra_user_name', trimmedName);
+      // Check if user already exists (Supabase returns empty identities array when email confirmation is active)
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return {
+          error: 'An account with this email already exists. Please log in with your password instead.'
+        };
       }
 
+      // Case 1: Session was returned immediately (Email confirmation disabled or auto-confirmed)
       if (data.user && data.session) {
-        setUser(data.user);
         setSession(data.session);
-        const userProfile = await fetchUserProfile(data.user);
+        setUser(data.user);
+        setAuthState('authenticated');
+
+        let userProfile = await fetchUserProfile(data.user);
+
+        if (trimmedName) {
+          try {
+            await supabase.from('profiles').upsert(
+              {
+                id: data.user.id,
+                email: data.user.email,
+                full_name: trimmedName,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'id' }
+            );
+            userProfile = {
+              ...(userProfile || {
+                id: data.user.id,
+                email: data.user.email || '',
+                role: 'student',
+                created_at: new Date().toISOString()
+              }),
+              full_name: trimmedName,
+              name: trimmedName
+            };
+          } catch (e) {
+            console.warn('[AuthContext] Error upserting signup name:', e);
+          }
+        }
+
         setProfile(userProfile);
 
-        if (!trimmedName && !userProfile?.full_name?.trim()) {
+        const isComplete = checkIsProfileComplete(data.user, userProfile);
+        if (!isComplete) {
           setAuthModalMode('name_prompt');
-          return {};
+          return { sessionEstablished: true };
         }
 
         closeAuthModal();
         executePendingIntent();
-        return { message: 'Account created successfully!' };
+        return { message: 'Account created successfully!', sessionEstablished: true };
       }
 
+      // Case 2: Email confirmation required by Supabase configuration
       return {
-        message: 'Account created! Please check your email inbox for the confirmation link to activate your account.'
+        message: 'Account created! Please check your email inbox for the confirmation link to activate your account.',
+        sessionEstablished: false
       };
     } catch (err: any) {
       return { error: err.message || 'An unexpected error occurred during registration.' };
@@ -409,18 +649,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Sign In with Google OAuth
-  const signInWithGoogle = async (pendingName?: string): Promise<{ error?: string }> => {
+  const signInWithGoogle = async (): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
-      if (pendingName?.trim()) {
-        localStorage.setItem('edtechra_pending_name', pendingName.trim());
-        localStorage.setItem('edtechra_user_name', pendingName.trim());
-      }
-
+      console.log('[OAuth] Google sign-in started');
       const redirectUrl = `${window.location.origin}`;
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
@@ -432,12 +668,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        console.error('[OAuth] Google sign-in error:', error);
         return { error: error.message };
       }
 
+      console.log('[OAuth] Google sign-in redirect initiated:', data?.url);
       return {};
     } catch (err: any) {
-      return { error: err.message || 'Google OAuth failed to initialize.' };
+      console.error('[OAuth] Google sign-in exception:', err);
+      return { error: err.message || 'Google Sign-In failed to initialize.' };
     }
   };
 
@@ -466,26 +705,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] SignOut error:', err);
       }
     }
-    setUser(null);
     setSession(null);
+    setUser(null);
     setProfile(null);
-    localStorage.removeItem('edtechra_user_name');
-    localStorage.removeItem('edtechra_pending_intent');
+    setAuthState('unauthenticated');
+    setPendingIntent(null);
+    setOauthErrorMessage(null);
   };
 
   return (
     <AuthContext.Provider
       value={{
+        authState,
         user,
         session,
         profile,
         isAdmin,
         isLoading,
+        isAuthenticated,
+        isProfileComplete,
         authModalOpen,
         authModalMode,
+        oauthErrorMessage,
         pendingIntent,
         openAuthModal,
         closeAuthModal,
+        clearOAuthError,
+        requireAuth,
         setPendingIntent,
         executePendingIntent,
         signInWithEmail,
@@ -509,3 +755,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

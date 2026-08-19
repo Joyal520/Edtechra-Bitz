@@ -114,9 +114,12 @@ export interface AdminUserListItem {
   last_sign_in_at?: string | null;
 }
 
-export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt';
+export type AuthState = 'loading' | 'authenticated' | 'unauthenticated';
+
+export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt' | 'oauth_error';
 
 export type AuthIntent =
   | { type: 'navigate'; path: string }
   | { type: 'action'; action: 'upload' | string; payload?: any }
   | null;
+

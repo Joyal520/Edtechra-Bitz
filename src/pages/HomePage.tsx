@@ -21,7 +21,7 @@ export const HomePage: React.FC = () => {
   const [uploadContent, setUploadContent] = useState('');
   const [uploadSubmitted, setUploadSubmitted] = useState(false);
 
-  const { user, openAuthModal } = useAuth();
+  const { requireAuth } = useAuth();
 
   // Listen for custom event to open upload modal after contextual authentication
   useEffect(() => {
@@ -35,33 +35,27 @@ export const HomePage: React.FC = () => {
   }, []);
 
   const handleExploreClick = (e: React.MouseEvent) => {
-    if (!user) {
-      e.preventDefault();
-      openAuthModal('signup', { type: 'navigate', path: '/explore' });
-    }
+    e.preventDefault();
+    requireAuth({ type: 'navigate', path: '/explore' });
   };
 
   const handleOpenUpload = () => {
-    if (!user) {
-      openAuthModal('signup', { type: 'action', action: 'upload' });
-      return;
-    }
-    setUploadModalOpen(true);
+    requireAuth({ type: 'action', action: 'upload' }, () => {
+      setUploadModalOpen(true);
+    });
   };
 
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      openAuthModal('signup', { type: 'action', action: 'upload' });
-      return;
-    }
-    setUploadSubmitted(true);
-    setTimeout(() => {
-      setUploadSubmitted(false);
-      setUploadModalOpen(false);
-      setUploadTitle('');
-      setUploadContent('');
-    }, 2200);
+    requireAuth({ type: 'action', action: 'upload' }, () => {
+      setUploadSubmitted(true);
+      setTimeout(() => {
+        setUploadSubmitted(false);
+        setUploadModalOpen(false);
+        setUploadTitle('');
+        setUploadContent('');
+      }, 2200);
+    });
   };
 
   return (
@@ -72,32 +66,49 @@ export const HomePage: React.FC = () => {
       {/* ========================================================================= */}
       <div className="relative w-full max-w-[1440px] h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-5.8rem)] max-h-[860px] rounded-3xl sm:rounded-[36px] overflow-hidden border-2 border-sky-400/80 shadow-[0_0_35px_rgba(56,189,248,0.45)] bg-[#fbfbf7] flex items-center justify-center">
         
-        {/* Animated Background Video Layer with Static Image Poster Fallback */}
+        {/* Animated Background Layer: Animated WebP for Mobile, Looping Video for Desktop */}
         <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none animate-hero-bg">
-          {/* Static Fallback Poster Image (Renders immediately while video prepares) */}
-          <picture className="absolute inset-0 w-full h-full">
-            <source media="(max-width: 640px)" srcSet="/assets/edtechra-bitz-hero-mobile.webp" />
-            <img
-              src="/assets/hero-papercraft.jpg"
-              alt="EdTechra Papercraft Educational Background"
-              className="w-full h-full object-cover object-bottom sm:object-center pointer-events-none select-none"
-              loading="eager"
-            />
-          </picture>
+          {/* Mobile Animated WebP Asset (< 640px) with Static Fallback */}
+          <div className="block sm:hidden absolute inset-0 w-full h-full">
+            <picture className="w-full h-full">
+              <source
+                type="image/webp"
+                srcSet="/assets/edtechra-bitz-hero-mobile-animated.webp"
+              />
+              <img
+                src="/assets/edtechra-bitz-hero-mobile.webp"
+                alt="EdTechra Papercraft Educational Background"
+                className="w-full h-full object-cover object-bottom pointer-events-none select-none"
+                loading="eager"
+                decoding="async"
+              />
+            </picture>
+          </div>
 
-          {/* High-Performance Web-Optimized Looping Hero Video */}
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            poster="/assets/hero-papercraft.jpg"
-            className="absolute inset-0 w-full h-full object-cover object-bottom sm:object-center pointer-events-none select-none"
-          >
-            <source src="/assets/edtechra-bitz-hero.webm" type="video/webm" />
-            <source src="/assets/edtechra-bitz-hero.mp4" type="video/mp4" />
-          </video>
+          {/* Desktop Hero Background (>= 640px) with Video and Fallback Poster */}
+          <div className="hidden sm:block absolute inset-0 w-full h-full">
+            <picture className="absolute inset-0 w-full h-full">
+              <img
+                src="/assets/hero-papercraft.jpg"
+                alt="EdTechra Papercraft Educational Background"
+                className="w-full h-full object-cover object-center pointer-events-none select-none"
+                loading="eager"
+              />
+            </picture>
+
+            {/* High-Performance Web-Optimized Looping Hero Video */}
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              poster="/assets/hero-papercraft.jpg"
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+            >
+              <source src="/assets/edtechra-bitz-hero.webm" type="video/webm" />
+            </video>
+          </div>
         </div>
 
         {/* ========================================================================= */}

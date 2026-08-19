@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v5';
+const CACHE_NAME = 'edtechra-bitz-v8';
 
 const STATIC_PRECACHE = [
   '/',
@@ -37,7 +37,7 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      console.log('[SW] Cache updated to v5 and clients claimed');
+      console.log('[SW] Cache updated to v8 and clients claimed');
       return self.clients.claim();
     })
   );
@@ -45,35 +45,51 @@ self.addEventListener('activate', (event) => {
 
 // 3. Fetch event: Strategic caching with Network-First default for navigation & assets
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const url = event.request.url;
 
-  // A. Bypass non-GET requests
+  // Never process non-HTTP(S) requests.
+  // Browser extensions such as Adobe/Chrome extensions use
+  // chrome-extension:// URLs and cannot be stored in Cache Storage.
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return;
+  }
+
+  // Bypass non-GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
-  // B. Bypass API requests, Supabase auth/data, and video media
+  const parsedUrl = new URL(url);
+
+  // Bypass API requests, Supabase auth/data, OAuth redirects, and video media
   if (
-    url.pathname.startsWith('/api/') ||
-    url.hostname.includes('supabase.co') ||
-    url.hostname.includes('youtube') ||
-    url.hostname.includes('googlevideo') ||
-    url.hostname.includes('googleapis') ||
-    url.hostname.includes('ytimg') ||
-    url.pathname.endsWith('.mp4') ||
-    url.pathname.endsWith('.webm')
+    parsedUrl.pathname.startsWith('/api/') ||
+    parsedUrl.hostname.includes('supabase.co') ||
+    parsedUrl.hostname.includes('youtube') ||
+    parsedUrl.hostname.includes('googlevideo') ||
+    parsedUrl.hostname.includes('googleapis') ||
+    parsedUrl.hostname.includes('ytimg') ||
+    parsedUrl.searchParams.has('code') ||
+    parsedUrl.searchParams.has('error') ||
+    parsedUrl.searchParams.has('error_code') ||
+    parsedUrl.pathname.endsWith('.mp4') ||
+    parsedUrl.pathname.endsWith('.webm')
   ) {
     return;
   }
 
-  // C. Handle Navigation requests: Network-First to guarantee fresh application state
+  const isHttpUrl = url.startsWith('http://') || url.startsWith('https://');
+
+  // Handle Navigation requests: Network-First to guarantee fresh application state
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          if (response && response.status === 200) {
+          if (response && response.status === 200 && response.type === 'basic' && isHttpUrl) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone).catch(() => {});
+            });
           }
           return response;
         })
@@ -84,7 +100,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // D. Network-first with cache fallback for HTML, JS and CSS
+  // Network-first with cache fallback for HTML, JS and CSS
   if (
     event.request.destination === 'script' ||
     event.request.destination === 'style' ||
@@ -93,9 +109,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic' && isHttpUrl) {
             const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone).catch(() => {});
+            });
           }
           return networkResponse;
         })
@@ -104,14 +122,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // E. Cache-first with network revalidation for images/icons
+  // Cache-first with network revalidation for images/icons
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)
         .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic' && isHttpUrl) {
             const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone).catch(() => {});
+            });
           }
           return networkResponse;
         })

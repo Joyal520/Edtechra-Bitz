@@ -20,7 +20,7 @@ import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
 import { UserLearningProgress } from '@/types';
 
 export const DashboardPage: React.FC = () => {
-  const { user, profile, isAdmin, openAuthModal } = useAuth();
+  const { user, profile, isAdmin, isLoading, openAuthModal } = useAuth();
   const [stats, setStats] = useState<ProgressSummary>({
     shortsWatched: 0,
     quizzesCompleted: 0,
@@ -51,6 +51,15 @@ export const DashboardPage: React.FC = () => {
     loadData();
   }, [userId]);
 
+  if (isLoading) {
+    return (
+      <div className="w-full max-w-5xl mx-auto px-4 py-16 flex flex-col items-center justify-center space-y-4">
+        <div className="w-10 h-10 border-3 border-[#026fc3]/30 border-t-[#026fc3] rounded-full animate-spin"></div>
+        <p className="text-xs font-bold text-slate-500">Loading your learning dashboard...</p>
+      </div>
+    );
+  }
+
   // Compute Levels progression
   const completedLevelsCount = allLevels.filter(l => {
     const st = getLevelStatus(l.levelNumber, progressMap);
@@ -63,8 +72,7 @@ export const DashboardPage: React.FC = () => {
   }) || allLevels[0];
 
   const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40);
-  const storedLocalName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
-  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || storedLocalName?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
+  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'L').slice(0, 2).toUpperCase();
   const greetingHeading = getTimeBasedGreeting(displayName);

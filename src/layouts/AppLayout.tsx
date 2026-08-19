@@ -29,7 +29,7 @@ export const AppLayout: React.FC = () => {
 
   const isHomePage = location.pathname === '/';
 
-  const { user, profile, isAdmin, isLoading, signOut, openAuthModal } = useAuth();
+  const { user, profile, isAdmin, isLoading, signOut, requireAuth } = useAuth();
 
   const {
     canInstall,
@@ -79,17 +79,14 @@ export const AppLayout: React.FC = () => {
     navigate('/');
   };
 
-  // Intercept navigation for guests contextually
+  // Intercept navigation for guests contextually using centralized requireAuth
   const handleProtectedNav = (path: string, e: React.MouseEvent) => {
-    if (!user) {
-      e.preventDefault();
-      setMobileMenuOpen(false);
-      openAuthModal('signup', { type: 'navigate', path });
-    }
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    requireAuth({ type: 'navigate', path });
   };
 
-  const storedLocalName = localStorage.getItem('edtechra_user_name') || localStorage.getItem('edtechra_guest_name') || localStorage.getItem('edtechra_pending_name');
-  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || storedLocalName?.trim() || (user?.email ? user.email.split('@')[0] : 'User');
+  const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'User');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 

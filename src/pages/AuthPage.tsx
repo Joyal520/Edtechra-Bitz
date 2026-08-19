@@ -5,17 +5,18 @@ import { useAuth } from '@/context/AuthContext';
 export const AuthPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, openAuthModal } = useAuth();
+  const { user, isLoading, openAuthModal } = useAuth();
 
   const mode = (searchParams.get('mode') as 'login' | 'signup' | 'forgot_password') || 'login';
 
   useEffect(() => {
+    if (isLoading) return;
     if (user) {
       navigate('/dashboard', { replace: true });
     } else {
       openAuthModal(mode);
     }
-  }, [user, mode, openAuthModal, navigate]);
+  }, [user, isLoading, mode, openAuthModal, navigate]);
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-4">

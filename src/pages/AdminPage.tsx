@@ -13,7 +13,9 @@ import {
   Sparkles,
   Layers,
   Radio,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -34,6 +36,32 @@ export const AdminPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'admin'>('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
+  // User details visibility state
+  const [revealedUserIds, setRevealedUserIds] = useState<Set<string>>(new Set());
+  const [showAllDetails, setShowAllDetails] = useState(false);
+
+  const toggleUserDetail = (userId: string) => {
+    setRevealedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllDetails = () => {
+    if (showAllDetails) {
+      setShowAllDetails(false);
+      setRevealedUserIds(new Set());
+    } else {
+      setShowAllDetails(true);
+      setRevealedUserIds(new Set(users.map((u) => u.id)));
+    }
+  };
 
   // YouTube Sync Modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -411,6 +439,29 @@ export const AdminPage: React.FC = () => {
               ))}
             </div>
 
+            {/* Show/Hide Details Toggle */}
+            <button
+              onClick={toggleAllDetails}
+              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ${
+                showAllDetails
+                  ? 'bg-[#026fc3] text-white shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+              title={showAllDetails ? 'Hide All User Details' : 'Show All User Details'}
+            >
+              {showAllDetails ? (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span>Hide Details</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Show Details</span>
+                </>
+              )}
+            </button>
+
             {/* Sort Order */}
             <button
               onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
@@ -453,6 +504,7 @@ export const AdminPage: React.FC = () => {
                 users.map((u) => {
                   const initials = (u.full_name || u.email || 'U').slice(0, 2).toUpperCase();
                   const isAdminRole = u.role === 'admin';
+                  const isRevealed = showAllDetails || revealedUserIds.has(u.id);
 
                   return (
                     <tr
@@ -481,7 +533,7 @@ export const AdminPage: React.FC = () => {
                               )}
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono">
-                              {u.id.slice(0, 8)}...
+                              {isRevealed ? `${u.id.slice(0, 8)}...` : '••••••••'}
                             </div>
                           </div>
                         </div>
@@ -489,7 +541,18 @@ export const AdminPage: React.FC = () => {
 
                       {/* Email */}
                       <td className="py-3 px-3 font-mono text-slate-600">
-                        {u.email || '-'}
+                        <div className="flex items-center gap-2">
+                          <span>
+                            {isRevealed ? (u.email || '-') : (u.email ? '••••••••••••••••' : '-')}
+                          </span>
+                          <button
+                            onClick={() => toggleUserDetail(u.id)}
+                            className="text-slate-400 hover:text-[#026fc3] p-1 rounded-md transition-colors cursor-pointer"
+                            title={isRevealed ? 'Hide detail' : 'Show detail'}
+                          >
+                            {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </td>
 
                       {/* Role Pill */}
