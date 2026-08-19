@@ -126,7 +126,7 @@ export interface AdminUserListItem {
 
 export type AuthState = 'loading' | 'authenticated' | 'unauthenticated';
 
-export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt' | 'oauth_error';
+export type AuthModalMode = 'login' | 'signup' | 'forgot_password' | 'name_prompt' | 'oauth_error' | 'reset_password';
 
 export type AuthIntent =
   | { type: 'navigate'; path: string }

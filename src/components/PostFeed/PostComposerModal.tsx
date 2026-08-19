@@ -10,6 +10,7 @@ import {
   Rocket
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { ImageSquareCropper } from './ImageSquareCropper';
 import { UploadBoxIllustration } from './UploadBoxIllustration';
 import {
@@ -143,13 +144,30 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
     }
     if (stage === 'uploading') return;
 
-    const token = session?.access_token || null;
     let uploadedObjectKey: string | null = null;
+    let token: string | null = null;
 
     try {
       setErrorMessage(null);
       setStage('uploading');
       setUploadPercent(10);
+      setStatusMessage('Verifying authentication…');
+
+      // Obtain fresh Supabase session and access token
+      if (supabase) {
+        const { data: { session: freshSession }, error: sessError } = await supabase.auth.getSession();
+        if (sessError || !freshSession?.access_token) {
+          throw new Error('Your session has expired. Please sign in again.');
+        }
+        token = freshSession.access_token;
+      } else if (session?.access_token) {
+        token = session.access_token;
+      }
+
+      if (!token) {
+        throw new Error('Your session has expired. Please sign in again.');
+      }
+
       setStatusMessage('Connecting to R2 storage…');
 
       // Step 1: Request Presigned URL from Server

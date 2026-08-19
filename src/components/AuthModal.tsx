@@ -26,6 +26,7 @@ export const AuthModal: React.FC = () => {
     signUpWithEmail,
     signInWithGoogle,
     resetPassword,
+    updatePassword,
     updateProfileName,
     profile
   } = useAuth();
@@ -714,6 +715,91 @@ export const AuthModal: React.FC = () => {
                 <span>Back to Log in</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODE: SET NEW PASSWORD (RECOVERY)                                        */}
+        {/* ========================================================================= */}
+        {mode === 'reset_password' && (
+          <div className="space-y-5">
+            <div className="text-center space-y-1.5">
+              <div className="w-12 h-12 rounded-2xl bg-brand-50 text-[#026fc3] flex items-center justify-center mx-auto shadow-xs border border-brand-100">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h2 className="text-2xl font-black text-[#0f233a] tracking-tight">
+                Set New Password
+              </h2>
+              <p className="text-xs text-slate-500">
+                Please enter a secure new password for your account.
+              </p>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2 text-xs text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2 text-xs text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!password || password.length < 6) {
+                  setError('Password must be at least 6 characters long.');
+                  return;
+                }
+                setLoading(true);
+                setError(null);
+                try {
+                  const res = await updatePassword(password);
+                  if (res.error) {
+                    setError(res.error);
+                  } else {
+                    setSuccessMessage('Password updated successfully!');
+                  }
+                } catch (err: any) {
+                  setError(err.message || 'Failed to update password.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="space-y-3.5"
+            >
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="New password (min 6 chars)"
+                  className="w-full pl-10 pr-10 py-2.5 bg-white border border-stone-200/90 rounded-2xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-2xl shadow-xs transition-all active:scale-98 disabled:opacity-60 cursor-pointer"
+              >
+                {loading ? 'Saving...' : 'Update Password & Continue'}
+              </button>
+            </form>
           </div>
         )}
 

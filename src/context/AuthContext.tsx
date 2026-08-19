@@ -26,10 +26,18 @@ interface AuthContextType {
   signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error?: string; message?: string; sessionEstablished?: boolean }>;
   signInWithGoogle: () => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string; message?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ error?: string }>;
   updateProfileName: (newName: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
+
+export const getAppOrigin = (): string => {
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:3000';
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -377,6 +385,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!isMounted) return;
 
         if (currentSession?.user) {
+          // Clean hash fragment or query params containing auth tokens to avoid repetitive clock-skew warnings
+          if (typeof window !== 'undefined' && (window.location.hash.includes('access_token=') || window.location.search.includes('code='))) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+
           setSession(currentSession);
           setUser(currentSession.user);
           setAuthState('authenticated');
@@ -417,6 +430,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!isMounted) return;
 
           console.log(`[Supabase Auth] event: ${event}`);
+
+          if (event === 'PASSWORD_RECOVERY') {
+            setSession(newSession);
+            setUser(newSession?.user || null);
+            setAuthState('authenticated');
+            setAuthModalMode('reset_password');
+            setAuthModalOpen(true);
+            return;
+          }
 
           if (newSession?.user) {
             setSession(newSession);
@@ -541,7 +563,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             full_name: trimmedName,
             name: trimmedName
           },
-          emailRedirectTo: `${window.location.origin}`
+          emailRedirectTo: `${getAppOrigin()}`
         }
       });
 
@@ -654,7 +676,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       console.log('[OAuth] Google sign-in started');
-      const redirectUrl = `${window.location.origin}`;
+      const redirectUrl = `${getAppOrigin()}`;
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -680,19 +702,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Reset Password
+  // Reset Password (Send link)
   const resetPassword = async (email: string): Promise<{ error?: string; message?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`
+        redirectTo: `${getAppOrigin()}`
       });
 
       if (error) return { error: error.message };
       return { message: 'Password reset link sent! Check your inbox.' };
     } catch (err: any) {
       return { error: err.message || 'Failed to send reset link.' };
+    }
+  };
+
+  // Update Password (After recovery link is clicked)
+  const updatePassword = async (newPassword: string): Promise<{ error?: string }> => {
+    if (!supabase) return { error: 'Supabase is not configured' };
+    const trimmed = newPassword.trim();
+    if (!trimmed || trimmed.length < 6) {
+      return { error: 'Password must be at least 6 characters long.' };
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: trimmed });
+      if (error) return { error: error.message };
+      closeAuthModal();
+      return {};
+    } catch (err: any) {
+      return { error: err.message || 'Failed to update password.' };
     }
   };
 
@@ -738,6 +778,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUpWithEmail,
         signInWithGoogle,
         resetPassword,
+        updatePassword,
         updateProfileName,
         signOut,
         refreshProfile

@@ -45,15 +45,36 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUP
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+// Server Initialization Diagnostics (logged once at startup)
+console.log('[Server Init] Environment diagnostics:');
+console.log(`  SUPABASE_URL: ${supabaseUrl ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✓ configured' : '✗ MISSING (falling back to anon key)'}`);
+console.log(`  VITE_SUPABASE_ANON_KEY: ${process.env.VITE_SUPABASE_ANON_KEY ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  serverSupabase initialized: ${serverSupabase ? '✓ yes' : '✗ NO — all auth will fail'}`);
+console.log(`  R2_ACCESS_KEY_ID: ${process.env.R2_ACCESS_KEY_ID ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  R2_BUCKET: ${process.env.R2_BUCKET ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+
 // Helper: Verify Supabase User Token from Request Authorization Header
 async function verifyAuthUser(req) {
   const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  if (!token || !serverSupabase) return null;
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+  if (!token) {
+    console.warn('[verifyAuthUser] No Bearer token in Authorization header');
+    return null;
+  }
+  if (!serverSupabase) {
+    console.error('[verifyAuthUser] serverSupabase client is NOT initialized — check env vars VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+    return null;
+  }
 
   try {
     const { data: { user }, error } = await serverSupabase.auth.getUser(token);
-    if (error || !user) return null;
+    if (error || !user) {
+      console.warn('[verifyAuthUser] Supabase getUser rejected token:', error?.message || 'Invalid or expired session');
+      return null;
+    }
 
     // Retrieve user profile
     const { data: profile } = await serverSupabase
