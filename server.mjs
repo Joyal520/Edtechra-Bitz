@@ -40,9 +40,16 @@ app.use(cors());
 app.use(express.text({ type: ['application/atom+xml', 'application/xml', 'text/xml', 'text/plain'] }));
 app.use(express.json({ limit: '20mb' }));
 
+// Helper: Strip invisible BOM (Byte Order Mark) and whitespace from env var values.
+// BOM characters (U+FEFF) can be silently introduced when pasting values into hosting
+// dashboards (e.g. Vercel) and corrupt HTTP headers, causing auth failures.
+function cleanEnv(value) {
+  return (value || '').replace(/^\uFEFF/, '').trim();
+}
+
 // Initialize server-side Supabase client
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY);
 const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Server Initialization Diagnostics (logged once at startup)
@@ -455,49 +462,6 @@ setInterval(() => {
     console.error('[Daemon Scheduler Error]:', err.message);
   });
 }, BACKUP_SYNC_INTERVAL);
-
-// ============================================================================
-// TEMPORARY DIAGNOSTIC: Auth configuration check (REMOVE after debugging)
-// ============================================================================
-app.post('/api/debug/auth-check', async (req, res) => {
-  const diagnostics = {
-    timestamp: new Date().toISOString(),
-    env: {
-      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? 'SET (' + process.env.VITE_SUPABASE_URL.substring(0, 30) + '...)' : 'MISSING',
-      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET (' + process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0, 30) + '...)' : 'MISSING',
-      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET (starts: ' + process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 10) + '...)' : 'MISSING',
-      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ? 'SET (starts: ' + process.env.VITE_SUPABASE_ANON_KEY.substring(0, 10) + '...)' : 'MISSING',
-      resolvedUrl: supabaseUrl || 'NULL',
-      resolvedKey: supabaseKey ? 'SET (starts: ' + supabaseKey.substring(0, 10) + '...)' : 'NULL'
-    },
-    serverSupabase: serverSupabase ? 'INITIALIZED' : 'NULL — ALL AUTH WILL FAIL',
-    authHeaderPresent: !!(req.headers.authorization),
-    authHeaderFormat: req.headers.authorization ? req.headers.authorization.substring(0, 15) + '...' : 'NONE'
-  };
-
-  // If a token is provided, try to validate it
-  if (req.headers.authorization && serverSupabase) {
-    const token = req.headers.authorization.startsWith('Bearer ') 
-      ? req.headers.authorization.substring(7).trim() 
-      : null;
-    if (token) {
-      try {
-        const { data: { user }, error } = await serverSupabase.auth.getUser(token);
-        diagnostics.tokenValidation = {
-          success: !!user,
-          userId: user?.id || null,
-          userEmail: user?.email || null,
-          error: error?.message || null,
-          errorStatus: error?.status || null
-        };
-      } catch (e) {
-        diagnostics.tokenValidation = { success: false, error: e.message };
-      }
-    }
-  }
-
-  res.json({ success: true, diagnostics });
-});
 
 // ============================================================================
 // API ROUTES: STUDENT POST FEED & CLOUDFLARE R2 STORAGE
