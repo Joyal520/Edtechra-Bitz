@@ -619,5 +619,79 @@ export const youtubeClient = {
       console.error('[YouTube Client] Error calculating category progress:', error);
       throw error;
     }
+  },
+
+  // 8. Admin: Request Presigned URL for Micro-Learning Video Thumbnail Upload
+  async getThumbnailPresignedUrl(
+    videoId: string,
+    file: { filename: string; contentType: string; size?: number },
+    token?: string | null
+  ): Promise<{ uploadUrl: string; publicUrl: string; objectKey: string; headers: Record<string, string> }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/thumbnail-presign`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        videoId,
+        filename: file.filename,
+        contentType: file.contentType,
+        size: file.size
+      })
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      throw new Error(json.error || `Failed to generate thumbnail upload URL (status ${response.status})`);
+    }
+
+    return json.data;
+  },
+
+  // 9. Admin: Upload Thumbnail Binary directly to Cloudflare R2 via Presigned PUT
+  async uploadThumbnailToR2(
+    uploadUrl: string,
+    file: Blob | File,
+    contentType: string
+  ): Promise<void> {
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType
+      },
+      body: file
+    });
+
+    if (!response.ok) {
+      throw new Error(`Direct R2 upload failed with status ${response.status}: ${response.statusText}`);
+    }
+  },
+
+  // 10. Admin: Save new Thumbnail URL to Supabase and cache
+  async updateVideoThumbnail(
+    videoId: string,
+    thumbnailUrl: string,
+    token?: string | null
+  ): Promise<{ success: boolean; thumbnailUrl: string }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/video/${encodeURIComponent(videoId)}/thumbnail`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ thumbnailUrl })
+    });
+
+    const json = await response.json();
+    if (!response.ok || !json.success) {
+      throw new Error(json.error || `Failed to update thumbnail in database (status ${response.status})`);
+    }
+
+    return json;
   }
 };

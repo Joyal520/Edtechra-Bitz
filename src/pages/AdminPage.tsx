@@ -15,13 +15,18 @@ import {
   Radio,
   CheckCircle2,
   Eye,
-  EyeOff
+  EyeOff,
+  Image as ImageIcon,
+  Upload,
+  Trophy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { AdminStats, AdminUserListItem } from '@/types';
+import { AdminStats, AdminUserListItem, YouTubeVideo } from '@/types';
 import { youtubeClient, SyncStatusData } from '@/services/youtubeClient';
 import { AdminSyncModal } from '@/components/AdminSyncModal';
+import { AdminThumbnailModal } from '@/components/AdminThumbnailModal';
+import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
   const { profile } = useAuth();
@@ -40,6 +45,18 @@ export const AdminPage: React.FC = () => {
   // User details visibility state
   const [revealedUserIds, setRevealedUserIds] = useState<Set<string>>(new Set());
   const [showAllDetails, setShowAllDetails] = useState(false);
+
+  // Video & 1:1 Thumbnail Management State
+  const [videos, setVideos] = useState<YouTubeVideo[]>([]);
+  const [videoSearchQuery, setVideoSearchQuery] = useState('');
+  const [videoFilter, setVideoFilter] = useState<'all' | 'levels' | 'custom_thumbnail' | 'default_thumbnail'>('all');
+  const [selectedVideoForThumbnail, setSelectedVideoForThumbnail] = useState<YouTubeVideo | null>(null);
+  const [selectedLevelNumber, setSelectedLevelNumber] = useState<number | undefined>(undefined);
+  const [thumbnailModalOpen, setThumbnailModalOpen] = useState(false);
+
+  // Map of Level 1-20 video IDs
+  const allLevels = getAllLevels();
+  const levelMap = new Map<string, number>(allLevels.map((lvl) => [lvl.youtubeVideoId, lvl.levelNumber]));
 
   const toggleUserDetail = (userId: string) => {
     setRevealedUserIds((prev) => {
@@ -142,6 +159,10 @@ export const AdminPage: React.FC = () => {
       if (syncData) {
         setSyncStatus(syncData);
       }
+
+      // 4. Fetch Micro-Learning Videos for Thumbnail Management
+      const fetchedVideos = await youtubeClient.getShorts({ status: 'all' });
+      setVideos(fetchedVideos || []);
     } catch (err: any) {
       console.error('[AdminPage] Error loading data:', err);
       setError(err.message || 'Failed to fetch administrator statistics.');
@@ -601,6 +622,202 @@ export const AdminPage: React.FC = () => {
         </div>
 
       </section>
+
+      {/* 4. Micro-Learning Video & 1:1 Thumbnail Management Section */}
+      <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
+        
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 text-[#026fc3] border border-brand-200 flex items-center justify-center font-bold">
+              <ImageIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-[#0f233a]">
+                Micro-Learning Video & 1:1 Thumbnail Management
+              </h2>
+              <p className="text-xs text-slate-500">
+                Upload and manage official 1:1 square thumbnails for Levels 1–20 and catalogue videos. Powered by Cloudflare R2.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-brand-50 text-[#026fc3] border border-brand-200 rounded-full text-xs font-black">
+              {videos.filter(v => v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com')).length} Custom 1:1 Active
+            </span>
+          </div>
+        </div>
+
+        {/* Search & Filter Toolbar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 sm:max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={videoSearchQuery}
+              onChange={(e) => setVideoSearchQuery(e.target.value)}
+              placeholder="Search by title, category, video ID, or Level..."
+              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white"
+            />
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            {[
+              { id: 'all', label: `All Videos (${videos.length})` },
+              { id: 'levels', label: `Levels 1–20 (20)` },
+              { id: 'custom_thumbnail', label: `1:1 Custom R2 (${videos.filter(v => v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com')).length})` },
+              { id: 'default_thumbnail', label: `YouTube Default (${videos.filter(v => !(v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com'))).length})` }
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setVideoFilter(f.id as any)}
+                className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                  videoFilter === f.id
+                    ? 'bg-white text-[#026fc3] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Video Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {videos
+            .filter((v) => {
+              const isLevel = levelMap.has(v.youtube_video_id);
+              const hasCustomThumb = v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com');
+              
+              if (videoFilter === 'levels' && !isLevel) return false;
+              if (videoFilter === 'custom_thumbnail' && !hasCustomThumb) return false;
+              if (videoFilter === 'default_thumbnail' && hasCustomThumb) return false;
+
+              if (videoSearchQuery.trim()) {
+                const q = videoSearchQuery.toLowerCase().trim();
+                const titleMatch = v.title?.toLowerCase().includes(q);
+                const catMatch = v.category?.toLowerCase().includes(q);
+                const idMatch = v.youtube_video_id?.toLowerCase().includes(q);
+                const levelNum = levelMap.get(v.youtube_video_id);
+                const levelMatch = levelNum ? `level ${levelNum}`.includes(q) : false;
+                return titleMatch || catMatch || idMatch || levelMatch;
+              }
+
+              return true;
+            })
+            .map((v) => {
+              const levelNum = levelMap.get(v.youtube_video_id);
+              const currentThumb = v.thumbnail_url || `https://i.ytimg.com/vi/${v.youtube_video_id}/maxresdefault.jpg`;
+              const isCustom = currentThumb.includes('r2.dev') || currentThumb.includes('cloudflarestorage.com');
+
+              return (
+                <div
+                  key={v.youtube_video_id || v.id}
+                  className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-4 hover:bg-white hover:border-brand-300 hover:shadow-xs transition-all"
+                >
+                  {/* 1:1 Square Thumbnail Preview Container */}
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-slate-900 shrink-0 shadow-2xs relative group">
+                    <img
+                      src={currentThumb}
+                      alt={v.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                      <ImageIcon className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+
+                  {/* Video Metadata & Controls */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {levelNum && (
+                        <span className="px-2 py-0.5 bg-[#026fc3] text-white text-[10px] font-black rounded-md flex items-center gap-1">
+                          <Trophy className="w-2.5 h-2.5 text-amber-300" />
+                          Level {levelNum}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 text-[10px] font-bold rounded-md">
+                        {v.category || 'General'}
+                      </span>
+                      {isCustom ? (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black rounded-md flex items-center gap-1">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                          1:1 Custom R2
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md">
+                          YouTube Default
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-xs sm:text-sm font-extrabold text-[#0f233a] leading-tight line-clamp-2" title={v.title}>
+                      {v.title}
+                    </h3>
+
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                      <span>ID: {v.youtube_video_id}</span>
+                      <span>•</span>
+                      <span>{v.duration_formatted || `${v.duration_seconds || 30}s`}</span>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        onClick={() => {
+                          setSelectedVideoForThumbnail(v);
+                          setSelectedLevelNumber(levelNum);
+                          setThumbnailModalOpen(true);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          isCustom
+                            ? 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200'
+                            : 'bg-[#026fc3] hover:bg-[#025ea6] text-white shadow-xs'
+                        }`}
+                      >
+                        {isCustom ? (
+                          <>
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            <span>Change 1:1 Thumbnail</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload 1:1 Thumbnail</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+
+      </section>
+
+      {/* Admin 1:1 Thumbnail Management Modal */}
+      <AdminThumbnailModal
+        isOpen={thumbnailModalOpen}
+        onClose={() => {
+          setThumbnailModalOpen(false);
+          setSelectedVideoForThumbnail(null);
+        }}
+        video={selectedVideoForThumbnail}
+        levelNumber={selectedLevelNumber}
+        onThumbnailUpdated={(vidId, newThumbUrl) => {
+          setVideos((prev) =>
+            prev.map((v) =>
+              v.youtube_video_id === vidId || v.id === vidId
+                ? { ...v, thumbnail_url: newThumbUrl }
+                : v
+            )
+          );
+        }}
+      />
 
       {/* YouTube Sync Modal */}
       <AdminSyncModal

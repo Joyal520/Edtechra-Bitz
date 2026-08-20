@@ -15,12 +15,14 @@ import {
   WEBSUB_TOPIC_URL,
   WEBSUB_HUB_URL
 } from './server/youtubeService.mjs';
+import crypto from 'crypto';
 import {
   buildPresignedUpload,
   buildObjectKey,
   buildPublicUrl,
   deleteObjects,
-  validateImageUpload
+  validateImageUpload,
+  sanitizeSegment
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
@@ -345,6 +347,106 @@ app.put('/api/youtube/content/:id', (req, res) => {
   } catch (error) {
     console.error('Error in /api/youtube/content/:id:', error);
     res.status(500).json({ success: false, error: 'Failed to update learning content' });
+  }
+});
+
+// 7b. POST /api/youtube/thumbnail-presign - Generate secure presigned URL for lesson thumbnail upload
+app.post('/api/youtube/thumbnail-presign', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (authData.profile.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Administrator privilege required to manage video thumbnails.' });
+    }
+
+    const { videoId, filename, contentType = 'image/webp', size } = req.body;
+    if (!videoId) {
+      return res.status(400).json({ success: false, error: 'Video/Lesson ID is required.' });
+    }
+
+    try {
+      validateImageUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    let ext = 'webp';
+    if (contentType === 'image/png' || filename?.toLowerCase().endsWith('.png')) ext = 'png';
+    else if (contentType === 'image/jpeg' || contentType === 'image/jpg' || filename?.toLowerCase().endsWith('.jpg') || filename?.toLowerCase().endsWith('.jpeg')) ext = 'jpg';
+
+    const cleanVideoId = sanitizeSegment(videoId) || 'video';
+    const timestamp = Date.now();
+    const randomSuffix = crypto.randomBytes(6).toString('hex');
+    const objectKey = `thumbnails/${cleanVideoId}/${timestamp}_${randomSuffix}.${ext}`;
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in /api/youtube/thumbnail-presign:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate thumbnail upload URL' });
+  }
+});
+
+// 7c. PUT /api/youtube/video/:id/thumbnail - Save thumbnail URL to Supabase and refresh cache
+app.put('/api/youtube/video/:id/thumbnail', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    if (authData.profile.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Administrator privilege required to manage video thumbnails.' });
+    }
+
+    const { id } = req.params;
+    const { thumbnailUrl } = req.body;
+
+    if (!thumbnailUrl || typeof thumbnailUrl !== 'string' || !thumbnailUrl.startsWith('http')) {
+      return res.status(400).json({ success: false, error: 'A valid thumbnail URL is required.' });
+    }
+
+    // 1. Authoritative Update in Supabase public.youtube_videos
+    if (serverSupabase) {
+      const { error: dbErr } = await serverSupabase
+        .from('youtube_videos')
+        .update({
+          thumbnail_url: thumbnailUrl,
+          updated_at: new Date().toISOString()
+        })
+        .or(`youtube_video_id.eq.${id},id.eq.${id}`);
+
+      if (dbErr) {
+        console.error('[Supabase update thumbnail error]:', dbErr);
+        return res.status(500).json({ success: false, error: 'Database update failed: ' + dbErr.message });
+      }
+    }
+
+    // 2. Synchronize local cache
+    const cache = loadLocalCache();
+    const videoIndex = cache.findIndex(v => v.youtube_video_id === id || v.id === id);
+    if (videoIndex !== -1) {
+      cache[videoIndex].thumbnail_url = thumbnailUrl;
+      cache[videoIndex].updated_at = new Date().toISOString();
+      saveLocalCache(cache);
+    }
+
+    res.json({
+      success: true,
+      message: 'Thumbnail updated successfully.',
+      thumbnailUrl
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/youtube/video/:id/thumbnail:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update video thumbnail' });
   }
 });
 
