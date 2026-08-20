@@ -651,9 +651,14 @@ app.post('/api/posts', async (req, res) => {
     // Save to Supabase student_posts table if available
     if (serverSupabase) {
       try {
-        await serverSupabase.from('student_posts').insert([newPost]);
+        const { error: sbErr } = await serverSupabase.from('student_posts').insert([newPost]);
+        if (sbErr) {
+          console.error('[Supabase student_posts insert error]:', sbErr.message, sbErr.code);
+        } else {
+          console.log('[Supabase student_posts] Post created in database successfully:', newPost.id);
+        }
       } catch (sbErr) {
-        console.warn('[Supabase student_posts insert notice]:', sbErr.message);
+        console.error('[Supabase student_posts insert exception]:', sbErr.message);
       }
     }
 
@@ -695,7 +700,9 @@ app.get('/api/posts', async (req, res) => {
           .eq('status', 'approved')
           .order('created_at', { ascending: false });
 
-        if (!dbErr && Array.isArray(dbPosts) && dbPosts.length > 0) {
+        if (dbErr) {
+          console.warn('[Supabase GET student_posts error]:', dbErr.message);
+        } else if (Array.isArray(dbPosts)) {
           allPosts = dbPosts.map(p => ({
             ...p,
             author: p.profiles || {
@@ -708,7 +715,7 @@ app.get('/api/posts', async (req, res) => {
           savePostsCache(allPosts);
         }
       } catch (e) {
-        // Fallback to cache
+        console.error('[Supabase GET student_posts exception]:', e);
       }
     }
 
