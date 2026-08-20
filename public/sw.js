@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v8';
+const CACHE_NAME = 'edtechra-bitz-v9';
 
 const STATIC_PRECACHE = [
   '/',
@@ -37,7 +37,7 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      console.log('[SW] Cache updated to v8 and clients claimed');
+      console.log('[SW] Cache updated to v9 and clients claimed');
       return self.clients.claim();
     })
   );
@@ -54,17 +54,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bypass non-GET requests
+  // Bypass non-GET requests (e.g. POST, PUT, DELETE, presigned uploads)
   if (event.request.method !== 'GET') {
     return;
   }
 
   const parsedUrl = new URL(url);
 
-  // Bypass API requests, Supabase auth/data, OAuth redirects, and video media
+  // Bypass API requests, Supabase auth/data, Cloudflare R2 uploads/media, OAuth redirects, and video media
   if (
     parsedUrl.pathname.startsWith('/api/') ||
     parsedUrl.hostname.includes('supabase.co') ||
+    parsedUrl.hostname.includes('r2.cloudflarestorage.com') ||
+    parsedUrl.hostname.includes('cloudflarestorage.com') ||
+    parsedUrl.hostname.includes('r2.dev') ||
+    parsedUrl.searchParams.has('X-Amz-Signature') ||
+    parsedUrl.searchParams.has('X-Amz-Credential') ||
+    parsedUrl.searchParams.has('X-Amz-Algorithm') ||
     parsedUrl.hostname.includes('youtube') ||
     parsedUrl.hostname.includes('googlevideo') ||
     parsedUrl.hostname.includes('googleapis') ||

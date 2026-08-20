@@ -1,88 +1,137 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+// Module-level storage to capture beforeinstallprompt before React component mounts
+let deferredPromptEvent: BeforeInstallPromptEvent | null = null;
+const promptListeners = new Set<(prompt: BeforeInstallPromptEvent | null) => void>();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e: Event) => {
+    e.preventDefault();
+    deferredPromptEvent = e as BeforeInstallPromptEvent;
+    promptListeners.forEach((listener) => listener(deferredPromptEvent));
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPromptEvent = null;
+    promptListeners.forEach((listener) => listener(null));
+    console.log('[PWA] EdTechra-Bitz appinstalled event detected');
+  });
+}
+
+function checkStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+}
+
+function checkIsIOS(): boolean {
+  if (typeof window === 'undefined') return false;
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  return (
+    /iphone|ipad|ipod/.test(userAgent) ||
+    (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1)
+  );
+}
+
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(() => deferredPromptEvent);
+  const [isInstalled, setIsInstalled] = useState<boolean>(() => checkStandalone());
+  const [isIOS] = useState<boolean>(() => checkIsIOS());
   const [iosModalOpen, setIosModalOpen] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed in standalone mode
-    const checkInstalled = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true ||
-        document.referrer.includes('android-app://');
-      setIsInstalled(isStandalone);
-    };
-
-    checkInstalled();
+    // 1. Standalone check and listener for display-mode changes
+    setIsInstalled(checkStandalone());
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)');
     const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      setIsInstalled(e.matches);
-    };
-    mediaQuery.addEventListener('change', handleDisplayModeChange);
-
-    // 2. Detect iOS / iPadOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent) ||
-      (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
-    setIsIOS(isIosDevice);
-
-    // 3. Listen for beforeinstallprompt (Chrome, Android, Edge, Desktop Chromium)
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setIsInstalled(e.matches || checkStandalone());
     };
 
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleDisplayModeChange);
+    } else {
+      mediaQuery.addListener(handleDisplayModeChange);
+    }
+
+    // 2. Subscribe to module-level prompt store updates
+    const handlePromptChange = (prompt: BeforeInstallPromptEvent | null) => {
+      setDeferredPrompt(prompt);
+      if (checkStandalone()) {
+        setIsInstalled(true);
+      }
+    };
+
+    promptListeners.add(handlePromptChange);
+
+    // 3. Native appinstalled listener
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
-      console.log('[PWA] EdTechra-Bitz installed successfully!');
+      deferredPromptEvent = null;
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
-      mediaQuery.removeEventListener('change', handleDisplayModeChange);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleDisplayModeChange);
+      } else {
+        mediaQuery.removeListener(handleDisplayModeChange);
+      }
+      promptListeners.delete(handlePromptChange);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  const triggerInstall = async () => {
+  const triggerInstall = useCallback(async () => {
     if (deferredPrompt) {
       try {
         await deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
         if (choice.outcome === 'accepted') {
-          console.log('[PWA] User accepted installation');
+          console.log('[PWA] User accepted installation prompt');
           setIsInstalled(true);
+        } else {
+          console.log('[PWA] User dismissed installation prompt');
         }
-        setDeferredPrompt(null);
       } catch (err) {
         console.error('[PWA] Install prompt error:', err);
+      } finally {
+        deferredPromptEvent = null;
+        setDeferredPrompt(null);
+        promptListeners.forEach((listener) => listener(null));
       }
     } else if (isIOS && !isInstalled) {
       setIosModalOpen(true);
     }
-  };
+  }, [deferredPrompt, isIOS, isInstalled]);
 
-  // Can install if prompt is available OR if on iOS Safari in non-standalone mode
-  const canInstall = !isInstalled && (deferredPrompt !== null || isIOS);
+  // Can install if:
+  // - Not already in standalone mode
+  // AND
+  // - Either native prompt is captured (Chrome/Edge/Android) OR iOS Safari manual flow is applicable
+  const hasNativePrompt = !isInstalled && deferredPrompt !== null;
+  const isIOSManual = !isInstalled && isIOS && deferredPrompt === null;
+  const canInstall = !isInstalled && (hasNativePrompt || isIOSManual);
 
   return {
     canInstall,
     isInstalled,
+    hasNativePrompt,
     isIOS,
+    isIOSManual,
     iosModalOpen,
     setIosModalOpen,
     triggerInstall
   };
 }
+

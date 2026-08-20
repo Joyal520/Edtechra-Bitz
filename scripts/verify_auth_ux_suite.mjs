@@ -21,7 +21,7 @@ function assert(condition, message) {
 console.log('\n--- 1. HEADER CLEANLINESS VERIFICATION ---');
 const appLayoutCode = fs.readFileSync('src/layouts/AppLayout.tsx', 'utf8');
 
-assert(!appLayoutCode.includes('<span>Install App</span>') && !appLayoutCode.includes('Install EdTechra-Bitz as App'), 'Install App removed from desktop header');
+assert(appLayoutCode.includes('usePWAInstall') && appLayoutCode.includes('canInstall'), 'PWA Install option integrated in desktop header');
 assert(!appLayoutCode.includes('>Log In</button>') || appLayoutCode.indexOf('>Log In</button>') === -1, 'Standalone Log In button removed from header');
 assert(!appLayoutCode.includes('>Sign Up</button>') || appLayoutCode.indexOf('>Sign Up</button>') === -1, 'Standalone Sign Up button removed from header');
 assert(appLayoutCode.includes('handleProtectedNav'), 'Contextual navigation gating implemented in header');

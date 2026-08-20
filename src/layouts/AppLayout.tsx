@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   LogOut,
   ChevronDown,
-  User as UserIcon
+  User as UserIcon,
+  Download
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
@@ -33,6 +34,7 @@ export const AppLayout: React.FC = () => {
 
   const {
     canInstall,
+    hasNativePrompt,
     isIOS,
     iosModalOpen,
     setIosModalOpen,
@@ -209,6 +211,23 @@ export const AppLayout: React.FC = () => {
           {/* Right Header Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             
+            {/* Install App Button (Visible on both Desktop and Mobile Header) */}
+            {canInstall && (
+              <button
+                onClick={triggerInstall}
+                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer shadow-2xs active:scale-95 group ${
+                  isHomePage
+                    ? 'bg-sky-500/25 hover:bg-sky-500/40 text-white border border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                    : 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200 hover:border-brand-300'
+                }`}
+                title="Install EdTechra-Bitz application"
+                aria-label="Install App"
+              >
+                <Download className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform stroke-[2.5]" />
+                <span>Install</span>
+              </button>
+            )}
+
             {/* Search Button (Hidden on Homepage) */}
             {!isHomePage && (
               <button
@@ -291,6 +310,19 @@ export const AppLayout: React.FC = () => {
                           <ShieldCheck className="w-4 h-4 text-purple-600" />
                           <span>Admin Panel</span>
                         </Link>
+                      )}
+
+                      {canInstall && (
+                        <button
+                          onClick={() => {
+                            setUserDropdownOpen(false);
+                            triggerInstall();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#026fc3] hover:bg-brand-50 transition-colors text-left cursor-pointer"
+                        >
+                          <Download className="w-4 h-4 text-[#026fc3]" />
+                          <span>Install App</span>
+                        </button>
                       )}
                     </div>
 
@@ -387,6 +419,27 @@ export const AppLayout: React.FC = () => {
             )}
 
             <nav className="flex flex-col gap-2">
+              {/* Mobile Install App Button */}
+              {canInstall && (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    triggerInstall();
+                  }}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-black bg-gradient-to-r from-brand-50 to-blue-50/70 border border-brand-200 text-[#026fc3] transition-all active:scale-98 cursor-pointer shadow-2xs mb-1"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-lg bg-[#026fc3] text-white flex items-center justify-center">
+                      <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                    </div>
+                    <span>Install EdTechra-Bitz App</span>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold bg-[#026fc3] text-white px-2 py-0.5 rounded-md">
+                    {isIOS ? 'iOS' : 'PWA'}
+                  </span>
+                </button>
+              )}
+
               <NavLink
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}
@@ -491,7 +544,7 @@ export const AppLayout: React.FC = () => {
         isOpen={iosModalOpen}
         onClose={() => setIosModalOpen(false)}
         isIOS={isIOS}
-        hasNativePrompt={canInstall && !isIOS}
+        hasNativePrompt={hasNativePrompt}
         onNativeInstall={triggerInstall}
       />
 
