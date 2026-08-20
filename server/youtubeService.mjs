@@ -304,7 +304,7 @@ export async function syncYouTubeChannel(triggerSource = 'manual', userToken = n
     if (activeSupabase) {
       const { data: dbVideos } = await activeSupabase
         .from('youtube_videos')
-        .select(`youtube_video_id, title, category, difficulty, status, youtube_learning_content(*)`);
+        .select(`id, youtube_video_id, title, thumbnail_url, category, difficulty, status, youtube_learning_content(*)`);
 
       if (dbVideos) {
         dbVideos.forEach(v => {
@@ -351,7 +351,7 @@ export async function syncYouTubeChannel(triggerSource = 'manual', userToken = n
           channel_id: item.snippet.channelId || VERIFIED_CHANNEL_ID,
           title: dbRecord?.title || cleanTitle(item.snippet.title),
           description: item.snippet.description || dbRecord?.description || '',
-          thumbnail_url: thumb,
+          thumbnail_url: dbRecord?.thumbnail_url || localRecord?.thumbnail_url || thumb,
           youtube_url: `https://www.youtube.com/watch?v=${vidId}`,
           published_at: item.snippet.publishedAt,
           duration_seconds: durationSeconds,

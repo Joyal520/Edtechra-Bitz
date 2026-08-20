@@ -416,18 +416,28 @@ app.put('/api/youtube/video/:id/thumbnail', async (req, res) => {
 
     // 1. Authoritative Update in Supabase public.youtube_videos
     if (serverSupabase) {
-      const { error: dbErr } = await serverSupabase
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let updateQuery = serverSupabase
         .from('youtube_videos')
         .update({
           thumbnail_url: thumbnailUrl,
           updated_at: new Date().toISOString()
-        })
-        .or(`youtube_video_id.eq.${id},id.eq.${id}`);
+        });
+
+      if (isUuid) {
+        updateQuery = updateQuery.eq('id', id);
+      } else {
+        updateQuery = updateQuery.eq('youtube_video_id', id);
+      }
+
+      const { data: updatedRows, error: dbErr } = await updateQuery.select('id, youtube_video_id, thumbnail_url');
 
       if (dbErr) {
         console.error('[Supabase update thumbnail error]:', dbErr);
         return res.status(500).json({ success: false, error: 'Database update failed: ' + dbErr.message });
       }
+
+      console.log(`[Supabase Thumbnail Update] Successfully updated video (${id}):`, updatedRows);
     }
 
     // 2. Synchronize local cache
