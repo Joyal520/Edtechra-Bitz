@@ -186,63 +186,60 @@ export const AdminReadingsSection: React.FC = () => {
         setValidationResult(null);
         setCreateCoverBlob(null);
         setCreateCoverPreview(null);
-        await loadData();
-        return;
+      } else if (validationResult.reading) {
+        // Case B: Single Reading Import
+        let coverImageUrl: string | null = null;
+        let coverImageObjectKey: string | null = null;
+
+        // 1. Upload Cover Image to Cloudflare R2 if selected (OPTIONAL)
+        if (createCoverBlob) {
+          const presigned = await readingService.requestPresignedCoverUpload(
+            {
+              readingId: 'reading',
+              filename: 'cover.webp',
+              contentType: createCoverBlob.type || 'image/webp',
+              size: createCoverBlob.size
+            },
+            token
+          );
+
+          await readingService.uploadCoverToR2(
+            presigned.uploadUrl,
+            presigned.headers,
+            createCoverBlob
+          );
+
+          coverImageUrl = presigned.publicUrl;
+          coverImageObjectKey = presigned.objectKey;
+        }
+
+        // 2. Create Reading Record
+        const payload: RawReadingInput = {
+          ...validationResult.reading,
+          cover_image_url: coverImageUrl || validationResult.reading.cover_image_url || null,
+          cover_image_object_key: coverImageObjectKey || validationResult.reading.cover_image_object_key || null,
+          is_published: publishImmediately
+        };
+
+        const newReading = await readingService.createReading(payload, token);
+        showToast(`One-Minute Reading "${newReading.title}" ${publishImmediately ? 'published' : 'saved as draft'}!`);
+
+        // Reset form
+        setJsonInput('');
+        setValidationResult(null);
+        setCreateCoverBlob(null);
+        setCreateCoverPreview(null);
       }
-
-      // Case B: Single Reading Import
-      if (!validationResult.reading) {
-        showToast('No reading record found to create.', 'error');
-        return;
-      }
-
-      let coverImageUrl: string | null = null;
-      let coverImageObjectKey: string | null = null;
-
-      // 1. Upload Cover Image to Cloudflare R2 if selected (OPTIONAL)
-      if (createCoverBlob) {
-        const presigned = await readingService.requestPresignedCoverUpload(
-          {
-            readingId: 'reading',
-            filename: 'cover.webp',
-            contentType: createCoverBlob.type || 'image/webp',
-            size: createCoverBlob.size
-          },
-          token
-        );
-
-        await readingService.uploadCoverToR2(
-          presigned.uploadUrl,
-          presigned.headers,
-          createCoverBlob
-        );
-
-        coverImageUrl = presigned.publicUrl;
-        coverImageObjectKey = presigned.objectKey;
-      }
-
-      // 2. Create Reading Record
-      const payload: RawReadingInput = {
-        ...validationResult.reading,
-        cover_image_url: coverImageUrl || validationResult.reading.cover_image_url || null,
-        cover_image_object_key: coverImageObjectKey || validationResult.reading.cover_image_object_key || null,
-        is_published: publishImmediately
-      };
-
-      const newReading = await readingService.createReading(payload, token);
-      showToast(`One-Minute Reading "${newReading.title}" ${publishImmediately ? 'published' : 'saved as draft'}!`);
-
-      // Reset form
-      setJsonInput('');
-      setValidationResult(null);
-      setCreateCoverBlob(null);
-      setCreateCoverPreview(null);
-      await loadData();
     } catch (err: any) {
       console.error('Failed to create reading(s):', err);
       showToast(err.message || 'Failed to create reading(s).', 'error');
     } finally {
       setImporting(false);
+      try {
+        await loadData();
+      } catch (loadErr) {
+        console.warn('Notice: Failed to auto-reload catalogue:', loadErr);
+      }
     }
   };
 
