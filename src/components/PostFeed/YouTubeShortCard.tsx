@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Play,
+  Pause,
   Film,
   Clock,
   Zap,
@@ -17,9 +18,13 @@ interface YouTubeShortCardProps {
 export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => {
   const [isIntersecting, setIsIntersecting] = useState<boolean>(false);
   const [userClickedPlay, setUserClickedPlay] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [showIndicator, setShowIndicator] = useState<boolean>(false);
   
   const cardRef = useRef<HTMLElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const durationText = short.duration_formatted || `${short.duration || 30}s`;
 
@@ -39,8 +44,10 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
             setIsIntersecting(true);
+            setIsPaused(false);
           } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
             setIsIntersecting(false);
+            setIsPaused(false);
           }
         });
       },
@@ -52,19 +59,44 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
     observer.observe(el);
     return () => {
       observer.disconnect();
+      if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
     };
   }, []);
 
   const shouldPlayInline = isIntersecting || userClickedPlay;
 
+  // Toggle Play / Pause on user interaction with temporary feedback
+  const handleTogglePlayPause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+
+    if (iframeRef.current && iframeRef.current.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func: nextPaused ? 'pauseVideo' : 'playVideo',
+          args: []
+        }),
+        '*'
+      );
+    }
+
+    setShowIndicator(true);
+    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
+    indicatorTimerRef.current = setTimeout(() => {
+      setShowIndicator(false);
+    }, 1200);
+  };
+
   // Official YouTube Embed URL configured for:
-  // - True 9:16 native presentation
-  // - Autoplay with sound attempt
-  // - Plays inline without forcing native fullscreen
-  // - Looping continuously via playlist parameter
+  // - True 9:16 vertical presentation
+  // - Clean autoplay with sound attempt
+  // - controls=0 to eliminate persistent ◀ ⏸ ▶ overlays
+  // - playsinline=1 without forcing native fullscreen
+  // - loop=1 continuously via playlist parameter
   // - cc_load_policy=0 to avoid duplicate caption overlay (captions already burned into video)
-  // - Clean official native YouTube controls
-  const embedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=1&modestbranding=1&rel=0&cc_load_policy=0`;
+  const embedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0`;
 
   return (
     <article
@@ -101,54 +133,74 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
         </div>
       </div>
 
-      {/* 2. TRUE 9:16 RESPONSIVE VIDEO CONTAINER (Fills entire width and height with object-cover) */}
-      <div
-        ref={videoContainerRef}
-        className="relative w-full aspect-[9/16] bg-black overflow-hidden flex items-center justify-center"
-      >
-        {shouldPlayInline ? (
-          <iframe
-            src={embedUrl}
-            title={short.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            className="w-full h-full border-0 object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div
-            onClick={() => setUserClickedPlay(true)}
-            className="relative w-full h-full cursor-pointer group flex items-center justify-center bg-slate-950"
-          >
-            <img
-              src={short.thumbnail_url}
-              alt={short.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
+      {/* 2. RESPONSIVE VIDEO FRAME: 
+             - Mobile: Full width 9:16 edge-to-edge
+             - Desktop: Centered, compact 9:16 card (max-w-[360px], max-h-[640px]) */}
+      <div className="w-full bg-slate-950 sm:bg-slate-900/90 sm:p-4 flex items-center justify-center">
+        <div
+          ref={videoContainerRef}
+          onClick={shouldPlayInline ? handleTogglePlayPause : () => setUserClickedPlay(true)}
+          className="relative w-full aspect-[9/16] max-h-[82svh] sm:max-h-[640px] sm:max-w-[360px] mx-auto bg-black overflow-hidden flex items-center justify-center sm:rounded-2xl shadow-md cursor-pointer select-none"
+        >
+          {shouldPlayInline ? (
+            <>
+              <iframe
+                ref={iframeRef}
+                src={embedUrl}
+                title={short.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full border-0 object-cover pointer-events-none"
+                loading="lazy"
+              />
 
-            {/* Dark overlay with Play button */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex items-center justify-center">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-all">
-                <Play className="w-7 h-7 fill-white translate-x-0.5" />
+              {/* Sleek temporary interaction feedback indicator (Play / Pause) */}
+              <div
+                className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 ${
+                  showIndicator ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <div className="w-16 h-16 rounded-full bg-black/70 backdrop-blur-md text-white flex items-center justify-center shadow-xl transform scale-100 transition-transform">
+                  {isPaused ? (
+                    <Pause className="w-8 h-8 fill-white" />
+                  ) : (
+                    <Play className="w-8 h-8 fill-white translate-x-0.5" />
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="relative w-full h-full cursor-pointer group flex items-center justify-center bg-slate-950">
+              <img
+                src={short.thumbnail_url}
+                alt={short.title}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+
+              {/* Dark overlay with Play button */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex items-center justify-center">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-all">
+                  <Play className="w-7 h-7 fill-white translate-x-0.5" />
+                </div>
+              </div>
+
+              {/* Bottom tag */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
+                <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5 text-red-400" />
+                  <span>Tap to Play</span>
+                </span>
+                {short.linked_quiz_id && (
+                  <span className="px-2.5 py-1 rounded-xl bg-teal-500/90 backdrop-blur-xs text-white text-[11px] font-extrabold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>Quiz Attached</span>
+                  </span>
+                )}
               </div>
             </div>
-
-            {/* Bottom tag */}
-            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
-              <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
-                <Film className="w-3.5 h-3.5 text-red-400" />
-                <span>Tap to Play</span>
-              </span>
-              {short.linked_quiz_id && (
-                <span className="px-2.5 py-1 rounded-xl bg-teal-500/90 backdrop-blur-xs text-white text-[11px] font-extrabold flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-300" />
-                  <span>Quiz Attached</span>
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 3. Short Content Body & Metadata (Padded with 12px text) */}

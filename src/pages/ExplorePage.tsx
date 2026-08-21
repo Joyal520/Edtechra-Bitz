@@ -4,7 +4,7 @@ import { PostFeed } from '@/components/PostFeed/PostFeed';
 
 export const ExplorePage: React.FC = () => {
   return (
-    <div className="w-full max-w-6xl mx-auto py-3 sm:py-8 px-0 sm:px-6 space-y-4 sm:space-y-6">
+    <div className="w-full max-w-2xl mx-auto py-3 sm:py-8 px-0 sm:px-4 space-y-4 sm:space-y-6">
       
       {/* Header */}
       <div className="px-4 sm:px-0">
