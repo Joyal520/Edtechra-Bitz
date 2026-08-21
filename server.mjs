@@ -3821,11 +3821,22 @@ app.get('/api/polls/feed', async (req, res) => {
           .order('created_at', { ascending: false });
 
         if (!sbErr && Array.isArray(dbPolls) && dbPolls.length > 0) {
-          allPolls = dbPolls;
+          const dbMap = new Map(dbPolls.map(p => [p.id, p]));
+          const merged = [...dbPolls];
+          for (const cached of allPolls) {
+            if (!dbMap.has(cached.id)) {
+              merged.push(cached);
+            }
+          }
+          allPolls = merged;
+          savePollsCache(allPolls);
         }
 
         const { data: dbVotes } = await serverSupabase.from('poll_votes').select('*');
-        if (dbVotes) allVotes = dbVotes;
+        if (dbVotes && Array.isArray(dbVotes)) {
+          allVotes = dbVotes;
+          savePollVotesCache(allVotes);
+        }
       } catch (e) {
         console.warn('[Supabase feed polls notice]:', e.message);
       }
@@ -3879,21 +3890,77 @@ app.post('/api/polls/vote', async (req, res) => {
     const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
 
     const allPolls = loadPollsCache();
-    const poll = allPolls.find(p => p.id === pollId);
+    let poll = allPolls.find(p => p.id === pollId);
+
+    // 1. If not found in cache, check Supabase polls table
+    if (!poll && serverSupabase) {
+      try {
+        const { data: dbPoll, error: sbErr } = await serverSupabase
+          .from('polls')
+          .select('*')
+          .eq('id', pollId)
+          .maybeSingle();
+
+        if (!sbErr && dbPoll) {
+          poll = dbPoll;
+          allPolls.push(poll);
+          savePollsCache(allPolls);
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase poll vote lookup notice]:', sbErr.message);
+      }
+    }
+
+    // 2. Secondary fallback: check Cloudflare R2
+    if (!poll) {
+      try {
+        const r2Poll = await getJsonContent(buildPollContentKey(pollId));
+        if (r2Poll) {
+          poll = r2Poll;
+          allPolls.push(poll);
+          savePollsCache(allPolls);
+        }
+      } catch (r2Err) {
+        console.warn('[R2 poll lookup notice]:', r2Err.message);
+      }
+    }
 
     if (!poll) {
       return res.status(404).json({ success: false, error: 'Poll not found.' });
     }
 
+    const pollOptions = Array.isArray(poll.options) ? poll.options : [];
     const rawSelected = Array.isArray(selectedOptions) ? selectedOptions : [selectedOptions];
-    const cleanSelected = rawSelected.map(o => String(o).trim()).filter(o => poll.options.includes(o));
+    const cleanSelected = rawSelected.map(o => String(o).trim()).filter(o => pollOptions.includes(o));
 
     if (cleanSelected.length === 0) {
       return res.status(400).json({ success: false, error: 'Selected option is not valid for this poll.' });
     }
 
-    // Check duplicate vote
+    // 3. Load latest votes from cache and Supabase
     let allVotes = loadPollVotesCache();
+    if (serverSupabase) {
+      try {
+        const { data: dbVotes } = await serverSupabase
+          .from('poll_votes')
+          .select('*')
+          .eq('poll_id', pollId);
+
+        if (Array.isArray(dbVotes) && dbVotes.length > 0) {
+          const voteIdSet = new Set(allVotes.map(v => v.id));
+          for (const v of dbVotes) {
+            if (!voteIdSet.has(v.id)) {
+              allVotes.push(v);
+            }
+          }
+          savePollVotesCache(allVotes);
+        }
+      } catch (e) {
+        console.warn('[Supabase poll_votes query notice]:', e.message);
+      }
+    }
+
+    // 4. Check duplicate vote
     const alreadyVoted = allVotes.some(v => v.poll_id === pollId && v.user_id === userId);
 
     if (alreadyVoted && userId !== 'guest_user') {
