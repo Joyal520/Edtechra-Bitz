@@ -1,9 +1,9 @@
 {
-  "lastSyncTime": "2026-08-18T07:40:17.112Z",
+  "lastSyncTime": "2026-08-21T07:36:10.109Z",
   "lastSyncStatus": "success",
-  "totalVideos": 205,
-  "upcomingVideos": 7,
+  "totalVideos": 225,
+  "upcomingVideos": 27,
   "lastError": null,
-  "newVideosAddedLastSync": 6,
-  "syncTrigger": "production_verification"
+  "newVideosAddedLastSync": 0,
+  "syncTrigger": "scheduled_backup"
 }
