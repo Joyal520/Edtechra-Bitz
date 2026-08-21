@@ -10,6 +10,14 @@ export const FEED_CONFIG = {
   SHORT_FEED_INTERVAL_MIN: 4,
   SHORT_FEED_INTERVAL_MAX: 6,
 
+  // One-Minute Reading pacing rules
+  READING_FEED_INTERVAL_MIN: 5,
+  READING_FEED_INTERVAL_MAX: 7,
+
+  // AI-Prompt Poll pacing rules
+  POLL_FEED_INTERVAL_MIN: 6,
+  POLL_FEED_INTERVAL_MAX: 8,
+
   // Standard educational categories
   SHORT_CATEGORIES: [
     'General',

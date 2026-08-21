@@ -28,6 +28,8 @@ import { AdminSyncModal } from '@/components/AdminSyncModal';
 import { AdminThumbnailModal } from '@/components/AdminThumbnailModal';
 import { AdminQuizSection } from '@/components/AdminQuizSection';
 import { AdminShortsSection } from '@/components/AdminShortsSection';
+import { AdminReadingsSection } from '@/components/AdminReadingsSection';
+import { AdminPollsSection } from '@/components/AdminPollsSection';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -40,7 +42,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,6 +274,40 @@ export const AdminPage: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setAdminTab('readings')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'readings'
+              ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>📖</span>
+          <span>1-Minute Readings</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'readings' ? 'bg-amber-300 text-slate-900' : 'bg-teal-100 text-teal-800'
+          }`}>
+            New
+          </span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('polls')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'polls'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>📊</span>
+          <span>AI-Prompt Polls</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'polls' ? 'bg-amber-300 text-slate-900' : 'bg-purple-100 text-purple-800'
+          }`}>
+            AI
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('youtube')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
             adminTab === 'youtube'
@@ -336,9 +372,19 @@ export const AdminPage: React.FC = () => {
         <AdminQuizSection />
       )}
 
-      {/* 2. YouTube Shorts Feed Content Management (New) */}
+      {/* 2. YouTube Shorts Feed Content Management */}
       {(adminTab === 'all' || adminTab === 'shorts') && (
         <AdminShortsSection />
+      )}
+
+      {/* 3. One-Minute Readings Management */}
+      {(adminTab === 'all' || adminTab === 'readings') && (
+        <AdminReadingsSection />
+      )}
+
+      {/* 4. AI-Prompt Polls Management */}
+      {(adminTab === 'all' || adminTab === 'polls') && (
+        <AdminPollsSection />
       )}
 
       {/* 2. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}

@@ -1,3 +1,5 @@
+export type { PresignedUploadResponse, StudentPost, PostAuthor } from './post';
+
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 
 export type ContentStatus = 'draft' | 'published' | 'archived' | 'upcoming';
@@ -241,5 +243,142 @@ export interface YouTubeShortAdminStats {
   publishedShorts: number;
   draftShorts: number;
   linkedQuizShorts: number;
+}
+
+// ============================================================================
+// One-Minute Reading Types
+// ============================================================================
+
+export interface ReadingParagraph {
+  id: number;
+  text: string;
+}
+
+export interface ReadingVocabulary {
+  word: string;
+  pronunciation?: string;
+  part_of_speech?: string;
+  definition: string;
+  example?: string;
+}
+
+export interface ReadingQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correct_answer: string;
+  explanation: string;
+}
+
+export interface ReadingBit {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  category: string;
+  level: string; // e.g. 'A1' | 'A2' | 'B1' | 'B2' | 'C1'
+  reading_time: number; // in minutes (default 1)
+  paragraphs: ReadingParagraph[];
+  vocabulary?: ReadingVocabulary[];
+  questions?: ReadingQuestion[];
+  cover_image_url?: string | null;
+  cover_image_object_key?: string | null;
+  is_published: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  has_completed?: boolean;
+}
+
+export interface RawReadingInput {
+  type?: 'reading';
+  title: string;
+  subtitle?: string;
+  category?: string;
+  level?: string;
+  reading_time?: number;
+  paragraphs: Array<{ id?: number; text: string }>;
+  vocabulary?: ReadingVocabulary[];
+  questions?: ReadingQuestion[];
+  cover_image_url?: string | null;
+  cover_image_object_key?: string | null;
+  is_published?: boolean;
+}
+
+export interface ReadingAdminStats {
+  totalReadings: number;
+  publishedReadings: number;
+  draftReadings: number;
+  readingsWithImages: number;
+  readingsWithoutImages: number;
+}
+
+export interface ReadingValidationErrorItem {
+  field: string;
+  message: string;
+}
+
+export interface ReadingValidationResult {
+  valid: boolean;
+  reading: RawReadingInput | null;
+  errors: ReadingValidationErrorItem[];
+}
+
+// ============================================================================
+// AI-Prompt-Based Poll Types
+// ============================================================================
+
+export interface PollBit {
+  id: string;
+  question: string;
+  options: string[];
+  category: string;
+  allow_multiple: boolean;
+  show_results_after_vote: boolean;
+  is_published: boolean;
+  total_votes: number;
+  prompt?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Computed / user state
+  user_voted_options?: string[];
+  option_votes?: Record<string, number>;
+  option_percentages?: Record<string, number>;
+}
+
+export interface CreatePollInput {
+  question: string;
+  options: string[];
+  category?: string;
+  allow_multiple?: boolean;
+  show_results_after_vote?: boolean;
+  is_published?: boolean;
+  prompt?: string;
+}
+
+export interface PollVoteResult {
+  success: boolean;
+  poll_id: string;
+  selected_options: string[];
+  total_votes: number;
+  option_votes: Record<string, number>;
+  option_percentages: Record<string, number>;
+  already_voted?: boolean;
+}
+
+export interface PollAdminStats {
+  totalPolls: number;
+  publishedPolls: number;
+  draftPolls: number;
+  totalVotes: number;
+}
+
+export interface AIPollGenerationResult {
+  question: string;
+  options: string[];
+  category: string;
+  allow_multiple: boolean;
+  show_results_after_vote: boolean;
+  prompt: string;
 }
 

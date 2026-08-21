@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
 import {
   getCachedOrFetchShorts,
   syncYouTubeChannel,
@@ -54,6 +55,10 @@ const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.
 const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY);
 const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+// Initialize server-side OpenAI client
+const openaiApiKey = cleanEnv(process.env.OPENAI_API_KEY);
+const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
+
 // Server Initialization Diagnostics (logged once at startup)
 console.log('[Server Init] Environment diagnostics:');
 console.log(`  SUPABASE_URL: ${supabaseUrl ? '✓ configured' : '✗ MISSING'}`);
@@ -62,7 +67,8 @@ console.log(`  VITE_SUPABASE_ANON_KEY: ${process.env.VITE_SUPABASE_ANON_KEY ? '�
 console.log(`  serverSupabase initialized: ${serverSupabase ? '✓ yes' : '✗ NO — all auth will fail'}`);
 console.log(`  R2_ACCESS_KEY_ID: ${process.env.R2_ACCESS_KEY_ID ? '✓ configured' : '✗ MISSING'}`);
 console.log(`  R2_BUCKET: ${process.env.R2_BUCKET ? '✓ configured' : '✗ MISSING'}`);
-console.log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  OPENAI_API_KEY: ${openaiApiKey ? '✓ configured' : '✗ MISSING'}`);
+console.log(`  serverOpenAI initialized: ${serverOpenAI ? '✓ yes' : '✗ NO — will use smart rule fallback'}`);
 console.log(`  NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
 
 // Helper: Verify Supabase User Token from Request Authorization Header
@@ -232,6 +238,90 @@ function saveShortsCache(shorts) {
     fs.writeFileSync(YOUTUBE_SHORTS_FILE, JSON.stringify(shorts, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving YouTube Shorts cache:', e);
+  }
+}
+
+// In-memory / file-based One-Minute Reading library store
+const READINGS_FILE = path.resolve(__dirname, 'server/data/readings_cache.json');
+const READING_COMPLETIONS_FILE = path.resolve(__dirname, 'server/data/reading_completions_cache.json');
+
+function loadReadingsCache() {
+  try {
+    if (fs.existsSync(READINGS_FILE)) {
+      return JSON.parse(fs.readFileSync(READINGS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading readings cache:', e);
+  }
+  return [];
+}
+
+function saveReadingsCache(readings) {
+  try {
+    fs.writeFileSync(READINGS_FILE, JSON.stringify(readings, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving readings cache:', e);
+  }
+}
+
+function loadReadingCompletionsCache() {
+  try {
+    if (fs.existsSync(READING_COMPLETIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(READING_COMPLETIONS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading reading completions cache:', e);
+  }
+  return [];
+}
+
+function saveReadingCompletionsCache(completions) {
+  try {
+    fs.writeFileSync(READING_COMPLETIONS_FILE, JSON.stringify(completions, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving reading completions cache:', e);
+  }
+}
+
+// In-memory / file-based Polls store
+const POLLS_FILE = path.resolve(__dirname, 'server/data/polls_cache.json');
+const POLL_VOTES_FILE = path.resolve(__dirname, 'server/data/poll_votes_cache.json');
+
+function loadPollsCache() {
+  try {
+    if (fs.existsSync(POLLS_FILE)) {
+      return JSON.parse(fs.readFileSync(POLLS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading polls cache:', e);
+  }
+  return [];
+}
+
+function savePollsCache(polls) {
+  try {
+    fs.writeFileSync(POLLS_FILE, JSON.stringify(polls, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving polls cache:', e);
+  }
+}
+
+function loadPollVotesCache() {
+  try {
+    if (fs.existsSync(POLL_VOTES_FILE)) {
+      return JSON.parse(fs.readFileSync(POLL_VOTES_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading poll votes cache:', e);
+  }
+  return [];
+}
+
+function savePollVotesCache(votes) {
+  try {
+    fs.writeFileSync(POLL_VOTES_FILE, JSON.stringify(votes, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving poll votes cache:', e);
   }
 }
 
@@ -2563,6 +2653,1353 @@ app.post('/api/youtube/shorts/import-existing', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/youtube/shorts/import-existing:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to import existing shorts.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: ONE-MINUTE READINGS
+// ============================================================================
+
+// 1. POST /api/readings/presign-upload - Presigned URL for Reading Cover Image
+app.post('/api/readings/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required to upload cover images.' });
+    }
+
+    const { readingId = 'reading', filename, contentType = 'image/webp', size } = req.body;
+
+    try {
+      validateImageUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    let ext = 'webp';
+    if (contentType === 'image/png' || filename?.toLowerCase().endsWith('.png')) ext = 'png';
+    else if (contentType === 'image/jpeg' || contentType === 'image/jpg' || filename?.toLowerCase().endsWith('.jpg') || filename?.toLowerCase().endsWith('.jpeg')) ext = 'jpg';
+
+    const cleanReadingId = sanitizeSegment(readingId) || 'reading';
+    const timestamp = Date.now();
+    const randomSuffix = crypto.randomBytes(6).toString('hex');
+    const objectKey = `readings/${cleanReadingId}/${timestamp}_${randomSuffix}.${ext}`;
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in POST /api/readings/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate cover upload URL' });
+  }
+});
+
+// 2. POST /api/readings - Create new One-Minute Reading (Admin only)
+app.post('/api/readings', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const {
+      title,
+      subtitle = null,
+      category = 'General',
+      level = 'A2',
+      reading_time = 1,
+      paragraphs,
+      vocabulary = [],
+      questions = [],
+      cover_image_url = null,
+      cover_image_object_key = null,
+      is_published = true
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Reading title is required.' });
+    }
+
+    if (!Array.isArray(paragraphs) || paragraphs.length === 0) {
+      return res.status(400).json({ success: false, error: 'At least one paragraph is required.' });
+    }
+
+    // Format paragraphs
+    const formattedParagraphs = paragraphs.map((p, idx) => ({
+      id: typeof p?.id === 'number' ? p.id : idx + 1,
+      text: typeof p === 'string' ? p.trim() : (p?.text || '').trim()
+    })).filter(p => p.text.length > 0);
+
+    if (formattedParagraphs.length === 0) {
+      return res.status(400).json({ success: false, error: 'Paragraphs cannot be empty.' });
+    }
+
+    const now = new Date().toISOString();
+    const newReading = {
+      id: crypto.randomUUID(),
+      title: title.trim(),
+      subtitle: subtitle ? subtitle.trim() : null,
+      category: category ? category.trim() : 'General',
+      level: level ? level.trim() : 'A2',
+      reading_time: Number(reading_time) > 0 ? Number(reading_time) : 1,
+      paragraphs: formattedParagraphs,
+      vocabulary: Array.isArray(vocabulary) ? vocabulary : [],
+      questions: Array.isArray(questions) ? questions : [],
+      cover_image_url: cover_image_url || null,
+      cover_image_object_key: cover_image_object_key || null,
+      is_published: Boolean(is_published),
+      created_by: authData.user.id,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Save to local cache
+    const cache = loadReadingsCache();
+    cache.unshift(newReading);
+    saveReadingsCache(cache);
+
+    // Save to Supabase if connected
+    if (serverSupabase) {
+      try {
+        const { error: sbErr } = await serverSupabase.from('readings').insert([newReading]);
+        if (sbErr) console.warn('[Supabase readings insert warning]:', sbErr.message);
+      } catch (e) {
+        console.warn('[Supabase readings insert notice]:', e.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'One-Minute Reading created successfully.',
+      data: newReading
+    });
+  } catch (error) {
+    console.error('Error in POST /api/readings:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create reading.' });
+  }
+});
+
+// 3. POST /api/readings/import-batch - Batch import readings from JSON (Admin only)
+app.post('/api/readings/import-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { readings } = req.body;
+    const rawList = Array.isArray(readings) ? readings : (readings ? [readings] : []);
+
+    if (rawList.length === 0) {
+      return res.status(400).json({ success: false, error: 'Valid array of readings is required.' });
+    }
+
+    const now = new Date().toISOString();
+    const validReadings = [];
+    const errors = [];
+
+    rawList.forEach((item, index) => {
+      const title = (item.title || '').trim();
+      if (!title) {
+        errors.push({ index: index + 1, error: 'Missing title' });
+        return;
+      }
+
+      const paragraphsRaw = Array.isArray(item.paragraphs) ? item.paragraphs : [];
+      const paragraphs = paragraphsRaw.map((p, pIdx) => ({
+        id: typeof p?.id === 'number' ? p.id : pIdx + 1,
+        text: typeof p === 'string' ? p.trim() : (p?.text || '').trim()
+      })).filter(p => p.text.length > 0);
+
+      if (paragraphs.length === 0) {
+        errors.push({ index: index + 1, error: 'Missing or empty paragraphs' });
+        return;
+      }
+
+      validReadings.push({
+        id: crypto.randomUUID(),
+        title,
+        subtitle: item.subtitle ? String(item.subtitle).trim() : null,
+        category: item.category ? String(item.category).trim() : 'General',
+        level: item.level ? String(item.level).trim() : 'A2',
+        reading_time: Number(item.reading_time) > 0 ? Number(item.reading_time) : 1,
+        paragraphs,
+        vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary : [],
+        questions: Array.isArray(item.questions) ? item.questions : [],
+        cover_image_url: item.cover_image_url || null,
+        cover_image_object_key: item.cover_image_object_key || null,
+        is_published: item.is_published !== undefined ? Boolean(item.is_published) : true,
+        created_by: authData.user.id,
+        created_at: now,
+        updated_at: now
+      });
+    });
+
+    if (validReadings.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid readings found in payload.',
+        errors
+      });
+    }
+
+    // Save to cache
+    const currentCache = loadReadingsCache();
+    const updatedCache = [...validReadings, ...currentCache];
+    saveReadingsCache(updatedCache);
+
+    // Save to Supabase
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('readings').insert(validReadings);
+      } catch (e) {
+        console.warn('[Supabase batch readings insert notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully imported ${validReadings.length} reading${validReadings.length === 1 ? '' : 's'}.`,
+      importedCount: validReadings.length,
+      failedCount: errors.length,
+      data: validReadings,
+      errors
+    });
+  } catch (error) {
+    console.error('Error in POST /api/readings/import-batch:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to import readings.' });
+  }
+});
+
+// 4. GET /api/readings/admin - Admin list with filtering & stats
+app.get('/api/readings/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, level, published, page = 1, limit = 50 } = req.query;
+    let allReadings = loadReadingsCache();
+
+    if (serverSupabase) {
+      try {
+        const { data: dbReadings, error: sbErr } = await serverSupabase
+          .from('readings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbReadings)) {
+          allReadings = dbReadings;
+          saveReadingsCache(allReadings);
+        }
+      } catch (e) {
+        console.warn('[Supabase admin readings notice]:', e.message);
+      }
+    }
+
+    // Stats
+    const totalReadings = allReadings.length;
+    const publishedReadings = allReadings.filter(r => r.is_published).length;
+    const draftReadings = totalReadings - publishedReadings;
+    const readingsWithImages = allReadings.filter(r => Boolean(r.cover_image_url)).length;
+    const readingsWithoutImages = totalReadings - readingsWithImages;
+
+    const stats = {
+      totalReadings,
+      publishedReadings,
+      draftReadings,
+      readingsWithImages,
+      readingsWithoutImages
+    };
+
+    // Filter
+    let filtered = [...allReadings];
+
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(r =>
+        r.title?.toLowerCase().includes(q) ||
+        r.subtitle?.toLowerCase().includes(q) ||
+        r.category?.toLowerCase().includes(q)
+      );
+    }
+
+    if (category && category !== 'all') {
+      filtered = filtered.filter(r => r.category?.toLowerCase() === category.toLowerCase());
+    }
+
+    if (level && level !== 'all') {
+      filtered = filtered.filter(r => r.level?.toLowerCase() === level.toLowerCase());
+    }
+
+    if (published && published !== 'all') {
+      const isPub = published === 'published' || published === 'true';
+      filtered = filtered.filter(r => Boolean(r.is_published) === isPub);
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const total = filtered.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = filtered.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        readings: paginated,
+        stats,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/readings/admin:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch readings.' });
+  }
+});
+
+// 5. GET /api/readings/feed - Student Feed pool of published readings
+app.get('/api/readings/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+
+    let allReadings = loadReadingsCache();
+
+    if (serverSupabase) {
+      try {
+        const { data: dbReadings, error: sbErr } = await serverSupabase
+          .from('readings')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbReadings) && dbReadings.length > 0) {
+          allReadings = dbReadings;
+        }
+      } catch (e) {
+        console.warn('[Supabase feed readings notice]:', e.message);
+      }
+    }
+
+    let published = allReadings.filter(r => r.is_published);
+    if (published.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Filter completions if authenticated
+    let candidatePool = published;
+    if (userId) {
+      let completions = [];
+      if (serverSupabase) {
+        try {
+          const { data: dbCompletions } = await serverSupabase
+            .from('reading_completions')
+            .select('reading_id')
+            .eq('user_id', userId);
+          if (dbCompletions) completions = dbCompletions;
+        } catch (e) {
+          // Ignore
+        }
+      }
+      if (completions.length === 0) {
+        const cachedCompletions = loadReadingCompletionsCache();
+        completions = cachedCompletions.filter(c => c.user_id === userId);
+      }
+
+      const completedIds = new Set(completions.map(c => c.reading_id));
+      const uncompleted = published.filter(r => !completedIds.has(r.id));
+      if (uncompleted.length > 0) {
+        candidatePool = uncompleted;
+      }
+    }
+
+    const shuffled = shuffleArray(candidatePool);
+    const feedPool = shuffled.slice(0, 10);
+
+    res.json({
+      success: true,
+      data: feedPool
+    });
+  } catch (error) {
+    console.error('Error in GET /api/readings/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve readings feed.' });
+  }
+});
+
+// 6. GET /api/readings/:id - Get single reading
+app.get('/api/readings/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let reading = null;
+
+    if (serverSupabase) {
+      try {
+        const { data: dbReading } = await serverSupabase
+          .from('readings')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (dbReading) reading = dbReading;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    if (!reading) {
+      const cache = loadReadingsCache();
+      reading = cache.find(r => r.id === id);
+    }
+
+    if (!reading) {
+      return res.status(404).json({ success: false, error: 'Reading not found.' });
+    }
+
+    res.json({ success: true, data: reading });
+  } catch (error) {
+    console.error('Error in GET /api/readings/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch reading.' });
+  }
+});
+
+// 7. PUT /api/readings/:id - Update reading content (Admin only)
+app.put('/api/readings/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const {
+      title,
+      subtitle,
+      category,
+      level,
+      reading_time,
+      paragraphs,
+      vocabulary,
+      questions,
+      is_published
+    } = req.body;
+
+    const cache = loadReadingsCache();
+    const index = cache.findIndex(r => r.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Reading not found.' });
+    }
+
+    const existing = index !== -1 ? cache[index] : null;
+    const now = new Date().toISOString();
+
+    const formattedParagraphs = Array.isArray(paragraphs)
+      ? paragraphs.map((p, idx) => ({
+          id: typeof p?.id === 'number' ? p.id : idx + 1,
+          text: typeof p === 'string' ? p.trim() : (p?.text || '').trim()
+        })).filter(p => p.text.length > 0)
+      : existing?.paragraphs || [];
+
+    const updated = {
+      ...(existing || {}),
+      id,
+      title: title !== undefined ? title.trim() : existing?.title,
+      subtitle: subtitle !== undefined ? (subtitle ? subtitle.trim() : null) : existing?.subtitle,
+      category: category !== undefined ? category.trim() : existing?.category || 'General',
+      level: level !== undefined ? level.trim() : existing?.level || 'A2',
+      reading_time: reading_time !== undefined ? (Number(reading_time) > 0 ? Number(reading_time) : 1) : existing?.reading_time || 1,
+      paragraphs: formattedParagraphs,
+      vocabulary: vocabulary !== undefined ? vocabulary : existing?.vocabulary || [],
+      questions: questions !== undefined ? questions : existing?.questions || [],
+      is_published: is_published !== undefined ? Boolean(is_published) : existing?.is_published ?? true,
+      updated_at: now
+    };
+
+    if (index !== -1) {
+      cache[index] = updated;
+    } else {
+      cache.unshift(updated);
+    }
+    saveReadingsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('readings')
+          .update({
+            title: updated.title,
+            subtitle: updated.subtitle,
+            category: updated.category,
+            level: updated.level,
+            reading_time: updated.reading_time,
+            paragraphs: updated.paragraphs,
+            vocabulary: updated.vocabulary,
+            questions: updated.questions,
+            is_published: updated.is_published,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase update reading notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Reading updated successfully.',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/readings/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update reading.' });
+  }
+});
+
+// 8. PUT /api/readings/:id/cover - Add or replace cover image for existing reading
+app.put('/api/readings/:id/cover', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { cover_image_url, cover_image_object_key } = req.body;
+
+    const cache = loadReadingsCache();
+    const index = cache.findIndex(r => r.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Reading not found.' });
+    }
+
+    const existing = index !== -1 ? cache[index] : null;
+    const oldObjectKey = existing?.cover_image_object_key;
+    const now = new Date().toISOString();
+
+    const updated = {
+      ...(existing || {}),
+      id,
+      cover_image_url: cover_image_url || null,
+      cover_image_object_key: cover_image_object_key || null,
+      updated_at: now
+    };
+
+    if (index !== -1) {
+      cache[index] = updated;
+    } else {
+      cache.unshift(updated);
+    }
+    saveReadingsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('readings')
+          .update({
+            cover_image_url: updated.cover_image_url,
+            cover_image_object_key: updated.cover_image_object_key,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase update reading cover notice]:', e.message);
+      }
+    }
+
+    // Clean up old R2 image object if it was replaced and different
+    if (oldObjectKey && oldObjectKey !== cover_image_object_key) {
+      try {
+        await deleteObjects([oldObjectKey]);
+      } catch (e) {
+        console.warn('[R2 cleanup notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Cover image updated successfully.',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/readings/:id/cover:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update cover image.' });
+  }
+});
+
+// 9. PUT /api/readings/:id/publish - Toggle reading publication status
+app.put('/api/readings/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const cache = loadReadingsCache();
+    const index = cache.findIndex(r => r.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Reading not found.' });
+    }
+
+    const targetPub = is_published !== undefined ? Boolean(is_published) : !cache[index]?.is_published;
+    const now = new Date().toISOString();
+
+    if (index !== -1) {
+      cache[index].is_published = targetPub;
+      cache[index].updated_at = now;
+      saveReadingsCache(cache);
+    }
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('readings')
+          .update({ is_published: targetPub, updated_at: now })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase toggle publish reading notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Reading ${targetPub ? 'published' : 'unpublished'} successfully.`,
+      is_published: targetPub
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/readings/:id/publish:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to toggle publication.' });
+  }
+});
+
+// 10. DELETE /api/readings/:id - Delete reading & clean up R2 cover
+app.delete('/api/readings/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const cache = loadReadingsCache();
+    const target = cache.find(r => r.id === id);
+    const updated = cache.filter(r => r.id !== id);
+    saveReadingsCache(updated);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('readings').delete().eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase delete reading notice]:', e.message);
+      }
+    }
+
+    if (target?.cover_image_object_key) {
+      try {
+        await deleteObjects([target.cover_image_object_key]);
+      } catch (e) {
+        console.warn('[R2 delete cover notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      deletedId: id,
+      message: 'Reading permanently deleted.'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/readings/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete reading.' });
+  }
+});
+
+// 11. POST /api/readings/complete - Record student reading completion
+app.post('/api/readings/complete', async (req, res) => {
+  try {
+    const { readingId } = req.body;
+    if (!readingId) {
+      return res.status(400).json({ success: false, error: 'readingId is required.' });
+    }
+
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    const completions = loadReadingCompletionsCache();
+    const alreadyCompleted = completions.some(c => c.reading_id === readingId && c.user_id === userId);
+
+    if (!alreadyCompleted) {
+      const record = {
+        id: crypto.randomUUID(),
+        reading_id: readingId,
+        user_id: userId,
+        completed_at: new Date().toISOString()
+      };
+      completions.push(record);
+      saveReadingCompletionsCache(completions);
+
+      if (serverSupabase && userId !== 'guest_user') {
+        try {
+          await serverSupabase.from('reading_completions').insert([record]);
+        } catch (e) {
+          // Ignore duplicate
+        }
+      }
+    }
+
+    res.json({ success: true, readingId, completed: true });
+  } catch (error) {
+    console.error('Error in POST /api/readings/complete:', error);
+    res.status(500).json({ success: false, error: 'Failed to record completion.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: AI-PROMPT POLLS
+// ============================================================================
+
+// 1. POST /api/polls/generate-ai - Generate structured poll from admin prompt (Admin only)
+app.post('/api/polls/generate-ai', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'Natural language prompt is required.' });
+    }
+
+    const cleanPrompt = prompt.trim();
+    console.log(`[AI Poll Generation] Received prompt: "${cleanPrompt}"`);
+
+    let generatedPoll = null;
+
+    // 1. Try OpenAI if API Key is available
+    if (serverOpenAI) {
+      try {
+        const completion = await serverOpenAI.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an educational AI assistant for EdTechra. When given an instructional prompt, create an engaging, classroom-appropriate poll for students.
+Return a clean, valid JSON object with the following schema:
+{
+  "question": "A clear, compelling poll question text",
+  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+  "category": "Science" | "Technology" | "Space" | "English" | "Math" | "General" | "Life Skills",
+  "allow_multiple": false,
+  "show_results_after_vote": true
+}
+Ensure exactly 4 distinct, concise, student-friendly options.`
+            },
+            {
+              role: 'user',
+              content: cleanPrompt
+            }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.7,
+          max_tokens: 500
+        });
+
+        const rawJson = completion.choices?.[0]?.message?.content;
+        if (rawJson) {
+          const parsed = JSON.parse(rawJson);
+          if (parsed.question && Array.isArray(parsed.options) && parsed.options.length >= 2) {
+            generatedPoll = {
+              question: parsed.question.trim(),
+              options: parsed.options.map(o => String(o).trim()).filter(Boolean),
+              category: parsed.category || 'General',
+              allow_multiple: Boolean(parsed.allow_multiple),
+              show_results_after_vote: parsed.show_results_after_vote !== undefined ? Boolean(parsed.show_results_after_vote) : true,
+              prompt: cleanPrompt
+            };
+          }
+        }
+      } catch (aiErr) {
+        console.warn('[AI Poll Generation Warning] OpenAI call failed, using intelligent rule generator:', aiErr.message);
+      }
+    }
+
+    // 2. Intelligent Educational Fallback Template if OpenAI is unconfigured or failed
+    if (!generatedPoll) {
+      const lower = cleanPrompt.toLowerCase();
+      let category = 'General';
+      let question = cleanPrompt;
+      let options = ['Option A', 'Option B', 'Option C', 'Option D'];
+
+      if (lower.includes('science') || lower.includes('experiment') || lower.includes('biology') || lower.includes('physics')) {
+        category = 'Science';
+        question = cleanPrompt.replace(/^(create|make|give me|generate)\s+(a\s+)?(poll|question)\s+(about|for)?\s*/i, '').trim();
+        if (!question.endsWith('?')) question = `How do you best learn science topics?`;
+        options = ['Hands-on experiments', 'Interactive video demonstrations', 'Illustrated reading guides', 'Concept quizzes & challenges'];
+      } else if (lower.includes('tech') || lower.includes('ai') || lower.includes('code') || lower.includes('computer')) {
+        category = 'Technology';
+        question = cleanPrompt.replace(/^(create|make|give me|generate)\s+(a\s+)?(poll|question)\s+(about|for)?\s*/i, '').trim();
+        if (!question.endsWith('?')) question = `Which technology skill would you most like to master?`;
+        options = ['Artificial Intelligence & Prompts', 'Web & App Building', 'Game Development', 'Cybersecurity & Ethics'];
+      } else if (lower.includes('space') || lower.includes('planet') || lower.includes('universe')) {
+        category = 'Space';
+        question = `Which mystery of deep space fascinates you the most?`;
+        options = ['Black Holes & Event Horizons', 'Search for Extraterrestrial Life', 'Mars Colonization & Habitats', 'Origins of the Big Bang'];
+      } else {
+        question = cleanPrompt.replace(/^(create|make|give me|generate)\s+(a\s+)?(poll|question)\s+(about|for)?\s*/i, '').trim();
+        if (!question.endsWith('?')) question = `${question}?`;
+        options = ['Option A: Practical applications', 'Option B: Visual step-by-step videos', 'Option C: Interactive community discussions', 'Option D: Quick daily review bits'];
+      }
+
+      // Capitalize question
+      question = question.charAt(0).toUpperCase() + question.slice(1);
+
+      generatedPoll = {
+        question,
+        options,
+        category,
+        allow_multiple: false,
+        show_results_after_vote: true,
+        prompt: cleanPrompt
+      };
+    }
+
+    res.json({
+      success: true,
+      message: 'AI Poll generated successfully. Review and approve before publishing.',
+      data: generatedPoll
+    });
+  } catch (error) {
+    console.error('Error in POST /api/polls/generate-ai:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate poll.' });
+  }
+});
+
+// 2. POST /api/polls - Create / Approve Poll (Admin only)
+app.post('/api/polls', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const {
+      question,
+      options,
+      category = 'General',
+      allow_multiple = false,
+      show_results_after_vote = true,
+      is_published = false,
+      prompt = null
+    } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ success: false, error: 'Poll question is required.' });
+    }
+
+    if (!Array.isArray(options) || options.length < 2) {
+      return res.status(400).json({ success: false, error: 'At least 2 options are required.' });
+    }
+
+    const cleanOptions = options.map(o => String(o).trim()).filter(Boolean);
+    if (cleanOptions.length < 2) {
+      return res.status(400).json({ success: false, error: 'At least 2 non-empty options are required.' });
+    }
+
+    const now = new Date().toISOString();
+    const newPoll = {
+      id: crypto.randomUUID(),
+      question: question.trim(),
+      options: cleanOptions,
+      category: category ? category.trim() : 'General',
+      allow_multiple: Boolean(allow_multiple),
+      show_results_after_vote: Boolean(show_results_after_vote),
+      is_published: Boolean(is_published),
+      total_votes: 0,
+      prompt: prompt ? String(prompt).trim() : null,
+      created_by: authData.user.id,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Save to cache
+    const cache = loadPollsCache();
+    cache.unshift(newPoll);
+    savePollsCache(cache);
+
+    // Save to Supabase
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('polls').insert([newPoll]);
+      } catch (e) {
+        console.warn('[Supabase create poll notice]:', e.message);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Poll ${newPoll.is_published ? 'published' : 'saved as draft'} successfully.`,
+      data: newPoll
+    });
+  } catch (error) {
+    console.error('Error in POST /api/polls:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create poll.' });
+  }
+});
+
+// Helper: Calculate option vote counts and percentages for a poll
+function computePollVoteStats(poll, allVotes, userVoteOptions = []) {
+  const pollVotes = allVotes.filter(v => v.poll_id === poll.id);
+  const totalVotes = pollVotes.length;
+  const optionVotes = {};
+  poll.options.forEach(opt => {
+    optionVotes[opt] = 0;
+  });
+
+  pollVotes.forEach(v => {
+    const selected = Array.isArray(v.selected_options) ? v.selected_options : [v.selected_options];
+    selected.forEach(opt => {
+      if (optionVotes[opt] !== undefined) {
+        optionVotes[opt]++;
+      }
+    });
+  });
+
+  const optionPercentages = {};
+  poll.options.forEach(opt => {
+    const count = optionVotes[opt] || 0;
+    optionPercentages[opt] = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+  });
+
+  return {
+    total_votes: totalVotes,
+    option_votes: optionVotes,
+    option_percentages: optionPercentages,
+    user_voted_options: userVoteOptions
+  };
+}
+
+// 3. GET /api/polls/admin - Admin list with filtering & detailed stats
+app.get('/api/polls/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, status, page = 1, limit = 50 } = req.query;
+    let allPolls = loadPollsCache();
+    let allVotes = loadPollVotesCache();
+
+    if (serverSupabase) {
+      try {
+        const [dbPollsRes, dbVotesRes] = await Promise.all([
+          serverSupabase.from('polls').select('*').order('created_at', { ascending: false }),
+          serverSupabase.from('poll_votes').select('*')
+        ]);
+
+        if (!dbPollsRes.error && Array.isArray(dbPollsRes.data)) {
+          allPolls = dbPollsRes.data;
+          savePollsCache(allPolls);
+        }
+        if (!dbVotesRes.error && Array.isArray(dbVotesRes.data)) {
+          allVotes = dbVotesRes.data;
+          savePollVotesCache(allVotes);
+        }
+      } catch (e) {
+        console.warn('[Supabase admin polls notice]:', e.message);
+      }
+    }
+
+    const enrichedPolls = allPolls.map(p => {
+      const stats = computePollVoteStats(p, allVotes);
+      return {
+        ...p,
+        total_votes: stats.total_votes,
+        option_votes: stats.option_votes,
+        option_percentages: stats.option_percentages
+      };
+    });
+
+    const totalPolls = enrichedPolls.length;
+    const publishedPolls = enrichedPolls.filter(p => p.is_published).length;
+    const draftPolls = totalPolls - publishedPolls;
+    const totalVotes = allVotes.length;
+
+    const stats = {
+      totalPolls,
+      publishedPolls,
+      draftPolls,
+      totalVotes
+    };
+
+    let filtered = [...enrichedPolls];
+
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(p =>
+        p.question?.toLowerCase().includes(q) ||
+        p.category?.toLowerCase().includes(q) ||
+        p.options?.some(o => o.toLowerCase().includes(q))
+      );
+    }
+
+    if (category && category !== 'all') {
+      filtered = filtered.filter(p => p.category?.toLowerCase() === category.toLowerCase());
+    }
+
+    if (status && status !== 'all') {
+      const isPub = status === 'published';
+      filtered = filtered.filter(p => Boolean(p.is_published) === isPub);
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const total = filtered.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = filtered.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        polls: paginated,
+        stats,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/polls/admin:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch admin polls.' });
+  }
+});
+
+// 4. GET /api/polls/feed - Student Feed pool of published polls
+app.get('/api/polls/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    let allPolls = loadPollsCache();
+    let allVotes = loadPollVotesCache();
+
+    if (serverSupabase) {
+      try {
+        const { data: dbPolls, error: sbErr } = await serverSupabase
+          .from('polls')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbPolls) && dbPolls.length > 0) {
+          allPolls = dbPolls;
+        }
+
+        const { data: dbVotes } = await serverSupabase.from('poll_votes').select('*');
+        if (dbVotes) allVotes = dbVotes;
+      } catch (e) {
+        console.warn('[Supabase feed polls notice]:', e.message);
+      }
+    }
+
+    const published = allPolls.filter(p => p.is_published);
+    if (published.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const userVotesMap = new Map();
+    allVotes.filter(v => v.user_id === userId).forEach(v => {
+      userVotesMap.set(v.poll_id, Array.isArray(v.selected_options) ? v.selected_options : [v.selected_options]);
+    });
+
+    const enriched = published.map(p => {
+      const userVote = userVotesMap.get(p.id) || [];
+      const stats = computePollVoteStats(p, allVotes, userVote);
+      return {
+        ...p,
+        total_votes: stats.total_votes,
+        option_votes: stats.option_votes,
+        option_percentages: stats.option_percentages,
+        user_voted_options: userVote
+      };
+    });
+
+    const shuffled = shuffleArray(enriched);
+    const feedPool = shuffled.slice(0, 10);
+
+    res.json({
+      success: true,
+      data: feedPool
+    });
+  } catch (error) {
+    console.error('Error in GET /api/polls/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve polls feed.' });
+  }
+});
+
+// 5. POST /api/polls/vote - Student submits vote
+app.post('/api/polls/vote', async (req, res) => {
+  try {
+    const { pollId, selectedOptions } = req.body;
+
+    if (!pollId || selectedOptions === undefined) {
+      return res.status(400).json({ success: false, error: 'pollId and selectedOptions are required.' });
+    }
+
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    const allPolls = loadPollsCache();
+    const poll = allPolls.find(p => p.id === pollId);
+
+    if (!poll) {
+      return res.status(404).json({ success: false, error: 'Poll not found.' });
+    }
+
+    const rawSelected = Array.isArray(selectedOptions) ? selectedOptions : [selectedOptions];
+    const cleanSelected = rawSelected.map(o => String(o).trim()).filter(o => poll.options.includes(o));
+
+    if (cleanSelected.length === 0) {
+      return res.status(400).json({ success: false, error: 'Selected option is not valid for this poll.' });
+    }
+
+    // Check duplicate vote
+    let allVotes = loadPollVotesCache();
+    const alreadyVoted = allVotes.some(v => v.poll_id === pollId && v.user_id === userId);
+
+    if (alreadyVoted && userId !== 'guest_user') {
+      const stats = computePollVoteStats(poll, allVotes, cleanSelected);
+      return res.json({
+        success: true,
+        already_voted: true,
+        data: {
+          poll_id: pollId,
+          selected_options: cleanSelected,
+          total_votes: stats.total_votes,
+          option_votes: stats.option_votes,
+          option_percentages: stats.option_percentages
+        }
+      });
+    }
+
+    const voteRecord = {
+      id: crypto.randomUUID(),
+      poll_id: pollId,
+      user_id: userId,
+      selected_options: cleanSelected,
+      created_at: new Date().toISOString()
+    };
+
+    allVotes.push(voteRecord);
+    savePollVotesCache(allVotes);
+
+    // Increment poll total_votes
+    const pollIndex = allPolls.findIndex(p => p.id === pollId);
+    if (pollIndex !== -1) {
+      allPolls[pollIndex].total_votes = (allPolls[pollIndex].total_votes || 0) + 1;
+      savePollsCache(allPolls);
+    }
+
+    if (serverSupabase && userId !== 'guest_user') {
+      try {
+        await serverSupabase.from('poll_votes').insert([voteRecord]);
+        await serverSupabase
+          .from('polls')
+          .update({ total_votes: (poll.total_votes || 0) + 1, updated_at: new Date().toISOString() })
+          .eq('id', pollId);
+      } catch (e) {
+        console.warn('[Supabase vote notice]:', e.message);
+      }
+    }
+
+    const stats = computePollVoteStats(poll, allVotes, cleanSelected);
+
+    res.json({
+      success: true,
+      data: {
+        poll_id: pollId,
+        selected_options: cleanSelected,
+        total_votes: stats.total_votes,
+        option_votes: stats.option_votes,
+        option_percentages: stats.option_percentages
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/polls/vote:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to submit vote.' });
+  }
+});
+
+// 6. PUT /api/polls/:id - Update poll (Admin only)
+app.put('/api/polls/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { question, options, category, allow_multiple, show_results_after_vote, is_published } = req.body;
+
+    const cache = loadPollsCache();
+    const index = cache.findIndex(p => p.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Poll not found.' });
+    }
+
+    const existing = index !== -1 ? cache[index] : null;
+    const now = new Date().toISOString();
+
+    const cleanOptions = Array.isArray(options) && options.length >= 2
+      ? options.map(o => String(o).trim()).filter(Boolean)
+      : existing?.options || [];
+
+    const updated = {
+      ...(existing || {}),
+      id,
+      question: question !== undefined ? question.trim() : existing?.question,
+      options: cleanOptions,
+      category: category !== undefined ? category.trim() : existing?.category || 'General',
+      allow_multiple: allow_multiple !== undefined ? Boolean(allow_multiple) : existing?.allow_multiple ?? false,
+      show_results_after_vote: show_results_after_vote !== undefined ? Boolean(show_results_after_vote) : existing?.show_results_after_vote ?? true,
+      is_published: is_published !== undefined ? Boolean(is_published) : existing?.is_published ?? false,
+      updated_at: now
+    };
+
+    if (index !== -1) {
+      cache[index] = updated;
+    } else {
+      cache.unshift(updated);
+    }
+    savePollsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('polls')
+          .update({
+            question: updated.question,
+            options: updated.options,
+            category: updated.category,
+            allow_multiple: updated.allow_multiple,
+            show_results_after_vote: updated.show_results_after_vote,
+            is_published: updated.is_published,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase update poll notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Poll updated successfully.',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/polls/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update poll.' });
+  }
+});
+
+// 7. PUT /api/polls/:id/publish - Toggle publication status
+app.put('/api/polls/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const cache = loadPollsCache();
+    const index = cache.findIndex(p => p.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Poll not found.' });
+    }
+
+    const targetPub = is_published !== undefined ? Boolean(is_published) : !cache[index]?.is_published;
+    const now = new Date().toISOString();
+
+    if (index !== -1) {
+      cache[index].is_published = targetPub;
+      cache[index].updated_at = now;
+      savePollsCache(cache);
+    }
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('polls')
+          .update({ is_published: targetPub, updated_at: now })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase toggle publish poll notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Poll ${targetPub ? 'published' : 'unpublished'} successfully.`,
+      is_published: targetPub
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/polls/:id/publish:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to toggle publication.' });
+  }
+});
+
+// 8. DELETE /api/polls/:id - Delete poll and associated votes
+app.delete('/api/polls/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const cache = loadPollsCache();
+    const updated = cache.filter(p => p.id !== id);
+    savePollsCache(updated);
+
+    const votesCache = loadPollVotesCache();
+    const updatedVotes = votesCache.filter(v => v.poll_id !== id);
+    savePollVotesCache(updatedVotes);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('polls').delete().eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase delete poll notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      deletedId: id,
+      message: 'Poll and associated votes deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/polls/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete poll.' });
   }
 });
 

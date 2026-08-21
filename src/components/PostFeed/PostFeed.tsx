@@ -11,14 +11,18 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
-import { QuizBit, QuizAttemptResult, YouTubeShort } from '@/types';
+import { QuizBit, QuizAttemptResult, YouTubeShort, ReadingBit, PollBit } from '@/types';
 import { postService } from '@/services/postService';
 import { quizService } from '@/services/quizService';
 import { youtubeShortsService } from '@/services/youtubeShortsService';
+import { readingService } from '@/services/readingService';
+import { pollService } from '@/services/pollService';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from './PostCard';
 import { QuizBitCard } from './QuizBitCard';
 import { YouTubeShortCard } from './YouTubeShortCard';
+import { OneMinuteReadingCard } from './OneMinuteReadingCard';
+import { PollBitCard } from './PollBitCard';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
 import { QUIZ_CONFIG } from '@/utils/quizConfig';
@@ -27,7 +31,9 @@ import { FEED_CONFIG, selectNextRotatedShort } from '@/utils/feedConfig';
 export type FeedItem =
   | { type: 'post'; post: StudentPost; key: string }
   | { type: 'quiz'; quiz: QuizBit; key: string }
-  | { type: 'youtube_short'; short: YouTubeShort; key: string };
+  | { type: 'youtube_short'; short: YouTubeShort; key: string }
+  | { type: 'reading'; reading: ReadingBit; key: string }
+  | { type: 'poll'; poll: PollBit; key: string };
 
 // Deterministic intervals for stable session interleaving
 const QUIZ_INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4];
@@ -39,6 +45,8 @@ const SHORT_INTERVAL_PATTERN = [
   FEED_CONFIG.SHORT_FEED_INTERVAL_MAX,
   FEED_CONFIG.SHORT_FEED_INTERVAL_MIN
 ];
+const READING_INTERVAL_PATTERN = [5, 6, 7, 5, 6, 7];
+const POLL_INTERVAL_PATTERN = [6, 7, 8, 6, 7, 8];
 
 export const PostFeed: React.FC = () => {
   const { profile, session, requireAuth } = useAuth();
@@ -46,6 +54,8 @@ export const PostFeed: React.FC = () => {
   const [posts, setPosts] = useState<StudentPost[]>([]);
   const [quizzes, setQuizzes] = useState<QuizBit[]>([]);
   const [shorts, setShorts] = useState<YouTubeShort[]>([]);
+  const [readings, setReadings] = useState<ReadingBit[]>([]);
+  const [polls, setPolls] = useState<PollBit[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -79,18 +89,22 @@ export const PostFeed: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Load feed quizzes and shorts pool
+  // Load feed quizzes, shorts, readings, and polls pool
   const loadMediaPool = useCallback(async () => {
     try {
       const token = session?.access_token || null;
-      const [quizData, shortsData] = await Promise.all([
+      const [quizData, shortsData, readingData, pollData] = await Promise.all([
         quizService.getFeedQuizzes(token),
-        youtubeShortsService.getFeedShorts(token)
+        youtubeShortsService.getFeedShorts(token),
+        readingService.getFeedReadings(token),
+        pollService.getFeedPolls(token)
       ]);
       setQuizzes(quizData || []);
       setShorts(shortsData || []);
+      setReadings(readingData || []);
+      setPolls(pollData || []);
     } catch (err) {
-      console.warn('[PostFeed] Failed to load quiz/shorts pool:', err);
+      console.warn('[PostFeed] Failed to load media pools:', err);
     }
   }, [session]);
 
@@ -182,32 +196,50 @@ export const PostFeed: React.FC = () => {
     // be encountered further down the feed as the student scrolls.
   };
 
-  // Interleave Quiz Bits & Category-Rotated YouTube Shorts stably into the feed stream
-  // Ratio per ~8-10 items: 4-5 normal posts, 1-2 quizzes, 1 YouTube Short
+  // Interleave Quizzes, Shorts, One-Minute Readings, and Polls stably into the feed stream
+  // Ratio per ~8-10 items: 4-5 normal posts, 1-2 quizzes, 1 YouTube Short, 1 Reading, 1 Poll
   const feedItems = useMemo<FeedItem[]>(() => {
     if (posts.length === 0) return [];
 
     const items: FeedItem[] = [];
     let quizIndex = 0;
+    let readingIndex = 0;
+    let pollIndex = 0;
+
     let postsSinceLastQuiz = 0;
     let postsSinceLastShort = 0;
+    let postsSinceLastReading = 0;
+    let postsSinceLastPoll = 0;
+
     let quizPatternIdx = 0;
     let shortPatternIdx = 0;
+    let readingPatternIdx = 0;
+    let pollPatternIdx = 0;
+
     let quizTargetInterval = QUIZ_INTERVAL_PATTERN[0];
     let shortTargetInterval = SHORT_INTERVAL_PATTERN[0];
+    let readingTargetInterval = READING_INTERVAL_PATTERN[0];
+    let pollTargetInterval = POLL_INTERVAL_PATTERN[0];
 
     // Track shown IDs and recent categories for category-aware rotation with cooldown
     const seenShortIds = new Set<string>();
     const seenQuizIds = new Set<string>();
+    const seenReadingIds = new Set<string>();
+    const seenPollIds = new Set<string>();
     let recentShortCategories: string[] = [];
 
     posts.forEach((post, index) => {
       items.push({ type: 'post', post, key: `post-${post.id}` });
       postsSinceLastQuiz++;
       postsSinceLastShort++;
+      postsSinceLastReading++;
+      postsSinceLastPoll++;
+
+      let insertedNonPostThisSlot = false;
 
       // 1. Check if it's time to insert an educational Quiz Bit
       if (
+        !insertedNonPostThisSlot &&
         QUIZ_CONFIG.ENABLED &&
         postsSinceLastQuiz >= quizTargetInterval &&
         quizIndex < quizzes.length
@@ -220,11 +252,13 @@ export const PostFeed: React.FC = () => {
           postsSinceLastQuiz = 0;
           quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
           quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
+          insertedNonPostThisSlot = true;
         }
       }
 
       // 2. Check if it's time to insert a category-rotated YouTube Short
       if (
+        !insertedNonPostThisSlot &&
         postsSinceLastShort >= shortTargetInterval &&
         shorts.length > 0
       ) {
@@ -243,12 +277,49 @@ export const PostFeed: React.FC = () => {
           postsSinceLastShort = 0;
           shortPatternIdx = (shortPatternIdx + 1) % SHORT_INTERVAL_PATTERN.length;
           shortTargetInterval = SHORT_INTERVAL_PATTERN[shortPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 3. Check if it's time to insert a One-Minute Reading
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastReading >= readingTargetInterval &&
+        readings.length > 0
+      ) {
+        const availableReading = readings.find(r => !seenReadingIds.has(r.id)) || readings[readingIndex % readings.length];
+        if (availableReading && (!seenReadingIds.has(availableReading.id) || seenReadingIds.size >= readings.length)) {
+          seenReadingIds.add(availableReading.id);
+          items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
+          readingIndex++;
+          postsSinceLastReading = 0;
+          readingPatternIdx = (readingPatternIdx + 1) % READING_INTERVAL_PATTERN.length;
+          readingTargetInterval = READING_INTERVAL_PATTERN[readingPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 4. Check if it's time to insert a Community Poll
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastPoll >= pollTargetInterval &&
+        polls.length > 0
+      ) {
+        const availablePoll = polls.find(p => !seenPollIds.has(p.id)) || polls[pollIndex % polls.length];
+        if (availablePoll && (!seenPollIds.has(availablePoll.id) || seenPollIds.size >= polls.length)) {
+          seenPollIds.add(availablePoll.id);
+          items.push({ type: 'poll', poll: availablePoll, key: `poll-${availablePoll.id}-${index}` });
+          pollIndex++;
+          postsSinceLastPoll = 0;
+          pollPatternIdx = (pollPatternIdx + 1) % POLL_INTERVAL_PATTERN.length;
+          pollTargetInterval = POLL_INTERVAL_PATTERN[pollPatternIdx];
+          insertedNonPostThisSlot = true;
         }
       }
     });
 
     return items;
-  }, [posts, quizzes, shorts]);
+  }, [posts, quizzes, shorts, readings, polls]);
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
@@ -398,6 +469,22 @@ export const PostFeed: React.FC = () => {
                   key={item.key}
                   short={item.short}
                 />
+              );
+            }
+
+            if (item.type === 'reading') {
+              return (
+                <div key={item.key} className="px-3 sm:px-0">
+                  <OneMinuteReadingCard reading={item.reading} />
+                </div>
+              );
+            }
+
+            if (item.type === 'poll') {
+              return (
+                <div key={item.key} className="px-3 sm:px-0">
+                  <PollBitCard poll={item.poll} />
+                </div>
               );
             }
 
