@@ -41,7 +41,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
           <div>
             <div className="flex items-center gap-1.5">
               <h3 className="text-base sm:text-lg font-black text-[#0f233a]">
-                Install EdTechra-Bitz
+                Install EdTechra Bitz
               </h3>
               <span className="px-2 py-0.5 bg-brand-50 text-[#026fc3] text-[10px] font-extrabold rounded-md border border-brand-200 flex items-center gap-0.5">
                 <Sparkles className="w-3 h-3 text-amber-500" /> Fast App

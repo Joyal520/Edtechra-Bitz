@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "EdTechra-Bitz",
-  "short_name": "EdTechra-Bitz",
+  "name": "EdTechra Bitz",
+  "short_name": "EdTechra Bitz",
   "description": "Learn. Discover. Grow. Microlearning platform transforming educational YouTube Shorts into interactive learning experiences.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#fbfbf7",
-  "theme_color": "#026fc3",
+  "background_color": "#020813",
+  "theme_color": "#030b18",
   "categories": ["education", "learning"],
   "icons": [
     {

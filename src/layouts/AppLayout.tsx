@@ -123,8 +123,8 @@ export const AppLayout: React.FC = () => {
           >
             <img
               src="/logo.png"
-              alt="EdTechra Official Logo"
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-2xs ring-1 ring-[#026fc3]/40 group-hover:scale-105 transition-transform"
+              alt="EdTechra Bitz"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shadow-xs group-hover:scale-105 transition-transform"
             />
             <div className="flex items-center gap-1.5">
               <span className={`text-base sm:text-lg font-black tracking-tight ${isHomePage ? 'text-white' : 'text-[#0f233a]'}`}>

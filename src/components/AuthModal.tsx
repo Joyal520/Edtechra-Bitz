@@ -337,13 +337,13 @@ export const AuthModal: React.FC = () => {
               <div className="inline-flex items-center gap-2 mb-1">
                 <img
                   src="/logo.png"
-                  alt="EdTechra-Bitz"
-                  className="w-9 h-9 rounded-full object-cover shadow-2xs ring-1 ring-[#026fc3]/20"
+                  alt="EdTechra Bitz"
+                  className="w-9 h-9 rounded-xl object-cover shadow-xs"
                 />
                 <span className="text-lg font-black text-[#0f233a]">EdTechra <span className="text-[#026fc3]">BITZ</span></span>
               </div>
               <h2 className="text-2xl font-black text-[#0f233a] tracking-tight">
-                Welcome to EdTechra-Bitz
+                Welcome to EdTechra Bitz
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 max-w-xs mx-auto leading-relaxed">
                 Create your free account to continue learning, creating, and exploring.

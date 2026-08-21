@@ -8,21 +8,119 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#026fc3" />
+    <meta name="theme-color" content="#020813" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="EdTechra-Bitz" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EdTechra Bitz" />
     
-    <meta name="description" content="EdTechra-Bitz - Microlearning platform transforming educational YouTube Shorts into interactive learning experiences. Learn. Discover. Grow." />
-    <title>EdTechra-Bitz | Watch, Learn & Grow</title>
+    <meta name="description" content="EdTechra Bitz - Microlearning platform transforming educational YouTube Shorts into interactive learning experiences. Learn. Discover. Grow." />
+    <title>EdTechra Bitz | Watch, Learn & Grow</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+      /* Initial zero-delay splash screen before React hydration */
+      #initial-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.5rem;
+        background: radial-gradient(circle at 50% 30%, #08203e 0%, #030d1e 50%, #020813 100%);
+        color: #ffffff;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        user-select: none;
+        overflow: hidden;
+        transition: opacity 0.4s ease-out;
+      }
+      .splash-logo {
+        width: 140px;
+        height: 140px;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 28px rgba(2, 111, 195, 0.45));
+      }
+      .splash-title {
+        font-size: 1.6rem;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        margin-top: 1.25rem;
+        text-align: center;
+      }
+      .splash-title span {
+        color: #38bdf8;
+      }
+      .splash-subtitle {
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.35em;
+        color: #7dd3fc;
+        margin-top: 0.25rem;
+        text-align: center;
+      }
+      .splash-tagline {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.25em;
+        color: #94a3b8;
+        margin-top: 0.4rem;
+        text-align: center;
+      }
+      .splash-spinner {
+        width: 2rem;
+        height: 2rem;
+        border: 3px solid rgba(56, 189, 248, 0.2);
+        border-top-color: #38bdf8;
+        border-radius: 50%;
+        animation: splash-spin 0.8s linear infinite;
+        margin: 1.5rem auto 0.75rem auto;
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.5);
+      }
+      .splash-status {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-align: center;
+      }
+      @keyframes splash-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body class="bg-[#fbfbf7] text-slate-900 antialiased selection:bg-[#026fc3] selection:text-white">
+    <!-- Initial Splash Screen -->
+    <div id="initial-splash">
+      <div style="height: 20px;"></div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+        <img src="/logo-emblem.png" alt="EdTechra Bitz" class="splash-logo" />
+        <div class="splash-title">EDTECH<span>RA</span></div>
+        <div class="splash-subtitle">— B I T Z —</div>
+        <div class="splash-tagline">LEARN. DISCOVER. GROW.</div>
+        <div class="splash-spinner"></div>
+        <div class="splash-status">Loading amazing learning...</div>
+      </div>
+      <div style="height: 20px;"></div>
+    </div>
+
     <div id="root"></div>
+
+    <script>
+      // Smoothly dismiss initial splash screen once React bundle mounts
+      window.addEventListener('DOMContentLoaded', () => {
+        const splash = document.getElementById('initial-splash');
+        if (splash) {
+          setTimeout(() => {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 400);
+          }, 300);
+        }
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
