@@ -2462,7 +2462,10 @@ app.get('/api/youtube/shorts/feed', async (req, res) => {
 
 export default app;
 
-if (process.env.NODE_ENV !== 'production' || process.env.SERVE_STANDALONE === 'true') {
+const isDirectRun = process.argv[1] && (process.argv[1].endsWith('server.mjs') || process.env.SERVE_STANDALONE === 'true');
+const isTestRunner = process.argv.some(arg => arg.includes('test'));
+
+if (isDirectRun && !isTestRunner && process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`EdTechra-Bitz API Server listening on port ${PORT}`);
   });

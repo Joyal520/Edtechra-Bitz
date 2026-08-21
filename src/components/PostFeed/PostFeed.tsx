@@ -21,6 +21,7 @@ import { YouTubeShortCard } from './YouTubeShortCard';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
 import { QUIZ_CONFIG } from '@/utils/quizConfig';
+import { FEED_CONFIG, selectNextRotatedShort } from '@/utils/feedConfig';
 
 export type FeedItem =
   | { type: 'post'; post: StudentPost; key: string }
@@ -29,7 +30,14 @@ export type FeedItem =
 
 // Deterministic intervals for stable session interleaving
 const QUIZ_INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4];
-const SHORT_INTERVAL_PATTERN = [5, 4, 6, 4, 5, 4, 6, 5];
+const SHORT_INTERVAL_PATTERN = [
+  FEED_CONFIG.SHORT_FEED_INTERVAL_MIN,
+  FEED_CONFIG.SHORT_FEED_INTERVAL_MAX,
+  FEED_CONFIG.SHORT_FEED_INTERVAL_MIN,
+  5,
+  FEED_CONFIG.SHORT_FEED_INTERVAL_MAX,
+  FEED_CONFIG.SHORT_FEED_INTERVAL_MIN
+];
 
 export const PostFeed: React.FC = () => {
   const { profile, session, requireAuth } = useAuth();
@@ -126,14 +134,13 @@ export const PostFeed: React.FC = () => {
     // be encountered further down the feed as the student scrolls.
   };
 
-  // Interleave Quiz Bits & YouTube Shorts stably into the posts stream
+  // Interleave Quiz Bits & Category-Rotated YouTube Shorts stably into the feed stream
   // Ratio per ~8-10 items: 4-5 normal posts, 1-2 quizzes, 1 YouTube Short
   const feedItems = useMemo<FeedItem[]>(() => {
     if (posts.length === 0) return [];
 
     const items: FeedItem[] = [];
     let quizIndex = 0;
-    let shortIndex = 0;
     let postsSinceLastQuiz = 0;
     let postsSinceLastShort = 0;
     let quizPatternIdx = 0;
@@ -141,9 +148,10 @@ export const PostFeed: React.FC = () => {
     let quizTargetInterval = QUIZ_INTERVAL_PATTERN[0];
     let shortTargetInterval = SHORT_INTERVAL_PATTERN[0];
 
-    // Track used IDs to guarantee no duplicates in this feed session
+    // Track shown IDs and recent categories for category-aware rotation with cooldown
     const seenShortIds = new Set<string>();
     const seenQuizIds = new Set<string>();
+    let recentShortCategories: string[] = [];
 
     posts.forEach((post, index) => {
       items.push({ type: 'post', post, key: `post-${post.id}` });
@@ -167,16 +175,23 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 2. Check if it's time to insert a YouTube Short
+      // 2. Check if it's time to insert a category-rotated YouTube Short
       if (
         postsSinceLastShort >= shortTargetInterval &&
-        shortIndex < shorts.length
+        shorts.length > 0
       ) {
-        const currentShort = shorts[shortIndex];
-        if (!seenShortIds.has(currentShort.id)) {
-          seenShortIds.add(currentShort.id);
-          items.push({ type: 'youtube_short', short: currentShort, key: `short-${currentShort.id}-${index}` });
-          shortIndex++;
+        const { selectedShort, updatedRecentCategories } = selectNextRotatedShort(
+          shorts,
+          seenShortIds,
+          recentShortCategories,
+          FEED_CONFIG.SHORT_CATEGORY_COOLDOWN
+        );
+
+        if (selectedShort) {
+          seenShortIds.add(selectedShort.id);
+          seenShortIds.add(selectedShort.youtube_video_id);
+          recentShortCategories = updatedRecentCategories;
+          items.push({ type: 'youtube_short', short: selectedShort, key: `short-${selectedShort.id}-${index}` });
           postsSinceLastShort = 0;
           shortPatternIdx = (shortPatternIdx + 1) % SHORT_INTERVAL_PATTERN.length;
           shortTargetInterval = SHORT_INTERVAL_PATTERN[shortPatternIdx];

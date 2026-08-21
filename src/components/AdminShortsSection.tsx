@@ -22,20 +22,9 @@ import { youtubeShortsService } from '@/services/youtubeShortsService';
 import { quizService } from '@/services/quizService';
 import { useAuth } from '@/context/AuthContext';
 import { extractYouTubeVideoId, getYouTubeThumbnailUrl } from '@/utils/youtubeUrl';
+import { FEED_CONFIG } from '@/utils/feedConfig';
 
-const CATEGORIES = [
-  'General',
-  'Science',
-  'Geography',
-  'Space',
-  'Math',
-  'Nature',
-  'History',
-  'Technology',
-  'English',
-  'AI',
-  'Psychology'
-];
+const CATEGORIES = FEED_CONFIG.SHORT_CATEGORIES;
 
 export const AdminShortsSection: React.FC = () => {
   const { session } = useAuth();
