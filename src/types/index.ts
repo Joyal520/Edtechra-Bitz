@@ -133,3 +133,73 @@ export type AuthIntent =
   | { type: 'action'; action: 'upload' | string; payload?: any }
   | null;
 
+// ============================================================================
+// Interactive Quiz Bits Types
+// ============================================================================
+
+export interface QuizBit {
+  id: string;
+  question: string;
+  options: string[];
+  correct_answer?: string; // May be omitted in student feed payloads for extra security
+  explanation: string;
+  category: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | string;
+  xp: number;
+  is_published: boolean;
+  created_by?: string | null;
+  import_batch_id?: string | null;
+  created_at: string;
+  updated_at?: string;
+  // Metadata for admin / student views
+  attempt_count?: number;
+  has_completed?: boolean;
+}
+
+export interface RawQuizInput {
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+  category: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard' | string;
+  xp: number;
+}
+
+export interface QuizAttemptResult {
+  is_correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  xp_awarded: number;
+  already_attempted: boolean;
+}
+
+export interface QuizValidationErrorItem {
+  index: number;
+  question: string;
+  errors: string[];
+}
+
+export interface QuizValidationResult {
+  valid: RawQuizInput[];
+  invalid: QuizValidationErrorItem[];
+  totalDetected: number;
+}
+
+export interface QuizImportResult {
+  importedCount: number;
+  failedCount: number;
+  batchId: string;
+  quizzes: QuizBit[];
+  errors?: QuizValidationErrorItem[];
+}
+
+export interface QuizAdminStats {
+  totalQuizzes: number;
+  publishedQuizzes: number;
+  unpublishedQuizzes: number;
+  totalAttempts: number;
+  totalXpAwarded: number;
+  totalBatches: number;
+}
+

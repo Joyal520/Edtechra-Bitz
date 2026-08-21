@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Image as ImageIcon,
@@ -6,19 +6,32 @@ import {
   BookOpen,
   Loader2,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
+import { QuizBit, QuizAttemptResult } from '@/types';
 import { postService } from '@/services/postService';
+import { quizService } from '@/services/quizService';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from './PostCard';
+import { QuizBitCard } from './QuizBitCard';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
+import { QUIZ_CONFIG } from '@/utils/quizConfig';
+
+type FeedItem =
+  | { type: 'post'; post: StudentPost; key: string }
+  | { type: 'quiz'; quiz: QuizBit; key: string };
+
+// Deterministic intervals between 2 and 4 posts (seeded pattern)
+const INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4, 3, 2];
 
 export const PostFeed: React.FC = () => {
   const { user, profile, session, requireAuth } = useAuth();
   
   const [posts, setPosts] = useState<StudentPost[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizBit[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -26,6 +39,7 @@ export const PostFeed: React.FC = () => {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [completedQuizIds, setCompletedQuizIds] = useState<Set<string>>(new Set());
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -41,6 +55,17 @@ export const PostFeed: React.FC = () => {
 
   const initials = (displayName || 'S').slice(0, 2).toUpperCase();
 
+  // Load feed quizzes pool
+  const loadQuizzes = useCallback(async () => {
+    try {
+      const token = session?.access_token || null;
+      const data = await quizService.getFeedQuizzes(token);
+      setQuizzes(data);
+    } catch (err) {
+      console.warn('[PostFeed] Failed to load quiz pool:', err);
+    }
+  }, [session]);
+
   const fetchPosts = useCallback(
     async (targetPage = 1, append = false) => {
       if (targetPage === 1) setLoading(true);
@@ -48,18 +73,18 @@ export const PostFeed: React.FC = () => {
 
       try {
         const token = session?.access_token || null;
-        const data = await postService.getPosts(
-          { page: targetPage, limit: 8, sort: sortBy },
-          token
-        );
+        const [postsData] = await Promise.all([
+          postService.getPosts({ page: targetPage, limit: 8, sort: sortBy }, token),
+          targetPage === 1 ? loadQuizzes() : Promise.resolve()
+        ]);
 
         if (append) {
-          setPosts((prev) => [...prev, ...data.posts]);
+          setPosts((prev) => [...prev, ...postsData.posts]);
         } else {
-          setPosts(data.posts);
+          setPosts(postsData.posts);
         }
 
-        setHasMore(data.hasMore);
+        setHasMore(postsData.hasMore);
         setPage(targetPage);
       } catch (err) {
         console.error('[PostFeed] Error loading posts:', err);
@@ -68,7 +93,7 @@ export const PostFeed: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [session, sortBy]
+    [session, sortBy, loadQuizzes]
   );
 
   useEffect(() => {
@@ -89,6 +114,50 @@ export const PostFeed: React.FC = () => {
   const handlePostDeleted = (deletedPostId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== deletedPostId));
   };
+
+  const handleQuizAttemptCompleted = (quizId: string, result: QuizAttemptResult) => {
+    if (result.is_correct) {
+      setCompletedQuizIds((prev) => {
+        const next = new Set(prev);
+        next.add(quizId);
+        return next;
+      });
+    }
+  };
+
+  // Interleave Quiz Bits stably into the posts list (every 2-4 posts)
+  const feedItems = useMemo<FeedItem[]>(() => {
+    if (posts.length === 0) return [];
+    if (!QUIZ_CONFIG.ENABLED || quizzes.length === 0) {
+      return posts.map((post) => ({ type: 'post', post, key: `post-${post.id}` }));
+    }
+
+    const activeQuizzes = quizzes.filter((q) => !completedQuizIds.has(q.id));
+    const pool = activeQuizzes.length > 0 ? activeQuizzes : quizzes;
+
+    const items: FeedItem[] = [];
+    let quizIndex = 0;
+    let postsSinceLastQuiz = 0;
+    let patternIndex = 0;
+    let targetInterval = INTERVAL_PATTERN[0];
+
+    posts.forEach((post, index) => {
+      items.push({ type: 'post', post, key: `post-${post.id}` });
+      postsSinceLastQuiz++;
+
+      // Check if it's time to insert a quiz
+      if (postsSinceLastQuiz >= targetInterval && quizIndex < pool.length) {
+        const currentQuiz = pool[quizIndex];
+        items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
+        quizIndex++;
+        postsSinceLastQuiz = 0;
+        patternIndex = (patternIndex + 1) % INTERVAL_PATTERN.length;
+        targetInterval = INTERVAL_PATTERN[patternIndex];
+      }
+    });
+
+    return items;
+  }, [posts, quizzes, completedQuizIds]);
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
@@ -136,9 +205,15 @@ export const PostFeed: React.FC = () => {
       {/* 2. Feed Controls & Filter Header */}
       <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-semibold">
         <div className="flex items-center gap-2">
-          <span className="font-extrabold text-slate-800 text-sm">Student Feed</span>
+          <span className="font-extrabold text-slate-800 text-sm">Community Feed</span>
           <span className="text-slate-300">•</span>
           <span>{posts.length} {posts.length === 1 ? 'post' : 'posts'}</span>
+          {quizzes.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200">
+              <Zap className="w-3 h-3 text-teal-600" />
+              <span>Quizzes Active</span>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -176,7 +251,7 @@ export const PostFeed: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Feed Posts List */}
+      {/* 3. Feed List (Interleaved Posts and Quiz Bits) */}
       {loading ? (
         <div className="space-y-5">
           {[1, 2, 3].map((n) => (
@@ -193,7 +268,7 @@ export const PostFeed: React.FC = () => {
             </div>
           ))}
         </div>
-      ) : posts.length === 0 ? (
+      ) : feedItems.length === 0 ? (
         <div className="bg-white border border-dashed border-slate-300 rounded-3xl p-12 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-brand-50 text-[#026fc3] flex items-center justify-center mx-auto shadow-xs">
             <BookOpen className="w-7 h-7" />
@@ -214,13 +289,25 @@ export const PostFeed: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-5">
-          {posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              onPostDeleted={handlePostDeleted}
-            />
-          ))}
+          {feedItems.map((item) => {
+            if (item.type === 'quiz') {
+              return (
+                <QuizBitCard
+                  key={item.key}
+                  quiz={item.quiz}
+                  onAttemptCompleted={handleQuizAttemptCompleted}
+                />
+              );
+            }
+
+            return (
+              <PostCard
+                key={item.key}
+                post={item.post}
+                onPostDeleted={handlePostDeleted}
+              />
+            );
+          })}
 
           {/* Load More Button */}
           {hasMore && (

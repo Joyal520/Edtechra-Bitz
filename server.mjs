@@ -171,6 +171,48 @@ function saveProgress(progress) {
   }
 }
 
+// In-memory / file-based quiz store for resilient persistence
+const QUIZ_FILE = path.resolve(__dirname, 'server/data/quiz_cache.json');
+const QUIZ_ATTEMPTS_FILE = path.resolve(__dirname, 'server/data/quiz_attempts_cache.json');
+
+function loadQuizCache() {
+  try {
+    if (fs.existsSync(QUIZ_FILE)) {
+      return JSON.parse(fs.readFileSync(QUIZ_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading quiz cache:', e);
+  }
+  return [];
+}
+
+function saveQuizCache(quizzes) {
+  try {
+    fs.writeFileSync(QUIZ_FILE, JSON.stringify(quizzes, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving quiz cache:', e);
+  }
+}
+
+function loadQuizAttemptsCache() {
+  try {
+    if (fs.existsSync(QUIZ_ATTEMPTS_FILE)) {
+      return JSON.parse(fs.readFileSync(QUIZ_ATTEMPTS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading quiz attempts cache:', e);
+  }
+  return [];
+}
+
+function saveQuizAttemptsCache(attempts) {
+  try {
+    fs.writeFileSync(QUIZ_ATTEMPTS_FILE, JSON.stringify(attempts, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving quiz attempts cache:', e);
+  }
+}
+
 // ============================================================================
 // API ROUTES: YOUTUBE & LEARNING
 // ============================================================================
@@ -1206,6 +1248,722 @@ app.post('/api/admin/moderation/posts/:id/action', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/admin/moderation/posts/:id/action:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to process moderation action.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: INTERACTIVE QUIZ BITS
+// ============================================================================
+
+// Helper: Fisher-Yates array shuffle
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// 1. POST /api/quiz/import - Admin batch import quizzes with server-side validation
+app.post('/api/quiz/import', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required to import quizzes.' });
+    }
+
+    const { quizzes } = req.body;
+    if (!Array.isArray(quizzes) || quizzes.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid payload: "quizzes" must be a non-empty array.' });
+    }
+
+    const batchId = `batch_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const now = new Date().toISOString();
+    const validQuizzes = [];
+    const errors = [];
+    const seenBatchQuestions = new Set();
+
+    quizzes.forEach((item, index) => {
+      const itemErrors = [];
+      const question = typeof item?.question === 'string' ? item.question.trim() : '';
+
+      if (!question) {
+        itemErrors.push('Question text is missing or empty.');
+      } else {
+        const normQ = question.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (seenBatchQuestions.has(normQ)) {
+          itemErrors.push('Duplicate question in this import batch.');
+        } else {
+          seenBatchQuestions.add(normQ);
+        }
+      }
+
+      const options = Array.isArray(item?.options) ? item.options.map(opt => String(opt ?? '').trim()) : [];
+      if (!Array.isArray(item?.options) || options.length !== 4) {
+        itemErrors.push(`Options must be an array of exactly 4 items (found ${options.length}).`);
+      } else {
+        if (options.some(opt => opt.length === 0)) {
+          itemErrors.push('All 4 options must be non-empty strings.');
+        }
+        const uniqueOptSet = new Set(options.map(o => o.toLowerCase()));
+        if (uniqueOptSet.size < 4) {
+          itemErrors.push('All 4 options must be unique.');
+        }
+      }
+
+      const rawCorrect = item?.correctAnswer ?? item?.correct_answer;
+      const correctAnswer = typeof rawCorrect === 'string' ? rawCorrect.trim() : String(rawCorrect ?? '').trim();
+      if (!correctAnswer) {
+        itemErrors.push('correctAnswer is required.');
+      } else if (options.length === 4) {
+        const match = options.find(opt => opt === correctAnswer);
+        if (!match) {
+          itemErrors.push(`correctAnswer "${correctAnswer}" does not match any of the 4 options: [${options.join(', ')}].`);
+        }
+      }
+
+      const explanation = typeof item?.explanation === 'string' ? item.explanation.trim() : '';
+      if (!explanation) {
+        itemErrors.push('Explanation text is missing or empty.');
+      }
+
+      const category = typeof item?.category === 'string' && item.category.trim() ? item.category.trim() : 'General';
+      const difficulty = typeof item?.difficulty === 'string' && ['Easy', 'Medium', 'Hard'].includes(item.difficulty.trim())
+        ? item.difficulty.trim()
+        : 'Easy';
+
+      let xp = typeof item?.xp === 'number' ? item.xp : parseInt(item?.xp, 10);
+      if (isNaN(xp) || xp <= 0) xp = 10;
+
+      if (itemErrors.length > 0) {
+        errors.push({
+          index: index + 1,
+          question: question ? question.substring(0, 60) : `Quiz #${index + 1}`,
+          errors: itemErrors
+        });
+      } else {
+        validQuizzes.push({
+          id: crypto.randomUUID(),
+          question,
+          options,
+          correct_answer: correctAnswer,
+          explanation,
+          category,
+          difficulty,
+          xp,
+          is_published: true, // Imported quizzes default to published
+          created_by: authData.user.id,
+          import_batch_id: batchId,
+          created_at: now,
+          updated_at: now
+        });
+      }
+    });
+
+    if (validQuizzes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid quizzes found in batch.',
+        data: { importedCount: 0, failedCount: errors.length, batchId, errors }
+      });
+    }
+
+    // Persist to local cache
+    const currentQuizCache = loadQuizCache();
+    const updatedCache = [...validQuizzes, ...currentQuizCache];
+    saveQuizCache(updatedCache);
+
+    // Persist to Supabase if connected
+    if (serverSupabase) {
+      try {
+        const { error: sbInsertErr } = await serverSupabase
+          .from('quiz_bits')
+          .insert(validQuizzes);
+        if (sbInsertErr) {
+          console.warn('[Supabase quiz_bits insert warning]:', sbInsertErr.message);
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase quiz_bits batch insert notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully imported ${validQuizzes.length} quiz bit${validQuizzes.length === 1 ? '' : 's'}.`,
+      data: {
+        importedCount: validQuizzes.length,
+        failedCount: errors.length,
+        batchId,
+        quizzes: validQuizzes,
+        errors
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/quiz/import:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to import quiz batch.' });
+  }
+});
+
+// 2. GET /api/quiz/admin - Retrieve all quizzes with filters & stats for admin
+app.get('/api/quiz/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, difficulty, published, page = 1, limit = 50 } = req.query;
+    let allQuizzes = loadQuizCache();
+
+    // Query Supabase for latest records if available
+    if (serverSupabase) {
+      try {
+        const { data: sbQuizzes, error: sbErr } = await serverSupabase
+          .from('quiz_bits')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!sbErr && sbQuizzes && sbQuizzes.length > 0) {
+          allQuizzes = sbQuizzes;
+          saveQuizCache(allQuizzes);
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase load quizzes notice]:', sbErr.message);
+      }
+    }
+
+    // Attach attempt counts
+    const attempts = loadQuizAttemptsCache();
+    const attemptsCountMap = {};
+    attempts.forEach(a => {
+      attemptsCountMap[a.quiz_id] = (attemptsCountMap[a.quiz_id] || 0) + 1;
+    });
+
+    allQuizzes = allQuizzes.map(q => ({
+      ...q,
+      attempt_count: attemptsCountMap[q.id] || 0
+    }));
+
+    // Compute stats
+    const totalQuizzes = allQuizzes.length;
+    const publishedQuizzes = allQuizzes.filter(q => q.is_published).length;
+    const unpublishedQuizzes = totalQuizzes - publishedQuizzes;
+    const totalAttempts = attempts.length;
+    const totalXpAwarded = attempts.reduce((sum, a) => sum + (a.xp_awarded || 0), 0);
+    const uniqueBatches = new Set(allQuizzes.map(q => q.import_batch_id).filter(Boolean));
+
+    const stats = {
+      totalQuizzes,
+      publishedQuizzes,
+      unpublishedQuizzes,
+      totalAttempts,
+      totalXpAwarded,
+      totalBatches: uniqueBatches.size
+    };
+
+    // Apply filters
+    let filtered = [...allQuizzes];
+
+    if (search) {
+      const q = String(search).toLowerCase();
+      filtered = filtered.filter(quiz =>
+        quiz.question?.toLowerCase().includes(q) ||
+        quiz.explanation?.toLowerCase().includes(q) ||
+        quiz.category?.toLowerCase().includes(q)
+      );
+    }
+
+    if (category && category !== 'all') {
+      filtered = filtered.filter(quiz =>
+        quiz.category?.toLowerCase() === String(category).toLowerCase()
+      );
+    }
+
+    if (difficulty && difficulty !== 'all') {
+      filtered = filtered.filter(quiz =>
+        quiz.difficulty?.toLowerCase() === String(difficulty).toLowerCase()
+      );
+    }
+
+    if (published && published !== 'all') {
+      const isPub = published === 'published' || published === 'true';
+      filtered = filtered.filter(quiz => Boolean(quiz.is_published) === isPub);
+    }
+
+    // Pagination
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.max(1, parseInt(limit, 10));
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = filtered.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        quizzes: paginated,
+        stats,
+        total: filtered.length,
+        page: pageNum,
+        limit: limitNum
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/quiz/admin:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch admin quizzes.' });
+  }
+});
+
+// 3. PUT /api/quiz/:id - Update an existing quiz bit
+app.put('/api/quiz/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { question, options, correct_answer, explanation, category, difficulty, xp, is_published } = req.body;
+
+    const quizCache = loadQuizCache();
+    const index = quizCache.findIndex(q => q.id === id);
+
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Quiz bit not found.' });
+    }
+
+    const existing = quizCache[index];
+    const now = new Date().toISOString();
+
+    const updated = {
+      ...existing,
+      question: question !== undefined ? String(question).trim() : existing.question,
+      options: Array.isArray(options) && options.length === 4 ? options.map(o => String(o).trim()) : existing.options,
+      correct_answer: correct_answer !== undefined ? String(correct_answer).trim() : existing.correct_answer,
+      explanation: explanation !== undefined ? String(explanation).trim() : existing.explanation,
+      category: category !== undefined ? String(category).trim() : existing.category,
+      difficulty: difficulty !== undefined ? String(difficulty).trim() : existing.difficulty,
+      xp: xp !== undefined ? Number(xp) : existing.xp,
+      is_published: is_published !== undefined ? Boolean(is_published) : existing.is_published,
+      updated_at: now
+    };
+
+    quizCache[index] = updated;
+    saveQuizCache(quizCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('quiz_bits')
+          .update({
+            question: updated.question,
+            options: updated.options,
+            correct_answer: updated.correct_answer,
+            explanation: updated.explanation,
+            category: updated.category,
+            difficulty: updated.difficulty,
+            xp: updated.xp,
+            is_published: updated.is_published,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase quiz update notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Quiz updated successfully.',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/quiz/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update quiz.' });
+  }
+});
+
+// 4. DELETE /api/quiz/:id - Delete a quiz bit
+app.delete('/api/quiz/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    let quizCache = loadQuizCache();
+    quizCache = quizCache.filter(q => q.id !== id);
+    saveQuizCache(quizCache);
+
+    // Also remove attempts
+    let attemptsCache = loadQuizAttemptsCache();
+    attemptsCache = attemptsCache.filter(a => a.quiz_id !== id);
+    saveQuizAttemptsCache(attemptsCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('quiz_bits').delete().eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase quiz delete notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Quiz deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/quiz/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete quiz.' });
+  }
+});
+
+// 5. PUT /api/quiz/:id/publish - Toggle single quiz published state
+app.put('/api/quiz/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const quizCache = loadQuizCache();
+    const index = quizCache.findIndex(q => q.id === id);
+
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Quiz not found.' });
+    }
+
+    const newPub = is_published !== undefined ? Boolean(is_published) : !quizCache[index].is_published;
+    quizCache[index].is_published = newPub;
+    quizCache[index].updated_at = new Date().toISOString();
+    saveQuizCache(quizCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('quiz_bits')
+          .update({ is_published: newPub, updated_at: quizCache[index].updated_at })
+          .eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase toggle publish notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Quiz ${newPub ? 'published' : 'unpublished'} successfully.`,
+      data: quizCache[index]
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/quiz/:id/publish:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to toggle publication.' });
+  }
+});
+
+// 6. PUT /api/quiz/batch-publish - Batch toggle published state
+app.put('/api/quiz/batch-publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { ids, is_published } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Array of quiz IDs required.' });
+    }
+
+    const targetStatus = Boolean(is_published);
+    const now = new Date().toISOString();
+    const idSet = new Set(ids);
+
+    const quizCache = loadQuizCache();
+    quizCache.forEach(q => {
+      if (idSet.has(q.id)) {
+        q.is_published = targetStatus;
+        q.updated_at = now;
+      }
+    });
+    saveQuizCache(quizCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('quiz_bits')
+          .update({ is_published: targetStatus, updated_at: now })
+          .in('id', ids);
+      } catch (sbErr) {
+        console.warn('[Supabase batch publish notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Updated publication status for ${ids.length} quizzes.`
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/quiz/batch-publish:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update batch publication.' });
+  }
+});
+
+// 7. GET /api/quiz/feed - Get a randomized pool of published quizzes for feed insertion
+app.get('/api/quiz/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+
+    let allQuizzes = loadQuizCache();
+
+    // Query Supabase for latest published quizzes if available
+    if (serverSupabase) {
+      try {
+        const { data: sbQuizzes, error: sbErr } = await serverSupabase
+          .from('quiz_bits')
+          .select('*')
+          .eq('is_published', true);
+        if (!sbErr && sbQuizzes && sbQuizzes.length > 0) {
+          allQuizzes = sbQuizzes;
+          // Refresh published entries in local cache
+          const existing = loadQuizCache();
+          const merged = [...sbQuizzes];
+          existing.forEach(e => {
+            if (!merged.some(m => m.id === e.id)) merged.push(e);
+          });
+          saveQuizCache(merged);
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase load feed quizzes notice]:', sbErr.message);
+      }
+    }
+
+    let publishedQuizzes = allQuizzes.filter(q => q.is_published);
+
+    if (publishedQuizzes.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Filter out quizzes user already completed correctly
+    let candidatePool = publishedQuizzes;
+
+    if (userId) {
+      let userAttempts = [];
+      if (serverSupabase) {
+        try {
+          const { data: sbAttempts } = await serverSupabase
+            .from('quiz_attempts')
+            .select('quiz_id, is_correct')
+            .eq('user_id', userId)
+            .eq('is_correct', true);
+          if (sbAttempts) userAttempts = sbAttempts;
+        } catch (e) {
+          console.warn('[Supabase user attempts notice]:', e.message);
+        }
+      }
+
+      if (userAttempts.length === 0) {
+        const cachedAttempts = loadQuizAttemptsCache();
+        userAttempts = cachedAttempts.filter(a => a.user_id === userId && a.is_correct);
+      }
+
+      const completedQuizIds = new Set(userAttempts.map(a => a.quiz_id));
+      const unattempted = publishedQuizzes.filter(q => !completedQuizIds.has(q.id));
+
+      // Prefer uncompleted quizzes; if all are completed, fall back to the full published pool
+      if (unattempted.length > 0) {
+        candidatePool = unattempted;
+      }
+    }
+
+    // Shuffle and pick up to 12 quizzes
+    const shuffled = shuffleArray(candidatePool);
+    const feedPool = shuffled.slice(0, 12);
+
+    res.json({
+      success: true,
+      data: feedPool
+    });
+  } catch (error) {
+    console.error('Error in GET /api/quiz/feed:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve quiz feed pool.' });
+  }
+});
+
+// 8. POST /api/quiz/attempt - Validate answer server-side and record attempt + XP
+app.post('/api/quiz/attempt', async (req, res) => {
+  try {
+    const { quizId, selectedAnswer } = req.body;
+
+    if (!quizId || selectedAnswer === undefined || selectedAnswer === null) {
+      return res.status(400).json({ success: false, error: 'quizId and selectedAnswer are required.' });
+    }
+
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    // Find target quiz from Supabase or cache
+    let quiz = null;
+    if (serverSupabase) {
+      try {
+        const { data: sbQuiz, error: sbErr } = await serverSupabase
+          .from('quiz_bits')
+          .select('*')
+          .eq('id', quizId)
+          .maybeSingle();
+        if (!sbErr && sbQuiz) {
+          quiz = sbQuiz;
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase find quiz notice]:', sbErr.message);
+      }
+    }
+
+    if (!quiz) {
+      const quizCache = loadQuizCache();
+      quiz = quizCache.find(q => q.id === quizId);
+    }
+
+    if (!quiz) {
+      return res.status(404).json({ success: false, error: 'Quiz bit not found.' });
+    }
+
+    // Compare answer
+    const isCorrect = String(selectedAnswer).trim().toLowerCase() === String(quiz.correct_answer).trim().toLowerCase();
+
+    // Check if XP was already awarded to this user for this quiz
+    let alreadyAwarded = false;
+
+    if (userId && userId !== 'guest_user') {
+      if (serverSupabase) {
+        try {
+          const { data: previousAttempts } = await serverSupabase
+            .from('quiz_attempts')
+            .select('id, is_correct, xp_awarded')
+            .eq('user_id', userId)
+            .eq('quiz_id', quizId)
+            .eq('is_correct', true);
+          if (previousAttempts && previousAttempts.some(a => (a.xp_awarded || 0) > 0)) {
+            alreadyAwarded = true;
+          }
+        } catch (e) {
+          console.warn('[Supabase check previous attempt notice]:', e.message);
+        }
+      }
+
+      if (!alreadyAwarded) {
+        const cachedAttempts = loadQuizAttemptsCache();
+        alreadyAwarded = cachedAttempts.some(
+          a => a.user_id === userId && a.quiz_id === quizId && a.is_correct && (a.xp_awarded || 0) > 0
+        );
+      }
+    }
+
+    let xpAwarded = 0;
+    let alreadyAttempted = false;
+
+    if (isCorrect) {
+      if (alreadyAwarded) {
+        xpAwarded = 0;
+        alreadyAttempted = true;
+      } else {
+        xpAwarded = quiz.xp || 10;
+        alreadyAttempted = false;
+      }
+    } else {
+      xpAwarded = 0;
+      alreadyAttempted = false;
+    }
+
+    // Record attempt
+    const attemptRecord = {
+      id: crypto.randomUUID(),
+      quiz_id: quizId,
+      user_id: userId,
+      selected_answer: String(selectedAnswer).trim(),
+      is_correct: isCorrect,
+      xp_awarded: xpAwarded,
+      created_at: new Date().toISOString()
+    };
+
+    const attemptsCache = loadQuizAttemptsCache();
+    attemptsCache.push(attemptRecord);
+    saveQuizAttemptsCache(attemptsCache);
+
+    if (serverSupabase && userId && userId !== 'guest_user') {
+      try {
+        await serverSupabase.from('quiz_attempts').insert({
+          id: attemptRecord.id,
+          quiz_id: attemptRecord.quiz_id,
+          user_id: attemptRecord.user_id,
+          selected_answer: attemptRecord.selected_answer,
+          is_correct: attemptRecord.is_correct,
+          xp_awarded: attemptRecord.xp_awarded,
+          created_at: attemptRecord.created_at
+        });
+      } catch (sbErr) {
+        console.warn('[Supabase save attempt notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        is_correct: isCorrect,
+        correct_answer: quiz.correct_answer,
+        explanation: quiz.explanation,
+        xp_awarded: xpAwarded,
+        already_attempted: alreadyAttempted
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/quiz/attempt:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to submit quiz attempt.' });
+  }
+});
+
+// 9. GET /api/quiz/user-xp/:userId - Get total Quiz XP and correct completions count for student
+app.get('/api/quiz/user-xp/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.json({ success: true, data: { totalXp: 0, completedCount: 0 } });
+    }
+
+    let attempts = [];
+    if (serverSupabase) {
+      try {
+        const { data: sbAttempts } = await serverSupabase
+          .from('quiz_attempts')
+          .select('quiz_id, is_correct, xp_awarded')
+          .eq('user_id', userId)
+          .eq('is_correct', true);
+        if (sbAttempts) attempts = sbAttempts;
+      } catch (e) {
+        console.warn('[Supabase user-xp notice]:', e.message);
+      }
+    }
+
+    if (attempts.length === 0) {
+      const cached = loadQuizAttemptsCache();
+      attempts = cached.filter(a => a.user_id === userId && a.is_correct);
+    }
+
+    // Calculate total XP and unique completed quiz count
+    const totalXp = attempts.reduce((sum, a) => sum + (a.xp_awarded || 0), 0);
+    const uniqueQuizzes = new Set(attempts.map(a => a.quiz_id));
+
+    res.json({
+      success: true,
+      data: {
+        totalXp,
+        completedCount: uniqueQuizzes.size
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/quiz/user-xp/:userId:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to compute user quiz stats.' });
   }
 });
 

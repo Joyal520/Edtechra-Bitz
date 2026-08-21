@@ -26,6 +26,7 @@ import { AdminStats, AdminUserListItem, YouTubeVideo } from '@/types';
 import { youtubeClient, SyncStatusData } from '@/services/youtubeClient';
 import { AdminSyncModal } from '@/components/AdminSyncModal';
 import { AdminThumbnailModal } from '@/components/AdminThumbnailModal';
+import { AdminQuizSection } from '@/components/AdminQuizSection';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -36,6 +37,9 @@ export const AdminPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Navigation Tab state
+  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -203,24 +207,99 @@ export const AdminPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => setAdminTab('quizzes')}
+              className="px-4 py-2.5 bg-gradient-to-r from-teal-400 to-emerald-400 hover:from-teal-300 hover:to-emerald-300 text-slate-950 text-xs font-black rounded-2xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🎯</span>
+              <span>Interactive Quizzes</span>
+            </button>
             <button
               onClick={() => setSyncModalOpen(true)}
               className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold rounded-2xl shadow-xs transition-all flex items-center gap-2"
             >
               <Youtube className="w-4 h-4" />
-              <span>Sync YouTube Channel</span>
+              <span>Sync YouTube</span>
             </button>
             <button
               onClick={() => loadAdminData()}
               disabled={refreshing}
-              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all"
+              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-2xl transition-all cursor-pointer"
               title="Refresh Stats"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Navigation Section Tabs */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-white border border-stone-200/90 rounded-2xl shadow-xs">
+        <button
+          onClick={() => setAdminTab('quizzes')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'quizzes'
+              ? 'bg-gradient-to-r from-[#026fc3] to-teal-500 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>🎯</span>
+          <span>Interactive Quizzes & AI Batch</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'quizzes' ? 'bg-amber-300 text-slate-900' : 'bg-amber-100 text-amber-800'
+          }`}>
+            New
+          </span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('youtube')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'youtube'
+              ? 'bg-[#026fc3] text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Youtube className="w-3.5 h-3.5 text-red-500" />
+          <span>YouTube Pipeline</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('users')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'users'
+              ? 'bg-[#026fc3] text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-[#026fc3]" />
+          <span>Users & Analytics</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('thumbnails')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'thumbnails'
+              ? 'bg-[#026fc3] text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <ImageIcon className="w-3.5 h-3.5 text-purple-600" />
+          <span>1:1 Thumbnails</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('all')}
+          className={`px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer sm:ml-auto ${
+            adminTab === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>All Sections</span>
+        </button>
       </div>
 
       {/* Error Alert */}
@@ -234,8 +313,14 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}
-      <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">
+      {/* 1. Interactive Quiz Bits Center (Highlighted) */}
+      {(adminTab === 'all' || adminTab === 'quizzes') && (
+        <AdminQuizSection />
+      )}
+
+      {/* 2. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}
+      {(adminTab === 'all' || adminTab === 'youtube') && (
+        <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
           <div>
             <div className="flex items-center gap-2">
@@ -326,18 +411,22 @@ export const AdminPage: React.FC = () => {
 
         </div>
       </section>
+      )}
 
-      {/* 2. Statistics Cards */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#026fc3]" />
-            User Statistics Overview
-          </h2>
-          <span className="text-[11px] text-slate-400 font-semibold">
-            Live database calculated metrics
-          </span>
-        </div>
+      {/* 3. User Statistics & Directory (Users View) */}
+      {(adminTab === 'all' || adminTab === 'users') && (
+        <>
+          {/* 2. Statistics Cards */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#026fc3]" />
+                User Statistics Overview
+              </h2>
+              <span className="text-[11px] text-slate-400 font-semibold">
+                Live database calculated metrics
+              </span>
+            </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           
@@ -622,9 +711,12 @@ export const AdminPage: React.FC = () => {
         </div>
 
       </section>
+        </>
+      )}
 
       {/* 4. Micro-Learning Video & 1:1 Thumbnail Management Section */}
-      <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
+      {(adminTab === 'all' || adminTab === 'thumbnails') && (
+        <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
         
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
@@ -798,6 +890,7 @@ export const AdminPage: React.FC = () => {
         </div>
 
       </section>
+      )}
 
       {/* Admin 1:1 Thumbnail Management Modal */}
       <AdminThumbnailModal

@@ -11,16 +11,18 @@ import {
   LogIn,
   ShieldCheck,
   GraduationCap,
-  Trophy
+  Trophy,
+  Zap
 } from 'lucide-react';
 import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
 import { getTimeBasedGreeting } from '@/utils/greeting';
 import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
 import { UserLearningProgress, CategoryProgress } from '@/types';
+import { quizService } from '@/services/quizService';
 
 export const DashboardPage: React.FC = () => {
-  const { user, profile, isAdmin, isLoading, openAuthModal } = useAuth();
+  const { user, profile, isAdmin, openAuthModal, isLoading, session } = useAuth();
   const [stats, setStats] = useState<ProgressSummary>({
     shortsWatched: 0,
     quizzesCompleted: 0,
@@ -29,6 +31,10 @@ export const DashboardPage: React.FC = () => {
     vocabularyLearned: 0,
     totalCompleted: 0,
     recentHistory: []
+  });
+  const [quizStats, setQuizStats] = useState<{ totalXp: number; completedCount: number }>({
+    totalXp: 0,
+    completedCount: 0
   });
   const [progressMap, setProgressMap] = useState<{ [videoId: string]: UserLearningProgress }>({});
   const [categoryProgress, setCategoryProgress] = useState<CategoryProgress[]>([]);
@@ -44,15 +50,18 @@ export const DashboardPage: React.FC = () => {
       try {
         setCategoriesLoading(true);
         setCategoriesError(null);
-        const [statsData, pMap, catProg] = await Promise.all([
+        const token = session?.access_token || null;
+        const [statsData, pMap, catProg, qStats] = await Promise.all([
           youtubeClient.getUserProgress(userId),
           youtubeClient.getProgressMap(userId),
-          youtubeClient.getCategoryProgress(userId)
+          youtubeClient.getCategoryProgress(userId),
+          quizService.getUserQuizStats(userId, token)
         ]);
         if (!isMounted) return;
         if (statsData) setStats(statsData);
         if (pMap) setProgressMap(pMap);
         if (catProg) setCategoryProgress(catProg);
+        if (qStats) setQuizStats(qStats);
       } catch (err: any) {
         console.error('Error loading dashboard stats:', err);
         if (isMounted) setCategoriesError(err?.message || 'Failed to load progress');
@@ -64,7 +73,7 @@ export const DashboardPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [userId]);
+  }, [userId, session]);
 
   if (isLoading) {
     return (
@@ -86,7 +95,7 @@ export const DashboardPage: React.FC = () => {
     return st === 'available' || st === 'in_progress';
   }) || allLevels[0];
 
-  const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40);
+  const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40) + (quizStats.totalXp || 0);
   const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'L').slice(0, 2).toUpperCase();
@@ -210,7 +219,7 @@ export const DashboardPage: React.FC = () => {
       </section>
 
       {/* Learning Stats Metric Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
         
         {/* Streak */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
@@ -236,7 +245,7 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quizzes Completed */}
+        {/* Curriculum Quizzes Passed */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
             <HelpCircle className="w-5 h-5 text-emerald-600" />
@@ -245,12 +254,25 @@ export const DashboardPage: React.FC = () => {
             <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
               {stats.quizzesCompleted > 0 ? `${stats.quizzesCompleted}` : `${completedLevelsCount}`}
             </div>
-            <div className="text-[11px] text-slate-500 font-semibold mt-1">Quizzes Passed</div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Video Quizzes</div>
+          </div>
+        </div>
+
+        {/* Quiz Bits Completed */}
+        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+            <Zap className="w-5 h-5 fill-teal-500 text-teal-500" />
+          </div>
+          <div>
+            <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
+              {quizStats.completedCount}
+            </div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Quiz Bits Done</div>
           </div>
         </div>
 
         {/* Levels Mastered */}
-        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
+        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3 col-span-2 sm:col-span-1">
           <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
             <Trophy className="w-5 h-5 text-purple-600" />
           </div>
