@@ -5,9 +5,7 @@ import {
   Clock,
   Zap,
   Sparkles,
-  ExternalLink,
-  Volume2,
-  VolumeX
+  ExternalLink
 } from 'lucide-react';
 import { YouTubeShort } from '@/types';
 import { YouTubeShortModal } from './YouTubeShortModal';
@@ -21,16 +19,14 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [isIntersecting, setIsIntersecting] = useState<boolean>(false);
   const [userClickedPlay, setUserClickedPlay] = useState<boolean>(false);
-  const [isMuted, setIsMuted] = useState<boolean>(true);
   
   const cardRef = useRef<HTMLElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const durationText = short.duration_formatted || `${short.duration || 30}s`;
 
   // Viewport-aware IntersectionObserver:
-  // Autoplays muted looping 9:16 video when at least 60% visible in the mobile viewport.
+  // Autoplays 9:16 video inline when at least 60% visible in the viewport.
   // Pauses / unloads player when scrolled away (< 40% visible).
   useEffect(() => {
     const el = videoContainerRef.current;
@@ -47,8 +43,6 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
             setIsIntersecting(true);
           } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
             setIsIntersecting(false);
-            // Reset mute state for clean next playback
-            setIsMuted(true);
           }
         });
       },
@@ -65,46 +59,12 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
 
   const shouldPlayInline = isIntersecting || userClickedPlay;
 
-  // Toggle Mute / Unmute instantly via YouTube Player postMessage API
-  const toggleMute = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const nextMuted = !isMuted;
-    setIsMuted(nextMuted);
-
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      const command = nextMuted ? 'mute' : 'unMute';
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({
-          event: 'command',
-          func: command,
-          args: []
-        }),
-        '*'
-      );
-      if (!nextMuted) {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({
-            event: 'command',
-            func: 'setVolume',
-            args: [100]
-          }),
-          '*'
-        );
-      }
-    }
-  };
-
-  const handleThumbnailClick = () => {
-    setUserClickedPlay(true);
-    setIsMuted(false); // If user manually taps thumbnail to play, start unmuted
-  };
-
   // Official YouTube Embed URL configured for:
-  // - Autoplay
+  // - Autoplay with sound attempt (no forced mute parameter)
   // - Plays inline on mobile iOS/Android without forcing native fullscreen
   // - Looping continuously via playlist parameter
-  // - enablejsapi=1 for dynamic postMessage unmute/volume control
-  const embedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&mute=${isMuted ? 1 : 0}&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=1&modestbranding=1&rel=0`;
+  // - Clean official native YouTube controls
+  const embedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=1&modestbranding=1&rel=0`;
 
   return (
     <>
@@ -148,45 +108,17 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
           className="relative w-full aspect-[9/16] max-h-[82svh] sm:max-h-none sm:aspect-[16/9] bg-black overflow-hidden flex items-center justify-center"
         >
           {shouldPlayInline ? (
-            <>
-              <iframe
-                ref={iframeRef}
-                src={embedUrl}
-                title={short.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="w-full h-full border-0 object-cover"
-                loading="lazy"
-              />
-
-              {/* Prominent Reels-Style Floating Unmute/Mute Toggle Button */}
-              <button
-                type="button"
-                onClick={toggleMute}
-                className={`absolute top-4 right-4 z-20 px-3.5 py-2 rounded-full backdrop-blur-md shadow-lg transition-all duration-200 active:scale-95 flex items-center gap-1.5 text-xs font-black cursor-pointer border ${
-                  isMuted
-                    ? 'bg-black/80 hover:bg-black text-white border-white/30 animate-pulse'
-                    : 'bg-emerald-600/90 hover:bg-emerald-700 text-white border-emerald-400/40'
-                }`}
-                aria-label={isMuted ? 'Unmute video sound' : 'Mute video sound'}
-                title={isMuted ? 'Tap to enable sound' : 'Sound enabled'}
-              >
-                {isMuted ? (
-                  <>
-                    <VolumeX className="w-4 h-4 text-amber-300" />
-                    <span className="font-extrabold tracking-wide">Tap for Sound 🔊</span>
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="w-4 h-4 text-white" />
-                    <span>Sound On</span>
-                  </>
-                )}
-              </button>
-            </>
+            <iframe
+              src={embedUrl}
+              title={short.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="w-full h-full border-0 object-cover"
+              loading="lazy"
+            />
           ) : (
             <div
-              onClick={handleThumbnailClick}
+              onClick={() => setUserClickedPlay(true)}
               className="relative w-full h-full cursor-pointer group flex items-center justify-center bg-slate-950"
             >
               <img
