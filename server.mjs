@@ -213,6 +213,49 @@ function saveQuizAttemptsCache(attempts) {
   }
 }
 
+// In-memory / file-based YouTube Shorts library store
+const YOUTUBE_SHORTS_FILE = path.resolve(__dirname, 'server/data/youtube_shorts_cache.json');
+
+function loadShortsCache() {
+  try {
+    if (fs.existsSync(YOUTUBE_SHORTS_FILE)) {
+      return JSON.parse(fs.readFileSync(YOUTUBE_SHORTS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading YouTube Shorts cache:', e);
+  }
+  return [];
+}
+
+function saveShortsCache(shorts) {
+  try {
+    fs.writeFileSync(YOUTUBE_SHORTS_FILE, JSON.stringify(shorts, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving YouTube Shorts cache:', e);
+  }
+}
+
+// Helper: Extract YouTube video ID from URL or raw ID
+function extractVideoId(urlOrId) {
+  if (!urlOrId || typeof urlOrId !== 'string') return null;
+  const trimmed = urlOrId.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+  const shortsMatch = trimmed.match(/(?:youtube\.com\/shorts\/|youtu\.be\/shorts\/)([a-zA-Z0-9_-]{11})/i);
+  if (shortsMatch && shortsMatch[1]) return shortsMatch[1];
+
+  const youtuBeMatch = trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/i);
+  if (youtuBeMatch && youtuBeMatch[1]) return youtuBeMatch[1];
+
+  const watchMatch = trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/i);
+  if (watchMatch && watchMatch[1]) return watchMatch[1];
+
+  const embedMatch = trimmed.match(/youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]{11})/i);
+  if (embedMatch && embedMatch[1]) return embedMatch[1];
+
+  return null;
+}
+
 // ============================================================================
 // API ROUTES: YOUTUBE & LEARNING
 // ============================================================================
@@ -943,9 +986,10 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// 4. DELETE /api/posts/:id - Delete student post & delete associated R2 object
+// 4. DELETE /api/posts/:id - Permanently delete student post & delete associated R2 object
 app.delete('/api/posts/:id', async (req, res) => {
   try {
+    // 1. Authenticate requester
     const authData = await verifyAuthUser(req);
     if (!authData) {
       return res.status(401).json({ success: false, error: 'Authentication required to delete posts.' });
@@ -953,48 +997,87 @@ app.delete('/api/posts/:id', async (req, res) => {
 
     const { id } = req.params;
     const postsCache = loadPostsCache();
-    const postIndex = postsCache.findIndex(p => p.id === id);
+    let post = postsCache.find(p => p.id === id);
 
-    if (postIndex === -1) {
-      return res.status(404).json({ success: false, error: 'Post not found.' });
+    // 2. Query Supabase for the post to ensure existence and verify ownership
+    if (serverSupabase) {
+      try {
+        const { data: dbPost, error: fetchErr } = await serverSupabase
+          .from('student_posts')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (dbPost) {
+          post = dbPost;
+        } else if (fetchErr) {
+          console.warn('[Supabase fetch student_posts notice]:', fetchErr.message);
+        }
+      } catch (err) {
+        console.error('[Supabase fetch student_posts exception]:', err);
+      }
     }
 
-    const post = postsCache[postIndex];
+    if (!post) {
+      return res.status(404).json({ success: false, error: 'Post not found or already deleted.' });
+    }
 
-    // Ownership & Admin verification
+    // 3. Verify owner/admin authorization
     const isOwner = post.user_id === authData.user.id;
-    const isAdmin = authData.profile.role === 'admin';
+    const isAdmin = authData.profile?.role === 'admin';
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ success: false, error: 'Permission denied: You cannot delete another student\'s post.' });
     }
 
-    // 1. Delete associated media object from Cloudflare R2 bucket
+    // 4. Delete from Supabase student_posts table (source of truth)
+    if (serverSupabase) {
+      try {
+        const { error: sbDeleteErr } = await serverSupabase
+          .from('student_posts')
+          .delete()
+          .eq('id', id);
+
+        if (sbDeleteErr) {
+          console.error('[Supabase delete student_posts error]:', sbDeleteErr.message);
+          return res.status(500).json({ success: false, error: 'Failed to delete post from database: ' + sbDeleteErr.message });
+        }
+      } catch (sbErr) {
+        console.error('[Supabase delete student_posts exception]:', sbErr);
+        return res.status(500).json({ success: false, error: 'Database deletion error: ' + sbErr.message });
+      }
+    }
+
+    // 5. Remove from in-memory / local JSON posts cache
+    const updatedCache = postsCache.filter(p => p.id !== id);
+    savePostsCache(updatedCache);
+
+    // 6. Remove from likes cache
+    try {
+      const likesMap = loadLikesCache();
+      if (likesMap[id]) {
+        delete likesMap[id];
+        saveLikesCache(likesMap);
+      }
+    } catch (e) {
+      // Non-critical
+    }
+
+    // 7. Delete associated media object from Cloudflare R2 bucket (safe cleanup)
     if (post.image_object_key) {
       try {
         await deleteObjects([post.image_object_key]);
-        console.log(`[R2] Deleted object: ${post.image_object_key}`);
+        console.log(`[R2] Cleaned up media object: ${post.image_object_key}`);
       } catch (r2Err) {
-        console.error('[R2 Delete Warning]:', r2Err.message);
+        console.error('[R2 Cleanup Notice]:', r2Err.message);
       }
     }
 
-    // 2. Remove from local cache
-    postsCache.splice(postIndex, 1);
-    savePostsCache(postsCache);
-
-    // 3. Remove from Supabase student_posts table
-    if (serverSupabase) {
-      try {
-        await serverSupabase.from('student_posts').delete().eq('id', id);
-      } catch (sbErr) {
-        console.warn('[Supabase delete student_posts notice]:', sbErr.message);
-      }
-    }
-
+    // 8. Return success confirmation with deletedId
     res.json({
       success: true,
-      message: 'Post and media deleted successfully.'
+      deletedId: id,
+      message: 'Post and media permanently deleted.'
     });
   } catch (error) {
     console.error('Error in DELETE /api/posts/:id:', error);
@@ -1964,6 +2047,416 @@ app.get('/api/quiz/user-xp/:userId', async (req, res) => {
   } catch (error) {
     console.error('Error in GET /api/quiz/user-xp/:userId:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to compute user quiz stats.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: YOUTUBE SHORTS FEED INTEGRATION & LIBRARY
+// ============================================================================
+
+// 1. POST /api/youtube/shorts - Create a new Short (Admin only)
+app.post('/api/youtube/shorts', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+
+    const { youtube_url, title, description, category, duration, linked_quiz_id, is_published } = req.body;
+
+    if (!youtube_url || typeof youtube_url !== 'string') {
+      return res.status(400).json({ success: false, error: 'Valid YouTube URL is required.' });
+    }
+
+    const videoId = extractVideoId(youtube_url);
+    if (!videoId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid YouTube URL or Video ID. Please enter a valid YouTube Shorts, watch, or youtu.be link.'
+      });
+    }
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Short title is required.' });
+    }
+
+    // Duplicate Check: Supabase & Cache
+    let existingShort = null;
+    const currentShortsCache = loadShortsCache();
+    existingShort = currentShortsCache.find(s => s.youtube_video_id === videoId);
+
+    if (!existingShort && serverSupabase) {
+      try {
+        const { data: dbExisting } = await serverSupabase
+          .from('youtube_shorts')
+          .select('id, youtube_video_id')
+          .eq('youtube_video_id', videoId)
+          .maybeSingle();
+        if (dbExisting) existingShort = dbExisting;
+      } catch (e) {
+        // Cache fallback already checked
+      }
+    }
+
+    if (existingShort) {
+      return res.status(409).json({
+        success: false,
+        error: `A YouTube Short with video ID '${videoId}' has already been added to the library.`
+      });
+    }
+
+    const now = new Date().toISOString();
+    const durationVal = Number(duration) > 0 ? Number(duration) : 30;
+    const newShort = {
+      id: crypto.randomUUID(),
+      youtube_video_id: videoId,
+      youtube_url: `https://www.youtube.com/shorts/${videoId}`,
+      title: title.trim(),
+      description: description ? description.trim() : null,
+      thumbnail_url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      category: category ? category.trim() : 'General',
+      duration: durationVal,
+      duration_formatted: `${durationVal}s`,
+      is_published: Boolean(is_published),
+      sort_order: 0,
+      linked_quiz_id: linked_quiz_id || null,
+      created_by: authData.user.id,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Update local cache
+    const updatedCache = [newShort, ...currentShortsCache];
+    saveShortsCache(updatedCache);
+
+    // Insert into Supabase if connected
+    if (serverSupabase) {
+      try {
+        const { error: sbErr } = await serverSupabase
+          .from('youtube_shorts')
+          .insert([newShort]);
+        if (sbErr) {
+          console.warn('[Supabase youtube_shorts insert warning]:', sbErr.message);
+        }
+      } catch (sbEx) {
+        console.warn('[Supabase youtube_shorts insert notice]:', sbEx.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'YouTube Short created successfully.',
+      data: newShort
+    });
+  } catch (error) {
+    console.error('Error in POST /api/youtube/shorts:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create YouTube Short.' });
+  }
+});
+
+// 2. GET /api/youtube/shorts/admin - Retrieve all shorts with filters & stats for admin
+app.get('/api/youtube/shorts/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, status, page = 1, limit = 50 } = req.query;
+    let allShorts = loadShortsCache();
+
+    if (serverSupabase) {
+      try {
+        let query = serverSupabase
+          .from('youtube_shorts')
+          .select('*, quiz_bits:linked_quiz_id(id, question, options, correct_answer, explanation, category, difficulty, xp)')
+          .order('created_at', { ascending: false });
+
+        if (category && category !== 'all') {
+          query = query.ilike('category', category);
+        }
+        if (status === 'published') {
+          query = query.eq('is_published', true);
+        } else if (status === 'draft') {
+          query = query.eq('is_published', false);
+        }
+        if (search && search.trim()) {
+          const q = search.trim();
+          query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%,youtube_video_id.ilike.%${q}%`);
+        }
+
+        const { data: sbShorts, error: sbErr } = await query;
+        if (!sbErr && Array.isArray(sbShorts)) {
+          allShorts = sbShorts.map(s => ({
+            ...s,
+            linked_quiz: s.quiz_bits || null,
+            duration_formatted: `${s.duration || 30}s`
+          }));
+          saveShortsCache(allShorts);
+        }
+      } catch (e) {
+        console.warn('[Supabase admin shorts query fallback]:', e.message);
+      }
+    }
+
+    // In-memory quiz lookup helper for cache fallback
+    const allQuizzes = loadQuizCache();
+    const quizMap = new Map(allQuizzes.map(q => [q.id, q]));
+
+    allShorts = allShorts.map(s => ({
+      ...s,
+      linked_quiz: s.linked_quiz || (s.linked_quiz_id ? quizMap.get(s.linked_quiz_id) || null : null),
+      duration_formatted: `${s.duration || 30}s`
+    }));
+
+    // Filter in-memory if Supabase was bypassed
+    let filtered = [...allShorts];
+    if (category && category !== 'all') {
+      filtered = filtered.filter(s => s.category?.toLowerCase() === category.toLowerCase());
+    }
+    if (status === 'published') {
+      filtered = filtered.filter(s => s.is_published === true);
+    } else if (status === 'draft') {
+      filtered = filtered.filter(s => s.is_published === false);
+    }
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(s =>
+        s.title?.toLowerCase().includes(q) ||
+        s.description?.toLowerCase().includes(q) ||
+        s.category?.toLowerCase().includes(q) ||
+        s.youtube_video_id?.toLowerCase().includes(q)
+      );
+    }
+
+    // Compute statistics
+    const stats = {
+      totalShorts: allShorts.length,
+      publishedShorts: allShorts.filter(s => s.is_published).length,
+      draftShorts: allShorts.filter(s => !s.is_published).length,
+      linkedQuizShorts: allShorts.filter(s => Boolean(s.linked_quiz_id)).length
+    };
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const total = filtered.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = filtered.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+      success: true,
+      data: {
+        shorts: paginated,
+        stats,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/youtube/shorts/admin:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to load YouTube Shorts.' });
+  }
+});
+
+// 3. PUT /api/youtube/shorts/:id - Update Short metadata
+app.put('/api/youtube/shorts/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { title, description, category, duration, linked_quiz_id, is_published } = req.body;
+
+    const shortsCache = loadShortsCache();
+    const shortIndex = shortsCache.findIndex(s => s.id === id);
+
+    if (shortIndex === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Short not found.' });
+    }
+
+    const existing = shortIndex !== -1 ? shortsCache[shortIndex] : null;
+    const now = new Date().toISOString();
+    const durationVal = duration !== undefined ? (Number(duration) > 0 ? Number(duration) : 30) : existing?.duration || 30;
+
+    const updated = {
+      ...(existing || {}),
+      id,
+      title: title !== undefined ? title.trim() : existing?.title,
+      description: description !== undefined ? (description ? description.trim() : null) : existing?.description,
+      category: category !== undefined ? category.trim() : existing?.category || 'General',
+      duration: durationVal,
+      duration_formatted: `${durationVal}s`,
+      linked_quiz_id: linked_quiz_id !== undefined ? (linked_quiz_id || null) : existing?.linked_quiz_id || null,
+      is_published: is_published !== undefined ? Boolean(is_published) : existing?.is_published ?? false,
+      updated_at: now
+    };
+
+    if (shortIndex !== -1) {
+      shortsCache[shortIndex] = updated;
+    } else {
+      shortsCache.unshift(updated);
+    }
+    saveShortsCache(shortsCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('youtube_shorts')
+          .update({
+            title: updated.title,
+            description: updated.description,
+            category: updated.category,
+            duration: updated.duration,
+            linked_quiz_id: updated.linked_quiz_id,
+            is_published: updated.is_published,
+            updated_at: updated.updated_at
+          })
+          .eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase update short notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'YouTube Short updated successfully.',
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/youtube/shorts/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update Short.' });
+  }
+});
+
+// 4. DELETE /api/youtube/shorts/:id - Delete Short permanently
+app.delete('/api/youtube/shorts/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const shortsCache = loadShortsCache();
+    const updatedCache = shortsCache.filter(s => s.id !== id);
+    saveShortsCache(updatedCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('youtube_shorts').delete().eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase delete short notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      deletedId: id,
+      message: 'YouTube Short deleted permanently.'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/youtube/shorts/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete Short.' });
+  }
+});
+
+// 5. PUT /api/youtube/shorts/:id/publish - Toggle publication status
+app.put('/api/youtube/shorts/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const shortsCache = loadShortsCache();
+    const shortIndex = shortsCache.findIndex(s => s.id === id);
+
+    let updatedShort = null;
+    if (shortIndex !== -1) {
+      shortsCache[shortIndex].is_published = Boolean(is_published);
+      shortsCache[shortIndex].updated_at = new Date().toISOString();
+      updatedShort = shortsCache[shortIndex];
+      saveShortsCache(shortsCache);
+    }
+
+    if (serverSupabase) {
+      try {
+        const { data: sbUpdated } = await serverSupabase
+          .from('youtube_shorts')
+          .update({ is_published: Boolean(is_published), updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('*')
+          .maybeSingle();
+        if (sbUpdated) updatedShort = sbUpdated;
+      } catch (sbErr) {
+        console.warn('[Supabase publish short notice]:', sbErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Short ${is_published ? 'published' : 'unpublished'} successfully.`,
+      data: updatedShort
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/youtube/shorts/:id/publish:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to toggle publication state.' });
+  }
+});
+
+// 6. GET /api/youtube/shorts/feed - Feed pool of published shorts for students
+app.get('/api/youtube/shorts/feed', async (req, res) => {
+  try {
+    let publishedShorts = [];
+
+    if (serverSupabase) {
+      try {
+        const { data: dbShorts, error: sbErr } = await serverSupabase
+          .from('youtube_shorts')
+          .select('*, quiz_bits:linked_quiz_id(*)')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbShorts) && dbShorts.length > 0) {
+          publishedShorts = dbShorts.map(s => ({
+            ...s,
+            linked_quiz: s.quiz_bits || null,
+            duration_formatted: `${s.duration || 30}s`
+          }));
+        }
+      } catch (e) {
+        console.warn('[Supabase getFeedShorts notice]:', e.message);
+      }
+    }
+
+    if (publishedShorts.length === 0) {
+      const cached = loadShortsCache();
+      const allQuizzes = loadQuizCache();
+      const quizMap = new Map(allQuizzes.map(q => [q.id, q]));
+
+      publishedShorts = cached
+        .filter(s => s.is_published === true)
+        .map(s => ({
+          ...s,
+          linked_quiz: s.linked_quiz || (s.linked_quiz_id ? quizMap.get(s.linked_quiz_id) || null : null),
+          duration_formatted: `${s.duration || 30}s`
+        }));
+    }
+
+    res.json({
+      success: true,
+      data: publishedShorts
+    });
+  } catch (error) {
+    console.error('Error in GET /api/youtube/shorts/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve YouTube Shorts feed.' });
   }
 });
 

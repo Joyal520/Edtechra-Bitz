@@ -203,3 +203,43 @@ export interface QuizAdminStats {
   totalBatches: number;
 }
 
+// ============================================================================
+// YouTube Shorts Types
+// ============================================================================
+
+export interface YouTubeShort {
+  id: string;
+  youtube_video_id: string;
+  youtube_url: string;
+  title: string;
+  description?: string | null;
+  thumbnail_url: string;
+  category: string;
+  duration: number; // in seconds (default 30)
+  duration_formatted?: string;
+  is_published: boolean;
+  sort_order: number;
+  linked_quiz_id?: string | null;
+  linked_quiz?: QuizBit | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateYouTubeShortInput {
+  youtube_url: string;
+  title: string;
+  description?: string;
+  category?: string;
+  duration?: number;
+  linked_quiz_id?: string | null;
+  is_published?: boolean;
+}
+
+export interface YouTubeShortAdminStats {
+  totalShorts: number;
+  publishedShorts: number;
+  draftShorts: number;
+  linkedQuizShorts: number;
+}
+

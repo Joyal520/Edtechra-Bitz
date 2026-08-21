@@ -10,28 +10,33 @@ import {
   Zap
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
-import { QuizBit, QuizAttemptResult } from '@/types';
+import { QuizBit, QuizAttemptResult, YouTubeShort } from '@/types';
 import { postService } from '@/services/postService';
 import { quizService } from '@/services/quizService';
+import { youtubeShortsService } from '@/services/youtubeShortsService';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from './PostCard';
 import { QuizBitCard } from './QuizBitCard';
+import { YouTubeShortCard } from './YouTubeShortCard';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
 import { QUIZ_CONFIG } from '@/utils/quizConfig';
 
-type FeedItem =
+export type FeedItem =
   | { type: 'post'; post: StudentPost; key: string }
-  | { type: 'quiz'; quiz: QuizBit; key: string };
+  | { type: 'quiz'; quiz: QuizBit; key: string }
+  | { type: 'youtube_short'; short: YouTubeShort; key: string };
 
-// Deterministic intervals between 2 and 4 posts (seeded pattern)
-const INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4, 3, 2];
+// Deterministic intervals for stable session interleaving
+const QUIZ_INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4];
+const SHORT_INTERVAL_PATTERN = [5, 4, 6, 4, 5, 4, 6, 5];
 
 export const PostFeed: React.FC = () => {
-  const { user, profile, session, requireAuth } = useAuth();
+  const { profile, session, requireAuth } = useAuth();
   
   const [posts, setPosts] = useState<StudentPost[]>([]);
   const [quizzes, setQuizzes] = useState<QuizBit[]>([]);
+  const [shorts, setShorts] = useState<YouTubeShort[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -43,25 +48,26 @@ export const PostFeed: React.FC = () => {
   const displayName =
     profile?.full_name?.trim() ||
     profile?.name?.trim() ||
-    user?.user_metadata?.full_name?.trim() ||
-    (user?.email ? user.email.split('@')[0] : 'Student');
+    'Student';
 
   const avatarUrl =
     profile?.avatar_url ||
-    profile?.avatarUrl ||
-    user?.user_metadata?.avatar_url ||
-    user?.user_metadata?.picture;
+    profile?.avatarUrl;
 
   const initials = (displayName || 'S').slice(0, 2).toUpperCase();
 
-  // Load feed quizzes pool
-  const loadQuizzes = useCallback(async () => {
+  // Load feed quizzes and shorts pool
+  const loadMediaPool = useCallback(async () => {
     try {
       const token = session?.access_token || null;
-      const data = await quizService.getFeedQuizzes(token);
-      setQuizzes(data);
+      const [quizData, shortsData] = await Promise.all([
+        quizService.getFeedQuizzes(token),
+        youtubeShortsService.getFeedShorts(token)
+      ]);
+      setQuizzes(quizData || []);
+      setShorts(shortsData || []);
     } catch (err) {
-      console.warn('[PostFeed] Failed to load quiz pool:', err);
+      console.warn('[PostFeed] Failed to load quiz/shorts pool:', err);
     }
   }, [session]);
 
@@ -74,7 +80,7 @@ export const PostFeed: React.FC = () => {
         const token = session?.access_token || null;
         const [postsData] = await Promise.all([
           postService.getPosts({ page: targetPage, limit: 8, sort: sortBy }, token),
-          targetPage === 1 ? loadQuizzes() : Promise.resolve()
+          targetPage === 1 ? loadMediaPool() : Promise.resolve()
         ]);
 
         if (append) {
@@ -92,7 +98,7 @@ export const PostFeed: React.FC = () => {
         setLoadingMore(false);
       }
     },
-    [session, sortBy, loadQuizzes]
+    [session, sortBy, loadMediaPool]
   );
 
   useEffect(() => {
@@ -120,36 +126,66 @@ export const PostFeed: React.FC = () => {
     // be encountered further down the feed as the student scrolls.
   };
 
-  // Interleave Quiz Bits stably into the posts list (every 2-4 posts)
+  // Interleave Quiz Bits & YouTube Shorts stably into the posts stream
+  // Ratio per ~8-10 items: 4-5 normal posts, 1-2 quizzes, 1 YouTube Short
   const feedItems = useMemo<FeedItem[]>(() => {
     if (posts.length === 0) return [];
-    if (!QUIZ_CONFIG.ENABLED || quizzes.length === 0) {
-      return posts.map((post) => ({ type: 'post', post, key: `post-${post.id}` }));
-    }
 
     const items: FeedItem[] = [];
     let quizIndex = 0;
+    let shortIndex = 0;
     let postsSinceLastQuiz = 0;
-    let patternIndex = 0;
-    let targetInterval = INTERVAL_PATTERN[0];
+    let postsSinceLastShort = 0;
+    let quizPatternIdx = 0;
+    let shortPatternIdx = 0;
+    let quizTargetInterval = QUIZ_INTERVAL_PATTERN[0];
+    let shortTargetInterval = SHORT_INTERVAL_PATTERN[0];
+
+    // Track used IDs to guarantee no duplicates in this feed session
+    const seenShortIds = new Set<string>();
+    const seenQuizIds = new Set<string>();
 
     posts.forEach((post, index) => {
       items.push({ type: 'post', post, key: `post-${post.id}` });
       postsSinceLastQuiz++;
+      postsSinceLastShort++;
 
-      // Check if it's time to insert a quiz
-      if (postsSinceLastQuiz >= targetInterval && quizIndex < quizzes.length) {
+      // 1. Check if it's time to insert an educational Quiz Bit
+      if (
+        QUIZ_CONFIG.ENABLED &&
+        postsSinceLastQuiz >= quizTargetInterval &&
+        quizIndex < quizzes.length
+      ) {
         const currentQuiz = quizzes[quizIndex];
-        items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
-        quizIndex++;
-        postsSinceLastQuiz = 0;
-        patternIndex = (patternIndex + 1) % INTERVAL_PATTERN.length;
-        targetInterval = INTERVAL_PATTERN[patternIndex];
+        if (!seenQuizIds.has(currentQuiz.id)) {
+          seenQuizIds.add(currentQuiz.id);
+          items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
+          quizIndex++;
+          postsSinceLastQuiz = 0;
+          quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
+          quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
+        }
+      }
+
+      // 2. Check if it's time to insert a YouTube Short
+      if (
+        postsSinceLastShort >= shortTargetInterval &&
+        shortIndex < shorts.length
+      ) {
+        const currentShort = shorts[shortIndex];
+        if (!seenShortIds.has(currentShort.id)) {
+          seenShortIds.add(currentShort.id);
+          items.push({ type: 'youtube_short', short: currentShort, key: `short-${currentShort.id}-${index}` });
+          shortIndex++;
+          postsSinceLastShort = 0;
+          shortPatternIdx = (shortPatternIdx + 1) % SHORT_INTERVAL_PATTERN.length;
+          shortTargetInterval = SHORT_INTERVAL_PATTERN[shortPatternIdx];
+        }
       }
     });
 
     return items;
-  }, [posts, quizzes]);
+  }, [posts, quizzes, shorts]);
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
@@ -288,6 +324,15 @@ export const PostFeed: React.FC = () => {
                   key={item.key}
                   quiz={item.quiz}
                   onAttemptCompleted={handleQuizAttemptCompleted}
+                />
+              );
+            }
+
+            if (item.type === 'youtube_short') {
+              return (
+                <YouTubeShortCard
+                  key={item.key}
+                  short={item.short}
                 />
               );
             }

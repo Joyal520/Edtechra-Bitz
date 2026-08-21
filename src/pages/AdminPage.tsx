@@ -27,6 +27,7 @@ import { youtubeClient, SyncStatusData } from '@/services/youtubeClient';
 import { AdminSyncModal } from '@/components/AdminSyncModal';
 import { AdminThumbnailModal } from '@/components/AdminThumbnailModal';
 import { AdminQuizSection } from '@/components/AdminQuizSection';
+import { AdminShortsSection } from '@/components/AdminShortsSection';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -39,7 +40,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,6 +255,23 @@ export const AdminPage: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setAdminTab('shorts')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'shorts'
+              ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>▶️</span>
+          <span>YouTube Shorts</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'shorts' ? 'bg-amber-300 text-slate-900' : 'bg-red-100 text-red-800'
+          }`}>
+            New
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('youtube')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
             adminTab === 'youtube'
@@ -316,6 +334,11 @@ export const AdminPage: React.FC = () => {
       {/* 1. Interactive Quiz Bits Center (Highlighted) */}
       {(adminTab === 'all' || adminTab === 'quizzes') && (
         <AdminQuizSection />
+      )}
+
+      {/* 2. YouTube Shorts Feed Content Management (New) */}
+      {(adminTab === 'all' || adminTab === 'shorts') && (
+        <AdminShortsSection />
       )}
 
       {/* 2. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}
