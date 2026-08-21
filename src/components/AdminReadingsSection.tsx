@@ -159,9 +159,9 @@ export const AdminReadingsSection: React.FC = () => {
     setCreateCoverPreview(URL.createObjectURL(file));
   };
 
-  // Submit and Create Reading
+  // Submit and Create Reading (Handles Single or Bulk Import)
   const handleCreateReading = async (publishImmediately: boolean = true) => {
-    if (!validationResult || !validationResult.valid || !validationResult.reading) {
+    if (!validationResult || !validationResult.valid) {
       showToast('Please provide valid reading JSON before publishing.', 'error');
       return;
     }
@@ -169,6 +169,33 @@ export const AdminReadingsSection: React.FC = () => {
     setImporting(true);
     try {
       const token = session?.access_token || null;
+
+      // Case A: Bulk Import
+      if (validationResult.isBulk && validationResult.readings.length > 0) {
+        const readingsToImport = validationResult.readings.map(r => ({
+          ...r,
+          is_published: publishImmediately
+        }));
+
+        const result = await readingService.importBatchReadings(readingsToImport, token);
+        const dupNotice = result.duplicateCount > 0 ? ` (${result.duplicateCount} duplicates skipped)` : '';
+        showToast(`Successfully imported ${result.importedCount} reading records into catalogue!${dupNotice}`);
+
+        // Reset form
+        setJsonInput('');
+        setValidationResult(null);
+        setCreateCoverBlob(null);
+        setCreateCoverPreview(null);
+        await loadData();
+        return;
+      }
+
+      // Case B: Single Reading Import
+      if (!validationResult.reading) {
+        showToast('No reading record found to create.', 'error');
+        return;
+      }
+
       let coverImageUrl: string | null = null;
       let coverImageObjectKey: string | null = null;
 
@@ -212,8 +239,8 @@ export const AdminReadingsSection: React.FC = () => {
       setCreateCoverPreview(null);
       await loadData();
     } catch (err: any) {
-      console.error('Failed to create reading:', err);
-      showToast(err.message || 'Failed to create reading.', 'error');
+      console.error('Failed to create reading(s):', err);
+      showToast(err.message || 'Failed to create reading(s).', 'error');
     } finally {
       setImporting(false);
     }
@@ -537,89 +564,133 @@ export const AdminReadingsSection: React.FC = () => {
 
           {/* Validation Preview & Optional Image Section */}
           <div className="space-y-4 bg-stone-50/70 p-4 sm:p-5 rounded-2xl border border-stone-200 flex flex-col justify-between">
-            {validationResult?.valid && validationResult.reading ? (
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Valid Reading Detected</span>
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-base font-black text-[#0f233a]">
-                    {validationResult.reading.title}
-                  </h4>
-                  {validationResult.reading.subtitle && (
-                    <p className="text-xs text-slate-600 font-semibold">
-                      {validationResult.reading.subtitle}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="px-2 py-0.5 bg-white border border-stone-200 text-teal-800 text-[10px] font-black rounded-md">
-                      {validationResult.reading.category}
-                    </span>
-                    <span className="px-2 py-0.5 bg-white border border-stone-200 text-slate-700 text-[10px] font-bold rounded-md">
-                      Level {validationResult.reading.level}
-                    </span>
-                    <span className="text-[11px] text-slate-500 font-semibold">
-                      {validationResult.reading.paragraphs?.length || 0} paragraphs • {validationResult.reading.vocabulary?.length || 0} vocabulary words
-                    </span>
-                  </div>
-                </div>
-
-                {/* Optional Cover Image Uploader Box */}
-                <div className="pt-2 border-t border-stone-200 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                    <span className="flex items-center gap-1">
-                      <ImageIcon className="w-3.5 h-3.5 text-teal-600" />
-                      <span>Optional Cover Image:</span>
-                    </span>
-                    <span className="text-[11px] font-normal text-slate-400">
-                      (Can upload now or later)
-                    </span>
+            {validationResult?.valid ? (
+              validationResult.isBulk ? (
+                /* Bulk Array Preview */
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 text-xs font-black">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Bulk Import: {validationResult.readings.length} Separate Reading Records</span>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    {createCoverPreview ? (
-                      <div className="relative w-20 h-14 rounded-xl overflow-hidden border border-stone-300 shrink-0">
-                        <img src={createCoverPreview} alt="Preview" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCreateCoverBlob(null);
-                            setCreateCoverPreview(null);
-                          }}
-                          className="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="w-20 h-14 rounded-xl border-2 border-dashed border-stone-300 flex items-center justify-center text-slate-400 shrink-0">
-                        <ImageIcon className="w-5 h-5 opacity-50" />
-                      </div>
-                    )}
+                  <div className="p-3 bg-white border border-stone-200 rounded-xl space-y-2 max-h-48 overflow-y-auto">
+                    <div className="text-xs font-black text-slate-800 flex items-center justify-between">
+                      <span>Ready to import {validationResult.readings.length} articles:</span>
+                      <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded">Individual Records</span>
+                    </div>
+                    <div className="space-y-1.5 divide-y divide-stone-100">
+                      {validationResult.readings.slice(0, 6).map((r, idx) => (
+                        <div key={idx} className="text-[11px] text-slate-600 flex items-center justify-between pt-1">
+                          <span className="font-semibold truncate max-w-[210px]">{idx + 1}. {r.title}</span>
+                          <span className="px-1.5 py-0.5 bg-stone-100 rounded text-[10px] text-slate-700 font-bold shrink-0">{r.category} • {r.level}</span>
+                        </div>
+                      ))}
+                      {validationResult.readings.length > 6 && (
+                        <div className="text-[11px] text-slate-400 font-semibold italic text-center pt-1.5">
+                          ...and {validationResult.readings.length - 6} more articles
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                    <div className="flex-1">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={handleCreateCoverSelected}
-                        className="text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer"
-                      />
+                  <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl text-[11px] text-slate-600 space-y-1">
+                    <div className="font-bold text-slate-800 flex items-center gap-1">
+                      <span>☁️ Cloudflare R2 Content Architecture</span>
+                    </div>
+                    <div>
+                      Every reading receives its own unique ID and R2 content object (<code>readings/&#123;id&#125;/content.json</code>). You can upload cover images individually to any article below at any time.
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : validationResult.reading ? (
+                /* Single Reading Preview */
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Single Reading Detected</span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h4 className="text-base font-black text-[#0f233a]">
+                      {validationResult.reading.title}
+                    </h4>
+                    {validationResult.reading.subtitle && (
+                      <p className="text-xs text-slate-600 font-semibold">
+                        {validationResult.reading.subtitle}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <span className="px-2 py-0.5 bg-white border border-stone-200 text-teal-800 text-[10px] font-black rounded-md">
+                        {validationResult.reading.category}
+                      </span>
+                      <span className="px-2 py-0.5 bg-white border border-stone-200 text-slate-700 text-[10px] font-bold rounded-md">
+                        Level {validationResult.reading.level}
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-semibold">
+                        {validationResult.reading.paragraphs?.length || 0} paragraphs • {validationResult.reading.vocabulary?.length || 0} vocabulary words
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Optional Cover Image Uploader Box */}
+                  <div className="pt-2 border-t border-stone-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                      <span className="flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Optional Cover Image:</span>
+                      </span>
+                      <span className="text-[11px] font-normal text-slate-400">
+                        (Can upload now or later)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {createCoverPreview ? (
+                        <div className="relative w-20 h-14 rounded-xl overflow-hidden border border-stone-300 shrink-0">
+                          <img src={createCoverPreview} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCreateCoverBlob(null);
+                              setCreateCoverPreview(null);
+                            }}
+                            className="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-20 h-14 rounded-xl border-2 border-dashed border-stone-300 flex items-center justify-center text-slate-400 shrink-0">
+                          <ImageIcon className="w-5 h-5 opacity-50" />
+                        </div>
+                      )}
+
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={handleCreateCoverSelected}
+                          className="text-xs text-slate-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2 text-slate-400">
                 <FileText className="w-8 h-8 opacity-40" />
                 <p className="text-xs font-semibold">
-                  Paste or upload JSON to see a live validation preview.
+                  Paste or upload single reading JSON or bulk array JSON to see a live validation preview.
                 </p>
                 {validationResult?.errors && validationResult.errors.length > 0 && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 text-left w-full space-y-1">
-                    <strong>Validation Issue:</strong>
-                    <div>{validationResult.errors[0]?.message}</div>
+                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 text-left w-full space-y-1 max-h-36 overflow-y-auto">
+                    <strong>Validation Issues ({validationResult.errors.length}):</strong>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      {validationResult.errors.slice(0, 3).map((err, errIdx) => (
+                        <li key={errIdx}>{err.message}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -633,7 +704,9 @@ export const AdminReadingsSection: React.FC = () => {
                 onClick={() => handleCreateReading(false)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all disabled:opacity-40 cursor-pointer"
               >
-                Save as Draft
+                {validationResult?.isBulk
+                  ? `Save ${validationResult.readings.length} as Draft`
+                  : 'Save as Draft'}
               </button>
 
               <button
@@ -645,12 +718,16 @@ export const AdminReadingsSection: React.FC = () => {
                 {importing ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Publishing…</span>
+                    <span>Importing to R2…</span>
                   </>
                 ) : (
                   <>
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>Publish Reading to Feed</span>
+                    <span>
+                      {validationResult?.isBulk
+                        ? `Import & Publish ${validationResult.readings.length} Readings`
+                        : 'Publish Reading to Feed'}
+                    </span>
                   </>
                 )}
               </button>

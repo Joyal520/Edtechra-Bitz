@@ -209,6 +209,39 @@ class ReadingService {
   }
 
   /**
+   * Admin API: Bulk imports an array of readings (creates individual records & individual R2 content objects)
+   */
+  async importBatchReadings(
+    readings: RawReadingInput[],
+    token?: string | null
+  ): Promise<{
+    success: boolean;
+    importedCount: number;
+    duplicateCount: number;
+    failedCount: number;
+    data: ReadingBit[];
+    errors: any[];
+  }> {
+    const headers = await this.getAuthHeaders(token);
+    if (!headers['Authorization']) {
+      throw new Error('Admin authorization required.');
+    }
+
+    const res = await fetch('/api/readings/import-batch', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ readings })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to import reading batch.');
+    }
+
+    return json;
+  }
+
+  /**
    * Admin API: Updates a reading
    */
   async updateReading(

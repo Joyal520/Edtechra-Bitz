@@ -319,8 +319,12 @@ export interface ReadingValidationErrorItem {
 
 export interface ReadingValidationResult {
   valid: boolean;
+  isBulk: boolean;
   reading: RawReadingInput | null;
+  readings: RawReadingInput[];
   errors: ReadingValidationErrorItem[];
+  totalCount?: number;
+  validCount?: number;
 }
 
 // ============================================================================

@@ -100,7 +100,9 @@ export function validateReadingJSON(jsonString: string): ReadingValidationResult
   if (!jsonString || !jsonString.trim()) {
     return {
       valid: false,
+      isBulk: false,
       reading: null,
+      readings: [],
       errors: [{ field: 'root', message: 'Input JSON cannot be empty.' }]
     };
   }
@@ -111,18 +113,63 @@ export function validateReadingJSON(jsonString: string): ReadingValidationResult
   } catch (err: any) {
     return {
       valid: false,
+      isBulk: false,
       reading: null,
+      readings: [],
       errors: [{ field: 'syntax', message: `Invalid JSON syntax: ${err.message}` }]
     };
   }
 
-  // Handle single object or array
-  const targetObj = Array.isArray(parsed) ? parsed[0] : parsed;
-  const result = validateSingleReading(targetObj, 0);
+  // Handle Array (Bulk Import)
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) {
+      return {
+        valid: false,
+        isBulk: true,
+        reading: null,
+        readings: [],
+        errors: [{ field: 'root', message: 'The JSON array is empty. Please provide at least one reading object.' }]
+      };
+    }
 
+    const validReadings: RawReadingInput[] = [];
+    const collectedErrors: ReadingValidationErrorItem[] = [];
+
+    parsed.forEach((item, index) => {
+      const res = validateSingleReading(item, index);
+      if (res.valid && res.reading) {
+        validReadings.push(res.reading);
+      } else {
+        const itemPrefix = item?.title ? `"${String(item.title).slice(0, 30)}..."` : `Item #${index + 1}`;
+        res.errors.forEach(e => {
+          collectedErrors.push({
+            field: `[${index + 1}].${e.field}`,
+            message: `${itemPrefix}: ${e.message}`
+          });
+        });
+      }
+    });
+
+    return {
+      valid: validReadings.length > 0,
+      isBulk: true,
+      reading: validReadings[0] || null,
+      readings: validReadings,
+      errors: collectedErrors,
+      totalCount: parsed.length,
+      validCount: validReadings.length
+    };
+  }
+
+  // Handle Single Object
+  const singleResult = validateSingleReading(parsed, 0);
   return {
-    valid: result.valid,
-    reading: result.reading,
-    errors: result.errors
+    valid: singleResult.valid,
+    isBulk: false,
+    reading: singleResult.reading,
+    readings: singleResult.reading ? [singleResult.reading] : [],
+    errors: singleResult.errors,
+    totalCount: 1,
+    validCount: singleResult.valid ? 1 : 0
   };
 }

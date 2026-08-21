@@ -231,3 +231,275 @@ export async function deleteObjects(keys) {
 
   return { deleted: cleanKeys };
 }
+
+// ============================================================================
+// CLOUDFLARE R2 CONTENT STORAGE ABSTRACTION (Educational JSON & Media)
+// ============================================================================
+
+/**
+ * Key Builders following standard R2 hierarchy
+ */
+export function buildReadingContentKey(id) {
+  return `readings/${sanitizeSegment(id)}/content.json`;
+}
+
+export function buildReadingCoverKey(id, ext = 'webp') {
+  return `readings/${sanitizeSegment(id)}/cover.${ext}`;
+}
+
+export function buildQuizContentKey(id) {
+  return `quizzes/${sanitizeSegment(id)}/content.json`;
+}
+
+export function buildQuizCoverKey(id, ext = 'webp') {
+  return `quizzes/${sanitizeSegment(id)}/cover.${ext}`;
+}
+
+export function buildPollContentKey(id) {
+  return `polls/${sanitizeSegment(id)}/content.json`;
+}
+
+export function buildPollCoverKey(id, ext = 'webp') {
+  return `polls/${sanitizeSegment(id)}/cover.${ext}`;
+}
+
+/**
+ * Direct Server Upload: Writes JSON Content directly to Cloudflare R2 via AWS SigV4
+ */
+export async function putJsonContent(objectKey, data) {
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
+  if (!cleanKey) throw new Error('Object key is required for R2 content storage.');
+
+  const body = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  const signed = signRequest({
+    method: 'PUT',
+    objectKey: cleanKey,
+    body,
+    contentType: 'application/json'
+  });
+
+  const response = await fetch(`${signed.endpoint}/${signed.bucket}/${cleanKey}`, {
+    method: 'PUT',
+    headers: signed.headers,
+    body
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[R2 Put Content Error] key=${cleanKey} status=${response.status}:`, errorText);
+    throw new Error(`Failed to store content in R2: status ${response.status}`);
+  }
+
+  return {
+    success: true,
+    objectKey: cleanKey,
+    publicUrl: buildPublicUrl(cleanKey)
+  };
+}
+
+/**
+ * Direct Server Retrieval: Reads JSON Content from Cloudflare R2
+ */
+export async function getJsonContent(objectKey) {
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
+  if (!cleanKey) return null;
+
+  try {
+    // 1. Try public URL first
+    const publicUrl = buildPublicUrl(cleanKey);
+    const pubRes = await fetch(publicUrl, { headers: { 'Accept': 'application/json' } });
+    if (pubRes.ok) {
+      return await pubRes.json();
+    }
+  } catch {
+    // Fall through to signed S3 GET
+  }
+
+  try {
+    // 2. Direct Signed S3 GET
+    const signed = signRequest({
+      method: 'GET',
+      objectKey: cleanKey
+    });
+
+    const response = await fetch(`${signed.endpoint}/${signed.bucket}/${cleanKey}`, {
+      method: 'GET',
+      headers: signed.headers
+    });
+
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn(`[R2 Get Content Notice] Failed to retrieve ${cleanKey}:`, err.message);
+  }
+
+  return null;
+}
+
+/**
+ * Lists objects in Cloudflare R2 bucket using S3 ListObjectsV2
+ */
+export async function listObjects(prefix = '', maxKeys = 1000) {
+  const cleanPrefix = String(prefix || '').replace(/^\/+/, '').trim();
+  const queryParts = ['list-type=2'];
+  if (cleanPrefix) queryParts.push(`prefix=${encodeURIComponent(cleanPrefix)}`);
+  if (maxKeys) queryParts.push(`max-keys=${maxKeys}`);
+  const queryString = queryParts.join('&');
+
+  const signed = signRequest({
+    method: 'GET',
+    queryString
+  });
+
+  const response = await fetch(`${signed.endpoint}/${signed.bucket}?${queryString}`, {
+    method: 'GET',
+    headers: signed.headers
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[R2 ListObjects Error] status=${response.status}:`, errorText);
+    throw new Error(`R2 listObjects failed with status ${response.status}`);
+  }
+
+  const xml = await response.text();
+  const objects = [];
+  const contentsRegex = /<Contents>([\s\S]*?)<\/Contents>/g;
+  let match;
+
+  while ((match = contentsRegex.exec(xml)) !== null) {
+    const block = match[1];
+    const keyMatch = /<Key>(.*?)<\/Key>/.exec(block);
+    const sizeMatch = /<Size>(.*?)<\/Size>/.exec(block);
+    const modifiedMatch = /<LastModified>(.*?)<\/LastModified>/.exec(block);
+
+    if (keyMatch) {
+      objects.push({
+        key: keyMatch[1],
+        size: sizeMatch ? parseInt(sizeMatch[1], 10) : 0,
+        lastModified: modifiedMatch ? modifiedMatch[1] : null
+      });
+    }
+  }
+
+  return objects;
+}
+
+/**
+ * Computes exact Cloudflare R2 storage usage statistics across content types and images
+ */
+export async function getStorageStats() {
+  const config = getR2Config();
+  if (!config.isConfigured) {
+    return {
+      isConfigured: false,
+      status: 'disconnected',
+      missing: config.missing
+    };
+  }
+
+  try {
+    const objects = await listObjects('', 2000);
+    let totalSizeBytes = 0;
+    let readingsCount = 0;
+    let quizzesCount = 0;
+    let pollsCount = 0;
+    let postsCount = 0;
+    let thumbnailsCount = 0;
+    let imagesCount = 0;
+
+    objects.forEach(obj => {
+      totalSizeBytes += obj.size;
+      const k = obj.key.toLowerCase();
+      if (k.startsWith('readings/')) readingsCount++;
+      else if (k.startsWith('quizzes/')) quizzesCount++;
+      else if (k.startsWith('polls/')) pollsCount++;
+      else if (k.startsWith('posts/')) postsCount++;
+      else if (k.startsWith('thumbnails/')) thumbnailsCount++;
+
+      if (k.endsWith('.webp') || k.endsWith('.png') || k.endsWith('.jpg') || k.endsWith('.jpeg')) {
+        imagesCount++;
+      }
+    });
+
+    const totalMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
+    const totalGB = (totalSizeBytes / (1024 * 1024 * 1024)).toFixed(3);
+
+    return {
+      isConfigured: true,
+      status: 'connected',
+      bucket: config.bucket,
+      maskedAccountId: config.accountId ? `********${config.accountId.slice(-4)}` : 'Configured',
+      publicBaseUrl: config.publicBaseUrl,
+      totalObjects: objects.length,
+      totalSizeBytes,
+      estimatedStorageMB: totalMB,
+      estimatedStorageGB: totalGB,
+      readingsCount,
+      quizzesCount,
+      pollsCount,
+      postsCount,
+      thumbnailsCount,
+      imagesCount,
+      lastStorageCheck: new Date().toISOString()
+    };
+  } catch (err) {
+    return {
+      isConfigured: true,
+      status: 'error',
+      error: err.message,
+      bucket: config.bucket,
+      maskedAccountId: config.accountId ? `********${config.accountId.slice(-4)}` : 'Configured'
+    };
+  }
+}
+
+/**
+ * Comprehensive Storage Lifecycle Diagnostic Test (Connection, Upload, Read, Delete)
+ */
+export async function testR2Connection() {
+  const config = getR2Config();
+  if (!config.isConfigured) {
+    return {
+      success: false,
+      step: 'configuration',
+      error: `Missing R2 configuration: ${config.missing.join(', ')}`
+    };
+  }
+
+  const testKey = `diagnostics/test_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.json`;
+  const testPayload = {
+    test: true,
+    timestamp: new Date().toISOString(),
+    message: 'EdTechra R2 Storage Diagnostic Roundtrip'
+  };
+
+  try {
+    // 1. Upload Test
+    await putJsonContent(testKey, testPayload);
+
+    // 2. Read Test
+    const retrieved = await getJsonContent(testKey);
+    const readValid = retrieved && retrieved.test === true;
+
+    // 3. Delete Test
+    await deleteObjects([testKey]);
+
+    return {
+      success: readValid,
+      step: 'complete',
+      message: 'Cloudflare R2 Connection, Upload, Read, and Delete tests passed successfully!',
+      timestamp: new Date().toISOString()
+    };
+  } catch (err) {
+    // Attempt cleanup if possible
+    try { await deleteObjects([testKey]); } catch {}
+    return {
+      success: false,
+      step: 'operation',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}

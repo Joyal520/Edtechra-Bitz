@@ -23,7 +23,15 @@ import {
   buildPublicUrl,
   deleteObjects,
   validateImageUpload,
-  sanitizeSegment
+  sanitizeSegment,
+  putJsonContent,
+  getJsonContent,
+  listObjects,
+  getStorageStats,
+  testR2Connection,
+  buildReadingContentKey,
+  buildQuizContentKey,
+  buildPollContentKey
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
@@ -2700,12 +2708,119 @@ app.post('/api/readings/presign-upload', async (req, res) => {
   }
 });
 
-// 2. POST /api/readings - Create new One-Minute Reading (Admin only)
+// Helper: Process and save a batch of readings individually to R2 and Supabase
+async function processBatchReadings(rawList, authUserId) {
+  const now = new Date().toISOString();
+  const currentCache = loadReadingsCache();
+  const existingTitleSet = new Set(
+    currentCache.map(r => (r.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean)
+  );
+
+  const validReadings = [];
+  const errors = [];
+  const seenBatchTitles = new Set();
+  let duplicateCount = 0;
+
+  for (let index = 0; index < rawList.length; index++) {
+    const item = rawList[index];
+    const title = typeof item?.title === 'string' ? item.title.trim() : '';
+    if (!title) {
+      errors.push({ index: index + 1, error: 'Missing title' });
+      continue;
+    }
+
+    const normTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (seenBatchTitles.has(normTitle) || existingTitleSet.has(normTitle)) {
+      duplicateCount++;
+      continue;
+    }
+    seenBatchTitles.add(normTitle);
+
+    const paragraphsRaw = Array.isArray(item.paragraphs) ? item.paragraphs : [];
+    const paragraphs = paragraphsRaw.map((p, pIdx) => ({
+      id: typeof p?.id === 'number' ? p.id : pIdx + 1,
+      text: typeof p === 'string' ? p.trim() : (p?.text || '').trim()
+    })).filter(p => p.text.length > 0);
+
+    if (paragraphs.length === 0) {
+      errors.push({ index: index + 1, title, error: 'Missing or empty paragraphs' });
+      continue;
+    }
+
+    const readingId = crypto.randomUUID();
+    const r2ContentKey = buildReadingContentKey(readingId);
+    const readingContent = {
+      id: readingId,
+      title,
+      subtitle: item.subtitle ? String(item.subtitle).trim() : null,
+      category: item.category ? String(item.category).trim() : 'General',
+      level: item.level ? String(item.level).trim() : 'A2',
+      reading_time: Number(item.reading_time) > 0 ? Number(item.reading_time) : 1,
+      paragraphs,
+      vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary : [],
+      questions: Array.isArray(item.questions) ? item.questions : [],
+      cover_image_url: item.cover_image_url || null,
+      cover_image_object_key: item.cover_image_object_key || null,
+      is_published: item.is_published !== undefined ? Boolean(item.is_published) : true,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Store individual content object in Cloudflare R2
+    try {
+      await putJsonContent(r2ContentKey, readingContent);
+    } catch (r2Err) {
+      console.warn(`[R2 Reading Content Notice for ${readingId}]:`, r2Err.message);
+    }
+
+    validReadings.push({
+      ...readingContent,
+      r2_content_key: r2ContentKey,
+      created_by: authUserId
+    });
+  }
+
+  if (validReadings.length > 0) {
+    const updatedCache = [...validReadings, ...currentCache];
+    saveReadingsCache(updatedCache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('readings').insert(validReadings);
+      } catch (e) {
+        console.warn('[Supabase batch readings insert notice]:', e.message);
+      }
+    }
+  }
+
+  return {
+    validReadings,
+    duplicateCount,
+    errors
+  };
+}
+
+// 2. POST /api/readings - Create new One-Minute Reading (Supports Single or Bulk Array)
 app.post('/api/readings', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData || authData.profile?.role !== 'admin') {
       return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    // Seamlessly support bulk payload sent to POST /api/readings
+    if (Array.isArray(req.body) || Array.isArray(req.body?.readings)) {
+      const list = Array.isArray(req.body) ? req.body : req.body.readings;
+      const { validReadings, duplicateCount, errors } = await processBatchReadings(list, authData.user.id);
+      return res.json({
+        success: true,
+        message: `Successfully processed ${list.length} readings: ${validReadings.length} created, ${duplicateCount} duplicates skipped.`,
+        importedCount: validReadings.length,
+        duplicateCount,
+        failedCount: errors.length,
+        data: validReadings,
+        errors
+      });
     }
 
     const {
@@ -2741,8 +2856,10 @@ app.post('/api/readings', async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const newReading = {
-      id: crypto.randomUUID(),
+    const readingId = crypto.randomUUID();
+    const r2ContentKey = buildReadingContentKey(readingId);
+    const readingContent = {
+      id: readingId,
       title: title.trim(),
       subtitle: subtitle ? subtitle.trim() : null,
       category: category ? category.trim() : 'General',
@@ -2754,9 +2871,21 @@ app.post('/api/readings', async (req, res) => {
       cover_image_url: cover_image_url || null,
       cover_image_object_key: cover_image_object_key || null,
       is_published: Boolean(is_published),
-      created_by: authData.user.id,
       created_at: now,
       updated_at: now
+    };
+
+    // Upload individual content JSON to Cloudflare R2
+    try {
+      await putJsonContent(r2ContentKey, readingContent);
+    } catch (r2Err) {
+      console.warn(`[R2 Reading Content Notice for ${readingId}]:`, r2Err.message);
+    }
+
+    const newReading = {
+      ...readingContent,
+      r2_content_key: r2ContentKey,
+      created_by: authData.user.id
     };
 
     // Save to local cache
@@ -2785,7 +2914,7 @@ app.post('/api/readings', async (req, res) => {
   }
 });
 
-// 3. POST /api/readings/import-batch - Batch import readings from JSON (Admin only)
+// 3. POST /api/readings/import-batch - Batch import readings from JSON array (Admin only)
 app.post('/api/readings/import-batch', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -2794,54 +2923,15 @@ app.post('/api/readings/import-batch', async (req, res) => {
     }
 
     const { readings } = req.body;
-    const rawList = Array.isArray(readings) ? readings : (readings ? [readings] : []);
+    const rawList = Array.isArray(readings) ? readings : (Array.isArray(req.body) ? req.body : (readings ? [readings] : []));
 
     if (rawList.length === 0) {
       return res.status(400).json({ success: false, error: 'Valid array of readings is required.' });
     }
 
-    const now = new Date().toISOString();
-    const validReadings = [];
-    const errors = [];
+    const { validReadings, duplicateCount, errors } = await processBatchReadings(rawList, authData.user.id);
 
-    rawList.forEach((item, index) => {
-      const title = (item.title || '').trim();
-      if (!title) {
-        errors.push({ index: index + 1, error: 'Missing title' });
-        return;
-      }
-
-      const paragraphsRaw = Array.isArray(item.paragraphs) ? item.paragraphs : [];
-      const paragraphs = paragraphsRaw.map((p, pIdx) => ({
-        id: typeof p?.id === 'number' ? p.id : pIdx + 1,
-        text: typeof p === 'string' ? p.trim() : (p?.text || '').trim()
-      })).filter(p => p.text.length > 0);
-
-      if (paragraphs.length === 0) {
-        errors.push({ index: index + 1, error: 'Missing or empty paragraphs' });
-        return;
-      }
-
-      validReadings.push({
-        id: crypto.randomUUID(),
-        title,
-        subtitle: item.subtitle ? String(item.subtitle).trim() : null,
-        category: item.category ? String(item.category).trim() : 'General',
-        level: item.level ? String(item.level).trim() : 'A2',
-        reading_time: Number(item.reading_time) > 0 ? Number(item.reading_time) : 1,
-        paragraphs,
-        vocabulary: Array.isArray(item.vocabulary) ? item.vocabulary : [],
-        questions: Array.isArray(item.questions) ? item.questions : [],
-        cover_image_url: item.cover_image_url || null,
-        cover_image_object_key: item.cover_image_object_key || null,
-        is_published: item.is_published !== undefined ? Boolean(item.is_published) : true,
-        created_by: authData.user.id,
-        created_at: now,
-        updated_at: now
-      });
-    });
-
-    if (validReadings.length === 0) {
+    if (validReadings.length === 0 && duplicateCount === 0) {
       return res.status(400).json({
         success: false,
         error: 'No valid readings found in payload.',
@@ -2849,24 +2939,11 @@ app.post('/api/readings/import-batch', async (req, res) => {
       });
     }
 
-    // Save to cache
-    const currentCache = loadReadingsCache();
-    const updatedCache = [...validReadings, ...currentCache];
-    saveReadingsCache(updatedCache);
-
-    // Save to Supabase
-    if (serverSupabase) {
-      try {
-        await serverSupabase.from('readings').insert(validReadings);
-      } catch (e) {
-        console.warn('[Supabase batch readings insert notice]:', e.message);
-      }
-    }
-
     res.json({
       success: true,
-      message: `Successfully imported ${validReadings.length} reading${validReadings.length === 1 ? '' : 's'}.`,
+      message: `Successfully processed ${rawList.length} readings: ${validReadings.length} created, ${duplicateCount} duplicates skipped.`,
       importedCount: validReadings.length,
+      duplicateCount,
       failedCount: errors.length,
       data: validReadings,
       errors
@@ -4000,6 +4077,175 @@ app.delete('/api/polls/:id', async (req, res) => {
   } catch (error) {
     console.error('Error in DELETE /api/polls/:id:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to delete poll.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: ADMIN STORAGE & CLOUDFLARE R2 CONTROL PANEL
+// ============================================================================
+
+// 1. GET /api/admin/storage/status - Get R2 connection & storage statistics
+app.get('/api/admin/storage/status', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const stats = await getStorageStats();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('Error in GET /api/admin/storage/status:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve storage status.' });
+  }
+});
+
+// 2. POST /api/admin/storage/test-connection - Run connection and lifecycle diagnostic test
+app.post('/api/admin/storage/test-connection', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const result = await testR2Connection();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error in POST /api/admin/storage/test-connection:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to test R2 connection.' });
+  }
+});
+
+// 3. POST /api/admin/storage/migrate-legacy - Migrate existing database/cache content to R2 (Idempotent & Resumable)
+app.post('/api/admin/storage/migrate-legacy', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    let migratedReadings = 0;
+    let migratedQuizzes = 0;
+    let migratedPolls = 0;
+    const errors = [];
+
+    // 1. Migrate Readings
+    const readingsCache = loadReadingsCache();
+    for (const reading of readingsCache) {
+      if (!reading.r2_content_key) {
+        try {
+          const r2Key = buildReadingContentKey(reading.id);
+          const readingContent = {
+            id: reading.id,
+            title: reading.title,
+            subtitle: reading.subtitle,
+            category: reading.category,
+            level: reading.level,
+            reading_time: reading.reading_time,
+            paragraphs: reading.paragraphs,
+            vocabulary: reading.vocabulary,
+            questions: reading.questions,
+            cover_image_url: reading.cover_image_url,
+            cover_image_object_key: reading.cover_image_object_key,
+            is_published: reading.is_published,
+            created_at: reading.created_at,
+            updated_at: reading.updated_at
+          };
+
+          await putJsonContent(r2Key, readingContent);
+          reading.r2_content_key = r2Key;
+          migratedReadings++;
+
+          if (serverSupabase) {
+            await serverSupabase.from('readings').update({ r2_content_key: r2Key }).eq('id', reading.id);
+          }
+        } catch (e) {
+          errors.push({ type: 'reading', id: reading.id, error: e.message });
+        }
+      }
+    }
+    saveReadingsCache(readingsCache);
+
+    // 2. Migrate Quizzes
+    const quizCache = loadQuizCache();
+    for (const quiz of quizCache) {
+      if (!quiz.r2_content_key) {
+        try {
+          const r2Key = buildQuizContentKey(quiz.id);
+          const quizContent = {
+            id: quiz.id,
+            question: quiz.question,
+            options: quiz.options,
+            correct_answer: quiz.correct_answer,
+            explanation: quiz.explanation,
+            category: quiz.category,
+            difficulty: quiz.difficulty,
+            xp: quiz.xp,
+            is_published: quiz.is_published,
+            created_at: quiz.created_at,
+            updated_at: quiz.updated_at
+          };
+
+          await putJsonContent(r2Key, quizContent);
+          quiz.r2_content_key = r2Key;
+          migratedQuizzes++;
+
+          if (serverSupabase) {
+            await serverSupabase.from('quiz_bits').update({ r2_content_key: r2Key }).eq('id', quiz.id);
+          }
+        } catch (e) {
+          errors.push({ type: 'quiz', id: quiz.id, error: e.message });
+        }
+      }
+    }
+    saveQuizCache(quizCache);
+
+    // 3. Migrate Polls
+    const pollsCache = loadPollsCache();
+    for (const poll of pollsCache) {
+      if (!poll.r2_content_key) {
+        try {
+          const r2Key = buildPollContentKey(poll.id);
+          const pollContent = {
+            id: poll.id,
+            question: poll.question,
+            options: poll.options,
+            category: poll.category,
+            allow_multiple: poll.allow_multiple,
+            show_results_after_vote: poll.show_results_after_vote,
+            is_published: poll.is_published,
+            prompt: poll.prompt,
+            created_at: poll.created_at,
+            updated_at: poll.updated_at
+          };
+
+          await putJsonContent(r2Key, pollContent);
+          poll.r2_content_key = r2Key;
+          migratedPolls++;
+
+          if (serverSupabase) {
+            await serverSupabase.from('polls').update({ r2_content_key: r2Key }).eq('id', poll.id);
+          }
+        } catch (e) {
+          errors.push({ type: 'poll', id: poll.id, error: e.message });
+        }
+      }
+    }
+    savePollsCache(pollsCache);
+
+    res.json({
+      success: true,
+      message: `Migration completed: ${migratedReadings} readings, ${migratedQuizzes} quizzes, ${migratedPolls} polls stored in Cloudflare R2.`,
+      data: {
+        migratedReadings,
+        migratedQuizzes,
+        migratedPolls,
+        errors
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/storage/migrate-legacy:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to execute legacy migration.' });
   }
 });
 

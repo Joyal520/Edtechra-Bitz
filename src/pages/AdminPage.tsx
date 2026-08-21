@@ -30,6 +30,7 @@ import { AdminQuizSection } from '@/components/AdminQuizSection';
 import { AdminShortsSection } from '@/components/AdminShortsSection';
 import { AdminReadingsSection } from '@/components/AdminReadingsSection';
 import { AdminPollsSection } from '@/components/AdminPollsSection';
+import { AdminStorageSection } from '@/components/AdminStorageSection';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -42,7 +43,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -344,6 +345,23 @@ export const AdminPage: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setAdminTab('storage')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'storage'
+              ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>☁️</span>
+          <span>Cloudflare R2 Storage</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'storage' ? 'bg-amber-300 text-slate-900' : 'bg-orange-100 text-orange-800'
+          }`}>
+            R2
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('all')}
           className={`px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer sm:ml-auto ${
             adminTab === 'all'
@@ -385,6 +403,11 @@ export const AdminPage: React.FC = () => {
       {/* 4. AI-Prompt Polls Management */}
       {(adminTab === 'all' || adminTab === 'polls') && (
         <AdminPollsSection />
+      )}
+
+      {/* 5. Cloudflare R2 Content & Media Storage Panel */}
+      {(adminTab === 'all' || adminTab === 'storage') && (
+        <AdminStorageSection />
       )}
 
       {/* 2. YouTube Synchronization & Channel Pipeline Section (Requirement 17) */}
