@@ -60,6 +60,10 @@ export const AdminShortsSection: React.FC = () => {
   const extractedVideoId = extractYouTubeVideoId(formUrl);
   const previewThumbnailUrl = extractedVideoId ? getYouTubeThumbnailUrl(extractedVideoId, 'hq') : '';
 
+  // Import existing shorts state
+  const [importingExisting, setImportingExisting] = useState<boolean>(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+
   // Load shorts and quizzes for linking
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -182,6 +186,26 @@ export const AdminShortsSection: React.FC = () => {
     }
   };
 
+  // Import all 205 existing channel shorts
+  const handleImportExistingShorts = async () => {
+    if (!window.confirm('Discover and import existing YouTube Shorts (approx. 205 items) into the automatic feed library?')) {
+      return;
+    }
+
+    setImportingExisting(true);
+    setImportMessage(null);
+    try {
+      const token = session?.access_token || null;
+      const res = await youtubeShortsService.importExistingShorts(token);
+      setImportMessage(res.message || `Processed ${res.found} shorts: ${res.imported} imported, ${res.duplicates} existing.`);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to import existing shorts.');
+    } finally {
+      setImportingExisting(false);
+    }
+  };
+
   // Delete Short
   const handleDeleteShort = async (id: string, title: string) => {
     if (!window.confirm(`Are you sure you want to delete the YouTube Short "${title}"?`)) {
@@ -215,15 +239,44 @@ export const AdminShortsSection: React.FC = () => {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenCreateModal}
-            className="px-5 py-3 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4 stroke-[3] text-red-600" />
-            <span>+ Add YouTube Short</span>
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={handleImportExistingShorts}
+              disabled={importingExisting}
+              className="px-4 py-3 bg-white/15 hover:bg-white/25 border border-white/20 text-white rounded-2xl font-black text-xs sm:text-sm shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Scan and import all 205 channel shorts into the feed library"
+            >
+              <RefreshCw className={`w-4 h-4 ${importingExisting ? 'animate-spin' : ''}`} />
+              <span>{importingExisting ? 'Importing…' : 'Import Existing Shorts'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              className="px-5 py-3 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4 stroke-[3] text-red-600" />
+              <span>+ Add YouTube Short</span>
+            </button>
+          </div>
         </div>
+
+        {/* Import Notification message if present */}
+        {importMessage && (
+          <div className="relative z-10 mt-4 p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-300/40 text-emerald-100 text-xs font-bold flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span>{importMessage}</span>
+            </div>
+            <button
+              onClick={() => setImportMessage(null)}
+              className="text-emerald-200 hover:text-white text-xs font-black cursor-pointer ml-3"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. KPI Metrics Cards */}

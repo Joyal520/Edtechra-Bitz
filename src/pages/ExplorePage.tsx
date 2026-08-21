@@ -70,10 +70,10 @@ export const ExplorePage: React.FC = () => {
   }) || allLevels[0];
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
+    <div className={`w-full max-w-6xl mx-auto py-3 sm:py-8 space-y-4 sm:space-y-8 ${viewTab === 'feed' ? 'px-0 sm:px-6' : 'px-4 sm:px-6'}`}>
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${viewTab === 'feed' ? 'px-4 sm:px-0' : ''}`}>
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 text-xs font-bold mb-1 border border-brand-200">
             <Sparkles className="w-3.5 h-3.5 text-brand-600" />
@@ -89,7 +89,7 @@ export const ExplorePage: React.FC = () => {
       </div>
 
       {/* Primary Navigation Mode Tabs (Levels 1-20 Roadmap vs Post Feed) */}
-      <div className="flex items-center gap-3 border-b border-slate-200/80 pb-2">
+      <div className={`flex items-center gap-3 border-b border-slate-200/80 pb-2 ${viewTab === 'feed' ? 'px-4 sm:px-0' : ''}`}>
         <button
           onClick={() => {
             setViewTab('levels');

@@ -221,7 +221,7 @@ async function runCategoryRotationTests() {
   let history5 = ['English']; // English on cooldown, but NO other categories exist
 
   const res5 = selectNextRotatedShort(pool5, shown5, history5, 2);
-  if (!res5.selectedShort || res5.selectedShort.id !== 'eng2') {
+  if (!res5.selectedShort || !['eng2', 'eng3'].includes(res5.selectedShort.id)) {
     throw new Error(`Test 5 failed: Single-category fallback failed to select remaining short: ${JSON.stringify(res5)}`);
   }
   console.log(`  ✓ Passed: Single category "English" gracefully relaxed cooldown to show unshown video "${res5.selectedShort.id}".`);

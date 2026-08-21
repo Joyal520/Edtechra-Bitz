@@ -138,12 +138,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
   const authorInitials = authorName.slice(0, 2).toUpperCase();
 
   return (
-    <article className="w-full bg-white border border-stone-200/80 rounded-3xl overflow-hidden shadow-xs hover:shadow-md transition-all">
+    <article className="w-full bg-white border-y sm:border border-stone-200/80 rounded-none sm:rounded-3xl overflow-hidden shadow-none sm:shadow-xs hover:shadow-md transition-all">
       
       {/* 1. Header: Avatar, Name, Timestamp, Options Menu */}
-      <div className="p-4 sm:p-5 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs overflow-hidden shrink-0">
+      <div className="p-3.5 sm:p-5 pb-2 sm:pb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs overflow-hidden shrink-0">
             {authorAvatar ? (
               <img
                 src={authorAvatar}
@@ -159,7 +159,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
 
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-black text-xs sm:text-sm text-[#0f233a] leading-tight">
+              <span className="font-bold text-xs sm:text-sm text-[#0f233a] leading-tight">
                 {authorName}
               </span>
               {authorRole === 'admin' && (
@@ -168,7 +168,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
                 </span>
               )}
             </div>
-            <span className="text-[11px] font-semibold text-slate-400">
+            <span className="text-[10px] sm:text-[11px] font-medium text-slate-400">
               {formatRelativeTime(post.created_at)}
             </span>
           </div>
@@ -179,7 +179,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
               aria-label="Post Options"
             >
               <MoreHorizontal className="w-4 h-4" />
@@ -202,17 +202,17 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
       </div>
 
       {/* 2. Caption Text */}
-      <div className="px-4 sm:px-5 pb-3">
-        <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">
+      <div className="px-3.5 sm:px-5 pb-2.5 sm:pb-3">
+        <p className="text-xs sm:text-sm font-normal text-slate-800 leading-relaxed whitespace-pre-wrap">
           {post.caption}
         </p>
       </div>
 
-      {/* 3. STRICT 1:1 SQUARE MEDIA CONTAINER */}
-      <div className="px-3 sm:px-4 pb-3">
+      {/* 3. FULL-BLEED EDGE-TO-EDGE 1:1 SQUARE MEDIA CONTAINER ON MOBILE */}
+      <div className="w-full sm:px-4 sm:pb-3">
         <div
           onClick={() => setImageModalOpen(true)}
-          className="relative w-full aspect-square bg-slate-900 rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-2xs"
+          className="relative w-full aspect-square bg-slate-900 rounded-none sm:rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-2xs"
         >
           <img
             src={post.image_url}
@@ -231,13 +231,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
       </div>
 
       {/* 4. Action Bar: Like, Comment, Share, Save */}
-      <div className="px-4 sm:px-5 py-3 border-t border-slate-100 flex items-center justify-between text-slate-600">
+      <div className="px-3.5 sm:px-5 py-2 sm:py-3 border-t border-slate-100 flex items-center justify-between text-slate-600">
         <div className="flex items-center gap-1 sm:gap-2">
           
           {/* Like Button */}
           <button
             onClick={handleLike}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+            className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               isLiked
                 ? 'bg-rose-50 text-rose-600'
                 : 'hover:bg-slate-100 text-slate-600'
@@ -250,7 +250,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
           {/* Comment Button */}
           <button
             onClick={() => setCommentOpen(!commentOpen)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+            className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
           >
             <MessageCircle className="w-4 h-4" />
             <span>Comment</span>
@@ -259,7 +259,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
           {/* Share Button */}
           <button
             onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer relative"
+            className="min-h-[44px] flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer relative"
           >
             {copiedToast ? (
               <Check className="w-4 h-4 text-emerald-600" />
@@ -268,20 +268,19 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
             )}
             <span>{copiedToast ? 'Copied!' : 'Share'}</span>
           </button>
-
         </div>
 
         {/* Save / Bookmark Button */}
         <button
           onClick={handleSave}
-          className={`p-2 rounded-full transition-colors cursor-pointer ${
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer ${
             isSaved
-              ? 'text-[#026fc3] bg-brand-50'
+              ? 'bg-amber-50 text-amber-600'
               : 'hover:bg-slate-100 text-slate-400 hover:text-slate-700'
           }`}
-          title={isSaved ? 'Saved' : 'Save post'}
+          title={isSaved ? 'Saved' : 'Save Post'}
         >
-          <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-[#026fc3]' : ''}`} />
+          <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-amber-500 stroke-amber-500' : ''}`} />
         </button>
       </div>
 

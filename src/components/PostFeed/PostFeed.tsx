@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus,
   Image as ImageIcon,
@@ -7,7 +7,8 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
-  Zap
+  Zap,
+  ArrowUp
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
 import { QuizBit, QuizAttemptResult, YouTubeShort } from '@/types';
@@ -52,6 +53,11 @@ export const PostFeed: React.FC = () => {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
+  const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
+
+  // Sentinel ref for production-grade infinite scroll prefetching
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const isFetchingRef = useRef<boolean>(false);
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -63,6 +69,15 @@ export const PostFeed: React.FC = () => {
     profile?.avatarUrl;
 
   const initials = (displayName || 'S').slice(0, 2).toUpperCase();
+
+  // Track window scroll position for floating Back to Top button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 600);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Load feed quizzes and shorts pool
   const loadMediaPool = useCallback(async () => {
@@ -81,6 +96,9 @@ export const PostFeed: React.FC = () => {
 
   const fetchPosts = useCallback(
     async (targetPage = 1, append = false) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
       if (targetPage === 1) setLoading(true);
       else setLoadingMore(true);
 
@@ -92,7 +110,11 @@ export const PostFeed: React.FC = () => {
         ]);
 
         if (append) {
-          setPosts((prev) => [...prev, ...postsData.posts]);
+          setPosts((prev) => {
+            const seen = new Set(prev.map((p) => p.id));
+            const freshPosts = postsData.posts.filter((p) => !seen.has(p.id));
+            return [...prev, ...freshPosts];
+          });
         } else {
           setPosts(postsData.posts);
         }
@@ -104,6 +126,7 @@ export const PostFeed: React.FC = () => {
       } finally {
         setLoading(false);
         setLoadingMore(false);
+        isFetchingRef.current = false;
       }
     },
     [session, sortBy, loadMediaPool]
@@ -112,6 +135,31 @@ export const PostFeed: React.FC = () => {
   useEffect(() => {
     fetchPosts(1, false);
   }, [fetchPosts]);
+
+  // Production-grade IntersectionObserver for infinite scrolling with prefetch margin
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loading && !loadingMore && !isFetchingRef.current) {
+          fetchPosts(page + 1, true);
+        }
+      },
+      {
+        root: null,
+        rootMargin: '400px', // Prefetch next batch 400px before reaching the end!
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, loading, loadingMore, page, fetchPosts]);
 
   const handleOpenComposer = () => {
     requireAuth({ type: 'action', action: 'create_post' }, () => {
@@ -203,12 +251,12 @@ export const PostFeed: React.FC = () => {
   }, [posts, quizzes, shorts]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-6">
+    <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
       
       {/* 1. Quick "Create Post" Composer Bar */}
-      <div className="bg-white border border-stone-200/80 rounded-3xl p-4 sm:p-5 shadow-xs flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs overflow-hidden shrink-0">
+      <div className="mx-3 sm:mx-0 bg-white border border-stone-200/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs flex flex-col gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs overflow-hidden shrink-0">
             {avatarUrl ? (
               <img src={avatarUrl} alt={displayName} className="w-full h-full rounded-full object-cover bg-amber-100" />
             ) : (
@@ -220,7 +268,7 @@ export const PostFeed: React.FC = () => {
 
           <button
             onClick={handleOpenComposer}
-            className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 text-xs sm:text-sm font-semibold rounded-2xl text-left transition-colors cursor-pointer"
+            className="flex-1 py-2 px-3 sm:py-2.5 sm:px-4 bg-slate-100 hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 text-xs sm:text-sm font-semibold rounded-2xl text-left transition-colors cursor-pointer min-h-[40px]"
           >
             What's on your mind? Share your knowledge…
           </button>
@@ -229,7 +277,7 @@ export const PostFeed: React.FC = () => {
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
           <button
             onClick={handleOpenComposer}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-brand-50 text-[#026fc3] text-xs font-bold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-brand-50 text-[#026fc3] text-xs font-bold transition-colors cursor-pointer min-h-[36px]"
           >
             <ImageIcon className="w-4 h-4 text-[#026fc3]" />
             <span>Add Square Photo</span>
@@ -237,7 +285,7 @@ export const PostFeed: React.FC = () => {
 
           <button
             onClick={handleOpenComposer}
-            className="px-4 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer min-h-[36px]"
           >
             <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>Create Post</span>
@@ -246,11 +294,11 @@ export const PostFeed: React.FC = () => {
       </div>
 
       {/* 2. Feed Controls & Filter Header */}
-      <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-semibold">
-        <div className="flex items-center gap-2">
-          <span className="font-extrabold text-slate-800 text-sm">Community Feed</span>
+      <div className="flex items-center justify-between px-3 sm:px-1 text-xs text-slate-500 font-semibold">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="font-extrabold text-slate-800 text-xs sm:text-sm">Community Feed</span>
           <span className="text-slate-300">•</span>
-          <span>{posts.length} {posts.length === 1 ? 'post' : 'posts'}</span>
+          <span className="text-[11px] sm:text-xs">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</span>
           {quizzes.length > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200">
               <Zap className="w-3 h-3 text-teal-600" />
@@ -259,27 +307,27 @@ export const PostFeed: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {profile?.role === 'admin' && (
             <button
               onClick={() => setAdminModalOpen(true)}
-              className="px-3 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
               title="Open AI Moderation Queue"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span>Admin Queue</span>
+              <span className="hidden sm:inline">Admin Queue</span>
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1">
+          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-2 py-1">
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'newest' | 'popular')}
               className="bg-transparent text-slate-700 text-xs font-bold focus:outline-none cursor-pointer"
             >
-              <option value="newest">Newest First</option>
-              <option value="popular">Most Liked</option>
+              <option value="newest">Newest</option>
+              <option value="popular">Popular</option>
             </select>
           </div>
 
@@ -294,11 +342,11 @@ export const PostFeed: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Feed List (Interleaved Posts and Quiz Bits) */}
+      {/* 3. Feed List (Interleaved Posts, Quiz Bits, and Category-Rotated YouTube Shorts) */}
       {loading ? (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {[1, 2, 3].map((n) => (
-            <div key={n} className="bg-white rounded-3xl border border-slate-200 p-5 space-y-4 animate-pulse">
+            <div key={n} className="bg-white rounded-none sm:rounded-3xl border-y sm:border border-slate-200 p-4 sm:p-5 space-y-4 animate-pulse">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-slate-200"></div>
                 <div className="space-y-1.5 flex-1">
@@ -307,12 +355,12 @@ export const PostFeed: React.FC = () => {
                 </div>
               </div>
               <div className="h-3 bg-slate-100 rounded w-3/4"></div>
-              <div className="w-full aspect-square bg-slate-200 rounded-2xl"></div>
+              <div className="w-full aspect-square bg-slate-200 rounded-none sm:rounded-2xl"></div>
             </div>
           ))}
         </div>
       ) : feedItems.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-3xl p-12 text-center space-y-4">
+        <div className="mx-3 sm:mx-0 bg-white border border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-brand-50 text-[#026fc3] flex items-center justify-center mx-auto shadow-xs">
             <BookOpen className="w-7 h-7" />
           </div>
@@ -324,22 +372,23 @@ export const PostFeed: React.FC = () => {
           </div>
           <button
             onClick={handleOpenComposer}
-            className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-2xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-2xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer min-h-[44px]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Create First Post</span>
           </button>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-6">
           {feedItems.map((item) => {
             if (item.type === 'quiz') {
               return (
-                <QuizBitCard
-                  key={item.key}
-                  quiz={item.quiz}
-                  onAttemptCompleted={handleQuizAttemptCompleted}
-                />
+                <div key={item.key} className="px-3 sm:px-0">
+                  <QuizBitCard
+                    quiz={item.quiz}
+                    onAttemptCompleted={handleQuizAttemptCompleted}
+                  />
+                </div>
               );
             }
 
@@ -361,26 +410,37 @@ export const PostFeed: React.FC = () => {
             );
           })}
 
-          {/* Load More Button */}
-          {hasMore && (
-            <div className="pt-2 text-center">
-              <button
-                onClick={() => fetchPosts(page + 1, true)}
-                disabled={loadingMore}
-                className="px-6 py-2.5 bg-white border border-slate-200 hover:border-brand-400 hover:bg-brand-50/50 text-slate-700 text-xs font-bold rounded-2xl shadow-xs transition-all flex items-center gap-2 mx-auto cursor-pointer disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#026fc3]" />
-                    <span>Loading more posts…</span>
-                  </>
-                ) : (
-                  <span>Load More Posts</span>
-                )}
-              </button>
+          {/* Minimal Loading Indicator when fetching next page */}
+          {loadingMore && (
+            <div className="py-4 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold animate-in fade-in">
+              <Loader2 className="w-5 h-5 animate-spin text-[#026fc3]" />
+              <span>Loading more educational bits…</span>
             </div>
           )}
+
+          {/* End of Feed Caught-up Indicator */}
+          {!hasMore && posts.length > 0 && (
+            <div className="py-6 text-center text-xs text-slate-400 font-bold flex items-center justify-center gap-1.5">
+              <span>✨ You're all caught up with the community feed!</span>
+            </div>
+          )}
+
+          {/* Prefetch Sentinel (Invisible trigger placed 400px before bottom) */}
+          <div ref={sentinelRef} className="h-6 w-full pointer-events-none" aria-hidden="true" />
         </div>
+      )}
+
+      {/* Floating "Back to Top" Button after significant scrolling */}
+      {showBackToTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-40 p-3 bg-white/95 hover:bg-white text-slate-700 hover:text-[#026fc3] border border-stone-200/90 rounded-full shadow-lg backdrop-blur-md transition-all duration-200 active:scale-95 flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+          aria-label="Back to top"
+          title="Scroll to top"
+        >
+          <ArrowUp className="w-4 h-4 text-[#026fc3]" />
+          <span className="hidden sm:inline font-bold">Top</span>
+        </button>
       )}
 
       {/* Post Composer Modal */}

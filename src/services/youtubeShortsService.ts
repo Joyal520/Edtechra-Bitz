@@ -204,6 +204,36 @@ class YouTubeShortsService {
 
     return json.data as YouTubeShort;
   }
+
+  /**
+   * Admin API: Imports and auto-categorizes existing channel shorts into the feed library
+   */
+  async importExistingShorts(token?: string | null): Promise<{
+    success: boolean;
+    message: string;
+    found: number;
+    imported: number;
+    duplicates: number;
+    categorized: number;
+    failed: number;
+  }> {
+    const headers = await this.getAuthHeaders(token);
+    if (!headers['Authorization']) {
+      throw new Error('Admin authorization required.');
+    }
+
+    const res = await fetch('/api/youtube/shorts/import-existing', {
+      method: 'POST',
+      headers
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to import existing shorts.');
+    }
+
+    return json;
+  }
 }
 
 export const youtubeShortsService = new YouTubeShortsService();

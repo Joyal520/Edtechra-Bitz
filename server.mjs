@@ -2460,6 +2460,112 @@ app.get('/api/youtube/shorts/feed', async (req, res) => {
   }
 });
 
+// 7. POST /api/youtube/shorts/import-existing - Discover and import existing 205 channel shorts into youtube_shorts
+app.post('/api/youtube/shorts/import-existing', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    // 1. Discover existing shorts from youtube_cache.json or Supabase youtube_videos
+    let rawShorts = [];
+    const ytCacheFile = path.resolve(__dirname, 'server/data/youtube_cache.json');
+    if (fs.existsSync(ytCacheFile)) {
+      rawShorts = JSON.parse(fs.readFileSync(ytCacheFile, 'utf-8'));
+    }
+
+    if (serverSupabase && rawShorts.length === 0) {
+      try {
+        const { data: dbVideos } = await serverSupabase.from('youtube_videos').select('*');
+        if (dbVideos) rawShorts = dbVideos;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    if (rawShorts.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No existing shorts found to import.',
+        found: 0,
+        imported: 0,
+        duplicates: 0,
+        categorized: 0,
+        failed: 0
+      });
+    }
+
+    const currentShortsCache = loadShortsCache();
+    const existingVideoIdSet = new Set(currentShortsCache.map(s => s.youtube_video_id));
+
+    let importedCount = 0;
+    let duplicateCount = 0;
+    const newRecords = [];
+
+    for (const raw of rawShorts) {
+      const videoId = raw.youtube_video_id || raw.id;
+      if (!videoId) continue;
+
+      if (existingVideoIdSet.has(videoId)) {
+        duplicateCount++;
+        continue;
+      }
+
+      // Auto-categorize
+      const category = raw.category || 'General';
+      const duration = Number(raw.duration_seconds) > 0 ? Number(raw.duration_seconds) : 30;
+      const record = {
+        id: crypto.randomUUID(),
+        youtube_video_id: videoId,
+        youtube_url: raw.youtube_url || `https://www.youtube.com/shorts/${videoId}`,
+        title: raw.title || 'Educational Short',
+        description: raw.description || null,
+        thumbnail_url: raw.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        category,
+        duration,
+        duration_formatted: `${duration}s`,
+        is_published: true, // Existing shorts are made published and ready for feed
+        sort_order: 0,
+        linked_quiz_id: null,
+        created_by: authData.user.id,
+        created_at: raw.published_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      existingVideoIdSet.add(videoId);
+      newRecords.push(record);
+      importedCount++;
+    }
+
+    if (newRecords.length > 0) {
+      const updatedCache = [...currentShortsCache, ...newRecords];
+      saveShortsCache(updatedCache);
+
+      if (serverSupabase) {
+        try {
+          await serverSupabase.from('youtube_shorts').upsert(newRecords, { onConflict: 'youtube_video_id' });
+        } catch (sbErr) {
+          console.warn('[Supabase import existing shorts notice]:', sbErr.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully processed existing shorts: ${importedCount} imported, ${duplicateCount} already existed.`,
+      found: rawShorts.length,
+      imported: importedCount,
+      duplicates: duplicateCount,
+      categorized: rawShorts.length,
+      failed: 0
+    });
+  } catch (error) {
+    console.error('Error in POST /api/youtube/shorts/import-existing:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to import existing shorts.' });
+  }
+});
+
 export default app;
 
 const isDirectRun = process.argv[1] && (process.argv[1].endsWith('server.mjs') || process.env.SERVE_STANDALONE === 'true');
