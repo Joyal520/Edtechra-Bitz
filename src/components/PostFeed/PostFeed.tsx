@@ -39,7 +39,6 @@ export const PostFeed: React.FC = () => {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
-  const [completedQuizIds, setCompletedQuizIds] = useState<Set<string>>(new Set());
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -115,14 +114,10 @@ export const PostFeed: React.FC = () => {
     setPosts((prev) => prev.filter((p) => p.id !== deletedPostId));
   };
 
-  const handleQuizAttemptCompleted = (quizId: string, result: QuizAttemptResult) => {
-    if (result.is_correct) {
-      setCompletedQuizIds((prev) => {
-        const next = new Set(prev);
-        next.add(quizId);
-        return next;
-      });
-    }
+  const handleQuizAttemptCompleted = (_quizId: string, _result: QuizAttemptResult) => {
+    // Attempt state is self-managed inside QuizBitCard so the answered quiz
+    // stays in place with its explanation and confetti. The next quiz will
+    // be encountered further down the feed as the student scrolls.
   };
 
   // Interleave Quiz Bits stably into the posts list (every 2-4 posts)
@@ -131,9 +126,6 @@ export const PostFeed: React.FC = () => {
     if (!QUIZ_CONFIG.ENABLED || quizzes.length === 0) {
       return posts.map((post) => ({ type: 'post', post, key: `post-${post.id}` }));
     }
-
-    const activeQuizzes = quizzes.filter((q) => !completedQuizIds.has(q.id));
-    const pool = activeQuizzes.length > 0 ? activeQuizzes : quizzes;
 
     const items: FeedItem[] = [];
     let quizIndex = 0;
@@ -146,8 +138,8 @@ export const PostFeed: React.FC = () => {
       postsSinceLastQuiz++;
 
       // Check if it's time to insert a quiz
-      if (postsSinceLastQuiz >= targetInterval && quizIndex < pool.length) {
-        const currentQuiz = pool[quizIndex];
+      if (postsSinceLastQuiz >= targetInterval && quizIndex < quizzes.length) {
+        const currentQuiz = quizzes[quizIndex];
         items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
         quizIndex++;
         postsSinceLastQuiz = 0;
@@ -157,7 +149,7 @@ export const PostFeed: React.FC = () => {
     });
 
     return items;
-  }, [posts, quizzes, completedQuizIds]);
+  }, [posts, quizzes]);
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
