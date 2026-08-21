@@ -37,7 +37,7 @@ export const HomePage: React.FC = () => {
   };
 
   const handlePostCreated = (_newPost: StudentPost) => {
-    navigate('/explore?tab=feed');
+    navigate('/explore');
   };
 
   return (
