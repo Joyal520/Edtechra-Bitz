@@ -3876,12 +3876,15 @@ app.get('/api/readings/feed', async (req, res) => {
       const cachedCompletions = loadReadingCompletionsCache();
       cachedCompletions.filter(c => c.user_id === userId).forEach(c => completedIds.add(String(c.reading_id)));
 
-      // Strictly exclude completed readings
+      // Strictly exclude completed readings; fallback to all published if all completed
       candidatePool = published.filter(r => !completedIds.has(String(r.id)));
+      if (candidatePool.length === 0) {
+        candidatePool = published;
+      }
     }
 
     const shuffled = shuffleArray(candidatePool);
-    const feedPool = shuffled.slice(0, 10);
+    const feedPool = shuffled.slice(0, 50);
 
     res.json({
       success: true,

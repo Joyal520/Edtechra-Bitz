@@ -299,9 +299,9 @@ export const PostFeed: React.FC = () => {
 
     posts.forEach((post, index) => {
       items.push({ type: 'post', post, key: `post-${post.id}` });
+      postsSinceLastReading++;
       postsSinceLastQuiz++;
       postsSinceLastShort++;
-      postsSinceLastReading++;
       postsSinceLastPoll++;
       postsSinceLastReorder++;
       postsSinceLastScramble++;
@@ -309,13 +309,38 @@ export const PostFeed: React.FC = () => {
 
       let insertedNonPostThisSlot = false;
 
-      // 1. Check if it's time to insert a Word of the Day card
+      // 1. TOP PRIORITY: Insert a One-Minute Reading strictly after every 4 posts
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastReading >= readingTargetInterval &&
+        readings.length > 0
+      ) {
+        let availableReading = readings.find(r => !seenReadingIds.has(r.id));
+        if (!availableReading) {
+          // If all pool readings have been seen in this session, cycle from the published pool
+          availableReading = readings[readingIndex % readings.length];
+        }
+        if (availableReading) {
+          seenReadingIds.add(availableReading.id);
+          items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
+          readingIndex++;
+          postsSinceLastReading = 0;
+          readingPatternIdx = (readingPatternIdx + 1) % READING_INTERVAL_PATTERN.length;
+          readingTargetInterval = READING_INTERVAL_PATTERN[readingPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 2. Check if it's time to insert a Word of the Day card
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastWord >= wordTargetInterval &&
         wordsOfDay.length > 0
       ) {
-        const availableWord = wordsOfDay.find(w => !seenWordIds.has(w.id));
+        let availableWord = wordsOfDay.find(w => !seenWordIds.has(w.id));
+        if (!availableWord) {
+          availableWord = wordsOfDay[wordIndex % wordsOfDay.length];
+        }
         if (availableWord) {
           seenWordIds.add(availableWord.id);
           items.push({ type: 'word_of_the_day', wordOfDay: availableWord, key: `word-${availableWord.id}-${index}` });
@@ -327,15 +352,18 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 2. Check if it's time to insert an educational Quiz Bit
+      // 3. Check if it's time to insert an educational Quiz Bit
       if (
         !insertedNonPostThisSlot &&
         QUIZ_CONFIG.ENABLED &&
         postsSinceLastQuiz >= quizTargetInterval &&
-        quizIndex < quizzes.length
+        quizzes.length > 0
       ) {
-        const currentQuiz = quizzes[quizIndex];
-        if (!seenQuizIds.has(currentQuiz.id)) {
+        let currentQuiz = quizzes.find(q => !seenQuizIds.has(q.id));
+        if (!currentQuiz) {
+          currentQuiz = quizzes[quizIndex % quizzes.length];
+        }
+        if (currentQuiz) {
           seenQuizIds.add(currentQuiz.id);
           items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
           quizIndex++;
@@ -346,13 +374,16 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 3. Check if it's time to insert a Spelling Scramble activity (every 4-6 posts)
+      // 4. Check if it's time to insert a Spelling Scramble activity
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastScramble >= scrambleTargetInterval &&
         scrambles.length > 0
       ) {
-        const availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
+        let availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
+        if (!availableScramble) {
+          availableScramble = scrambles[scrambleIndex % scrambles.length];
+        }
         if (availableScramble) {
           seenScrambleIds.add(availableScramble.id);
           items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
@@ -364,13 +395,16 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 4. Check if it's time to insert a Sentence Reorder activity (every 4-6 posts)
+      // 5. Check if it's time to insert a Sentence Reorder activity
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastReorder >= reorderTargetInterval &&
         reorders.length > 0
       ) {
-        const availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
+        let availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
+        if (!availableReorder) {
+          availableReorder = reorders[reorderIndex % reorders.length];
+        }
         if (availableReorder) {
           seenReorderIds.add(availableReorder.id);
           items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
@@ -382,7 +416,7 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 5. Check if it's time to insert a category-rotated YouTube Short
+      // 6. Check if it's time to insert a category-rotated YouTube Short
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastShort >= shortTargetInterval &&
@@ -407,31 +441,16 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 6. Check if it's time to insert a One-Minute Reading
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastReading >= readingTargetInterval &&
-        readings.length > 0
-      ) {
-        const availableReading = readings.find(r => !seenReadingIds.has(r.id));
-        if (availableReading) {
-          seenReadingIds.add(availableReading.id);
-          items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
-          readingIndex++;
-          postsSinceLastReading = 0;
-          readingPatternIdx = (readingPatternIdx + 1) % READING_INTERVAL_PATTERN.length;
-          readingTargetInterval = READING_INTERVAL_PATTERN[readingPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
-      }
-
       // 7. Check if it's time to insert a Community Poll
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastPoll >= pollTargetInterval &&
         polls.length > 0
       ) {
-        const availablePoll = polls.find(p => !seenPollIds.has(p.id));
+        let availablePoll = polls.find(p => !seenPollIds.has(p.id));
+        if (!availablePoll) {
+          availablePoll = polls[pollIndex % polls.length];
+        }
         if (availablePoll) {
           seenPollIds.add(availablePoll.id);
           items.push({ type: 'poll', poll: availablePoll, key: `poll-${availablePoll.id}-${index}` });
