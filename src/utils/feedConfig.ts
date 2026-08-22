@@ -10,9 +10,9 @@ export const FEED_CONFIG = {
   SHORT_FEED_INTERVAL_MIN: 4,
   SHORT_FEED_INTERVAL_MAX: 6,
 
-  // One-Minute Reading pacing rules
-  READING_FEED_INTERVAL_MIN: 5,
-  READING_FEED_INTERVAL_MAX: 7,
+  // One-Minute Reading pacing rules (One-Minute Reading appears after every 4 posts)
+  READING_FEED_INTERVAL_MIN: 4,
+  READING_FEED_INTERVAL_MAX: 4,
 
   // AI-Prompt Poll pacing rules
   POLL_FEED_INTERVAL_MIN: 6,
