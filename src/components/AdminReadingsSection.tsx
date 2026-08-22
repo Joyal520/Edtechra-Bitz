@@ -12,7 +12,8 @@ import {
   Loader2,
   FileText,
   Plus,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 import {
   ReadingBit,
@@ -41,6 +42,15 @@ export const AdminReadingsSection: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // AI Image Generation State
+  const [generatingMap, setGeneratingMap] = useState<Record<string, boolean>>({});
+  const [bulkModalOpen, setBulkModalOpen] = useState<boolean>(false);
+  const [bulkGenerating, setBulkGenerating] = useState<boolean>(false);
+  const [missingCount, setMissingCount] = useState<number>(0);
+  const [retryModalOpen, setRetryModalOpen] = useState<boolean>(false);
+  const [retryGenerating, setRetryGenerating] = useState<boolean>(false);
+  const [failedCount, setFailedCount] = useState<number>(0);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -90,17 +100,23 @@ export const AdminReadingsSection: React.FC = () => {
     setRefreshing(true);
     try {
       const token = session?.access_token || null;
-      const data = await readingService.getAdminReadings(
-        {
-          search: searchQuery,
-          category: categoryFilter,
-          level: levelFilter,
-          published: statusFilter
-        },
-        token
-      );
+      const [data, missingInfo, failedInfo] = await Promise.all([
+        readingService.getAdminReadings(
+          {
+            search: searchQuery,
+            category: categoryFilter,
+            level: levelFilter,
+            published: statusFilter
+          },
+          token
+        ),
+        readingService.getMissingImagesCount(token).catch(() => ({ count: 0, articles: [] })),
+        readingService.getFailedImagesCount(token).catch(() => ({ count: 0, articles: [] }))
+      ]);
       setReadings(data.readings);
       setStats(data.stats);
+      setMissingCount(missingInfo.count);
+      setFailedCount(failedInfo.count);
     } catch (err: any) {
       console.error('Error loading admin readings:', err);
       showToast(err.message || 'Failed to load readings', 'error');
@@ -240,6 +256,66 @@ export const AdminReadingsSection: React.FC = () => {
       } catch (loadErr) {
         console.warn('Notice: Failed to auto-reload catalogue:', loadErr);
       }
+    }
+  };
+
+  // Generate or Regenerate AI Image for Single Article
+  const handleGenerateImage = async (reading: ReadingBit, isRegenerate = false) => {
+    setGeneratingMap(prev => ({ ...prev, [reading.id]: true }));
+    try {
+      const token = session?.access_token || null;
+      const result = await readingService.generateReadingImage(
+        reading.id,
+        { regenerate: isRegenerate, force: true },
+        token
+      );
+
+      if (result.success && result.imageUrl) {
+        showToast(`AI cover image generated in Master Paper-Cut style for "${reading.title}"!`);
+      } else {
+        showToast(result.error || 'Gemini image generation failed.', 'error');
+      }
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to generate image:', err);
+      showToast(err.message || 'Failed to generate image.', 'error');
+      await loadData();
+    } finally {
+      setGeneratingMap(prev => ({ ...prev, [reading.id]: false }));
+    }
+  };
+
+  // Bulk Generate Missing AI Images
+  const handleBulkGenerateMissing = async () => {
+    setBulkGenerating(true);
+    try {
+      const token = session?.access_token || null;
+      const result = await readingService.generateMissingImages({ limit: 50 }, token);
+      showToast(`Bulk generation complete: ${result.completed} generated, ${result.failed} failed, ${result.skipped} skipped.`);
+      setBulkModalOpen(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Bulk generation error:', err);
+      showToast(err.message || 'Bulk generation failed.', 'error');
+    } finally {
+      setBulkGenerating(false);
+    }
+  };
+
+  // Bulk Retry Failed AI Images
+  const handleBulkRetryFailed = async () => {
+    setRetryGenerating(true);
+    try {
+      const token = session?.access_token || null;
+      const result = await readingService.retryFailedImages({ limit: 50 }, token);
+      showToast(`Bulk retry complete: ${result.completed} generated, ${result.failed} failed, ${result.skipped} skipped.`);
+      setRetryModalOpen(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Bulk retry error:', err);
+      showToast(err.message || 'Bulk retry failed.', 'error');
+    } finally {
+      setRetryGenerating(false);
     }
   };
 
@@ -748,6 +824,32 @@ export const AdminReadingsSection: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Generate Missing Images Button */}
+            {(missingCount > 0 || stats.readingsWithoutImages > 0) && (
+              <button
+                type="button"
+                onClick={() => setBulkModalOpen(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Generate AI cover images for all articles missing images"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generate Missing Images ({missingCount || stats.readingsWithoutImages})</span>
+              </button>
+            )}
+
+            {/* Retry Failed Images Button */}
+            {failedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setRetryModalOpen(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="Retry failed AI cover image generations"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry Failed ({failedCount})</span>
+              </button>
+            )}
+
             {/* Search Input */}
             <div className="relative flex-1 sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -832,29 +934,125 @@ export const AdminReadingsSection: React.FC = () => {
 
                       {/* Cover Thumbnail / Mode */}
                       <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           {hasCover ? (
-                            <img
-                              src={reading.cover_image_url!}
-                              alt={reading.title}
-                              className="w-12 h-8 rounded-lg object-cover border border-stone-200 shadow-2xs"
-                            />
+                            <div className="relative shrink-0">
+                              <img
+                                src={reading.cover_image_url!}
+                                alt={reading.title}
+                                className="w-14 h-9 rounded-lg object-cover border border-stone-200 shadow-2xs"
+                              />
+                              {reading.image_status === 'generated' ? (
+                                <span
+                                  className="absolute -top-1 -right-1 px-1 py-0.2 bg-amber-500 text-white text-[8px] font-black rounded-full shadow-2xs flex items-center gap-0.5"
+                                  title="AI Paper-Cut Style Artwork"
+                                >
+                                  <Sparkles className="w-2 h-2" />
+                                  <span>AI</span>
+                                </span>
+                              ) : (
+                                <span
+                                  className="absolute -top-1 -right-1 px-1 py-0.2 bg-slate-700 text-white text-[7px] font-black rounded-full shadow-2xs"
+                                  title="Manual Cover Image"
+                                >
+                                  Manual
+                                </span>
+                              )}
+                            </div>
+                          ) : reading.image_status === 'generating' || generatingMap[reading.id] ? (
+                            <span className="px-2 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-black rounded-lg flex items-center gap-1.5 animate-pulse">
+                              <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
+                              <span>Generating…</span>
+                            </span>
+                          ) : reading.image_status === 'failed' ? (
+                            <span
+                              className="px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black rounded-lg flex items-center gap-1"
+                              title={reading.image_error || 'Generation failed'}
+                            >
+                              <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                              <span>Failed</span>
+                            </span>
                           ) : (
                             <span className="px-2 py-1 bg-stone-100 text-stone-700 text-[10px] font-bold rounded-lg border border-stone-200">
                               Text-First
                             </span>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTargetReadingForCover(reading);
-                              coverImageInputRef.current?.click();
-                            }}
-                            className="text-[11px] text-teal-700 hover:underline font-bold"
-                          >
-                            {hasCover ? 'Replace' : '+ Add Image'}
-                          </button>
+                          {/* Dynamic AI & Manual Action Buttons */}
+                          <div className="flex flex-col gap-0.5">
+                            {hasCover ? (
+                              <div className="flex items-center gap-2">
+                                {reading.image_status === 'generated' && (
+                                  <button
+                                    type="button"
+                                    disabled={generatingMap[reading.id]}
+                                    onClick={() => handleGenerateImage(reading, true)}
+                                    className="text-[11px] text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                    title="Regenerate with Gemini in Paper-Cut style"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                    <span>Regenerate</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetReadingForCover(reading);
+                                    coverImageInputRef.current?.click();
+                                  }}
+                                  className="text-[11px] text-teal-700 hover:underline font-bold cursor-pointer"
+                                >
+                                  Replace
+                                </button>
+                              </div>
+                            ) : reading.image_status === 'failed' ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={generatingMap[reading.id]}
+                                  onClick={() => handleGenerateImage(reading, true)}
+                                  className="text-[11px] text-rose-700 hover:text-rose-900 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  title="Retry AI Image Generation"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Retry</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetReadingForCover(reading);
+                                    coverImageInputRef.current?.click();
+                                  }}
+                                  className="text-[11px] text-slate-500 hover:underline font-bold cursor-pointer"
+                                >
+                                  + Add Image
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={generatingMap[reading.id]}
+                                  onClick={() => handleGenerateImage(reading, false)}
+                                  className="text-[11px] text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                  title="Generate 16:9 Paper-Cut artwork with Gemini"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Generate Image</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetReadingForCover(reading);
+                                    coverImageInputRef.current?.click();
+                                  }}
+                                  className="text-[11px] text-teal-700 hover:underline font-bold cursor-pointer"
+                                >
+                                  + Add Image
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
 
@@ -1062,6 +1260,170 @@ export const AdminReadingsSection: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Bulk Missing Images Generation Modal */}
+      {bulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col animate-in zoom-in-95">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-600 to-orange-600 text-white flex items-center justify-between">
+              <h3 className="text-sm sm:text-base font-black flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>Generate Missing Article Images</span>
+              </h3>
+              {!bulkGenerating && (
+                <button
+                  type="button"
+                  onClick={() => setBulkModalOpen(false)}
+                  className="p-1 text-white/80 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4 text-center">
+              {bulkGenerating ? (
+                <div className="py-6 space-y-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-amber-600 mx-auto" />
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-slate-900">
+                      Generating AI Cover Images with Gemini…
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Crafting 16:9 Master Paper-Cut artwork and storing in Cloudflare R2. Requests are rate-controlled.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-2xs">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-base font-black text-slate-900">
+                      {missingCount || stats.readingsWithoutImages} articles are missing images
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      This will automatically generate high-resolution 16:9 cover artwork in the <strong>EdTechra Bitz Master Paper-Cut style</strong> using Google Gemini AI, optimize each image, and upload them directly to Cloudflare R2.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-left text-[11px] text-amber-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>🔒 Safety & Quality Guarantees:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-amber-800 text-[10px]">
+                      <li>Articles with existing or manual images are untouched.</li>
+                      <li>Sequential rate-controlled batching prevents API throttling.</li>
+                      <li>Any individual failure will not block other articles.</li>
+                    </ul>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setBulkModalOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkGenerateMissing}
+                      className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Start Bulk Generation</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Retry Failed Images Modal */}
+      {retryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col animate-in zoom-in-95">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-600 to-red-700 text-white flex items-center justify-between">
+              <h3 className="text-sm sm:text-base font-black flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-rose-200" />
+                <span>Retry Failed Image Generations</span>
+              </h3>
+              {!retryGenerating && (
+                <button
+                  type="button"
+                  onClick={() => setRetryModalOpen(false)}
+                  className="p-1 text-white/80 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4 text-center">
+              {retryGenerating ? (
+                <div className="py-6 space-y-4">
+                  <Loader2 className="w-10 h-10 animate-spin text-rose-600 mx-auto" />
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-slate-900">
+                      Retrying AI Cover Generations with Gemini…
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Sequential rate-controlled retry in Master Paper-Cut style.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-2xs">
+                    <RefreshCw className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-base font-black text-slate-900">
+                      Retry {failedCount} Failed Articles
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      This will re-attempt AI image generation for articles where previous Gemini API requests timed out, exceeded rate limits, or encountered errors.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-rose-50/70 border border-rose-200/80 rounded-2xl text-left text-[11px] text-rose-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>🔒 Protection & Policy:</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-0.5 text-rose-800 text-[10px]">
+                      <li>Articles remain fully published and intact throughout retries.</li>
+                      <li>Manual uploads are never overwritten.</li>
+                      <li>Sequential pacing prevents API throttling.</li>
+                    </ul>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setRetryModalOpen(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkRetryFailed}
+                      className="px-5 py-2.5 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Start Retry Batch</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

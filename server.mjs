@@ -39,6 +39,7 @@ import {
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
+import { generateArticleCoverImage, buildArticleImagePrompt } from './server/geminiImageService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -3356,6 +3357,209 @@ async function processBatchReadings(rawList, authUserId) {
   };
 }
 
+/**
+ * Helper to sanitize error messages from exposing keys or internal auth tokens
+ */
+function sanitizeErrorMessage(errMsg) {
+  if (!errMsg || typeof errMsg !== 'string') return 'Unknown error';
+  const apiKey = process.env.GEMINI_API_KEY;
+  let clean = errMsg;
+  if (apiKey) {
+    clean = clean.split(apiKey).join('[REDACTED_API_KEY]');
+  }
+  clean = clean.replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]');
+  clean = clean.replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+  return clean.slice(0, 500);
+}
+
+/**
+ * Background AI Image Generation Worker for Articles
+ * Generates an image using Gemini AI, saves to R2, and updates article record without blocking
+ * Implements strict manual image protection, atomic locking, and race-condition verification.
+ */
+async function triggerBackgroundArticleImageGeneration(article, options = {}) {
+  if (!article || !article.id) return { success: false, error: 'Invalid article' };
+  const articleId = article.id;
+
+  // 1. Initial State & Manual Image Protection Check
+  const currentCache = loadReadingsCache();
+  const currentReading = currentCache.find(r => r.id === articleId) || article;
+
+  // Protect manual images: If an image exists and is NOT an AI-generated image, NEVER overwrite
+  if (currentReading.cover_image_url && currentReading.cover_image_url.trim() !== '') {
+    if (currentReading.image_status !== 'generated') {
+      console.log(`[GeminiImageService] Skipped: Article "${currentReading.title}" has a manual cover image.`);
+      return {
+        success: false,
+        status: 'manual_image',
+        reason: 'Article contains a manual image that cannot be overwritten automatically.'
+      };
+    }
+  }
+
+  // Atomic generation lock check
+  if (currentReading.image_status === 'generating' && !options.force) {
+    console.log(`[GeminiImageService] Skipped: Article "${currentReading.title}" is already generating an image.`);
+    return {
+      success: false,
+      status: 'already_generating',
+      message: 'Image generation is already in progress for this article.'
+    };
+  }
+
+  console.log(`[GeminiImageService] Triggering AI image generation for article: "${article.title}" (${articleId})`);
+
+  // 2. Mark status as 'generating' in cache & DB
+  const nextAttempts = (currentReading.image_generation_attempts || 0) + 1;
+  const lockCache = loadReadingsCache();
+  const lockIdx = lockCache.findIndex(r => r.id === articleId);
+  if (lockIdx !== -1) {
+    lockCache[lockIdx].image_status = 'generating';
+    lockCache[lockIdx].image_error = null;
+    lockCache[lockIdx].image_generation_attempts = nextAttempts;
+    saveReadingsCache(lockCache);
+  }
+  if (serverSupabase) {
+    try {
+      const { error: lockErr } = await serverSupabase
+        .from('readings')
+        .update({
+          image_status: 'generating',
+          image_error: null,
+          image_generation_attempts: nextAttempts
+        })
+        .eq('id', articleId);
+      if (lockErr && lockErr.message?.includes('image_status')) {
+        await serverSupabase.from('readings').update({ updated_at: new Date().toISOString() }).eq('id', articleId);
+      }
+    } catch (e) {
+      console.warn('[Supabase image_status generating notice]:', e.message);
+    }
+  }
+
+  // 3. Perform generation
+  try {
+    const result = await generateArticleCoverImage(article, options);
+    const now = new Date().toISOString();
+
+    // 4. Mandatory Post-Generation Race Condition Check:
+    // Verify that a manual image upload did not occur while Gemini was running
+    const freshCache = loadReadingsCache();
+    const freshReading = freshCache.find(r => r.id === articleId);
+    if (freshReading && freshReading.cover_image_url && freshReading.image_status !== 'generating' && freshReading.image_status !== 'generated') {
+      console.warn(`[GeminiImageService] Race Condition: Manual image was uploaded during AI generation for "${article.title}". Aborting AI image overwrite.`);
+      return {
+        success: false,
+        status: 'manual_image',
+        reason: 'Manual image uploaded during generation took priority.'
+      };
+    }
+
+    const updatedIdx = freshCache.findIndex(r => r.id === articleId);
+
+    if (result.success && result.publicUrl) {
+      const updatedArticle = {
+        ...(updatedIdx !== -1 ? freshCache[updatedIdx] : article),
+        cover_image_url: result.publicUrl,
+        cover_image_object_key: result.objectKey || null,
+        image_status: 'generated',
+        image_prompt: result.prompt || null,
+        image_generated_at: now,
+        image_provider: 'google',
+        image_model: result.model || 'gemini-2.5-flash-image',
+        image_storage_key: result.objectKey || null,
+        image_error: null,
+        updated_at: now
+      };
+
+      if (updatedIdx !== -1) {
+        freshCache[updatedIdx] = updatedArticle;
+        saveReadingsCache(freshCache);
+      }
+
+      if (serverSupabase) {
+        try {
+          const { error: sbUpdateErr } = await serverSupabase.from('readings').update({
+            cover_image_url: updatedArticle.cover_image_url,
+            cover_image_object_key: updatedArticle.cover_image_object_key,
+            image_status: 'generated',
+            image_prompt: updatedArticle.image_prompt,
+            image_generated_at: updatedArticle.image_generated_at,
+            image_provider: 'google',
+            image_model: updatedArticle.image_model,
+            image_storage_key: updatedArticle.image_storage_key,
+            image_error: null,
+            updated_at: now
+          }).eq('id', articleId);
+
+          if (sbUpdateErr && sbUpdateErr.message?.includes('image_status')) {
+            await serverSupabase.from('readings').update({
+              cover_image_url: updatedArticle.cover_image_url,
+              cover_image_object_key: updatedArticle.cover_image_object_key,
+              updated_at: now
+            }).eq('id', articleId);
+          }
+        } catch (e) {
+          console.warn('[Supabase update generated image notice]:', e.message);
+        }
+      }
+      console.log(`[GeminiImageService] ✓ Successfully generated and stored cover image for "${article.title}": ${result.publicUrl}`);
+      return { success: true, status: 'generated', reading: updatedArticle };
+    } else {
+      // Mark as failed while keeping article published
+      const sanitizedErr = sanitizeErrorMessage(result.error || 'Failed to generate image with Gemini API');
+      const failedArticle = {
+        ...(updatedIdx !== -1 ? freshCache[updatedIdx] : article),
+        image_status: 'failed',
+        image_error: sanitizedErr,
+        image_prompt: result.prompt || null,
+        updated_at: now
+      };
+
+      if (updatedIdx !== -1) {
+        freshCache[updatedIdx] = failedArticle;
+        saveReadingsCache(freshCache);
+      }
+      if (serverSupabase) {
+        try {
+          const { error: sbFailErr } = await serverSupabase.from('readings').update({
+            image_status: 'failed',
+            image_error: sanitizedErr,
+            image_prompt: result.prompt || null,
+            updated_at: now
+          }).eq('id', articleId);
+          if (sbFailErr && sbFailErr.message?.includes('image_status')) {
+            await serverSupabase.from('readings').update({ updated_at: now }).eq('id', articleId);
+          }
+        } catch (e) {
+          console.warn('[Supabase update failed image notice]:', e.message);
+        }
+      }
+      console.warn(`[GeminiImageService] ✗ Image generation failed for "${article.title}":`, sanitizedErr);
+      return { success: false, status: 'failed', error: sanitizedErr, reading: failedArticle };
+    }
+  } catch (err) {
+    const sanitizedErr = sanitizeErrorMessage(err.message || 'Unexpected server error during image generation');
+    console.error(`[GeminiImageService] Unhandled error generating image for "${article.title}":`, sanitizedErr);
+    const updatedCache = loadReadingsCache();
+    const updatedIdx = updatedCache.findIndex(r => r.id === articleId);
+    if (updatedIdx !== -1) {
+      updatedCache[updatedIdx].image_status = 'failed';
+      updatedCache[updatedIdx].image_error = sanitizedErr;
+      saveReadingsCache(updatedCache);
+    }
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('readings').update({
+          image_status: 'failed',
+          image_error: sanitizedErr
+        }).eq('id', articleId);
+      } catch {}
+    }
+    return { success: false, status: 'failed', error: sanitizedErr };
+  }
+}
+
 // 2. POST /api/readings - Create new One-Minute Reading (Supports Single or Bulk Array)
 app.post('/api/readings', async (req, res) => {
   try {
@@ -3426,6 +3630,7 @@ app.post('/api/readings', async (req, res) => {
       questions: Array.isArray(questions) ? questions : [],
       cover_image_url: cover_image_url || null,
       cover_image_object_key: cover_image_object_key || null,
+      image_status: cover_image_url ? 'none' : 'none',
       is_published: Boolean(is_published),
       created_at: now,
       updated_at: now
@@ -3453,10 +3658,23 @@ app.post('/api/readings', async (req, res) => {
     if (serverSupabase) {
       try {
         const { error: sbErr } = await serverSupabase.from('readings').insert([newReading]);
-        if (sbErr) console.warn('[Supabase readings insert warning]:', sbErr.message);
+        if (sbErr) {
+          console.warn('[Supabase readings insert warning]:', sbErr.message);
+          if (sbErr.message && sbErr.message.includes('image_status')) {
+            const { image_status, image_prompt, image_generated_at, image_error, ...safePayload } = newReading;
+            await serverSupabase.from('readings').insert([safePayload]);
+          }
+        }
       } catch (e) {
         console.warn('[Supabase readings insert notice]:', e.message);
       }
+    }
+
+    // If published and no manual cover image, automatically trigger Gemini AI image generation in background
+    if (newReading.is_published && (!newReading.cover_image_url || newReading.cover_image_url.trim() === '')) {
+      triggerBackgroundArticleImageGeneration(newReading).catch(err => {
+        console.warn('[Auto AI Image Generation Background Error]:', err.message);
+      });
     }
 
     res.status(201).json({
@@ -3913,6 +4131,16 @@ app.put('/api/readings/:id/publish', async (req, res) => {
       }
     }
 
+    // If published and no manual cover image, automatically trigger Gemini AI image generation in background
+    if (targetPub && index !== -1) {
+      const readingObj = cache[index];
+      if (!readingObj?.cover_image_url || readingObj.cover_image_url.trim() === '') {
+        triggerBackgroundArticleImageGeneration(readingObj).catch(err => {
+          console.warn('[Auto AI Image Generation Background Error on Publish]:', err.message);
+        });
+      }
+    }
+
     res.json({
       success: true,
       message: `Reading ${targetPub ? 'published' : 'unpublished'} successfully.`,
@@ -3962,6 +4190,292 @@ app.delete('/api/readings/:id', async (req, res) => {
   } catch (error) {
     console.error('Error in DELETE /api/readings/:id:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to delete reading.' });
+  }
+});
+
+// 11. POST /api/admin/readings/:id/generate-image - Generate or regenerate AI cover image for a single article
+app.post('/api/admin/readings/:id/generate-image', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { force = false, regenerate = false, customPrompt } = req.body || {};
+
+    const cache = loadReadingsCache();
+    let reading = cache.find(r => r.id === id);
+
+    if (!reading && serverSupabase) {
+      try {
+        const { data: dbReading } = await serverSupabase.from('readings').select('*').eq('id', id).single();
+        if (dbReading) reading = dbReading;
+      } catch (e) {
+        console.warn('[Supabase fetch single reading notice]:', e.message);
+      }
+    }
+
+    if (!reading) {
+      return res.status(404).json({ success: false, error: 'Article not found.' });
+    }
+
+    // Manual Image Protection: If article has a manual cover image, NEVER overwrite it
+    if (reading.cover_image_url && reading.cover_image_url.trim() !== '') {
+      if (reading.image_status !== 'generated') {
+        return res.json({
+          success: false,
+          status: 'manual_image',
+          reason: 'This article contains a manual cover image and cannot be overwritten by AI generation.',
+          data: reading,
+          skipped: true
+        });
+      }
+      // If AI-generated and not explicitly requesting regenerate
+      if (!regenerate && !force) {
+        return res.json({
+          success: true,
+          status: 'skipped',
+          message: 'Article already has an AI-generated image. Specify regenerate: true to replace.',
+          data: reading,
+          skipped: true
+        });
+      }
+    }
+
+    // Atomic generation lock check
+    if (reading.image_status === 'generating' && !force) {
+      return res.json({
+        success: false,
+        status: 'already_generating',
+        message: 'An image generation job is already in progress for this article.',
+        data: reading
+      });
+    }
+
+    const result = await triggerBackgroundArticleImageGeneration(reading, { customPrompt, force: true });
+
+    if (result.success && result.reading) {
+      return res.json({
+        success: true,
+        status: 'generated',
+        message: 'AI cover image generated and stored in Cloudflare R2 successfully.',
+        data: result.reading
+      });
+    } else {
+      return res.status(200).json({
+        success: false,
+        error: result.error || result.reason || 'Gemini AI image generation failed.',
+        status: result.status || 'failed',
+        reason: result.reason || null,
+        data: result.reading || reading
+      });
+    }
+  } catch (error) {
+    console.error('Error in POST /api/admin/readings/:id/generate-image:', error);
+    res.status(500).json({ success: false, error: sanitizeErrorMessage(error.message) || 'Failed to generate image.' });
+  }
+});
+
+// 12. POST /api/admin/readings/generate-missing-images - Bulk generate AI cover images for articles missing images
+app.post('/api/admin/readings/generate-missing-images', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { dryRun = false, limit = 100 } = req.body || {};
+
+    let allReadings = loadReadingsCache();
+    if (serverSupabase) {
+      try {
+        const { data: dbReadings } = await serverSupabase.from('readings').select('*').order('created_at', { ascending: false });
+        if (dbReadings && dbReadings.length > 0) {
+          allReadings = dbReadings;
+        }
+      } catch (e) {
+        console.warn('[Supabase bulk missing images notice]:', e.message);
+      }
+    }
+
+    // Identify articles without cover images (published, no image, not generating, not failed)
+    const missingArticles = allReadings.filter(r => 
+      Boolean(r.is_published) &&
+      (!r.cover_image_url || r.cover_image_url.trim() === '') &&
+      r.image_status !== 'generating'
+    ).slice(0, Math.min(100, Math.max(1, limit)));
+
+    if (dryRun) {
+      return res.json({
+        success: true,
+        dryRun: true,
+        totalFound: missingArticles.length,
+        articles: missingArticles.map(r => ({ id: r.id, title: r.title, category: r.category, is_published: r.is_published }))
+      });
+    }
+
+    if (missingArticles.length === 0) {
+      return res.json({
+        success: true,
+        totalFound: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        results: [],
+        message: 'All published articles already have cover images.'
+      });
+    }
+
+    // Process sequentially with controlled delay to respect Gemini API rate limits
+    let completed = 0;
+    let failed = 0;
+    let skipped = 0;
+    const results = [];
+
+    for (let i = 0; i < missingArticles.length; i++) {
+      const article = missingArticles[i];
+
+      // Double-check if image was added concurrently
+      if (article.cover_image_url && article.cover_image_url.trim() !== '') {
+        skipped++;
+        results.push({ readingId: article.id, status: 'skipped', message: 'Already has image' });
+        continue;
+      }
+
+      try {
+        const genResult = await triggerBackgroundArticleImageGeneration(article);
+        if (genResult.success) {
+          completed++;
+          results.push({ readingId: article.id, status: 'generated', imageUrl: genResult.reading?.cover_image_url });
+        } else if (genResult.status === 'manual_image' || genResult.status === 'skipped') {
+          skipped++;
+          results.push({ readingId: article.id, status: 'skipped', reason: genResult.reason || 'Skipped' });
+        } else {
+          failed++;
+          results.push({ readingId: article.id, status: 'failed', error: genResult.error });
+        }
+      } catch (itemErr) {
+        failed++;
+        results.push({ readingId: article.id, status: 'failed', error: sanitizeErrorMessage(itemErr.message) });
+      }
+
+      // Small pacing delay between requests (500ms)
+      if (i < missingArticles.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    res.json({
+      success: true,
+      totalFound: missingArticles.length,
+      completed,
+      failed,
+      skipped,
+      results,
+      message: `Bulk missing image generation complete: ${completed} generated, ${failed} failed, ${skipped} skipped.`
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/readings/generate-missing-images:', error);
+    res.status(500).json({ success: false, error: sanitizeErrorMessage(error.message) || 'Failed to process bulk image generation.' });
+  }
+});
+
+// 13. POST /api/admin/readings/retry-failed-images - Bulk retry AI cover images for articles where generation failed
+app.post('/api/admin/readings/retry-failed-images', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { dryRun = false, limit = 100 } = req.body || {};
+
+    let allReadings = loadReadingsCache();
+    if (serverSupabase) {
+      try {
+        const { data: dbReadings } = await serverSupabase.from('readings').select('*').order('created_at', { ascending: false });
+        if (dbReadings && dbReadings.length > 0) {
+          allReadings = dbReadings;
+        }
+      } catch (e) {
+        console.warn('[Supabase bulk retry failed images notice]:', e.message);
+      }
+    }
+
+    // Identify articles where image_status is 'failed' and no manual image was added
+    const failedArticles = allReadings.filter(r => 
+      r.image_status === 'failed' &&
+      (!r.cover_image_url || r.cover_image_url.trim() === '')
+    ).slice(0, Math.min(100, Math.max(1, limit)));
+
+    if (dryRun) {
+      return res.json({
+        success: true,
+        dryRun: true,
+        totalFound: failedArticles.length,
+        articles: failedArticles.map(r => ({ id: r.id, title: r.title, category: r.category, error: r.image_error }))
+      });
+    }
+
+    if (failedArticles.length === 0) {
+      return res.json({
+        success: true,
+        totalFound: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        results: [],
+        message: 'No failed articles found to retry.'
+      });
+    }
+
+    // Process sequentially with controlled delay to respect Gemini API rate limits
+    let completed = 0;
+    let failed = 0;
+    let skipped = 0;
+    const results = [];
+
+    for (let i = 0; i < failedArticles.length; i++) {
+      const article = failedArticles[i];
+
+      if (article.cover_image_url && article.cover_image_url.trim() !== '') {
+        skipped++;
+        results.push({ readingId: article.id, status: 'skipped', message: 'Manual image present' });
+        continue;
+      }
+
+      try {
+        const genResult = await triggerBackgroundArticleImageGeneration(article, { force: true });
+        if (genResult.success) {
+          completed++;
+          results.push({ readingId: article.id, status: 'generated', imageUrl: genResult.reading?.cover_image_url });
+        } else {
+          failed++;
+          results.push({ readingId: article.id, status: 'failed', error: genResult.error });
+        }
+      } catch (itemErr) {
+        failed++;
+        results.push({ readingId: article.id, status: 'failed', error: sanitizeErrorMessage(itemErr.message) });
+      }
+
+      if (i < failedArticles.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    res.json({
+      success: true,
+      totalFound: failedArticles.length,
+      completed,
+      failed,
+      skipped,
+      results,
+      message: `Bulk retry complete: ${completed} generated, ${failed} failed, ${skipped} skipped.`
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/readings/retry-failed-images:', error);
+    res.status(500).json({ success: false, error: sanitizeErrorMessage(error.message) || 'Failed to process bulk retry.' });
   }
 });
 

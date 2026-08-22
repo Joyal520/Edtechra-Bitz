@@ -283,6 +283,14 @@ export interface ReadingBit {
   questions?: ReadingQuestion[];
   cover_image_url?: string | null;
   cover_image_object_key?: string | null;
+  image_status?: 'none' | 'generating' | 'generated' | 'failed' | null;
+  image_prompt?: string | null;
+  image_generated_at?: string | null;
+  image_error?: string | null;
+  image_provider?: string | null;
+  image_model?: string | null;
+  image_storage_key?: string | null;
+  image_generation_attempts?: number | null;
   is_published: boolean;
   created_by?: string | null;
   created_at: string;
@@ -302,6 +310,14 @@ export interface RawReadingInput {
   questions?: ReadingQuestion[];
   cover_image_url?: string | null;
   cover_image_object_key?: string | null;
+  image_status?: 'none' | 'generating' | 'generated' | 'failed' | null;
+  image_prompt?: string | null;
+  image_generated_at?: string | null;
+  image_error?: string | null;
+  image_provider?: string | null;
+  image_model?: string | null;
+  image_storage_key?: string | null;
+  image_generation_attempts?: number | null;
   is_published?: boolean;
 }
 
@@ -311,6 +327,28 @@ export interface ReadingAdminStats {
   draftReadings: number;
   readingsWithImages: number;
   readingsWithoutImages: number;
+  generatingImages?: number;
+  failedImages?: number;
+}
+
+export interface ReadingImageGenerationResult {
+  success: boolean;
+  readingId: string;
+  imageUrl?: string | null;
+  objectKey?: string | null;
+  prompt?: string | null;
+  status: 'generated' | 'failed' | 'skipped' | 'already_generating' | 'manual_image';
+  reason?: string | null;
+  error?: string | null;
+  reading?: ReadingBit;
+}
+
+export interface BulkMissingImagesResult {
+  totalFound: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  results: ReadingImageGenerationResult[];
 }
 
 export interface ReadingValidationErrorItem {

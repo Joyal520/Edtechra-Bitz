@@ -6,7 +6,9 @@ import {
   ReadingBit,
   RawReadingInput,
   ReadingAdminStats,
-  PresignedUploadResponse
+  PresignedUploadResponse,
+  ReadingImageGenerationResult,
+  BulkMissingImagesResult
 } from '@/types';
 import { supabase } from '@/lib/supabase';
 
@@ -356,6 +358,154 @@ class ReadingService {
     } catch {
       // Non-critical
     }
+  }
+
+  /**
+   * Admin API: Generates or regenerates an AI cover image for an article using Gemini
+   */
+  async generateReadingImage(
+    readingId: string,
+    options: { force?: boolean; regenerate?: boolean; customPrompt?: string } = {},
+    token?: string | null
+  ): Promise<ReadingImageGenerationResult> {
+    const headers = await this.getAuthHeaders(token);
+    if (!headers['Authorization']) {
+      throw new Error('Admin authorization required.');
+    }
+
+    const res = await fetch(`/api/admin/readings/${encodeURIComponent(readingId)}/generate-image`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(options)
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok && !json.data) {
+      throw new Error(json.error || 'Failed to generate article image.');
+    }
+
+    return {
+      success: Boolean(json.success),
+      readingId,
+      imageUrl: json.data?.cover_image_url || null,
+      objectKey: json.data?.cover_image_object_key || null,
+      prompt: json.data?.image_prompt || null,
+      status: json.data?.image_status || (json.success ? 'generated' : 'failed'),
+      error: json.error || null,
+      reading: json.data as ReadingBit
+    };
+  }
+
+  /**
+   * Admin API: Queries how many published articles currently lack cover images
+   */
+  async getMissingImagesCount(token?: string | null): Promise<{ count: number; articles: Array<{ id: string; title: string }> }> {
+    try {
+      const headers = await this.getAuthHeaders(token);
+      const res = await fetch('/api/admin/readings/generate-missing-images', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ dryRun: true })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        return {
+          count: json.totalFound || 0,
+          articles: json.articles || []
+        };
+      }
+      return { count: 0, articles: [] };
+    } catch {
+      return { count: 0, articles: [] };
+    }
+  }
+
+  /**
+   * Admin API: Triggers batch generation of missing AI cover images
+   */
+  async generateMissingImages(
+    options: { limit?: number } = {},
+    token?: string | null
+  ): Promise<BulkMissingImagesResult> {
+    const headers = await this.getAuthHeaders(token);
+    if (!headers['Authorization']) {
+      throw new Error('Admin authorization required.');
+    }
+
+    const res = await fetch('/api/admin/readings/generate-missing-images', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ dryRun: false, limit: options.limit || 100 })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to perform bulk image generation.');
+    }
+
+    return {
+      totalFound: json.totalFound || 0,
+      completed: json.completed || 0,
+      failed: json.failed || 0,
+      skipped: json.skipped || 0,
+      results: json.results || []
+    };
+  }
+
+  /**
+   * Admin API: Queries how many published articles currently have failed image generations
+   */
+  async getFailedImagesCount(token?: string | null): Promise<{ count: number; articles: Array<{ id: string; title: string }> }> {
+    try {
+      const headers = await this.getAuthHeaders(token);
+      const res = await fetch('/api/admin/readings/retry-failed-images', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ dryRun: true })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        return {
+          count: json.totalFound || 0,
+          articles: json.articles || []
+        };
+      }
+      return { count: 0, articles: [] };
+    } catch {
+      return { count: 0, articles: [] };
+    }
+  }
+
+  /**
+   * Admin API: Triggers batch retry of failed AI cover images
+   */
+  async retryFailedImages(
+    options: { limit?: number } = {},
+    token?: string | null
+  ): Promise<BulkMissingImagesResult> {
+    const headers = await this.getAuthHeaders(token);
+    if (!headers['Authorization']) {
+      throw new Error('Admin authorization required.');
+    }
+
+    const res = await fetch('/api/admin/readings/retry-failed-images', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ dryRun: false, limit: options.limit || 100 })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to retry failed image generations.');
+    }
+
+    return {
+      totalFound: json.totalFound || 0,
+      completed: json.completed || 0,
+      failed: json.failed || 0,
+      skipped: json.skipped || 0,
+      results: json.results || []
+    };
   }
 }
 

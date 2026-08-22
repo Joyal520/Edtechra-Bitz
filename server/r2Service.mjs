@@ -323,6 +323,39 @@ export async function putJsonContent(objectKey, data) {
 }
 
 /**
+ * Direct Server Upload: Writes binary image/media Buffer directly to Cloudflare R2 via AWS SigV4
+ */
+export async function putBinaryContent(objectKey, buffer, contentType = 'image/webp') {
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
+  if (!cleanKey) throw new Error('Object key is required for R2 binary storage.');
+
+  const signed = signRequest({
+    method: 'PUT',
+    objectKey: cleanKey,
+    body: buffer,
+    contentType
+  });
+
+  const response = await fetch(`${signed.endpoint}/${signed.bucket}/${cleanKey}`, {
+    method: 'PUT',
+    headers: signed.headers,
+    body: buffer
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[R2 Put Binary Error] key=${cleanKey} status=${response.status}:`, errorText);
+    throw new Error(`Failed to store binary content in R2: status ${response.status}`);
+  }
+
+  return {
+    success: true,
+    objectKey: cleanKey,
+    publicUrl: buildPublicUrl(cleanKey)
+  };
+}
+
+/**
  * Direct Server Retrieval: Reads JSON Content from Cloudflare R2
  */
 export async function getJsonContent(objectKey) {
