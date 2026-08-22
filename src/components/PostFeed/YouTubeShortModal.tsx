@@ -75,14 +75,14 @@ export const YouTubeShortModal: React.FC<YouTubeShortModalProps> = ({
 
         {/* Scrollable Content Body */}
         <div className="overflow-y-auto p-4 sm:p-5 space-y-5">
-          {/* YouTube Responsive Video Player */}
-          <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-md">
+          {/* YouTube Responsive 9:16 Video Player (True vertical short without horizontal letterboxing) */}
+          <div className="relative w-full max-w-[340px] aspect-[9/16] mx-auto bg-black rounded-2xl overflow-hidden shadow-md">
             <iframe
               src={embedUrl}
               title={short.title}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
-              className="w-full h-full border-0"
+              className="w-full h-full border-0 object-cover"
             />
           </div>
 

@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Play,
-  Pause,
   Film,
   Clock,
   Zap,
@@ -13,24 +11,36 @@ import { QuizBitCard } from './QuizBitCard';
 
 interface YouTubeShortCardProps {
   short: YouTubeShort;
+  isActive?: boolean;
+  isNext?: boolean;
+  onBecomeActive?: () => void;
 }
 
-export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => {
+export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
+  short,
+  isActive = false,
+  isNext = false,
+  onBecomeActive
+}) => {
   const [isIntersecting, setIsIntersecting] = useState<boolean>(false);
   const [userClickedPlay, setUserClickedPlay] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [showIndicator, setShowIndicator] = useState<boolean>(false);
+  const [thumbnailSrc, setThumbnailSrc] = useState<string>(short.thumbnail_url);
   
   const cardRef = useRef<HTMLElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const durationText = short.duration_formatted || `${short.duration || 30}s`;
 
+  // Update thumbnail source if prop changes
+  useEffect(() => {
+    setThumbnailSrc(short.thumbnail_url);
+  }, [short.thumbnail_url]);
+
   // Viewport-aware IntersectionObserver:
-  // Autoplays true 9:16 video inline when at least 60% visible in the viewport.
-  // Pauses / unloads player when scrolled away (< 40% visible).
+  // Activates playback when at least 50% visible in the viewport.
+  // Notifies parent PostFeed coordinator of active Short for intelligent 1-step next-video preloading.
   useEffect(() => {
     const el = videoContainerRef.current;
     if (!el) return;
@@ -42,32 +52,45 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
             setIsIntersecting(true);
             setIsPaused(false);
-          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
+            onBecomeActive?.();
+          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.35) {
             setIsIntersecting(false);
             setIsPaused(false);
           }
         });
       },
       {
-        threshold: [0, 0.4, 0.6, 1.0]
+        threshold: [0, 0.35, 0.5, 0.8, 1.0]
       }
     );
 
     observer.observe(el);
     return () => {
       observer.disconnect();
-      if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
     };
-  }, []);
+  }, [onBecomeActive]);
 
-  const shouldPlayInline = isIntersecting || userClickedPlay;
+  // Determine effective operational state:
+  // - shouldPlayInline: active short playing with sound attempt & autoplay
+  // - shouldPreload: immediately relevant next short warming up in background
+  // - idle / distant: unmounted iframe to save bandwidth and memory during rapid swipes
+  const shouldPlayInline = Boolean(isActive || userClickedPlay || isIntersecting);
+  const shouldPreload = Boolean(isNext && !shouldPlayInline);
 
-  // Toggle Play / Pause on user interaction with temporary feedback
-  const handleTogglePlayPause = (e: React.MouseEvent) => {
+  // Toggle Play / Pause on user interaction — completely invisible controls (Issue 1)
+  // Maintains tap-to-play/pause without showing any visual overlay or fade animations.
+  const handleTogglePlayPause = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    
+    if (!shouldPlayInline) {
+      setUserClickedPlay(true);
+      onBecomeActive?.();
+      return;
+    }
+
     const nextPaused = !isPaused;
     setIsPaused(nextPaused);
 
@@ -81,22 +104,21 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
         '*'
       );
     }
+  }, [isPaused, shouldPlayInline, onBecomeActive]);
 
-    setShowIndicator(true);
-    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
-    indicatorTimerRef.current = setTimeout(() => {
-      setShowIndicator(false);
-    }, 1200);
+  // Fallback for YouTube thumbnail if maxresdefault is unavailable
+  const handleThumbnailError = () => {
+    if (thumbnailSrc.includes('maxresdefault.jpg')) {
+      setThumbnailSrc(`https://i.ytimg.com/vi/${short.youtube_video_id}/hqdefault.jpg`);
+    }
   };
 
-  // Official YouTube Embed URL configured for:
-  // - True 9:16 vertical presentation
-  // - Clean autoplay with sound attempt
-  // - controls=0 to eliminate persistent ◀ ⏸ ▶ overlays
-  // - playsinline=1 without forcing native fullscreen
-  // - loop=1 continuously via playlist parameter
-  // - cc_load_policy=0 to avoid duplicate caption overlay (captions already burned into video)
-  const embedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0`;
+  const originParam = typeof window !== 'undefined' && window.location.origin
+    ? `&origin=${encodeURIComponent(window.location.origin)}&widget_referrer=${encodeURIComponent(window.location.origin)}`
+    : '';
+
+  // Active YouTube Embed URL (autoplay enabled, controls invisible)
+  const activeEmbedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0${originParam}`;
 
   return (
     <article
@@ -134,62 +156,81 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({ short }) => 
       </div>
 
       {/* 2. RESPONSIVE VIDEO FRAME: 
-             - Mobile: Full width 9:16 edge-to-edge
-             - Desktop: Centered, compact 9:16 card (max-w-[360px], max-h-[640px]) */}
-      <div className="w-full bg-slate-950 sm:bg-slate-900/90 sm:p-4 flex items-center justify-center">
+             - Mobile: Full width 9:16 edge-to-edge, zero black sidebars (Issue 3)
+             - Desktop: Centered, compact 9:16 card (sm:max-w-[380px], sm:max-h-[640px]) */}
+      <div className="w-full bg-black sm:bg-slate-900/90 sm:p-4 flex items-center justify-center">
         <div
           ref={videoContainerRef}
-          onClick={shouldPlayInline ? handleTogglePlayPause : () => setUserClickedPlay(true)}
-          className="relative w-full aspect-[9/16] max-h-[82svh] sm:max-h-[640px] sm:max-w-[360px] mx-auto bg-black overflow-hidden flex items-center justify-center sm:rounded-2xl shadow-md cursor-pointer select-none"
+          onClick={handleTogglePlayPause}
+          className="relative w-full aspect-[9/16] sm:max-w-[380px] sm:max-h-[640px] mx-auto bg-black overflow-hidden flex items-center justify-center sm:rounded-2xl shadow-md cursor-pointer select-none"
         >
+          {/* Active Video Player Layer */}
           {shouldPlayInline ? (
-            <>
+            <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center">
+              {/* Immediate Poster image layer underneath video to eliminate white flash */}
+              <img
+                src={thumbnailSrc}
+                alt={short.title}
+                onError={handleThumbnailError}
+                className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+                loading="eager"
+                decoding="async"
+              />
+
+              {/* YouTube Embed Player — No visible playback controls, true 9:16 full-bleed */}
               <iframe
                 ref={iframeRef}
-                src={embedUrl}
+                src={activeEmbedUrl}
                 title={short.title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
-                className="w-full h-full border-0 object-cover pointer-events-none"
-                loading="lazy"
+                className="absolute inset-0 w-full h-full border-0 pointer-events-none object-cover"
+                loading="eager"
               />
-
-              {/* Sleek temporary interaction feedback indicator (Play / Pause) */}
-              <div
-                className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-300 ${
-                  showIndicator ? 'opacity-100' : 'opacity-0'
-                }`}
-              >
-                <div className="w-16 h-16 rounded-full bg-black/70 backdrop-blur-md text-white flex items-center justify-center shadow-xl transform scale-100 transition-transform">
-                  {isPaused ? (
-                    <Pause className="w-8 h-8 fill-white" />
-                  ) : (
-                    <Play className="w-8 h-8 fill-white translate-x-0.5" />
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="relative w-full h-full cursor-pointer group flex items-center justify-center bg-slate-950">
+            </div>
+          ) : shouldPreload ? (
+            /* Next-Short Preload Layer: High-priority Eager Poster cached in memory without competing iframe bandwidth */
+            <div className="relative w-full h-full cursor-pointer flex items-center justify-center bg-black overflow-hidden">
               <img
-                src={short.thumbnail_url}
+                src={thumbnailSrc}
                 alt={short.title}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                loading="lazy"
+                onError={handleThumbnailError}
+                className="w-full h-full object-cover object-center pointer-events-none select-none"
+                loading="eager"
+                decoding="async"
               />
 
-              {/* Dark overlay with Play button */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent flex items-center justify-center">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl group-hover:scale-110 transition-all">
-                  <Play className="w-7 h-7 fill-white translate-x-0.5" />
-                </div>
-              </div>
-
-              {/* Bottom tag */}
+              {/* Bottom tag without any center play button */}
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
                 <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
                   <Film className="w-3.5 h-3.5 text-red-400" />
-                  <span>Tap to Play</span>
+                  <span>EdTechra Short</span>
+                </span>
+                {short.linked_quiz_id && (
+                  <span className="px-2.5 py-1 rounded-xl bg-teal-500/90 backdrop-blur-xs text-white text-[11px] font-extrabold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    <span>Quiz Attached</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Standby Poster Layer (Clean, instant thumbnail with zero visible play button overlay) */
+            <div className="relative w-full h-full cursor-pointer flex items-center justify-center bg-black overflow-hidden">
+              <img
+                src={thumbnailSrc}
+                alt={short.title}
+                onError={handleThumbnailError}
+                className="w-full h-full object-cover object-center pointer-events-none select-none transition-transform duration-300 hover:scale-102"
+                loading="lazy"
+                decoding="async"
+              />
+
+              {/* Bottom informative tag — Clean & immersive */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
+                <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5 text-red-400" />
+                  <span>EdTechra Short</span>
                 </span>
                 {short.linked_quiz_id && (
                   <span className="px-2.5 py-1 rounded-xl bg-teal-500/90 backdrop-blur-xs text-white text-[11px] font-extrabold flex items-center gap-1">

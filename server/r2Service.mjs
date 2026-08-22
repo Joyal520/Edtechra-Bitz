@@ -263,6 +263,14 @@ export function buildPollCoverKey(id, ext = 'webp') {
   return `polls/${sanitizeSegment(id)}/cover.${ext}`;
 }
 
+export function buildReorderContentKey(id) {
+  return `reorders/${sanitizeSegment(id)}/content.json`;
+}
+
+export function buildSpellingScrambleContentKey(id) {
+  return `spelling-scrambles/${sanitizeSegment(id)}/content.json`;
+}
+
 /**
  * Direct Server Upload: Writes JSON Content directly to Cloudflare R2 via AWS SigV4
  */
@@ -405,6 +413,8 @@ export async function getStorageStats() {
     let readingsCount = 0;
     let quizzesCount = 0;
     let pollsCount = 0;
+    let reordersCount = 0;
+    let spellingScramblesCount = 0;
     let postsCount = 0;
     let thumbnailsCount = 0;
     let imagesCount = 0;
@@ -415,6 +425,8 @@ export async function getStorageStats() {
       if (k.startsWith('readings/')) readingsCount++;
       else if (k.startsWith('quizzes/')) quizzesCount++;
       else if (k.startsWith('polls/')) pollsCount++;
+      else if (k.startsWith('reorders/')) reordersCount++;
+      else if (k.startsWith('spelling-scrambles/')) spellingScramblesCount++;
       else if (k.startsWith('posts/')) postsCount++;
       else if (k.startsWith('thumbnails/')) thumbnailsCount++;
 
@@ -439,6 +451,8 @@ export async function getStorageStats() {
       readingsCount,
       quizzesCount,
       pollsCount,
+      reordersCount,
+      spellingScramblesCount,
       postsCount,
       thumbnailsCount,
       imagesCount,

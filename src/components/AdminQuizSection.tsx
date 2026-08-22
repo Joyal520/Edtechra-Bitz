@@ -1,5 +1,5 @@
 // ============================================================================
-// EDTECHRA-BITZ: Admin Interactive Quizzes & Batch Import Section
+// EDTECHRA-BITZ: Admin Interactive Quizzes & Spelling Scramble Batch Import Section
 // ============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,33 +10,51 @@ import {
   Upload,
   AlertCircle,
   CheckCircle2,
-  XCircle,
   Trash2,
   Edit3,
   Search,
   RefreshCw,
-  HelpCircle,
   ChevronDown,
   ChevronUp,
   X,
-  Loader2
+  Loader2,
+  Clock,
+  Zap,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import {
   QuizBit,
   QuizAdminStats,
   QuizValidationResult
 } from '@/types';
+import {
+  SpellingScramble,
+  SpellingScrambleAdminStats,
+  SpellingScrambleValidationResult,
+  SpellingDifficulty
+} from '@/types/spellingScramble';
 import { quizService } from '@/services/quizService';
+import { spellingScrambleService } from '@/services/spellingScrambleService';
 import { useAuth } from '@/context/AuthContext';
 import { validateQuizBatch } from '@/utils/quizValidation';
-import { QUIZ_CONFIG, AI_QUIZ_PROMPT_TEMPLATE } from '@/utils/quizConfig';
+import { validateSpellingScrambleBatch } from '@/utils/spellingScrambleValidation';
+import {
+  AI_QUIZ_PROMPT_TEMPLATE,
+  AI_SPELLING_SCRAMBLE_PROMPT_TEMPLATE
+} from '@/utils/quizConfig';
 
 export const AdminQuizSection: React.FC = () => {
   const { session } = useAuth();
-  
-  // Data state
+
+  // Activity Type Selector: 'quiz' (Multiple Choice Quiz) or 'spelling' (Spelling Scramble)
+  const [contentType, setContentType] = useState<'quiz' | 'spelling'>('quiz');
+
+  // --------------------------------------------------------------------------
+  // Quiz Data & State
+  // --------------------------------------------------------------------------
   const [quizzes, setQuizzes] = useState<QuizBit[]>([]);
-  const [stats, setStats] = useState<QuizAdminStats>({
+  const [quizStats, setQuizStats] = useState<QuizAdminStats>({
     totalQuizzes: 0,
     publishedQuizzes: 0,
     unpublishedQuizzes: 0,
@@ -44,6 +62,19 @@ export const AdminQuizSection: React.FC = () => {
     totalXpAwarded: 0,
     totalBatches: 0
   });
+
+  // --------------------------------------------------------------------------
+  // Spelling Scramble Data & State
+  // --------------------------------------------------------------------------
+  const [scrambles, setScrambles] = useState<SpellingScramble[]>([]);
+  const [spellingStats, setSpellingStats] = useState<SpellingScrambleAdminStats>({
+    totalScrambles: 0,
+    publishedScrambles: 0,
+    draftScrambles: 0,
+    totalCompletions: 0,
+    totalXpAwarded: 0
+  });
+
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -56,19 +87,18 @@ export const AdminQuizSection: React.FC = () => {
 
   // Batch import state
   const [jsonInput, setJsonInput] = useState<string>('');
-  const [validationResult, setValidationResult] = useState<QuizValidationResult | null>(null);
+  const [quizValidationResult, setQuizValidationResult] = useState<QuizValidationResult | null>(null);
+  const [spellingValidationResult, setSpellingValidationResult] = useState<SpellingScrambleValidationResult | null>(null);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
   const [promptTopic, setPromptTopic] = useState<string>('Science, Technology, Space, and Curious Facts');
   const [promptCount, setPromptCount] = useState<number>(20);
+  const [spellingDifficultyPrompt, setSpellingDifficultyPrompt] = useState<'Easy' | 'Medium' | 'Hard' | 'Mixed'>('Mixed');
   const [importPanelOpen, setImportPanelOpen] = useState<boolean>(true);
 
-  // Multi-select state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // Edit Modal state
+  // Edit Modal state for Quiz
   const [editingQuiz, setEditingQuiz] = useState<QuizBit | null>(null);
-  const [editForm, setEditForm] = useState<{
+  const [editQuizForm, setEditQuizForm] = useState<{
     question: string;
     options: string[];
     correct_answer: string;
@@ -87,6 +117,25 @@ export const AdminQuizSection: React.FC = () => {
     xp: 10,
     is_published: true
   });
+
+  // Edit Modal state for Spelling Scramble
+  const [editingScramble, setEditingScramble] = useState<SpellingScramble | null>(null);
+  const [editScrambleForm, setEditScrambleForm] = useState<{
+    word: string;
+    clue: string;
+    category: string;
+    difficulty: SpellingDifficulty;
+    xp: number;
+    is_published: boolean;
+  }>({
+    word: '',
+    clue: '',
+    category: 'Vocabulary',
+    difficulty: 'Easy',
+    xp: 10,
+    is_published: true
+  });
+
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -94,44 +143,84 @@ export const AdminQuizSection: React.FC = () => {
     setTimeout(() => setActionMessage(null), 4000);
   };
 
+  // Load Data for current content type
   const loadData = useCallback(async () => {
     setRefreshing(true);
     try {
       const token = session?.access_token || null;
-      const data = await quizService.getAdminQuizzes(
-        {
-          search: searchQuery,
-          category: categoryFilter,
-          difficulty: difficultyFilter,
-          published: statusFilter
-        },
-        token
-      );
-      setQuizzes(data.quizzes);
-      setStats(data.stats);
+      if (contentType === 'quiz') {
+        const data = await quizService.getAdminQuizzes(
+          {
+            search: searchQuery,
+            category: categoryFilter,
+            difficulty: difficultyFilter,
+            published: statusFilter
+          },
+          token
+        );
+        setQuizzes(data.quizzes);
+        setQuizStats(data.stats);
+      } else {
+        const data = await spellingScrambleService.getAdminScrambles(
+          {
+            search: searchQuery,
+            category: categoryFilter,
+            difficulty: difficultyFilter,
+            published: statusFilter
+          },
+          token
+        );
+        setScrambles(data.scrambles);
+        setSpellingStats(data.stats);
+      }
     } catch (err: any) {
-      console.error('Error loading admin quizzes:', err);
-      showToast(err.message || 'Failed to load quizzes', 'error');
+      console.error('Error loading admin content:', err);
+      showToast(err.message || 'Failed to load content', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session, searchQuery, categoryFilter, difficultyFilter, statusFilter]);
+  }, [session, contentType, searchQuery, categoryFilter, difficultyFilter, statusFilter]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  // Handle Type Change
+  const handleContentTypeChange = (newType: 'quiz' | 'spelling') => {
+    setContentType(newType);
+    setJsonInput('');
+    setQuizValidationResult(null);
+    setSpellingValidationResult(null);
+    setSearchQuery('');
+    setCategoryFilter('all');
+    setDifficultyFilter('all');
+    setStatusFilter('all');
+    if (newType === 'spelling') {
+      setPromptTopic('English Vocabulary, Science, Nature, and Daily Life');
+    } else {
+      setPromptTopic('Science, Technology, Space, and Curious Facts');
+    }
+  };
+
   // Copy AI Generator Prompt
   const handleCopyPrompt = () => {
-    const prompt = AI_QUIZ_PROMPT_TEMPLATE
-      .replace('{COUNT}', String(promptCount))
-      .replace('{TOPIC}', promptTopic.trim() || 'General Science and Microlearning');
+    let prompt = '';
+    if (contentType === 'quiz') {
+      prompt = AI_QUIZ_PROMPT_TEMPLATE
+        .replace('{COUNT}', String(promptCount))
+        .replace('{TOPIC}', promptTopic.trim() || 'General Science and Microlearning');
+    } else {
+      prompt = AI_SPELLING_SCRAMBLE_PROMPT_TEMPLATE
+        .replace('{COUNT}', String(promptCount))
+        .replace('{TOPIC}', promptTopic.trim() || 'English Vocabulary, Everyday Objects, and Science')
+        .replace('{DIFFICULTY}', spellingDifficultyPrompt);
+    }
 
     if (navigator.clipboard) {
       navigator.clipboard.writeText(prompt).then(() => {
         setCopiedPrompt(true);
-        showToast('AI Quiz Prompt copied to clipboard! Paste it into ChatGPT or Claude.');
+        showToast(`AI ${contentType === 'quiz' ? 'Quiz' : 'Spelling Scramble'} Prompt copied to clipboard!`);
         setTimeout(() => setCopiedPrompt(false), 3000);
       });
     }
@@ -140,75 +229,103 @@ export const AdminQuizSection: React.FC = () => {
   // Validate Pasted JSON
   const handleValidate = () => {
     if (!jsonInput.trim()) {
-      showToast('Please paste quiz JSON data before validating.', 'error');
+      showToast('Please paste JSON data before validating.', 'error');
       return;
     }
-    const result = validateQuizBatch(jsonInput);
-    setValidationResult(result);
 
-    if (result.invalid.length === 0 && result.valid.length > 0) {
-      showToast(`All ${result.valid.length} quizzes passed validation! Ready to import.`);
-    } else if (result.valid.length > 0) {
-      showToast(`${result.valid.length} quizzes valid, ${result.invalid.length} contains errors.`, 'error');
+    if (contentType === 'quiz') {
+      const result = validateQuizBatch(jsonInput);
+      setQuizValidationResult(result);
+
+      if (result.invalid.length === 0 && result.valid.length > 0) {
+        showToast(`All ${result.valid.length} quizzes passed validation! Ready to import.`);
+      } else if (result.valid.length > 0) {
+        showToast(`${result.valid.length} quizzes valid, ${result.invalid.length} contains errors.`, 'error');
+      } else {
+        showToast('Validation failed: No valid quizzes found in pasted JSON.', 'error');
+      }
     } else {
-      showToast('Validation failed: No valid quizzes found in pasted JSON.', 'error');
+      const result = validateSpellingScrambleBatch(jsonInput);
+      setSpellingValidationResult(result);
+
+      if (result.invalid.length === 0 && result.valid.length > 0) {
+        showToast(`All ${result.valid.length} spelling scrambles passed validation! Ready to import.`);
+      } else if (result.valid.length > 0) {
+        showToast(`${result.valid.length} scrambles valid, ${result.invalid.length} contains errors.`, 'error');
+      } else {
+        showToast('Validation failed: No valid spelling scrambles found in pasted JSON.', 'error');
+      }
     }
   };
 
-  // Import Valid Quizzes
-  const handleImportValidQuizzes = async () => {
-    if (!validationResult || validationResult.valid.length === 0) {
-      showToast('Please validate your JSON first and ensure there are valid quizzes.', 'error');
-      return;
-    }
+  // Import Valid Items
+  const handleImportValidBatch = async () => {
+    if (contentType === 'quiz') {
+      if (!quizValidationResult || quizValidationResult.valid.length === 0) {
+        showToast('Please validate your JSON first and ensure there are valid quizzes.', 'error');
+        return;
+      }
 
-    setIsImporting(true);
-    try {
-      const token = session?.access_token || null;
-      const result = await quizService.importBatch(validationResult.valid, token);
-      showToast(`Successfully imported ${result.importedCount} quiz bit${result.importedCount === 1 ? '' : 's'}!`);
-      
-      // Reset import state
-      setJsonInput('');
-      setValidationResult(null);
-      loadData();
-    } catch (err: any) {
-      console.error('Import error:', err);
-      showToast(err.message || 'Failed to import quizzes.', 'error');
-    } finally {
-      setIsImporting(false);
+      setIsImporting(true);
+      try {
+        const token = session?.access_token || null;
+        const result = await quizService.importBatch(quizValidationResult.valid, token);
+        showToast(`Successfully imported ${result.importedCount} quiz bit${result.importedCount === 1 ? '' : 's'}!`);
+        setJsonInput('');
+        setQuizValidationResult(null);
+        loadData();
+      } catch (err: any) {
+        console.error('Import error:', err);
+        showToast(err.message || 'Failed to import quizzes.', 'error');
+      } finally {
+        setIsImporting(false);
+      }
+    } else {
+      if (!spellingValidationResult || spellingValidationResult.valid.length === 0) {
+        showToast('Please validate your JSON first and ensure there are valid spelling scrambles.', 'error');
+        return;
+      }
+
+      setIsImporting(true);
+      try {
+        const token = session?.access_token || null;
+        const result = await spellingScrambleService.importBatch(spellingValidationResult.valid, token);
+        showToast(`Successfully imported ${result.importedCount} spelling scramble${result.importedCount === 1 ? '' : 's'}!`);
+        setJsonInput('');
+        setSpellingValidationResult(null);
+        loadData();
+      } catch (err: any) {
+        console.error('Import error:', err);
+        showToast(err.message || 'Failed to import spelling scrambles.', 'error');
+      } finally {
+        setIsImporting(false);
+      }
     }
   };
 
   // Clear Import Form
   const handleClearImport = () => {
     setJsonInput('');
-    setValidationResult(null);
+    setQuizValidationResult(null);
+    setSpellingValidationResult(null);
   };
 
-  // Toggle single quiz publication
-  const handleTogglePublish = async (quiz: QuizBit) => {
+  // --------------------------------------------------------------------------
+  // Quiz Actions
+  // --------------------------------------------------------------------------
+  const handleToggleQuizPublish = async (quiz: QuizBit) => {
     try {
       const token = session?.access_token || null;
       const updated = await quizService.togglePublish(quiz.id, !quiz.is_published, token);
       setQuizzes((prev) => prev.map((q) => (q.id === quiz.id ? updated : q)));
-      setStats((prev) => ({
-        ...prev,
-        publishedQuizzes: prev.publishedQuizzes + (updated.is_published ? 1 : -1),
-        unpublishedQuizzes: prev.unpublishedQuizzes + (updated.is_published ? -1 : 1)
-      }));
       showToast(`Quiz ${updated.is_published ? 'published' : 'unpublished'}.`);
     } catch (err: any) {
       showToast(err.message || 'Failed to toggle publication.', 'error');
     }
   };
 
-  // Delete single quiz
   const handleDeleteQuiz = async (quiz: QuizBit) => {
-    if (!window.confirm(`Are you sure you want to permanently delete this quiz:\n"${quiz.question}"?`)) {
-      return;
-    }
-
+    if (!window.confirm(`Permanently delete quiz:\n"${quiz.question}"?`)) return;
     try {
       const token = session?.access_token || null;
       await quizService.deleteQuiz(quiz.id, token);
@@ -220,43 +337,9 @@ export const AdminQuizSection: React.FC = () => {
     }
   };
 
-  // Batch toggle publish
-  const handleBatchPublish = async (publish: boolean) => {
-    if (selectedIds.size === 0) return;
-
-    try {
-      const token = session?.access_token || null;
-      await quizService.batchPublish(Array.from(selectedIds), publish, token);
-      showToast(`Updated publication status for ${selectedIds.size} quizzes.`);
-      setSelectedIds(new Set());
-      loadData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to update batch.', 'error');
-    }
-  };
-
-  // Select all / deselect all
-  const handleToggleSelectAll = () => {
-    if (selectedIds.size === quizzes.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(quizzes.map((q) => q.id)));
-    }
-  };
-
-  const handleToggleSelectRow = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // Open Edit Modal
-  const handleOpenEditModal = (quiz: QuizBit) => {
+  const handleOpenEditQuizModal = (quiz: QuizBit) => {
     setEditingQuiz(quiz);
-    setEditForm({
+    setEditQuizForm({
       question: quiz.question,
       options: [...quiz.options],
       correct_answer: quiz.correct_answer || quiz.options[0] || '',
@@ -268,25 +351,19 @@ export const AdminQuizSection: React.FC = () => {
     });
   };
 
-  // Save Edit Modal
-  const handleSaveEdit = async (e: React.FormEvent) => {
+  const handleSaveQuizEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuiz) return;
-
-    if (!editForm.question.trim()) {
+    if (!editQuizForm.question.trim()) {
       alert('Question cannot be empty.');
       return;
     }
-    if (editForm.options.some((opt) => !opt.trim())) {
+    if (editQuizForm.options.some((opt) => !opt.trim())) {
       alert('All 4 options must be filled.');
       return;
     }
-    if (!editForm.options.includes(editForm.correct_answer)) {
+    if (!editQuizForm.options.includes(editQuizForm.correct_answer)) {
       alert('Correct answer must match one of the 4 options.');
-      return;
-    }
-    if (!editForm.explanation.trim()) {
-      alert('Explanation cannot be empty.');
       return;
     }
 
@@ -296,18 +373,17 @@ export const AdminQuizSection: React.FC = () => {
       const updated = await quizService.updateQuiz(
         editingQuiz.id,
         {
-          question: editForm.question.trim(),
-          options: editForm.options.map((o) => o.trim()),
-          correct_answer: editForm.correct_answer.trim(),
-          explanation: editForm.explanation.trim(),
-          category: editForm.category.trim(),
-          difficulty: editForm.difficulty,
-          xp: Number(editForm.xp) || 10,
-          is_published: editForm.is_published
+          question: editQuizForm.question.trim(),
+          options: editQuizForm.options.map((o) => o.trim()),
+          correct_answer: editQuizForm.correct_answer.trim(),
+          explanation: editQuizForm.explanation.trim(),
+          category: editQuizForm.category.trim(),
+          difficulty: editQuizForm.difficulty,
+          xp: Number(editQuizForm.xp) || 10,
+          is_published: editQuizForm.is_published
         },
         token
       );
-
       setQuizzes((prev) => prev.map((q) => (q.id === editingQuiz.id ? updated : q)));
       showToast('Quiz updated successfully.');
       setEditingQuiz(null);
@@ -318,9 +394,92 @@ export const AdminQuizSection: React.FC = () => {
     }
   };
 
+  // --------------------------------------------------------------------------
+  // Spelling Scramble Actions
+  // --------------------------------------------------------------------------
+  const handleToggleScramblePublish = async (scramble: SpellingScramble) => {
+    try {
+      const token = session?.access_token || null;
+      const nextPub = !scramble.is_published;
+      await spellingScrambleService.togglePublish(scramble.id, nextPub, token);
+      setScrambles((prev) =>
+        prev.map((s) => (s.id === scramble.id ? { ...s, is_published: nextPub } : s))
+      );
+      showToast(`Spelling scramble ${nextPub ? 'published' : 'unpublished'}.`);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to toggle publication.', 'error');
+    }
+  };
+
+  const handleDeleteScramble = async (scramble: SpellingScramble) => {
+    if (!window.confirm(`Permanently delete spelling scramble: "${scramble.word}"?`)) return;
+    try {
+      const token = session?.access_token || null;
+      await spellingScrambleService.deleteScramble(scramble.id, token);
+      setScrambles((prev) => prev.filter((s) => s.id !== scramble.id));
+      showToast('Spelling scramble deleted successfully.');
+      loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete spelling scramble.', 'error');
+    }
+  };
+
+  const handleOpenEditScrambleModal = (scramble: SpellingScramble) => {
+    setEditingScramble(scramble);
+    setEditScrambleForm({
+      word: scramble.word,
+      clue: scramble.clue,
+      category: scramble.category || 'Vocabulary',
+      difficulty: scramble.difficulty || 'Easy',
+      xp: scramble.xp || (scramble.difficulty === 'Hard' ? 20 : scramble.difficulty === 'Medium' ? 15 : 10),
+      is_published: scramble.is_published
+    });
+  };
+
+  const handleSaveScrambleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScramble) return;
+    const word = editScrambleForm.word.trim().toUpperCase();
+    if (!word || !/^[A-Z]+$/.test(word) || word.length < 3) {
+      alert('Word must contain at least 3 letters A-Z without spaces.');
+      return;
+    }
+    if (!editScrambleForm.clue.trim()) {
+      alert('Clue cannot be empty.');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const token = session?.access_token || null;
+      const updated = await spellingScrambleService.updateScramble(
+        editingScramble.id,
+        {
+          word,
+          clue: editScrambleForm.clue.trim(),
+          category: editScrambleForm.category.trim(),
+          difficulty: editScrambleForm.difficulty,
+          xp: Number(editScrambleForm.xp) || 10,
+          is_published: editScrambleForm.is_published
+        },
+        token
+      );
+      setScrambles((prev) => prev.map((s) => (s.id === editingScramble.id ? updated : s)));
+      showToast('Spelling scramble updated successfully.');
+      setEditingScramble(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update spelling scramble.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const activeValidCount = contentType === 'quiz' ? quizValidationResult?.valid.length || 0 : spellingValidationResult?.valid.length || 0;
+  const activeInvalidCount = contentType === 'quiz' ? quizValidationResult?.invalid.length || 0 : spellingValidationResult?.invalid.length || 0;
+  const activeInvalidList = contentType === 'quiz' ? quizValidationResult?.invalid || [] : spellingValidationResult?.invalid || [];
+
   return (
     <section className="space-y-6 pt-4">
-      
       {/* Toast Notification */}
       {actionMessage && (
         <div
@@ -347,41 +506,70 @@ export const AdminQuizSection: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Header Card with Actions */}
+      {/* 1. Header Card with Content Type Selector */}
       <div className="bg-gradient-to-r from-[#0f233a] via-[#122e4d] to-[#026fc3] text-white rounded-3xl p-6 sm:p-7 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
         <div className="space-y-1.5 max-w-xl">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-teal-400/20 text-teal-300 text-[11px] font-black tracking-wider uppercase border border-teal-400/30">
-              Interactive Learning
+              Interactive Microlearning
             </span>
             <span className="text-white/70 text-xs font-semibold">
-              Feed Interleaving Engine
+              AI Batch Pipeline
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2">
-            <span>🎯</span>
-            <span>Interactive Quiz Bits Center</span>
+            <span>{contentType === 'quiz' ? '🎯' : '🔠'}</span>
+            <span>{contentType === 'quiz' ? 'Interactive Quiz Bits Center' : 'Spelling Scramble Center'}</span>
           </h2>
           <p className="text-xs text-white/80 leading-relaxed">
-            Batch-import AI-generated multiple-choice questions, manage publication status, and reward students with confetti celebrations & XP directly inside the post feed.
+            {contentType === 'quiz'
+              ? 'Batch-import AI-generated multiple-choice questions with 4 options, explanations, and confetti celebrations directly inside the Explore feed.'
+              : 'Batch-import English spelling challenges with clues and 30s/45s/60s timers derived strictly from difficulty, with letter flying animations.'}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 w-full md:w-auto">
+          {/* Content Type Selector */}
+          <div className="bg-white/10 p-1 rounded-2xl border border-white/20 flex items-center gap-1">
+            <button
+              onClick={() => handleContentTypeChange('quiz')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                contentType === 'quiz'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <span>🎯</span>
+              <span>Multiple Choice Quiz</span>
+            </button>
+
+            <button
+              onClick={() => handleContentTypeChange('spelling')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                contentType === 'spelling'
+                  ? 'bg-gradient-to-r from-amber-400 to-amber-300 text-slate-950 shadow-xs'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <span>🔠</span>
+              <span>Spelling Scramble</span>
+            </button>
+          </div>
+
           <button
             onClick={handleCopyPrompt}
-            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-black rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-            title="Copy ChatGPT prompt to generate quizzes"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-black rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            title="Copy AI prompt template"
           >
             {copiedPrompt ? (
               <>
                 <Check className="w-4 h-4 text-emerald-600" />
-                <span className="text-emerald-700">Prompt Copied!</span>
+                <span className="text-emerald-700">Copied!</span>
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4 text-[#026fc3]" />
-                <span>Copy AI Quiz Prompt</span>
+                <span>Copy AI Prompt</span>
               </>
             )}
           </button>
@@ -389,60 +577,58 @@ export const AdminQuizSection: React.FC = () => {
           <button
             onClick={() => loadData()}
             disabled={refreshing}
-            className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer"
-            title="Reload quiz records"
+            className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer flex items-center justify-center"
+            title="Reload records"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* 2. Key Metrics Grid (6 Tiles) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        {/* Total Quizzes */}
+      {/* 2. Key Metrics Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400">Total Quizzes</div>
-          <div className="text-xl font-black text-[#0f233a] mt-1">{stats.totalQuizzes}</div>
+          <div className="text-xs font-bold text-slate-400">Total {contentType === 'quiz' ? 'Quizzes' : 'Scrambles'}</div>
+          <div className="text-xl font-black text-[#0f233a] mt-1">
+            {contentType === 'quiz' ? quizStats.totalQuizzes : spellingStats.totalScrambles}
+          </div>
           <div className="text-[10px] text-slate-400 font-semibold mt-0.5">In database</div>
         </div>
 
-        {/* Published */}
         <div className="bg-white border border-emerald-200/80 rounded-2xl p-4 shadow-2xs bg-emerald-50/20">
           <div className="text-xs font-bold text-emerald-700">Published</div>
-          <div className="text-xl font-black text-emerald-900 mt-1">{stats.publishedQuizzes}</div>
+          <div className="text-xl font-black text-emerald-900 mt-1">
+            {contentType === 'quiz' ? quizStats.publishedQuizzes : spellingStats.publishedScrambles}
+          </div>
           <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">Active in feed</div>
         </div>
 
-        {/* Unpublished */}
         <div className="bg-white border border-amber-200/80 rounded-2xl p-4 shadow-2xs bg-amber-50/20">
           <div className="text-xs font-bold text-amber-700">Draft / Hidden</div>
-          <div className="text-xl font-black text-amber-900 mt-1">{stats.unpublishedQuizzes}</div>
+          <div className="text-xl font-black text-amber-900 mt-1">
+            {contentType === 'quiz' ? quizStats.unpublishedQuizzes : spellingStats.draftScrambles}
+          </div>
           <div className="text-[10px] text-amber-600 font-semibold mt-0.5">Not in feed</div>
         </div>
 
-        {/* Total Student Attempts */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400">Total Attempts</div>
-          <div className="text-xl font-black text-[#026fc3] mt-1">{stats.totalAttempts}</div>
+          <div className="text-xs font-bold text-slate-400">Total Completions</div>
+          <div className="text-xl font-black text-[#026fc3] mt-1">
+            {contentType === 'quiz' ? quizStats.totalAttempts : spellingStats.totalCompletions}
+          </div>
           <div className="text-[10px] text-slate-400 font-semibold mt-0.5">By students</div>
         </div>
 
-        {/* Total XP Awarded */}
-        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400">Quiz XP Awarded</div>
-          <div className="text-xl font-black text-amber-600 mt-1">+{stats.totalXpAwarded} XP</div>
-          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">Earned by students</div>
-        </div>
-
-        {/* Import Batches */}
-        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400">Import Batches</div>
-          <div className="text-xl font-black text-purple-600 mt-1">{stats.totalBatches}</div>
-          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">ChatGPT batches</div>
+        <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs col-span-2 sm:col-span-1">
+          <div className="text-xs font-bold text-slate-400">Total XP Awarded</div>
+          <div className="text-xl font-black text-amber-600 mt-1">
+            +{contentType === 'quiz' ? quizStats.totalXpAwarded : spellingStats.totalXpAwarded} XP
+          </div>
+          <div className="text-[10px] text-slate-400 font-semibold mt-0.5">Earned once per item</div>
         </div>
       </div>
 
-      {/* 3. Batch Import Card */}
+      {/* 3. AI Batch Importer Panel */}
       <div className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -451,10 +637,12 @@ export const AdminQuizSection: React.FC = () => {
             </div>
             <div>
               <h3 className="text-base font-black text-[#0f233a]">
-                AI Quiz Batch Import (JSON)
+                AI {contentType === 'quiz' ? 'Quiz' : 'Spelling Scramble'} Batch Import (JSON)
               </h3>
               <p className="text-xs text-slate-500">
-                Paste structured JSON from ChatGPT or Claude to batch-import dozens of quizzes at once.
+                {contentType === 'quiz'
+                  ? 'Paste structured JSON from ChatGPT or Claude to batch-import dozens of quizzes.'
+                  : 'Paste structured JSON with word, scrambledLetters, and clue to batch-import spelling activities.'}
               </p>
             </div>
           </div>
@@ -469,7 +657,7 @@ export const AdminQuizSection: React.FC = () => {
 
         {importPanelOpen && (
           <div className="space-y-4 animate-in fade-in">
-            {/* Prompt customization settings */}
+            {/* Prompt Customization Toolbar */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div className="flex-1 space-y-1 w-full sm:w-auto">
                 <label className="font-extrabold text-slate-700 flex items-center gap-1">
@@ -480,23 +668,39 @@ export const AdminQuizSection: React.FC = () => {
                   type="text"
                   value={promptTopic}
                   onChange={(e) => setPromptTopic(e.target.value)}
-                  placeholder="e.g. Space Exploration, Physics, Microorganisms..."
-                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 font-semibold focus:outline-none focus:border-brand-500"
+                  placeholder={contentType === 'quiz' ? 'e.g. Space Exploration, Physics, Biology...' : 'e.g. English Vocabulary, Animals, Technology...'}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 font-semibold focus:outline-hidden focus:border-brand-500"
                 />
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                {contentType === 'spelling' && (
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-500">Difficulty:</label>
+                    <select
+                      value={spellingDifficultyPrompt}
+                      onChange={(e) => setSpellingDifficultyPrompt(e.target.value as any)}
+                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700"
+                    >
+                      <option value="Mixed">Mixed (Easy/Med/Hard)</option>
+                      <option value="Easy">Easy (4-6 letters, 30s)</option>
+                      <option value="Medium">Medium (6-8 letters, 45s)</option>
+                      <option value="Hard">Hard (8-12 letters, 60s)</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-500">Questions Count:</label>
+                  <label className="font-bold text-slate-500">Count:</label>
                   <select
                     value={promptCount}
                     onChange={(e) => setPromptCount(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700"
                   >
-                    <option value={10}>10 Quizzes</option>
-                    <option value={20}>20 Quizzes</option>
-                    <option value={30}>30 Quizzes</option>
-                    <option value={50}>50 Quizzes</option>
+                    <option value={10}>10 items</option>
+                    <option value={20}>20 items</option>
+                    <option value={30}>30 items</option>
+                    <option value={50}>50 items</option>
                   </select>
                 </div>
 
@@ -515,141 +719,78 @@ export const AdminQuizSection: React.FC = () => {
               <div className="flex items-center justify-between text-xs">
                 <label className="font-bold text-slate-700">Paste JSON Content:</label>
                 <span className="text-slate-400 font-mono text-[11px]">
-                  Format: {`{ "quizzes": [ ... ] }`}
+                  Format: {contentType === 'quiz' ? '{ "quizzes": [ ... ] }' : '{ "spellingScrambles": [ ... ] }'}
                 </span>
               </div>
               <textarea
                 value={jsonInput}
                 onChange={(e) => setJsonInput(e.target.value)}
-                placeholder={`Paste JSON here...\nExample:\n{\n  "quizzes": [\n    {\n      "question": "How many hearts does an octopus have?",\n      "options": ["1", "2", "3", "4"],\n      "correctAnswer": "3",\n      "explanation": "An octopus has three hearts.",\n      "category": "Science",\n      "difficulty": "Easy",\n      "xp": 10\n    }\n  ]\n}`}
-                rows={7}
-                className="w-full p-4 font-mono text-xs text-slate-800 bg-slate-50 border border-slate-300 rounded-2xl focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
+                placeholder={
+                  contentType === 'quiz'
+                    ? `{\n  "quizzes": [\n    {\n      "question": "How many hearts does an octopus have?",\n      "options": ["1", "2", "3", "4"],\n      "correctAnswer": "3",\n      "explanation": "An octopus has three hearts.",\n      "category": "Science",\n      "difficulty": "Easy",\n      "xp": 10\n    }\n  ]\n}`
+                    : `{\n  "spellingScrambles": [\n    {\n      "word": "ELEPHANT",\n      "scrambledLetters": ["P", "E", "L", "E", "H", "A", "N", "T"],\n      "clue": "A very large animal with a long trunk.",\n      "category": "Nature",\n      "difficulty": "Easy",\n      "xp": 10\n    }\n  ]\n}`
+                }
+                rows={6}
+                className="w-full p-3.5 font-mono text-xs bg-slate-900 text-emerald-400 rounded-2xl border border-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
               />
             </div>
 
-            {/* Import Action Buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleValidate}
-                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-2xl shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Validate JSON</span>
-                </button>
+            {/* Actions: Validate, Clear */}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={handleClearImport}
+                disabled={!jsonInput.trim()}
+                className="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer disabled:opacity-40"
+              >
+                Clear Content
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleClearImport}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-2xl transition-colors cursor-pointer"
-                >
-                  Clear
-                </button>
-              </div>
-
-              {validationResult && validationResult.valid.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleImportValidQuizzes}
-                  disabled={isImporting}
-                  className="px-6 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-2xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isImporting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Importing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      <span>Import {validationResult.valid.length} Valid Quiz{validationResult.valid.length === 1 ? '' : 'zes'}</span>
-                    </>
-                  )}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleValidate}
+                disabled={!jsonInput.trim()}
+                className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025da4] disabled:opacity-40 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Validate JSON Batch</span>
+              </button>
             </div>
 
-            {/* Validation Feedback UI */}
-            {validationResult && (
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 animate-in fade-in">
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2 font-black text-xs">
-                    <span className="text-slate-800">Validation Results:</span>
-                    <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
-                      ✓ {validationResult.valid.length} Valid
-                    </span>
-                    {validationResult.invalid.length > 0 && (
-                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-800 rounded-lg">
-                        ✗ {validationResult.invalid.length} Errors
-                      </span>
+            {/* Validation Feedback & Import Button */}
+            {(quizValidationResult || spellingValidationResult) && (
+              <div className="p-4 rounded-2xl border bg-slate-50 space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {activeInvalidCount === 0 && activeValidCount > 0 ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-rose-600" />
                     )}
+                    <span className="text-xs font-black text-slate-800">
+                      {activeValidCount} valid, {activeInvalidCount} invalid detected
+                    </span>
                   </div>
-                  <span className="text-xs text-slate-500 font-semibold">
-                    Total Detected: {validationResult.totalDetected}
-                  </span>
+
+                  {activeValidCount > 0 && (
+                    <button
+                      onClick={handleImportValidBatch}
+                      disabled={isImporting}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span>Import {activeValidCount} {contentType === 'quiz' ? 'Quizzes' : 'Scrambles'}</span>
+                    </button>
+                  )}
                 </div>
 
-                {/* List invalid errors if any */}
-                {validationResult.invalid.length > 0 && (
-                  <div className="space-y-2">
-                    <h5 className="text-xs font-bold text-rose-800">Problematic Records:</h5>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {validationResult.invalid.map((errItem, i) => (
-                        <div key={i} className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
-                          <div className="font-extrabold flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                            <span>Record #{errItem.index}: {errItem.question}</span>
-                          </div>
-                          <ul className="list-disc list-inside mt-1 text-[11px] text-rose-700 pl-2">
-                            {errItem.errors.map((msg, idx) => (
-                              <li key={idx}>{msg}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Valid Records Preview Table */}
-                {validationResult.valid.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <h5 className="text-xs font-bold text-emerald-800">Valid Quizzes Ready for Import:</h5>
-                    <div className="overflow-x-auto max-h-60 overflow-y-auto border border-slate-200 rounded-xl bg-white">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-extrabold sticky top-0 border-b border-slate-200">
-                          <tr>
-                            <th className="py-2.5 px-3">#</th>
-                            <th className="py-2.5 px-3">Question</th>
-                            <th className="py-2.5 px-3">Category</th>
-                            <th className="py-2.5 px-3">Difficulty</th>
-                            <th className="py-2.5 px-3">XP</th>
-                            <th className="py-2.5 px-3">Correct Answer</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                          {validationResult.valid.map((q, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50">
-                              <td className="py-2 px-3 text-slate-400">{idx + 1}</td>
-                              <td className="py-2 px-3 max-w-xs truncate" title={q.question}>{q.question}</td>
-                              <td className="py-2 px-3">
-                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
-                                  {q.category}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3">
-                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                                  {q.difficulty}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-[#026fc3] font-black">+{q.xp} XP</td>
-                              <td className="py-2 px-3 text-emerald-700 font-bold truncate max-w-[140px]">{q.correctAnswer}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                {activeInvalidCount > 0 && (
+                  <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3 max-h-32 overflow-y-auto space-y-1">
+                    {activeInvalidList.map((item, idx) => (
+                      <div key={idx}>
+                        • Item {item.index} ({'question' in item ? item.question : item.word}): {item.errors.join('; ')}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -658,399 +799,340 @@ export const AdminQuizSection: React.FC = () => {
         )}
       </div>
 
-      {/* 4. Quiz Management & Directory Section */}
-      <div className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h3 className="text-base font-black text-[#0f233a]">
-              Manage Quiz Bits ({quizzes.length})
-            </h3>
-            <p className="text-xs text-slate-500">
-              Filter by category, search by text, toggle published status, edit options, or remove outdated questions.
-            </p>
-          </div>
-
-          {/* Bulk actions */}
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 animate-in fade-in">
-              <span className="text-xs font-bold text-slate-600">
-                {selectedIds.size} selected
-              </span>
-              <button
-                onClick={() => handleBatchPublish(true)}
-                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Publish
-              </button>
-              <button
-                onClick={() => handleBatchPublish(false)}
-                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Unpublish
-              </button>
-            </div>
-          )}
+      {/* 4. Filter Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-stone-200/90 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={contentType === 'quiz' ? 'Search questions, explanations, categories...' : 'Search words, clues, categories...'}
+            className="w-full pl-9 pr-4 py-2 rounded-xl border border-stone-200 text-xs focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+          />
         </div>
 
-        {/* Filter Toolbar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-          {/* Search */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search question, explanation..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-brand-500"
-            />
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={difficultyFilter}
+            onChange={(e) => setDifficultyFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
+          >
+            <option value="all">All Difficulties</option>
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
 
-          {/* Category Filter */}
-          <div>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
-            >
-              <option value="all">All Categories</option>
-              {QUIZ_CONFIG.VALID_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
+          >
+            <option value="all">All Status</option>
+            <option value="published">Published</option>
+            <option value="draft">Drafts</option>
+          </select>
 
-          {/* Difficulty Filter */}
-          <div>
-            <select
-              value={difficultyFilter}
-              onChange={(e) => setDifficultyFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
-            >
-              <option value="all">All Difficulties</option>
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
-            </select>
-          </div>
+          <button
+            onClick={loadData}
+            disabled={refreshing}
+            className="p-2 rounded-xl border border-stone-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
+            title="Refresh List"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#026fc3]' : ''}`} />
+          </button>
+        </div>
+      </div>
 
-          {/* Published Filter */}
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
-            >
-              <option value="all">All Statuses</option>
-              <option value="published">Published Only</option>
-              <option value="false">Draft / Hidden Only</option>
-            </select>
-          </div>
+      {/* 5. Data Records List */}
+      <div className="bg-white rounded-3xl border border-stone-200/80 shadow-xs overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-sm font-black text-[#0f233a]">
+            {contentType === 'quiz'
+              ? `Manage Quiz Bits (${quizzes.length})`
+              : `Manage Spelling Scrambles (${scrambles.length})`}
+          </h3>
         </div>
 
-        {/* Quizzes Table */}
         {loading ? (
-          <div className="p-12 text-center space-y-3">
-            <Loader2 className="w-8 h-8 text-[#026fc3] animate-spin mx-auto" />
-            <p className="text-xs font-bold text-slate-500">Loading quiz bits...</p>
+          <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
+            <Loader2 className="w-6 h-6 animate-spin text-[#026fc3]" />
+            <span>Loading {contentType === 'quiz' ? 'quizzes' : 'spelling scrambles'}…</span>
           </div>
-        ) : quizzes.length === 0 ? (
-          <div className="p-12 text-center border border-dashed border-slate-300 rounded-2xl space-y-3 bg-slate-50/50">
-            <HelpCircle className="w-10 h-10 text-slate-300 mx-auto" />
-            <h4 className="text-sm font-black text-slate-700">No Quizzes Found</h4>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              No quiz bits match your current filter criteria or none have been imported yet. Use the Batch Import tool above to add quizzes!
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-extrabold border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-3 w-8">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === quizzes.length && quizzes.length > 0}
-                      onChange={handleToggleSelectAll}
-                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-                    />
-                  </th>
-                  <th className="py-3 px-3">Question & Options</th>
-                  <th className="py-3 px-3">Category</th>
-                  <th className="py-3 px-3">Difficulty</th>
-                  <th className="py-3 px-3">XP</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3">Attempts</th>
-                  <th className="py-3 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
-                {quizzes.map((quiz) => {
-                  const isSelected = selectedIds.has(quiz.id);
-
-                  return (
-                    <tr key={quiz.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-brand-50/30' : ''}`}>
-                      <td className="py-3 px-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleToggleSelectRow(quiz.id)}
-                          className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
-                        />
-                      </td>
-
-                      <td className="py-3 px-3 max-w-sm">
-                        <div className="font-extrabold text-[#0f233a] leading-snug">
-                          {quiz.question}
-                        </div>
-
-                        {/* Options pills */}
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {(Array.isArray(quiz.options) ? quiz.options : []).map((opt, i) => {
-                            const isCorrect = opt === quiz.correct_answer;
-                            return (
-                              <span
-                                key={i}
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                  isCorrect
-                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold'
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                {isCorrect ? '✓ ' : ''}{opt}
-                              </span>
-                            );
-                          })}
-                        </div>
-
-                        {/* Explanation snippet */}
-                        {quiz.explanation && (
-                          <p className="text-[11px] text-slate-500 font-normal mt-1 line-clamp-1 italic">
-                            💡 {quiz.explanation}
-                          </p>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
-                          {quiz.category || 'General'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
-                          quiz.difficulty?.toLowerCase() === 'hard'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : quiz.difficulty?.toLowerCase() === 'medium'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        }`}>
-                          {quiz.difficulty || 'Easy'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 whitespace-nowrap text-[#026fc3] font-black">
+        ) : contentType === 'quiz' ? (
+          // Quiz List
+          quizzes.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-xs font-bold">
+              No quizzes found matching your filters.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {quizzes.map((quiz) => (
+                <div
+                  key={quiz.id}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                >
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          quiz.is_published
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {quiz.is_published ? 'Published' : 'Draft'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
+                        {quiz.category}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
+                        {quiz.difficulty}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black">
                         +{quiz.xp || 10} XP
-                      </td>
+                      </span>
+                    </div>
 
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <button
-                          onClick={() => handleTogglePublish(quiz)}
-                          className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase transition-colors cursor-pointer ${
-                            quiz.is_published
-                              ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300'
-                              : 'bg-slate-200 hover:bg-slate-300 text-slate-700 border border-slate-300'
-                          }`}
-                          title="Click to toggle publication"
-                        >
-                          {quiz.is_published ? '● Published' : '○ Draft'}
-                        </button>
-                      </td>
+                    <h4 className="text-sm sm:text-base font-bold text-[#0f233a]">
+                      {quiz.question}
+                    </h4>
 
-                      <td className="py-3 px-3 whitespace-nowrap text-slate-500 text-[11px]">
-                        {quiz.attempt_count || 0} attempts
-                      </td>
+                    <div className="text-xs text-emerald-700 font-semibold">
+                      ✓ Correct: {quiz.correct_answer}
+                    </div>
 
-                      <td className="py-3 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditModal(quiz)}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                            title="Edit Quiz"
+                    {quiz.explanation && (
+                      <p className="text-xs text-slate-500 line-clamp-1 italic">
+                        💡 {quiz.explanation}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleToggleQuizPublish(quiz)}
+                      className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                        quiz.is_published
+                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                      }`}
+                      title={quiz.is_published ? 'Unpublish' : 'Publish'}
+                    >
+                      {quiz.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEditQuizModal(quiz)}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                      title="Edit quiz"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteQuiz(quiz)}
+                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                      title="Delete quiz"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          // Spelling Scrambles List
+          scrambles.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-xs font-bold">
+              No spelling scrambles found matching your filters.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {scrambles.map((scramble) => (
+                <div
+                  key={scramble.id}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          scramble.is_published
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {scramble.is_published ? 'Published' : 'Draft'}
+                      </span>
+
+                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
+                        {scramble.category}
+                      </span>
+
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        scramble.difficulty === 'Hard'
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                          : scramble.difficulty === 'Medium'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {scramble.difficulty}
+                      </span>
+
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        <span>{scramble.timer_seconds}s</span>
+                      </span>
+
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black flex items-center gap-1">
+                        <Zap className="w-3 h-3 fill-amber-700" />
+                        <span>+{scramble.xp} XP</span>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <h4 className="text-base font-black text-[#0f233a] font-mono tracking-wider">
+                        {scramble.word}
+                      </h4>
+                      <div className="flex items-center gap-1">
+                        {scramble.scrambled_letters?.map((l, lIdx) => (
+                          <span
+                            key={lIdx}
+                            className="w-5 h-6 bg-slate-100 text-slate-700 rounded-md font-mono text-xs font-bold flex items-center justify-center border border-slate-200"
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
-                          <button
-                            onClick={() => handleDeleteQuiz(quiz)}
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                            title="Delete Quiz"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    <p className="text-xs text-slate-600 font-medium line-clamp-2">
+                      💡 &ldquo;{scramble.clue}&rdquo;
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleToggleScramblePublish(scramble)}
+                      className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                        scramble.is_published
+                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                      }`}
+                      title={scramble.is_published ? 'Unpublish' : 'Publish'}
+                    >
+                      {scramble.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEditScrambleModal(scramble)}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                      title="Edit scramble"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteScramble(scramble)}
+                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                      title="Delete scramble"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
-      {/* 5. Edit Quiz Modal */}
+      {/* 6. Edit Modal for Quiz */}
       {editingQuiz && (
-        <div
-          onClick={() => setEditingQuiz(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-black text-[#0f233a] flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-[#026fc3]" />
-                <span>Edit Quiz Bit</span>
-              </h3>
+              <h3 className="text-base font-black text-[#0f233a]">Edit Quiz Bit</h3>
               <button
                 onClick={() => setEditingQuiz(null)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-semibold">
-              {/* Question */}
-              <div className="space-y-1">
-                <label className="text-slate-700 font-bold">Question Text:</label>
-                <textarea
-                  value={editForm.question}
-                  onChange={(e) => setEditForm({ ...editForm, question: e.target.value })}
-                  rows={2}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-500 font-bold text-slate-800"
-                  required
-                />
-              </div>
-
-              {/* 4 Options & Correct Answer Radio */}
-              <div className="space-y-2">
-                <label className="text-slate-700 font-bold">Options (Select radio for correct answer):</label>
-                <div className="space-y-2">
-                  {(Array.isArray(editForm.options) ? editForm.options : ['', '', '', '']).map((opt, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="correctAnswerRadio"
-                        checked={editForm.correct_answer === opt && opt.length > 0}
-                        onChange={() => setEditForm({ ...editForm, correct_answer: opt })}
-                        className="text-brand-600 focus:ring-brand-500 cursor-pointer"
-                        title="Mark as correct answer"
-                      />
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={(e) => {
-                          const newOpts = [...editForm.options];
-                          const oldVal = newOpts[idx];
-                          newOpts[idx] = e.target.value;
-                          const newCorrect = editForm.correct_answer === oldVal ? e.target.value : editForm.correct_answer;
-                          setEditForm({ ...editForm, options: newOpts, correct_answer: newCorrect });
-                        }}
-                        placeholder={`Option ${idx + 1}`}
-                        className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-brand-500"
-                        required
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Explanation */}
-              <div className="space-y-1">
-                <label className="text-slate-700 font-bold">Educational Explanation:</label>
-                <textarea
-                  value={editForm.explanation}
-                  onChange={(e) => setEditForm({ ...editForm, explanation: e.target.value })}
-                  rows={2}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-brand-500 text-slate-800"
-                  required
-                />
-              </div>
-
-              {/* Category, Difficulty, XP */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="text-slate-600 font-bold text-[11px]">Category:</label>
-                  <select
-                    value={editForm.category}
-                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700"
-                  >
-                    {QUIZ_CONFIG.VALID_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-600 font-bold text-[11px]">Difficulty:</label>
-                  <select
-                    value={editForm.difficulty}
-                    onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700"
-                  >
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-600 font-bold text-[11px]">XP Reward:</label>
-                  <input
-                    type="number"
-                    value={editForm.xp}
-                    onChange={(e) => setEditForm({ ...editForm, xp: Number(e.target.value) })}
-                    min={1}
-                    max={100}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
-                  />
-                </div>
-              </div>
-
-              {/* Published checkbox */}
-              <div className="pt-2 flex items-center gap-2">
+            <form onSubmit={handleSaveQuizEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Question *</label>
                 <input
-                  type="checkbox"
-                  id="modalPublished"
-                  checked={editForm.is_published}
-                  onChange={(e) => setEditForm({ ...editForm, is_published: e.target.checked })}
-                  className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                  type="text"
+                  value={editQuizForm.question}
+                  onChange={(e) => setEditQuizForm((prev) => ({ ...prev, question: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm font-medium"
                 />
-                <label htmlFor="modalPublished" className="font-bold text-slate-700 cursor-pointer">
-                  Published (Visible to students in feed)
-                </label>
               </div>
 
-              {/* Submit Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">4 Options *</label>
+                {editQuizForm.options.map((opt, idx) => (
+                  <input
+                    key={idx}
+                    type="text"
+                    value={opt}
+                    onChange={(e) => {
+                      const next = [...editQuizForm.options];
+                      next[idx] = e.target.value;
+                      setEditQuizForm((prev) => ({ ...prev, options: next }));
+                    }}
+                    placeholder={`Option ${idx + 1}`}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs"
+                  />
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Correct Answer *</label>
+                <select
+                  value={editQuizForm.correct_answer}
+                  onChange={(e) => setEditQuizForm((prev) => ({ ...prev, correct_answer: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white"
+                >
+                  {editQuizForm.options.map((opt, idx) => (
+                    <option key={idx} value={opt}>
+                      {opt || `Option ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Explanation *</label>
+                <textarea
+                  value={editQuizForm.explanation}
+                  onChange={(e) => setEditQuizForm((prev) => ({ ...prev, explanation: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingQuiz(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-5 py-2 bg-[#026fc3] hover:bg-[#025ea6] text-white font-black rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  className="px-5 py-2 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white font-black text-xs shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  <span>Save Changes</span>
+                  {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>Save Quiz</span>
                 </button>
               </div>
             </form>
@@ -1058,6 +1140,100 @@ export const AdminQuizSection: React.FC = () => {
         </div>
       )}
 
+      {/* 7. Edit Modal for Spelling Scramble */}
+      {editingScramble && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-black text-[#0f233a]">Edit Spelling Scramble</h3>
+              <button
+                onClick={() => setEditingScramble(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveScrambleEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Target Word (A-Z) *</label>
+                <input
+                  type="text"
+                  value={editScrambleForm.word}
+                  onChange={(e) => setEditScrambleForm((prev) => ({ ...prev, word: e.target.value.toUpperCase() }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-sm font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Clue *</label>
+                <textarea
+                  value={editScrambleForm.clue}
+                  onChange={(e) => setEditScrambleForm((prev) => ({ ...prev, clue: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3.5 py-2 rounded-xl border border-stone-200 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Difficulty</label>
+                  <select
+                    value={editScrambleForm.difficulty}
+                    onChange={(e) => setEditScrambleForm((prev) => ({ ...prev, difficulty: e.target.value as any }))}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white"
+                  >
+                    <option value="Easy">Easy (30s timer, 10 XP)</option>
+                    <option value="Medium">Medium (45s timer, 15 XP)</option>
+                    <option value="Hard">Hard (60s timer, 20 XP)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <input
+                    type="text"
+                    value={editScrambleForm.category}
+                    onChange={(e) => setEditScrambleForm((prev) => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="scrambleEditPub"
+                  checked={editScrambleForm.is_published}
+                  onChange={(e) => setEditScrambleForm((prev) => ({ ...prev, is_published: e.target.checked }))}
+                  className="rounded-md text-brand-600 w-4 h-4"
+                />
+                <label htmlFor="scrambleEditPub" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Published
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingScramble(null)}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>Save Scramble</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

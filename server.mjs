@@ -31,7 +31,9 @@ import {
   testR2Connection,
   buildReadingContentKey,
   buildQuizContentKey,
-  buildPollContentKey
+  buildPollContentKey,
+  buildReorderContentKey,
+  buildSpellingScrambleContentKey
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
@@ -338,6 +340,48 @@ function savePollVotesCache(votes) {
     fs.writeFileSync(POLL_VOTES_FILE, JSON.stringify(votes, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving poll votes cache:', e);
+  }
+}
+
+// In-memory / file-based Sentence Reorder store
+const REORDERS_FILE = path.resolve(__dirname, 'server/data/reorders_cache.json');
+const REORDER_COMPLETIONS_FILE = path.resolve(__dirname, 'server/data/reorder_completions_cache.json');
+
+function loadReordersCache() {
+  try {
+    if (fs.existsSync(REORDERS_FILE)) {
+      return JSON.parse(fs.readFileSync(REORDERS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading reorders cache:', e);
+  }
+  return [];
+}
+
+function saveReordersCache(reorders) {
+  try {
+    fs.writeFileSync(REORDERS_FILE, JSON.stringify(reorders, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving reorders cache:', e);
+  }
+}
+
+function loadReorderCompletionsCache() {
+  try {
+    if (fs.existsSync(REORDER_COMPLETIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(REORDER_COMPLETIONS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading reorder completions cache:', e);
+  }
+  return [];
+}
+
+function saveReorderCompletionsCache(completions) {
+  try {
+    fs.writeFileSync(REORDER_COMPLETIONS_FILE, JSON.stringify(completions, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving reorder completions cache:', e);
   }
 }
 
@@ -4182,6 +4226,1307 @@ app.delete('/api/polls/:id', async (req, res) => {
   } catch (error) {
     console.error('Error in DELETE /api/polls/:id:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to delete poll.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: SENTENCE REORDER ACTIVITIES
+// ============================================================================
+
+// Helper: Normalize words array and ensure 3 to 6 word limits
+function processReorderWords(rawInput) {
+  let sentence = String(rawInput.sentence || '').trim();
+  let correctOrder = [];
+  let scrambledWords = [];
+
+  // Parse words from array or sentence string
+  if (Array.isArray(rawInput.correct_order) && rawInput.correct_order.length > 0) {
+    correctOrder = rawInput.correct_order.map(w => String(w).trim()).filter(Boolean);
+  } else if (Array.isArray(rawInput.correctOrder) && rawInput.correctOrder.length > 0) {
+    correctOrder = rawInput.correctOrder.map(w => String(w).trim()).filter(Boolean);
+  } else if (Array.isArray(rawInput.words) && rawInput.words.length > 0) {
+    correctOrder = rawInput.words.map(w => String(w).trim()).filter(Boolean);
+  } else if (sentence) {
+    correctOrder = sentence.split(/\s+/).filter(Boolean);
+  }
+
+  if (Array.isArray(rawInput.scrambled_words) && rawInput.scrambled_words.length > 0) {
+    scrambledWords = rawInput.scrambled_words.map(w => String(w).trim()).filter(Boolean);
+  } else if (Array.isArray(rawInput.words) && rawInput.words.length > 0) {
+    scrambledWords = [...rawInput.words.map(w => String(w).trim()).filter(Boolean)];
+    // Ensure words are scrambled
+    if (scrambledWords.join(' ') === correctOrder.join(' ') && scrambledWords.length > 1) {
+      scrambledWords.sort(() => Math.random() - 0.5);
+    }
+  } else {
+    scrambledWords = [...correctOrder].sort(() => Math.random() - 0.5);
+  }
+
+  if (!sentence && correctOrder.length > 0) {
+    sentence = correctOrder.join(' ');
+  }
+
+  return { sentence, correctOrder, scrambledWords };
+}
+
+// 1. POST /api/reorders - Create new activity (Supports Single or Bulk Array)
+app.post('/api/reorders', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const payload = req.body;
+    const isBulk = Array.isArray(payload) || Array.isArray(payload?.activities);
+    const rawItems = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.activities)
+      ? payload.activities
+      : [payload];
+
+    const results = [];
+    const cache = loadReordersCache();
+    const batchId = isBulk ? `batch_reorder_${Date.now()}` : null;
+    const now = new Date().toISOString();
+
+    for (let idx = 0; idx < rawItems.length; idx++) {
+      const item = rawItems[idx];
+      const { sentence, correctOrder, scrambledWords } = processReorderWords(item);
+
+      if (!sentence) {
+        throw new Error(`Item ${idx + 1}: Sentence cannot be empty.`);
+      }
+
+      if (correctOrder.length < 3 || correctOrder.length > 6) {
+        throw new Error(`Item ${idx + 1}: Sentence "${sentence}" contains ${correctOrder.length} words. Sentences must contain between 3 and 6 words.`);
+      }
+
+      const id = crypto.randomUUID();
+      const r2Key = buildReorderContentKey(id);
+
+      const activityRecord = {
+        id,
+        sentence,
+        scrambled_words: scrambledWords,
+        correct_order: correctOrder,
+        category: typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'Grammar',
+        level: typeof item.level === 'string' && item.level.trim() ? item.level.trim() : 'A1',
+        xp: Number(item.xp) > 0 ? Number(item.xp) : 10,
+        hint: item.hint ? String(item.hint).trim() : null,
+        explanation: item.explanation ? String(item.explanation).trim() : null,
+        r2_content_key: r2Key,
+        is_published: item.is_published !== undefined ? Boolean(item.is_published) : true,
+        created_by: authData.user.id,
+        import_batch_id: batchId,
+        created_at: now,
+        updated_at: now
+      };
+
+      // 1. Upload full content JSON to Cloudflare R2
+      try {
+        await putJsonContent(r2Key, {
+          id: activityRecord.id,
+          sentence: activityRecord.sentence,
+          scrambled_words: activityRecord.scrambled_words,
+          correct_order: activityRecord.correct_order,
+          category: activityRecord.category,
+          level: activityRecord.level,
+          xp: activityRecord.xp,
+          hint: activityRecord.hint,
+          explanation: activityRecord.explanation,
+          created_at: activityRecord.created_at
+        });
+      } catch (r2Err) {
+        console.warn(`[R2 Reorder Upload Notice] Failed for ${id}:`, r2Err.message);
+      }
+
+      // 2. Persist to Supabase if available
+      if (serverSupabase) {
+        try {
+          await serverSupabase.from('reorder_activities').insert([activityRecord]);
+        } catch (sbErr) {
+          console.warn(`[Supabase Reorder Notice] Insert fallback:`, sbErr.message);
+        }
+      }
+
+      cache.unshift(activityRecord);
+      results.push(activityRecord);
+    }
+
+    saveReordersCache(cache);
+
+    if (isBulk) {
+      return res.json({
+        success: true,
+        message: `Successfully imported ${results.length} sentence reorder activities.`,
+        data: results,
+        count: results.length,
+        batchId
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Sentence reorder activity created successfully.',
+      data: results[0]
+    });
+  } catch (error) {
+    console.error('Error in POST /api/reorders:', error);
+    res.status(400).json({ success: false, error: error.message || 'Failed to create activity.' });
+  }
+});
+
+// 2. POST /api/reorders/import-batch - Admin batch import
+app.post('/api/reorders/import-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { activities, batchId: customBatchId } = req.body;
+    const rawList = Array.isArray(activities) ? activities : Array.isArray(req.body) ? req.body : [];
+
+    if (rawList.length === 0) {
+      return res.status(400).json({ success: false, error: 'No activities provided for batch import.' });
+    }
+
+    const cache = loadReordersCache();
+    const batchId = customBatchId || `batch_reorder_${Date.now()}`;
+    const now = new Date().toISOString();
+    const imported = [];
+    const errors = [];
+
+    for (let i = 0; i < rawList.length; i++) {
+      const item = rawList[i];
+      try {
+        const { sentence, correctOrder, scrambledWords } = processReorderWords(item);
+
+        if (!sentence) {
+          errors.push({ index: i, error: 'Sentence cannot be empty' });
+          continue;
+        }
+
+        if (correctOrder.length < 3 || correctOrder.length > 6) {
+          errors.push({ index: i, error: `Sentence contains ${correctOrder.length} words. Allowed range: 3-6 words.` });
+          continue;
+        }
+
+        const id = crypto.randomUUID();
+        const r2Key = buildReorderContentKey(id);
+
+        const record = {
+          id,
+          sentence,
+          scrambled_words: scrambledWords,
+          correct_order: correctOrder,
+          category: typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'Grammar',
+          level: typeof item.level === 'string' && item.level.trim() ? item.level.trim() : 'A1',
+          xp: Number(item.xp) > 0 ? Number(item.xp) : 10,
+          hint: item.hint ? String(item.hint).trim() : null,
+          explanation: item.explanation ? String(item.explanation).trim() : null,
+          r2_content_key: r2Key,
+          is_published: item.is_published !== undefined ? Boolean(item.is_published) : true,
+          created_by: authData.user.id,
+          import_batch_id: batchId,
+          created_at: now,
+          updated_at: now
+        };
+
+        try {
+          await putJsonContent(r2Key, {
+            id: record.id,
+            sentence: record.sentence,
+            scrambled_words: record.scrambled_words,
+            correct_order: record.correct_order,
+            category: record.category,
+            level: record.level,
+            xp: record.xp,
+            hint: record.hint,
+            explanation: record.explanation,
+            created_at: record.created_at
+          });
+        } catch (e) {}
+
+        if (serverSupabase) {
+          try {
+            await serverSupabase.from('reorder_activities').insert([record]);
+          } catch (e) {}
+        }
+
+        cache.unshift(record);
+        imported.push(record);
+      } catch (err) {
+        errors.push({ index: i, error: err.message });
+      }
+    }
+
+    saveReordersCache(cache);
+
+    res.json({
+      success: true,
+      importedCount: imported.length,
+      failedCount: errors.length,
+      batchId,
+      activities: imported,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error in POST /api/reorders/import-batch:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to import batch.' });
+  }
+});
+
+// 3. GET /api/reorders/admin - Admin list with filtering & stats
+app.get('/api/reorders/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, level, published } = req.query;
+    let allActivities = loadReordersCache();
+    const completions = loadReorderCompletionsCache();
+
+    if (serverSupabase) {
+      try {
+        const { data: dbActivities, error: sbErr } = await serverSupabase
+          .from('reorder_activities')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbActivities) && dbActivities.length > 0) {
+          const dbMap = new Map(dbActivities.map(a => [a.id, a]));
+          const merged = [...dbActivities];
+          for (const cached of allActivities) {
+            if (!dbMap.has(cached.id)) {
+              merged.push(cached);
+            }
+          }
+          allActivities = merged;
+          saveReordersCache(allActivities);
+        }
+      } catch (e) {
+        console.warn('[Supabase admin reorders notice]:', e.message);
+      }
+    }
+
+    let filtered = [...allActivities];
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(a =>
+        a.sentence?.toLowerCase().includes(q) ||
+        a.category?.toLowerCase().includes(q) ||
+        a.explanation?.toLowerCase().includes(q)
+      );
+    }
+
+    if (category && category !== 'all') {
+      filtered = filtered.filter(a => a.category?.toLowerCase() === String(category).toLowerCase());
+    }
+
+    if (level && level !== 'all') {
+      filtered = filtered.filter(a => a.level?.toLowerCase() === String(level).toLowerCase());
+    }
+
+    if (published && published !== 'all') {
+      const isPub = published === 'published' || published === 'true';
+      filtered = filtered.filter(a => Boolean(a.is_published) === isPub);
+    }
+
+    const stats = {
+      totalActivities: allActivities.length,
+      publishedActivities: allActivities.filter(a => a.is_published).length,
+      draftActivities: allActivities.filter(a => !a.is_published).length,
+      totalCompletions: completions.length,
+      totalXpAwarded: completions.reduce((sum, c) => sum + (c.xp_awarded || 0), 0)
+    };
+
+    res.json({
+      success: true,
+      data: {
+        activities: filtered,
+        stats,
+        total: filtered.length
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/reorders/admin:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch admin activities.' });
+  }
+});
+
+// 4. GET /api/reorders/feed - Student Feed pool of published activities
+app.get('/api/reorders/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    let allActivities = loadReordersCache();
+    let allCompletions = loadReorderCompletionsCache();
+
+    if (serverSupabase) {
+      try {
+        const { data: dbActivities, error: sbErr } = await serverSupabase
+          .from('reorder_activities')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (!sbErr && Array.isArray(dbActivities) && dbActivities.length > 0) {
+          const dbMap = new Map(dbActivities.map(a => [a.id, a]));
+          const merged = [...dbActivities];
+          for (const cached of allActivities) {
+            if (!dbMap.has(cached.id)) {
+              merged.push(cached);
+            }
+          }
+          allActivities = merged;
+          saveReordersCache(allActivities);
+        }
+
+        if (userId !== 'guest_user') {
+          const { data: dbCompletions } = await serverSupabase
+            .from('reorder_completions')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (dbCompletions && Array.isArray(dbCompletions)) {
+            const compMap = new Map(allCompletions.map(c => [`${c.activity_id}_${c.user_id}`, c]));
+            dbCompletions.forEach(c => compMap.set(`${c.activity_id}_${c.user_id}`, c));
+            allCompletions = Array.from(compMap.values());
+            saveReorderCompletionsCache(allCompletions);
+          }
+        }
+      } catch (e) {
+        console.warn('[Supabase feed reorders notice]:', e.message);
+      }
+    }
+
+    const published = allActivities.filter(a => a.is_published);
+    if (published.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const userCompletionsMap = new Map();
+    allCompletions.filter(c => c.user_id === userId).forEach(c => {
+      userCompletionsMap.set(c.activity_id, c);
+    });
+
+    const enriched = published.map(a => {
+      const userComp = userCompletionsMap.get(a.id);
+      return {
+        ...a,
+        has_completed: Boolean(userComp?.is_correct),
+        user_order: userComp?.user_order || null
+      };
+    });
+
+    // Sort to prioritize uncompleted activities, then shuffle lightly
+    const uncompleted = enriched.filter(a => !a.has_completed).sort(() => Math.random() - 0.5);
+    const completed = enriched.filter(a => a.has_completed).sort(() => Math.random() - 0.5);
+    const feedPool = [...uncompleted, ...completed].slice(0, 15);
+
+    res.json({
+      success: true,
+      data: feedPool
+    });
+  } catch (error) {
+    console.error('Error in GET /api/reorders/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve reorders feed.' });
+  }
+});
+
+// 5. GET /api/reorders/:id - Get single activity
+app.get('/api/reorders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let activity = null;
+
+    if (serverSupabase) {
+      const { data } = await serverSupabase.from('reorder_activities').select('*').eq('id', id).single();
+      if (data) activity = data;
+    }
+
+    if (!activity) {
+      const cache = loadReordersCache();
+      activity = cache.find(a => a.id === id);
+    }
+
+    if (!activity) {
+      return res.status(404).json({ success: false, error: 'Activity not found.' });
+    }
+
+    res.json({ success: true, data: activity });
+  } catch (error) {
+    console.error('Error in GET /api/reorders/:id:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 6. PUT /api/reorders/:id - Update activity content (Admin only)
+app.put('/api/reorders/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { sentence, scrambled_words, correct_order, category, level, xp, hint, explanation, is_published } = req.body;
+
+    const cache = loadReordersCache();
+    const index = cache.findIndex(a => a.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Activity not found.' });
+    }
+
+    const existing = index !== -1 ? cache[index] : null;
+    const now = new Date().toISOString();
+
+    const { sentence: cleanSentence, correctOrder: cleanCorrect, scrambledWords: cleanScrambled } = processReorderWords({
+      sentence: sentence !== undefined ? sentence : existing?.sentence,
+      correct_order: correct_order !== undefined ? correct_order : existing?.correct_order,
+      scrambled_words: scrambled_words !== undefined ? scrambled_words : existing?.scrambled_words
+    });
+
+    if (cleanCorrect.length < 3 || cleanCorrect.length > 6) {
+      return res.status(400).json({ success: false, error: `Sentence must contain between 3 and 6 words (received ${cleanCorrect.length}).` });
+    }
+
+    const updated = {
+      ...(existing || {}),
+      id,
+      sentence: cleanSentence,
+      scrambled_words: cleanScrambled,
+      correct_order: cleanCorrect,
+      category: category !== undefined ? category.trim() : existing?.category || 'Grammar',
+      level: level !== undefined ? level.trim() : existing?.level || 'A1',
+      xp: Number(xp) > 0 ? Number(xp) : existing?.xp || 10,
+      hint: hint !== undefined ? (hint ? String(hint).trim() : null) : existing?.hint,
+      explanation: explanation !== undefined ? (explanation ? String(explanation).trim() : null) : existing?.explanation,
+      is_published: is_published !== undefined ? Boolean(is_published) : existing?.is_published ?? true,
+      r2_content_key: existing?.r2_content_key || buildReorderContentKey(id),
+      updated_at: now
+    };
+
+    if (index !== -1) {
+      cache[index] = updated;
+      saveReordersCache(cache);
+    }
+
+    // Update R2 content JSON
+    try {
+      await putJsonContent(updated.r2_content_key, {
+        id: updated.id,
+        sentence: updated.sentence,
+        scrambled_words: updated.scrambled_words,
+        correct_order: updated.correct_order,
+        category: updated.category,
+        level: updated.level,
+        xp: updated.xp,
+        hint: updated.hint,
+        explanation: updated.explanation,
+        updated_at: now
+      });
+    } catch (e) {}
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('reorder_activities').update(updated).eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase update reorder notice]:', e.message);
+      }
+    }
+
+    res.json({ success: true, message: 'Activity updated successfully.', data: updated });
+  } catch (error) {
+    console.error('Error in PUT /api/reorders/:id:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 7. PUT /api/reorders/:id/publish - Toggle publish status (Admin only)
+app.put('/api/reorders/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const cache = loadReordersCache();
+    const index = cache.findIndex(a => a.id === id);
+
+    if (index === -1 && !serverSupabase) {
+      return res.status(404).json({ success: false, error: 'Activity not found.' });
+    }
+
+    const targetPub = is_published !== undefined ? Boolean(is_published) : !cache[index]?.is_published;
+    const now = new Date().toISOString();
+
+    if (index !== -1) {
+      cache[index].is_published = targetPub;
+      cache[index].updated_at = now;
+      saveReordersCache(cache);
+    }
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('reorder_activities')
+          .update({ is_published: targetPub, updated_at: now })
+          .eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase publish reorder notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Activity ${targetPub ? 'published' : 'unpublished'} successfully.`,
+      is_published: targetPub
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/reorders/:id/publish:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 8. DELETE /api/reorders/:id - Delete activity (Admin only)
+app.delete('/api/reorders/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const cache = loadReordersCache();
+    const target = cache.find(a => a.id === id);
+    const updated = cache.filter(a => a.id !== id);
+    saveReordersCache(updated);
+
+    if (target?.r2_content_key) {
+      try {
+        await deleteObjects([target.r2_content_key]);
+      } catch (e) {}
+    }
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('reorder_activities').delete().eq('id', id);
+      } catch (e) {
+        console.warn('[Supabase delete reorder notice]:', e.message);
+      }
+    }
+
+    res.json({ success: true, deletedId: id, message: 'Activity deleted successfully.' });
+  } catch (error) {
+    console.error('Error in DELETE /api/reorders/:id:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 9. POST /api/reorders/complete - Submit student completion attempt
+app.post('/api/reorders/complete', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+    const { activityId, userOrder, usedHint } = req.body;
+
+    if (!activityId || !Array.isArray(userOrder)) {
+      return res.status(400).json({ success: false, error: 'activityId and userOrder array are required.' });
+    }
+
+    let activity = null;
+    const cache = loadReordersCache();
+    activity = cache.find(a => a.id === activityId);
+
+    if (!activity && serverSupabase) {
+      const { data } = await serverSupabase.from('reorder_activities').select('*').eq('id', activityId).single();
+      if (data) activity = data;
+    }
+
+    if (!activity) {
+      return res.status(404).json({ success: false, error: 'Activity not found.' });
+    }
+
+    // Evaluate answer against correct order (case-insensitive string comparison for safety)
+    const expected = activity.correct_order.map(w => w.trim().toLowerCase());
+    const submitted = userOrder.map(w => String(w).trim().toLowerCase());
+    const isCorrect = expected.length === submitted.length && expected.every((w, i) => w === submitted[i]);
+
+    const completions = loadReorderCompletionsCache();
+    const existing = completions.find(c => c.activity_id === activityId && c.user_id === userId);
+    const alreadyCompleted = Boolean(existing && existing.is_correct);
+
+    // Calculate XP: award once upon first correct completion (deduct 2 XP if hint was used, min 5 XP)
+    let xpAwarded = 0;
+    if (isCorrect && !alreadyCompleted) {
+      const baseXP = Number(activity.xp) || 10;
+      xpAwarded = usedHint ? Math.max(5, baseXP - 2) : baseXP;
+    }
+
+    if (!existing || (!existing.is_correct && isCorrect)) {
+      const record = {
+        id: existing?.id || crypto.randomUUID(),
+        activity_id: activityId,
+        user_id: userId,
+        is_correct: isCorrect,
+        user_order: userOrder,
+        xp_awarded: xpAwarded,
+        completed_at: new Date().toISOString()
+      };
+
+      if (existing) {
+        const idx = completions.findIndex(c => c.id === existing.id);
+        completions[idx] = record;
+      } else {
+        completions.push(record);
+      }
+      saveReorderCompletionsCache(completions);
+
+      if (serverSupabase && userId !== 'guest_user') {
+        try {
+          await serverSupabase.from('reorder_completions').upsert([record], { onConflict: 'activity_id,user_id' });
+        } catch (e) {
+          console.warn('[Supabase completion notice]:', e.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        is_correct: isCorrect,
+        correct_sentence: activity.sentence,
+        explanation: activity.explanation,
+        xp_awarded: xpAwarded,
+        already_completed: alreadyCompleted
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/reorders/complete:', error);
+    res.status(500).json({ success: false, error: 'Failed to record completion.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: SPELLING SCRAMBLE MICROLEARNING ACTIVITIES
+// ============================================================================
+
+const SPELLING_SCRAMBLES_CACHE_FILE = path.resolve(__dirname, 'server/data/spelling_scrambles_cache.json');
+const SPELLING_COMPLETIONS_CACHE_FILE = path.resolve(__dirname, 'server/data/spelling_completions_cache.json');
+
+function loadSpellingScramblesCache() {
+  try {
+    if (fs.existsSync(SPELLING_SCRAMBLES_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(SPELLING_SCRAMBLES_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Spelling Scrambles Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveSpellingScramblesCache(data) {
+  try {
+    const dir = path.dirname(SPELLING_SCRAMBLES_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SPELLING_SCRAMBLES_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Spelling Scrambles Cache Write Error]:', err.message);
+  }
+}
+
+function loadSpellingCompletionsCache() {
+  try {
+    if (fs.existsSync(SPELLING_COMPLETIONS_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(SPELLING_COMPLETIONS_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Spelling Completions Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveSpellingCompletionsCache(data) {
+  try {
+    const dir = path.dirname(SPELLING_COMPLETIONS_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SPELLING_COMPLETIONS_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Spelling Completions Cache Write Error]:', err.message);
+  }
+}
+
+// 1. GET /api/spelling-scrambles/feed - Student Feed Pool
+app.get('/api/spelling-scrambles/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+
+    let scrambles = [];
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('spelling_scrambles')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (!error && data && data.length > 0) {
+          scrambles = data;
+        }
+      } catch (err) {
+        console.warn('[Supabase feed query fallback]:', err.message);
+      }
+    }
+
+    if (scrambles.length === 0) {
+      scrambles = loadSpellingScramblesCache().filter(s => s.is_published !== false);
+    }
+
+    // Attach completion status if user is authenticated
+    let userCompletions = new Set();
+    if (userId) {
+      if (serverSupabase) {
+        try {
+          const { data } = await serverSupabase
+            .from('spelling_scramble_completions')
+            .select('scramble_id')
+            .eq('user_id', userId);
+          if (data) {
+            data.forEach(c => userCompletions.add(c.scramble_id));
+          }
+        } catch {}
+      } else {
+        const completions = loadSpellingCompletionsCache();
+        completions.filter(c => c.user_id === userId).forEach(c => userCompletions.add(c.scramble_id));
+      }
+    }
+
+    const payload = scrambles.map(s => ({
+      ...s,
+      has_completed: userCompletions.has(s.id)
+    }));
+
+    res.json({ success: true, data: payload });
+  } catch (error) {
+    console.error('Error in GET /api/spelling-scrambles/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch spelling scrambles feed.' });
+  }
+});
+
+// 2. GET /api/spelling-scrambles/admin - Admin management list with stats & filters
+app.get('/api/spelling-scrambles/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { search, category, difficulty, published } = req.query;
+
+    let scrambles = [];
+    if (serverSupabase) {
+      try {
+        let query = serverSupabase.from('spelling_scrambles').select('*').order('created_at', { ascending: false });
+        if (category && category !== 'all') query = query.eq('category', category);
+        if (difficulty && difficulty !== 'all') query = query.eq('difficulty', difficulty);
+        if (published === 'published') query = query.eq('is_published', true);
+        if (published === 'draft') query = query.eq('is_published', false);
+        if (search) {
+          query = query.or(`word.ilike.%${search}%,clue.ilike.%${search}%,category.ilike.%${search}%`);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) {
+          scrambles = data;
+        }
+      } catch (err) {
+        console.warn('[Supabase admin query fallback]:', err.message);
+      }
+    }
+
+    if (scrambles.length === 0) {
+      scrambles = loadSpellingScramblesCache();
+      if (category && category !== 'all') scrambles = scrambles.filter(s => s.category === category);
+      if (difficulty && difficulty !== 'all') scrambles = scrambles.filter(s => s.difficulty === difficulty);
+      if (published === 'published') scrambles = scrambles.filter(s => s.is_published === true);
+      if (published === 'draft') scrambles = scrambles.filter(s => s.is_published === false);
+      if (search) {
+        const q = search.toLowerCase();
+        scrambles = scrambles.filter(s =>
+          (s.word && s.word.toLowerCase().includes(q)) ||
+          (s.clue && s.clue.toLowerCase().includes(q)) ||
+          (s.category && s.category.toLowerCase().includes(q))
+        );
+      }
+    }
+
+    const allCache = loadSpellingScramblesCache();
+    const completions = loadSpellingCompletionsCache();
+
+    const stats = {
+      totalScrambles: allCache.length,
+      publishedScrambles: allCache.filter(s => s.is_published !== false).length,
+      draftScrambles: allCache.filter(s => s.is_published === false).length,
+      totalCompletions: completions.length,
+      totalXpAwarded: completions.reduce((acc, c) => acc + (c.xp_awarded || 0), 0)
+    };
+
+    res.json({ success: true, data: { scrambles, stats, total: scrambles.length } });
+  } catch (error) {
+    console.error('Error in GET /api/spelling-scrambles/admin:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch admin spelling scrambles.' });
+  }
+});
+
+// 3. POST /api/spelling-scrambles - Create single activity or array
+app.post('/api/spelling-scrambles', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const body = req.body;
+    const items = Array.isArray(body) ? body : [body];
+    const createdItems = [];
+    const cache = loadSpellingScramblesCache();
+
+    for (const item of items) {
+      const word = String(item.word || '').trim().toUpperCase();
+      if (!word || !/^[A-Z]+$/.test(word) || word.length < 3) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid word "${word}". Must be at least 3 letters containing only A-Z.`
+        });
+      }
+
+      let scrambledLetters = Array.isArray(item.scrambled_letters) && item.scrambled_letters.length > 0
+        ? item.scrambled_letters.map(l => String(l).toUpperCase().trim()).filter(Boolean)
+        : Array.isArray(item.scrambledLetters) && item.scrambledLetters.length > 0
+        ? item.scrambledLetters.map(l => String(l).toUpperCase().trim()).filter(Boolean)
+        : word.split('').sort(() => Math.random() - 0.5);
+
+      const clue = String(item.clue || '').trim();
+      if (!clue) {
+        return res.status(400).json({ success: false, error: 'Clue is required for spelling scramble.' });
+      }
+
+      let difficulty = 'Easy';
+      if (item.difficulty && ['easy', 'medium', 'hard'].includes(String(item.difficulty).toLowerCase())) {
+        const d = String(item.difficulty).toLowerCase();
+        difficulty = d === 'medium' ? 'Medium' : d === 'hard' ? 'Hard' : 'Easy';
+      }
+
+      // Derive timer and default XP strictly from difficulty
+      const timerSeconds = difficulty === 'Easy' ? 30 : difficulty === 'Medium' ? 45 : 60;
+      const defaultXP = difficulty === 'Easy' ? 10 : difficulty === 'Medium' ? 15 : 20;
+      const xp = Number(item.xp) > 0 ? Number(item.xp) : defaultXP;
+      const category = String(item.category || 'Vocabulary').trim();
+      const isPublished = item.is_published !== undefined ? Boolean(item.is_published) : true;
+
+      const id = item.id || `scramble_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      const r2ContentKey = buildSpellingScrambleContentKey(id);
+
+      const fullRecord = {
+        id,
+        word,
+        scrambled_letters: scrambledLetters,
+        clue,
+        category,
+        difficulty,
+        xp,
+        timer_seconds: timerSeconds,
+        r2_content_key: r2ContentKey,
+        is_published: isPublished,
+        created_by: authData.user.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // 1. Write full content JSON to Cloudflare R2
+      try {
+        await putJsonContent(r2ContentKey, fullRecord);
+      } catch (r2Err) {
+        console.warn(`[R2 Put Warning for ${r2ContentKey}]:`, r2Err.message);
+      }
+
+      // 2. Persist to Supabase if configured
+      if (serverSupabase) {
+        try {
+          await serverSupabase.from('spelling_scrambles').upsert([fullRecord]);
+        } catch (dbErr) {
+          console.warn('[Supabase Scramble Upsert Warning]:', dbErr.message);
+        }
+      }
+
+      // 3. Update local cache
+      const existingIdx = cache.findIndex(s => s.id === id);
+      if (existingIdx >= 0) cache[existingIdx] = fullRecord;
+      else cache.unshift(fullRecord);
+
+      createdItems.push(fullRecord);
+    }
+
+    saveSpellingScramblesCache(cache);
+
+    res.status(201).json({
+      success: true,
+      data: Array.isArray(body) ? createdItems : createdItems[0]
+    });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-scrambles:', error);
+    res.status(500).json({ success: false, error: 'Failed to create spelling scramble activity.' });
+  }
+});
+
+// 4. POST /api/spelling-scrambles/import-batch - Admin batch import
+app.post('/api/spelling-scrambles/import-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { activities, scrambles } = req.body;
+    const rawList = Array.isArray(activities) ? activities : Array.isArray(scrambles) ? scrambles : [];
+
+    if (rawList.length === 0) {
+      return res.status(400).json({ success: false, error: 'No spelling scrambles provided for import.' });
+    }
+
+    const batchId = `batch_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const cache = loadSpellingScramblesCache();
+    const imported = [];
+    const failed = [];
+
+    for (let i = 0; i < rawList.length; i++) {
+      const item = rawList[i];
+      try {
+        const word = String(item.word || '').trim().toUpperCase();
+        if (!word || !/^[A-Z]+$/.test(word) || word.length < 3) {
+          failed.push({ index: i + 1, word, error: 'Invalid word format (3-16 letters A-Z required).' });
+          continue;
+        }
+
+        let scrambledLetters = Array.isArray(item.scrambledLetters) && item.scrambledLetters.length > 0
+          ? item.scrambledLetters.map(l => String(l).toUpperCase().trim()).filter(Boolean)
+          : Array.isArray(item.scrambled_letters) && item.scrambled_letters.length > 0
+          ? item.scrambled_letters.map(l => String(l).toUpperCase().trim()).filter(Boolean)
+          : word.split('').sort(() => Math.random() - 0.5);
+
+        const clue = String(item.clue || '').trim();
+        if (!clue) {
+          failed.push({ index: i + 1, word, error: 'Clue is missing or empty.' });
+          continue;
+        }
+
+        let difficulty = 'Easy';
+        if (item.difficulty && ['easy', 'medium', 'hard'].includes(String(item.difficulty).toLowerCase())) {
+          const d = String(item.difficulty).toLowerCase();
+          difficulty = d === 'medium' ? 'Medium' : d === 'hard' ? 'Hard' : 'Easy';
+        }
+
+        const timerSeconds = difficulty === 'Easy' ? 30 : difficulty === 'Medium' ? 45 : 60;
+        const defaultXP = difficulty === 'Easy' ? 10 : difficulty === 'Medium' ? 15 : 20;
+        const xp = Number(item.xp) > 0 ? Number(item.xp) : defaultXP;
+        const category = String(item.category || 'Vocabulary').trim();
+        const isPublished = item.is_published !== undefined ? Boolean(item.is_published) : true;
+
+        const id = `scramble_${Date.now()}_${i}_${crypto.randomBytes(3).toString('hex')}`;
+        const r2ContentKey = buildSpellingScrambleContentKey(id);
+
+        const fullRecord = {
+          id,
+          word,
+          scrambled_letters: scrambledLetters,
+          clue,
+          category,
+          difficulty,
+          xp,
+          timer_seconds: timerSeconds,
+          r2_content_key: r2ContentKey,
+          is_published: isPublished,
+          created_by: authData.user.id,
+          import_batch_id: batchId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        // Write to R2
+        try {
+          await putJsonContent(r2ContentKey, fullRecord);
+        } catch (r2Err) {
+          console.warn(`[R2 Put Notice for batch item ${id}]:`, r2Err.message);
+        }
+
+        imported.push(fullRecord);
+      } catch (err) {
+        failed.push({ index: i + 1, word: item.word || 'Unknown', error: err.message });
+      }
+    }
+
+    // Persist to Supabase in bulk
+    if (serverSupabase && imported.length > 0) {
+      try {
+        await serverSupabase.from('spelling_scrambles').upsert(imported);
+      } catch (dbErr) {
+        console.warn('[Supabase Batch Insert Warning]:', dbErr.message);
+      }
+    }
+
+    // Update Cache
+    cache.unshift(...imported);
+    saveSpellingScramblesCache(cache);
+
+    res.json({
+      success: true,
+      batchId,
+      importedCount: imported.length,
+      failedCount: failed.length,
+      failed,
+      scrambles: imported
+    });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-scrambles/import-batch:', error);
+    res.status(500).json({ success: false, error: 'Failed to process batch import.' });
+  }
+});
+
+// 5. PUT /api/spelling-scrambles/:id - Update activity
+app.put('/api/spelling-scrambles/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const body = req.body;
+    const cache = loadSpellingScramblesCache();
+    const existing = cache.find(s => s.id === id);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Spelling scramble not found.' });
+    }
+
+    const word = body.word ? String(body.word).trim().toUpperCase() : existing.word;
+    const clue = body.clue ? String(body.clue).trim() : existing.clue;
+    const category = body.category ? String(body.category).trim() : existing.category;
+
+    let difficulty = existing.difficulty;
+    if (body.difficulty && ['easy', 'medium', 'hard'].includes(String(body.difficulty).toLowerCase())) {
+      const d = String(body.difficulty).toLowerCase();
+      difficulty = d === 'medium' ? 'Medium' : d === 'hard' ? 'Hard' : 'Easy';
+    }
+
+    const timerSeconds = difficulty === 'Easy' ? 30 : difficulty === 'Medium' ? 45 : 60;
+    const xp = Number(body.xp) > 0 ? Number(body.xp) : existing.xp;
+    const isPublished = body.is_published !== undefined ? Boolean(body.is_published) : existing.is_published;
+
+    let scrambledLetters = existing.scrambled_letters;
+    if (Array.isArray(body.scrambled_letters) && body.scrambled_letters.length > 0) {
+      scrambledLetters = body.scrambled_letters.map(l => String(l).toUpperCase().trim()).filter(Boolean);
+    } else if (body.word && body.word !== existing.word) {
+      scrambledLetters = word.split('').sort(() => Math.random() - 0.5);
+    }
+
+    const updatedRecord = {
+      ...existing,
+      word,
+      scrambled_letters: scrambledLetters,
+      clue,
+      category,
+      difficulty,
+      xp,
+      timer_seconds: timerSeconds,
+      is_published: isPublished,
+      updated_at: new Date().toISOString()
+    };
+
+    // Update R2
+    if (updatedRecord.r2_content_key) {
+      try {
+        await putJsonContent(updatedRecord.r2_content_key, updatedRecord);
+      } catch (r2Err) {
+        console.warn(`[R2 Put Warning on update ${id}]:`, r2Err.message);
+      }
+    }
+
+    // Update Supabase
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_scrambles').update(updatedRecord).eq('id', id);
+      } catch (dbErr) {
+        console.warn('[Supabase Scramble Update Warning]:', dbErr.message);
+      }
+    }
+
+    // Update local cache
+    const idx = cache.findIndex(s => s.id === id);
+    if (idx >= 0) cache[idx] = updatedRecord;
+    saveSpellingScramblesCache(cache);
+
+    res.json({ success: true, data: updatedRecord });
+  } catch (error) {
+    console.error('Error in PUT /api/spelling-scrambles/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to update spelling scramble.' });
+  }
+});
+
+// 6. PUT /api/spelling-scrambles/:id/publish - Toggle published status
+app.put('/api/spelling-scrambles/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+    const cache = loadSpellingScramblesCache();
+    const existing = cache.find(s => s.id === id);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Spelling scramble not found.' });
+    }
+
+    const nextPublished = is_published !== undefined ? Boolean(is_published) : !existing.is_published;
+    existing.is_published = nextPublished;
+    existing.updated_at = new Date().toISOString();
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_scrambles').update({ is_published: nextPublished, updated_at: existing.updated_at }).eq('id', id);
+      } catch {}
+    }
+
+    saveSpellingScramblesCache(cache);
+    res.json({ success: true, is_published: nextPublished });
+  } catch (error) {
+    console.error('Error in PUT /api/spelling-scrambles/:id/publish:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle publish status.' });
+  }
+});
+
+// 7. DELETE /api/spelling-scrambles/:id - Delete activity + R2 object
+app.delete('/api/spelling-scrambles/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const cache = loadSpellingScramblesCache();
+    const target = cache.find(s => s.id === id);
+
+    if (target?.r2_content_key) {
+      try {
+        await deleteObjects([target.r2_content_key]);
+      } catch (r2Err) {
+        console.warn(`[R2 Delete Warning for ${target.r2_content_key}]:`, r2Err.message);
+      }
+    }
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_scrambles').delete().eq('id', id);
+      } catch {}
+    }
+
+    const updated = cache.filter(s => s.id !== id);
+    saveSpellingScramblesCache(updated);
+
+    res.json({ success: true, message: 'Spelling scramble deleted successfully.' });
+  } catch (error) {
+    console.error('Error in DELETE /api/spelling-scrambles/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete spelling scramble.' });
+  }
+});
+
+// 8. POST /api/spelling-scrambles/complete - Record student completion and award XP
+app.post('/api/spelling-scrambles/complete', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest_user';
+    const { scrambleId, userWord, timeTakenSeconds } = req.body;
+
+    if (!scrambleId) {
+      return res.status(400).json({ success: false, error: 'scrambleId is required.' });
+    }
+
+    const cache = loadSpellingScramblesCache();
+    const scramble = cache.find(s => s.id === scrambleId);
+
+    if (!scramble) {
+      return res.status(404).json({ success: false, error: 'Spelling scramble activity not found.' });
+    }
+
+    const isCorrect = String(userWord || '').trim().toUpperCase() === scramble.word.trim().toUpperCase();
+
+    // Check if already completed by this user
+    const completions = loadSpellingCompletionsCache();
+    const existing = completions.find(c => c.scramble_id === scrambleId && c.user_id === userId);
+    const alreadyCompleted = Boolean(existing && existing.is_correct);
+
+    let xpAwarded = 0;
+    if (isCorrect && !alreadyCompleted) {
+      xpAwarded = scramble.xp || (scramble.difficulty === 'Hard' ? 20 : scramble.difficulty === 'Medium' ? 15 : 10);
+    }
+
+    const record = {
+      id: existing ? existing.id : `comp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      scramble_id: scrambleId,
+      user_id: userId,
+      is_correct: isCorrect,
+      time_taken_seconds: timeTakenSeconds || null,
+      xp_awarded: xpAwarded,
+      completed_at: new Date().toISOString()
+    };
+
+    if (existing) {
+      const idx = completions.findIndex(c => c.id === existing.id);
+      completions[idx] = record;
+    } else {
+      completions.push(record);
+    }
+    saveSpellingCompletionsCache(completions);
+
+    if (serverSupabase && userId !== 'guest_user') {
+      try {
+        await serverSupabase.from('spelling_scramble_completions').upsert([record], { onConflict: 'scramble_id,user_id' });
+      } catch (e) {
+        console.warn('[Supabase scramble completion notice]:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        is_correct: isCorrect,
+        correct_word: scramble.word,
+        clue: scramble.clue,
+        xp_awarded: xpAwarded,
+        already_completed: alreadyCompleted,
+        time_taken_seconds: timeTakenSeconds
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-scrambles/complete:', error);
+    res.status(500).json({ success: false, error: 'Failed to record completion.' });
   }
 });
 

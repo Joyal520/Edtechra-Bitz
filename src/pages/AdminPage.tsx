@@ -30,6 +30,7 @@ import { AdminQuizSection } from '@/components/AdminQuizSection';
 import { AdminShortsSection } from '@/components/AdminShortsSection';
 import { AdminReadingsSection } from '@/components/AdminReadingsSection';
 import { AdminPollsSection } from '@/components/AdminPollsSection';
+import { AdminReorderSection } from '@/components/AdminReorderSection';
 import { AdminStorageSection } from '@/components/AdminStorageSection';
 import { getAllLevels } from '@/utils/levelsData';
 
@@ -43,7 +44,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -309,6 +310,23 @@ export const AdminPage: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setAdminTab('reorders')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'reorders'
+              ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>🔤</span>
+          <span>Sentence Reorder</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'reorders' ? 'bg-amber-300 text-slate-900' : 'bg-violet-100 text-violet-800'
+          }`}>
+            New
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('youtube')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
             adminTab === 'youtube'
@@ -405,7 +423,12 @@ export const AdminPage: React.FC = () => {
         <AdminPollsSection />
       )}
 
-      {/* 5. Cloudflare R2 Content & Media Storage Panel */}
+      {/* 5. Sentence Reorder Activities Management */}
+      {(adminTab === 'all' || adminTab === 'reorders') && (
+        <AdminReorderSection />
+      )}
+
+      {/* 6. Cloudflare R2 Content & Media Storage Panel */}
       {(adminTab === 'all' || adminTab === 'storage') && (
         <AdminStorageSection />
       )}

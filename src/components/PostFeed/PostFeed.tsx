@@ -11,18 +11,22 @@ import {
   ArrowUp
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
-import { QuizBit, QuizAttemptResult, YouTubeShort, ReadingBit, PollBit } from '@/types';
+import { QuizBit, QuizAttemptResult, YouTubeShort, ReadingBit, PollBit, ReorderActivity, SpellingScramble } from '@/types';
 import { postService } from '@/services/postService';
 import { quizService } from '@/services/quizService';
 import { youtubeShortsService } from '@/services/youtubeShortsService';
 import { readingService } from '@/services/readingService';
 import { pollService } from '@/services/pollService';
+import { reorderService } from '@/services/reorderService';
+import { spellingScrambleService } from '@/services/spellingScrambleService';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from './PostCard';
 import { QuizBitCard } from './QuizBitCard';
 import { YouTubeShortCard } from './YouTubeShortCard';
 import { OneMinuteReadingCard } from './OneMinuteReadingCard';
 import { PollBitCard } from './PollBitCard';
+import { ReorderSentenceCard } from './ReorderSentenceCard';
+import { SpellingScrambleCard } from './SpellingScrambleCard';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
 import { QUIZ_CONFIG } from '@/utils/quizConfig';
@@ -33,7 +37,9 @@ export type FeedItem =
   | { type: 'quiz'; quiz: QuizBit; key: string }
   | { type: 'youtube_short'; short: YouTubeShort; key: string }
   | { type: 'reading'; reading: ReadingBit; key: string }
-  | { type: 'poll'; poll: PollBit; key: string };
+  | { type: 'poll'; poll: PollBit; key: string }
+  | { type: 'reorder'; reorder: ReorderActivity; key: string }
+  | { type: 'spelling_scramble'; scramble: SpellingScramble; key: string };
 
 // Deterministic intervals for stable session interleaving
 const QUIZ_INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4];
@@ -47,6 +53,20 @@ const SHORT_INTERVAL_PATTERN = [
 ];
 const READING_INTERVAL_PATTERN = [5, 6, 7, 5, 6, 7];
 const POLL_INTERVAL_PATTERN = [6, 7, 8, 6, 7, 8];
+const REORDER_INTERVAL_PATTERN = [
+  FEED_CONFIG.REORDER_FEED_INTERVAL_MIN,
+  FEED_CONFIG.REORDER_FEED_INTERVAL_MAX,
+  FEED_CONFIG.REORDER_FEED_INTERVAL_MIN,
+  5,
+  FEED_CONFIG.REORDER_FEED_INTERVAL_MAX
+];
+const SPELLING_INTERVAL_PATTERN = [
+  FEED_CONFIG.SPELLING_FEED_INTERVAL_MIN,
+  FEED_CONFIG.SPELLING_FEED_INTERVAL_MAX,
+  5,
+  FEED_CONFIG.SPELLING_FEED_INTERVAL_MIN,
+  FEED_CONFIG.SPELLING_FEED_INTERVAL_MAX
+];
 
 export const PostFeed: React.FC = () => {
   const { profile, session, requireAuth } = useAuth();
@@ -56,6 +76,8 @@ export const PostFeed: React.FC = () => {
   const [shorts, setShorts] = useState<YouTubeShort[]>([]);
   const [readings, setReadings] = useState<ReadingBit[]>([]);
   const [polls, setPolls] = useState<PollBit[]>([]);
+  const [reorders, setReorders] = useState<ReorderActivity[]>([]);
+  const [scrambles, setScrambles] = useState<SpellingScramble[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -64,6 +86,7 @@ export const PostFeed: React.FC = () => {
   const [composerOpen, setComposerOpen] = useState<boolean>(false);
   const [adminModalOpen, setAdminModalOpen] = useState<boolean>(false);
   const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
+  const [activeShortId, setActiveShortId] = useState<string | null>(null);
 
   // Sentinel ref for production-grade infinite scroll prefetching
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -89,20 +112,24 @@ export const PostFeed: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Load feed quizzes, shorts, readings, and polls pool
+  // Load feed quizzes, shorts, readings, polls, sentence reorders, and spelling scrambles pool
   const loadMediaPool = useCallback(async () => {
     try {
       const token = session?.access_token || null;
-      const [quizData, shortsData, readingData, pollData] = await Promise.all([
+      const [quizData, shortsData, readingData, pollData, reorderData, scrambleData] = await Promise.all([
         quizService.getFeedQuizzes(token),
         youtubeShortsService.getFeedShorts(token),
         readingService.getFeedReadings(token),
-        pollService.getFeedPolls(token)
+        pollService.getFeedPolls(token),
+        reorderService.getFeedReorders(token),
+        spellingScrambleService.getFeedScrambles(token)
       ]);
       setQuizzes(quizData || []);
       setShorts(shortsData || []);
       setReadings(readingData || []);
       setPolls(pollData || []);
+      setReorders(reorderData || []);
+      setScrambles(scrambleData || []);
     } catch (err) {
       console.warn('[PostFeed] Failed to load media pools:', err);
     }
@@ -196,8 +223,7 @@ export const PostFeed: React.FC = () => {
     // be encountered further down the feed as the student scrolls.
   };
 
-  // Interleave Quizzes, Shorts, One-Minute Readings, and Polls stably into the feed stream
-  // Ratio per ~8-10 items: 4-5 normal posts, 1-2 quizzes, 1 YouTube Short, 1 Reading, 1 Poll
+  // Interleave Quizzes, Shorts, One-Minute Readings, Polls, Sentence Reorders, and Spelling Scrambles stably into the feed stream
   const feedItems = useMemo<FeedItem[]>(() => {
     if (posts.length === 0) return [];
 
@@ -205,27 +231,37 @@ export const PostFeed: React.FC = () => {
     let quizIndex = 0;
     let readingIndex = 0;
     let pollIndex = 0;
+    let reorderIndex = 0;
+    let scrambleIndex = 0;
 
     let postsSinceLastQuiz = 0;
     let postsSinceLastShort = 0;
     let postsSinceLastReading = 0;
     let postsSinceLastPoll = 0;
+    let postsSinceLastReorder = 0;
+    let postsSinceLastScramble = 0;
 
     let quizPatternIdx = 0;
     let shortPatternIdx = 0;
     let readingPatternIdx = 0;
     let pollPatternIdx = 0;
+    let reorderPatternIdx = 0;
+    let scramblePatternIdx = 0;
 
     let quizTargetInterval = QUIZ_INTERVAL_PATTERN[0];
     let shortTargetInterval = SHORT_INTERVAL_PATTERN[0];
     let readingTargetInterval = READING_INTERVAL_PATTERN[0];
     let pollTargetInterval = POLL_INTERVAL_PATTERN[0];
+    let reorderTargetInterval = REORDER_INTERVAL_PATTERN[0];
+    let scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[0];
 
     // Track shown IDs and recent categories for category-aware rotation with cooldown
     const seenShortIds = new Set<string>();
     const seenQuizIds = new Set<string>();
     const seenReadingIds = new Set<string>();
     const seenPollIds = new Set<string>();
+    const seenReorderIds = new Set<string>();
+    const seenScrambleIds = new Set<string>();
     let recentShortCategories: string[] = [];
 
     posts.forEach((post, index) => {
@@ -234,6 +270,8 @@ export const PostFeed: React.FC = () => {
       postsSinceLastShort++;
       postsSinceLastReading++;
       postsSinceLastPoll++;
+      postsSinceLastReorder++;
+      postsSinceLastScramble++;
 
       let insertedNonPostThisSlot = false;
 
@@ -256,7 +294,43 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 2. Check if it's time to insert a category-rotated YouTube Short
+      // 2. Check if it's time to insert a Spelling Scramble activity (every 4-6 posts)
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastScramble >= scrambleTargetInterval &&
+        scrambles.length > 0
+      ) {
+        const availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id)) || scrambles[scrambleIndex % scrambles.length];
+        if (availableScramble && (!seenScrambleIds.has(availableScramble.id) || seenScrambleIds.size >= scrambles.length)) {
+          seenScrambleIds.add(availableScramble.id);
+          items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
+          scrambleIndex++;
+          postsSinceLastScramble = 0;
+          scramblePatternIdx = (scramblePatternIdx + 1) % SPELLING_INTERVAL_PATTERN.length;
+          scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[scramblePatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 3. Check if it's time to insert a Sentence Reorder activity (every 4-6 posts)
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastReorder >= reorderTargetInterval &&
+        reorders.length > 0
+      ) {
+        const availableReorder = reorders.find(r => !seenReorderIds.has(r.id)) || reorders[reorderIndex % reorders.length];
+        if (availableReorder && (!seenReorderIds.has(availableReorder.id) || seenReorderIds.size >= reorders.length)) {
+          seenReorderIds.add(availableReorder.id);
+          items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
+          reorderIndex++;
+          postsSinceLastReorder = 0;
+          reorderPatternIdx = (reorderPatternIdx + 1) % REORDER_INTERVAL_PATTERN.length;
+          reorderTargetInterval = REORDER_INTERVAL_PATTERN[reorderPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 4. Check if it's time to insert a category-rotated YouTube Short
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastShort >= shortTargetInterval &&
@@ -281,7 +355,7 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 3. Check if it's time to insert a One-Minute Reading
+      // 5. Check if it's time to insert a One-Minute Reading
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastReading >= readingTargetInterval &&
@@ -299,7 +373,7 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 4. Check if it's time to insert a Community Poll
+      // 6. Check if it's time to insert a Community Poll
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastPoll >= pollTargetInterval &&
@@ -319,7 +393,29 @@ export const PostFeed: React.FC = () => {
     });
 
     return items;
-  }, [posts, quizzes, shorts, readings, polls]);
+  }, [posts, quizzes, shorts, readings, polls, reorders, scrambles]);
+
+  // Extract ordered list of YouTube Short IDs in current feed
+  const feedShortIds = useMemo(() => {
+    return feedItems
+      .filter((item): item is Extract<FeedItem, { type: 'youtube_short' }> => item.type === 'youtube_short')
+      .map((item) => item.short.id);
+  }, [feedItems]);
+
+  // Determine immediate next Short for intelligent 1-step background preloading
+  const nextShortId = useMemo(() => {
+    if (feedShortIds.length === 0) return null;
+    if (!activeShortId) return feedShortIds[0] || null;
+    const currentIdx = feedShortIds.indexOf(activeShortId);
+    if (currentIdx >= 0 && currentIdx + 1 < feedShortIds.length) {
+      return feedShortIds[currentIdx + 1];
+    }
+    return null;
+  }, [feedShortIds, activeShortId]);
+
+  const handleShortBecomeActive = useCallback((shortId: string) => {
+    setActiveShortId((prev) => (prev !== shortId ? shortId : prev));
+  }, []);
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
@@ -464,10 +560,16 @@ export const PostFeed: React.FC = () => {
             }
 
             if (item.type === 'youtube_short') {
+              const isShortActive = item.short.id === activeShortId;
+              const isShortNext = item.short.id === nextShortId;
+
               return (
                 <YouTubeShortCard
                   key={item.key}
                   short={item.short}
+                  isActive={isShortActive}
+                  isNext={isShortNext}
+                  onBecomeActive={() => handleShortBecomeActive(item.short.id)}
                 />
               );
             }
@@ -476,6 +578,22 @@ export const PostFeed: React.FC = () => {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
                   <OneMinuteReadingCard reading={item.reading} />
+                </div>
+              );
+            }
+
+            if (item.type === 'reorder') {
+              return (
+                <div key={item.key} className="px-3 sm:px-0">
+                  <ReorderSentenceCard reorder={item.reorder} />
+                </div>
+              );
+            }
+
+            if (item.type === 'spelling_scramble') {
+              return (
+                <div key={item.key} className="px-3 sm:px-0">
+                  <SpellingScrambleCard scramble={item.scramble} />
                 </div>
               );
             }

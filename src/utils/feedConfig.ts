@@ -18,6 +18,14 @@ export const FEED_CONFIG = {
   POLL_FEED_INTERVAL_MIN: 6,
   POLL_FEED_INTERVAL_MAX: 8,
 
+  // Sentence Reorder pacing rules
+  REORDER_FEED_INTERVAL_MIN: 4,
+  REORDER_FEED_INTERVAL_MAX: 6,
+
+  // Spelling Scramble pacing rules
+  SPELLING_FEED_INTERVAL_MIN: 4,
+  SPELLING_FEED_INTERVAL_MAX: 6,
+
   // Standard educational categories
   SHORT_CATEGORIES: [
     'General',

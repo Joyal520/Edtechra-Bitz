@@ -159,6 +159,12 @@
   animation: slowCloudFloat 8s ease-in-out infinite;
 }
 
-.animate-float-subtle {
-  animation: float-subtle 4s ease-in-out infinite;
+@keyframes subtleShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: subtleShake 0.45s ease-in-out;
 }
