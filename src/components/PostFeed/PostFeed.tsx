@@ -315,8 +315,8 @@ export const PostFeed: React.FC = () => {
         postsSinceLastScramble >= scrambleTargetInterval &&
         scrambles.length > 0
       ) {
-        const availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id)) || scrambles[scrambleIndex % scrambles.length];
-        if (availableScramble && (!seenScrambleIds.has(availableScramble.id) || seenScrambleIds.size >= scrambles.length)) {
+        const availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
+        if (availableScramble) {
           seenScrambleIds.add(availableScramble.id);
           items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
           scrambleIndex++;
@@ -333,8 +333,8 @@ export const PostFeed: React.FC = () => {
         postsSinceLastReorder >= reorderTargetInterval &&
         reorders.length > 0
       ) {
-        const availableReorder = reorders.find(r => !seenReorderIds.has(r.id)) || reorders[reorderIndex % reorders.length];
-        if (availableReorder && (!seenReorderIds.has(availableReorder.id) || seenReorderIds.size >= reorders.length)) {
+        const availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
+        if (availableReorder) {
           seenReorderIds.add(availableReorder.id);
           items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
           reorderIndex++;
@@ -376,8 +376,8 @@ export const PostFeed: React.FC = () => {
         postsSinceLastReading >= readingTargetInterval &&
         readings.length > 0
       ) {
-        const availableReading = readings.find(r => !seenReadingIds.has(r.id)) || readings[readingIndex % readings.length];
-        if (availableReading && (!seenReadingIds.has(availableReading.id) || seenReadingIds.size >= readings.length)) {
+        const availableReading = readings.find(r => !seenReadingIds.has(r.id));
+        if (availableReading) {
           seenReadingIds.add(availableReading.id);
           items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
           readingIndex++;
@@ -394,8 +394,8 @@ export const PostFeed: React.FC = () => {
         postsSinceLastPoll >= pollTargetInterval &&
         polls.length > 0
       ) {
-        const availablePoll = polls.find(p => !seenPollIds.has(p.id)) || polls[pollIndex % polls.length];
-        if (availablePoll && (!seenPollIds.has(availablePoll.id) || seenPollIds.size >= polls.length)) {
+        const availablePoll = polls.find(p => !seenPollIds.has(p.id));
+        if (availablePoll) {
           seenPollIds.add(availablePoll.id);
           items.push({ type: 'poll', poll: availablePoll, key: `poll-${availablePoll.id}-${index}` });
           pollIndex++;

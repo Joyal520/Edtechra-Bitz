@@ -8,7 +8,10 @@ import {
   AlertTriangle,
   RotateCcw,
   Check,
-  Loader2
+  Loader2,
+  Calendar,
+  Sparkles,
+  Star
 } from 'lucide-react';
 import { LeaderboardPeriod, LeaderboardResponse } from '@/types/leaderboard';
 import { leaderboardService } from '@/services/leaderboardService';
@@ -20,6 +23,18 @@ const PERIOD_LABELS: Record<LeaderboardPeriod, string> = {
   month: 'This Month',
   all_time: 'All Time'
 };
+
+// Curated avatar background palette for initials fallback
+const AVATAR_BG_COLORS = [
+  'bg-emerald-600',
+  'bg-teal-700',
+  'bg-amber-600',
+  'bg-purple-600',
+  'bg-sky-600',
+  'bg-indigo-600',
+  'bg-rose-600',
+  'bg-blue-600'
+];
 
 export const TopLearnersLeaderboard: React.FC = () => {
   const { user, isAdmin, session } = useAuth();
@@ -104,7 +119,7 @@ export const TopLearnersLeaderboard: React.FC = () => {
   const secondPlace = top10.find((u) => u.rank === 2);
   const thirdPlace = top10.find((u) => u.rank === 3);
 
-  // Ranks 4–10
+  // Ranks 4–10 (Guaranteed to render all 10 without cutoffs)
   const remainingRanks = top10.filter((u) => u.rank >= 4 && u.rank <= 10);
 
   // Helper: Format initials
@@ -113,40 +128,45 @@ export const TopLearnersLeaderboard: React.FC = () => {
   };
 
   return (
-    <section className="w-full bg-white border border-stone-200/90 rounded-3xl p-4 sm:p-7 shadow-xs space-y-6 relative overflow-hidden">
+    <section className="w-full bg-gradient-to-b from-[#0c1322] via-[#131b2e] to-[#1a243a] text-white rounded-[32px] p-4 sm:p-7 shadow-2xl border border-slate-800/80 space-y-6 sm:space-y-8 relative overflow-hidden">
       
+      {/* Background Ambient Glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-20 right-10 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
       {/* 1. Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-2 border-b border-stone-100">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold shadow-2xs">
-              <Trophy className="w-4 h-4 text-amber-500 fill-amber-400" />
-            </div>
-            <h2 className="text-lg sm:text-xl font-black text-[#0f233a] tracking-tight">
-              Top 10 Learners
-            </h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.2)] shrink-0">
+            <Trophy className="w-5 h-5 fill-amber-400 text-amber-400" />
           </div>
-          <p className="text-xs font-semibold text-slate-500 mt-1">
-            Compete, climb, and become an EdTechra Champion!
-          </p>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
+              <span>Top 10 Learners</span>
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-slate-300 mt-0.5">
+              Compete, climb, and become an EdTechra Champion!
+            </p>
+          </div>
         </div>
 
         {/* Action Controls: Period Selector & Admin Reset Menu */}
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
           
           {/* Period Selector Dropdown */}
           <div className="relative" ref={periodDropdownRef}>
             <button
               type="button"
               onClick={() => setPeriodDropdownOpen(!periodDropdownOpen)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-stone-50 hover:bg-stone-100 text-slate-800 border border-stone-200 text-xs font-black rounded-2xl shadow-2xs transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 active:scale-95 text-white border border-white/20 text-xs font-bold rounded-2xl shadow-lg backdrop-blur-md transition-all cursor-pointer"
             >
+              <Calendar className="w-3.5 h-3.5 text-amber-400" />
               <span>{PERIOD_LABELS[period]}</span>
               <ChevronDown className="w-3.5 h-3.5 opacity-70" />
             </button>
 
             {periodDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-36 bg-white border border-stone-200 rounded-2xl shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 mt-2 w-40 bg-[#141e34] border border-slate-700 rounded-2xl shadow-2xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
                 {(['today', 'week', 'month', 'all_time'] as LeaderboardPeriod[]).map((p) => (
                   <button
                     key={p}
@@ -155,14 +175,14 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setPeriod(p);
                       setPeriodDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3.5 py-2 text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
+                    className={`w-full text-left px-4 py-2 text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
                       period === p
-                        ? 'bg-brand-50 text-[#026fc3] font-black'
-                        : 'text-slate-700 hover:bg-slate-50'
+                        ? 'bg-[#026fc3] text-white font-black'
+                        : 'text-slate-200 hover:bg-white/10'
                     }`}
                   >
                     <span>{PERIOD_LABELS[p]}</span>
-                    {period === p && <Check className="w-3.5 h-3.5 text-[#026fc3]" />}
+                    {period === p && <Check className="w-3.5 h-3.5 text-white" />}
                   </button>
                 ))}
               </div>
@@ -175,16 +195,16 @@ export const TopLearnersLeaderboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setAdminMenuOpen(!adminMenuOpen)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-extrabold rounded-2xl transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-400/40 text-xs font-extrabold rounded-2xl shadow-lg backdrop-blur-md transition-all cursor-pointer"
                 title="Leaderboard Administrative Controls"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
                 <span>Admin ▾</span>
               </button>
 
               {adminMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-stone-200 rounded-2xl shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-purple-700 border-b border-stone-100">
+                <div className="absolute right-0 mt-2 w-48 bg-[#141e34] border border-purple-500/40 rounded-2xl shadow-2xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+                  <div className="px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-purple-300 border-b border-slate-700/80">
                     Leaderboard Resets
                   </div>
 
@@ -194,7 +214,7 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setAdminMenuOpen(false);
                       setResetTargetPeriod('today');
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
                     <span>Reset Today</span>
@@ -206,7 +226,7 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setAdminMenuOpen(false);
                       setResetTargetPeriod('week');
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
                     <span>Reset Weekly</span>
@@ -218,18 +238,18 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setAdminMenuOpen(false);
                       setResetTargetPeriod('month');
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
                     <span>Reset Monthly</span>
                   </button>
 
-                  <div className="border-t border-stone-100 my-1"></div>
+                  <div className="border-t border-slate-700/80 my-1"></div>
 
                   <button
                     type="button"
                     onClick={() => setAdminMenuOpen(false)}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-colors cursor-pointer"
                   >
                     Keep Options
                   </button>
@@ -243,50 +263,50 @@ export const TopLearnersLeaderboard: React.FC = () => {
 
       {/* Admin Reset Feedback Notification */}
       {resetNotice && (
-        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 animate-in fade-in">
-          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{resetNotice}</span>
         </div>
       )}
 
       {/* Loading State */}
       {loading && !data && (
-        <div className="py-12 flex flex-col items-center justify-center space-y-3">
-          <div className="w-8 h-8 border-3 border-[#026fc3]/30 border-t-[#026fc3] rounded-full animate-spin"></div>
-          <p className="text-xs font-bold text-slate-400">Loading top learners...</p>
+        <div className="py-16 flex flex-col items-center justify-center space-y-3">
+          <div className="w-9 h-9 border-3 border-amber-400/30 border-t-amber-400 rounded-full animate-spin"></div>
+          <p className="text-xs font-bold text-slate-300">Loading top learners...</p>
         </div>
       )}
 
       {/* Error State */}
       {error && !loading && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+        <div className="p-4 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Empty State */}
       {!loading && top10.length === 0 && (
-        <div className="py-10 text-center space-y-2">
-          <p className="text-sm font-black text-slate-700">No activity recorded for this period yet.</p>
+        <div className="py-12 text-center space-y-2">
+          <p className="text-base font-black text-white">No activity recorded for this period yet.</p>
           <p className="text-xs text-slate-400">Be the first to complete a quiz or lesson and claim #1 rank!</p>
         </div>
       )}
 
       {/* 2. TOP 3 PODIUM */}
       {!loading && top10.length > 0 && (
-        <div className="space-y-6">
-          <div className="pt-4 pb-2 px-2">
-            <div className="flex items-end justify-center gap-2 sm:gap-4 max-w-lg mx-auto">
+        <div className="space-y-6 sm:space-y-8 relative z-10">
+          <div className="pt-2 pb-0 px-1 sm:px-4">
+            <div className="flex items-end justify-center gap-2 sm:gap-6 max-w-xl mx-auto">
               
               {/* 🥈 2nd Place (Silver) */}
               <div className="flex-1 flex flex-col items-center text-center">
                 {secondPlace ? (
-                  <div className="space-y-1.5 flex flex-col items-center w-full">
+                  <div className="space-y-2 flex flex-col items-center w-full">
                     {/* Medal / Avatar */}
                     <div className="relative">
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-slate-300 to-slate-400 p-[2.5px] shadow-sm">
-                        <div className="w-full h-full rounded-full overflow-hidden bg-slate-100 flex items-center justify-center font-black text-slate-700">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-slate-300 via-slate-100 to-slate-400 p-[3px] shadow-[0_0_20px_rgba(203,213,225,0.25)]">
+                        <div className="w-full h-full rounded-full overflow-hidden bg-slate-800 flex items-center justify-center font-black text-slate-100 text-lg">
                           {secondPlace.avatarUrl ? (
                             <img src={secondPlace.avatarUrl} alt={secondPlace.displayName} className="w-full h-full object-cover" />
                           ) : (
@@ -294,47 +314,52 @@ export const TopLearnersLeaderboard: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div className="absolute -bottom-1.5 -right-1 w-6 h-6 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-xs font-black shadow-xs">
+                      <div className="absolute -bottom-1.5 -right-1 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-slate-200 text-slate-800 border-2 border-[#141e34] flex items-center justify-center text-xs font-black shadow-md">
                         🥈
                       </div>
                     </div>
 
-                    <div className="font-extrabold text-xs sm:text-sm text-[#0f233a] truncate max-w-[90px] sm:max-w-[120px]">
+                    <div className="font-extrabold text-xs sm:text-sm text-white truncate max-w-[95px] sm:max-w-[130px]">
                       {secondPlace.displayName}
                     </div>
 
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black font-mono">
+                    <span className="px-3 py-0.5 rounded-full bg-[#1e293b] text-blue-300 border border-blue-500/30 text-[11px] font-black font-mono shadow-xs">
                       {secondPlace.xp.toLocaleString()} XP
                     </span>
-                    <span className="text-[10px] font-bold text-slate-400">
+                    <span className="text-[11px] font-bold text-slate-400">
                       Level {secondPlace.level}
                     </span>
                   </div>
                 ) : (
-                  <div className="h-24 flex items-center justify-center text-xs text-slate-300 italic">
+                  <div className="h-24 flex items-center justify-center text-xs text-slate-500 italic">
                     Open Slot
                   </div>
                 )}
 
                 {/* Podium Pedestal Pillar 2 */}
-                <div className="w-full h-20 sm:h-24 mt-2.5 rounded-t-2xl bg-gradient-to-b from-slate-200 to-slate-300 flex items-center justify-center text-slate-600 font-black text-sm sm:text-base shadow-inner">
-                  2nd
+                <div className="w-full h-24 sm:h-28 mt-3 rounded-t-2xl bg-gradient-to-b from-[#475569] via-[#334155] to-[#1e293b] border-t-2 border-slate-300 flex flex-col items-center justify-center shadow-lg relative overflow-hidden">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-slate-200/20 border border-slate-300/40 flex items-center justify-center text-slate-100 font-black text-sm sm:text-base shadow-inner">
+                    2
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-300 mt-1">
+                    Silver
+                  </span>
                 </div>
               </div>
 
               {/* 🥇 1st Place (Gold, Champion) */}
-              <div className="flex-1 flex flex-col items-center text-center -mt-4">
+              <div className="flex-1 flex flex-col items-center text-center -mt-6">
                 {firstPlace ? (
-                  <div className="space-y-1.5 flex flex-col items-center w-full relative">
+                  <div className="space-y-2 flex flex-col items-center w-full relative">
                     {/* Crown Icon */}
-                    <div className="text-amber-500 animate-bounce">
-                      <Crown className="w-6 h-6 fill-amber-400" />
+                    <div className="text-amber-400 animate-bounce">
+                      <Crown className="w-7 h-7 sm:w-8 sm:h-8 fill-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
                     </div>
 
                     {/* Avatar with Gold Ring and Glow */}
                     <div className="relative">
-                      <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-500 p-[3px] shadow-[0_0_20px_rgba(245,158,11,0.35)]">
-                        <div className="w-full h-full rounded-full overflow-hidden bg-amber-50 flex items-center justify-center font-black text-slate-800 text-lg">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-amber-300 via-yellow-200 to-amber-500 p-[3.5px] shadow-[0_0_35px_rgba(245,158,11,0.6)]">
+                        <div className="w-full h-full rounded-full overflow-hidden bg-slate-900 flex items-center justify-center font-black text-amber-300 text-xl">
                           {firstPlace.avatarUrl ? (
                             <img src={firstPlace.avatarUrl} alt={firstPlace.displayName} className="w-full h-full object-cover" />
                           ) : (
@@ -342,33 +367,36 @@ export const TopLearnersLeaderboard: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-400 border-2 border-white flex items-center justify-center text-xs font-black shadow-xs">
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-400 text-slate-950 border-2 border-[#141e34] flex items-center justify-center text-xs sm:text-sm font-black shadow-md">
                         🥇
                       </div>
                     </div>
 
-                    <div className="font-black text-sm sm:text-base text-[#0f233a] truncate max-w-[100px] sm:max-w-[140px]">
+                    <div className="font-black text-sm sm:text-base text-white truncate max-w-[110px] sm:max-w-[150px]">
                       {firstPlace.displayName}
                     </div>
 
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-black font-mono shadow-2xs">
+                    <span className="px-3.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[11px] sm:text-xs font-black font-mono shadow-xs">
                       {firstPlace.xp.toLocaleString()} XP
                     </span>
-                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider">
-                      Level {firstPlace.level} • Champion
+                    <span className="text-[10px] sm:text-[11px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>LEVEL {firstPlace.level} • CHAMPION</span>
                     </span>
                   </div>
                 ) : (
-                  <div className="h-28 flex items-center justify-center text-xs text-slate-300 italic">
+                  <div className="h-28 flex items-center justify-center text-xs text-slate-500 italic">
                     Open Slot
                   </div>
                 )}
 
                 {/* Podium Pedestal Pillar 1 */}
-                <div className="w-full h-28 sm:h-32 mt-2.5 rounded-t-2xl bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 flex flex-col items-center justify-center text-slate-900 font-black text-base sm:text-lg shadow-md">
-                  <span>1st</span>
-                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-amber-900/80">
-                    Leader
+                <div className="w-full h-32 sm:h-36 mt-3 rounded-t-2xl bg-gradient-to-b from-[#d97706] via-[#b45309] to-[#78350f] border-t-3 border-yellow-300 flex flex-col items-center justify-center shadow-[0_10px_25px_rgba(217,119,6,0.3)] relative overflow-hidden">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-300/30 border border-yellow-200/50 flex items-center justify-center text-yellow-100 font-black text-base sm:text-lg shadow-inner">
+                    1
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider font-black text-yellow-200 mt-1">
+                    Champion
                   </span>
                 </div>
               </div>
@@ -376,11 +404,11 @@ export const TopLearnersLeaderboard: React.FC = () => {
               {/* 🥉 3rd Place (Bronze) */}
               <div className="flex-1 flex flex-col items-center text-center">
                 {thirdPlace ? (
-                  <div className="space-y-1.5 flex flex-col items-center w-full">
+                  <div className="space-y-2 flex flex-col items-center w-full">
                     {/* Medal / Avatar */}
                     <div className="relative">
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-amber-600 to-amber-800 p-[2.5px] shadow-sm">
-                        <div className="w-full h-full rounded-full overflow-hidden bg-amber-50 flex items-center justify-center font-black text-amber-900">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-amber-600 via-orange-400 to-amber-800 p-[3px] shadow-[0_0_20px_rgba(217,119,6,0.25)]">
+                        <div className="w-full h-full rounded-full overflow-hidden bg-slate-800 flex items-center justify-center font-black text-amber-200 text-lg">
                           {thirdPlace.avatarUrl ? (
                             <img src={thirdPlace.avatarUrl} alt={thirdPlace.displayName} className="w-full h-full object-cover" />
                           ) : (
@@ -388,68 +416,80 @@ export const TopLearnersLeaderboard: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      <div className="absolute -bottom-1.5 -right-1 w-6 h-6 rounded-full bg-amber-600 border-2 border-white flex items-center justify-center text-xs font-black text-white shadow-xs">
+                      <div className="absolute -bottom-1.5 -right-1 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-amber-700 text-white border-2 border-[#141e34] flex items-center justify-center text-xs font-black shadow-md">
                         🥉
                       </div>
                     </div>
 
-                    <div className="font-extrabold text-xs sm:text-sm text-[#0f233a] truncate max-w-[90px] sm:max-w-[120px]">
+                    <div className="font-extrabold text-xs sm:text-sm text-white truncate max-w-[95px] sm:max-w-[130px]">
                       {thirdPlace.displayName}
                     </div>
 
-                    <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-black font-mono">
+                    <span className="px-3 py-0.5 rounded-full bg-amber-900/30 text-amber-300 border border-amber-700/40 text-[11px] font-black font-mono shadow-xs">
                       {thirdPlace.xp.toLocaleString()} XP
                     </span>
-                    <span className="text-[10px] font-bold text-slate-400">
+                    <span className="text-[11px] font-bold text-slate-400">
                       Level {thirdPlace.level}
                     </span>
                   </div>
                 ) : (
-                  <div className="h-24 flex items-center justify-center text-xs text-slate-300 italic">
+                  <div className="h-24 flex items-center justify-center text-xs text-slate-500 italic">
                     Open Slot
                   </div>
                 )}
 
                 {/* Podium Pedestal Pillar 3 */}
-                <div className="w-full h-16 sm:h-20 mt-2.5 rounded-t-2xl bg-gradient-to-b from-amber-600/80 to-amber-700 flex items-center justify-center text-white font-black text-sm sm:text-base shadow-inner">
-                  3rd
+                <div className="w-full h-20 sm:h-24 mt-3 rounded-t-2xl bg-gradient-to-b from-[#9a3412] via-[#7c2d12] to-[#431407] border-t-2 border-orange-400 flex flex-col items-center justify-center shadow-lg relative overflow-hidden">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-orange-300/20 border border-orange-300/40 flex items-center justify-center text-orange-100 font-black text-sm sm:text-base shadow-inner">
+                    3
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-extrabold text-orange-200 mt-1">
+                    Bronze
+                  </span>
                 </div>
               </div>
 
             </div>
           </div>
 
-          {/* 3. RANKS 4–10 LIST */}
+          {/* 3. RANKS 4–10 WHITE CARD CONTAINER */}
           {remainingRanks.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-stone-100">
-              <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 px-3 pb-1 flex items-center justify-between">
-                <span>Rank & Learner</span>
-                <span>XP Earned</span>
+            <div className="bg-white text-slate-900 rounded-[28px] p-4 sm:p-6 shadow-2xl border border-stone-200/80 space-y-3">
+              
+              {/* Header Label Row */}
+              <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 px-2 flex items-center justify-between">
+                <span>RANK & LEARNER</span>
+                <span>XP EARNED</span>
               </div>
 
-              <div className="space-y-1.5">
-                {remainingRanks.map((entry) => {
+              {/* Ranks 4 to 10 List */}
+              <div className="space-y-2">
+                {remainingRanks.map((entry, index) => {
                   const isCurrent = user && entry.userId === user.id;
+                  const bgFallback = AVATAR_BG_COLORS[index % AVATAR_BG_COLORS.length];
+
                   return (
                     <div
                       key={entry.userId || entry.rank}
-                      className={`p-2.5 sm:p-3 rounded-2xl transition-all flex items-center justify-between gap-3 ${
+                      className={`p-3 sm:p-3.5 rounded-2xl transition-all flex items-center justify-between gap-3 ${
                         isCurrent
-                          ? 'bg-brand-50/80 border-2 border-[#026fc3] shadow-xs'
-                          : 'bg-stone-50/70 border border-stone-200/70 hover:bg-stone-100/70'
+                          ? 'bg-brand-50/90 border-2 border-[#026fc3] shadow-sm'
+                          : 'bg-[#f8fafc] hover:bg-[#f1f5f9] border border-slate-200/70 hover:border-slate-300'
                       }`}
                     >
                       {/* Left: Rank, Avatar, Name */}
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
+                        {/* Rank Badge */}
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${
                           isCurrent
-                            ? 'bg-[#026fc3] text-white'
-                            : 'bg-white text-slate-700 border border-stone-200'
+                            ? 'bg-[#026fc3] text-white shadow-xs'
+                            : 'bg-purple-50 text-purple-700 border border-purple-100'
                         }`}>
                           {entry.rank}
                         </div>
 
-                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-slate-700">
+                        {/* Avatar */}
+                        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-white shadow-2xs ${bgFallback}`}>
                           {entry.avatarUrl ? (
                             <img src={entry.avatarUrl} alt={entry.displayName} className="w-full h-full object-cover" />
                           ) : (
@@ -457,6 +497,7 @@ export const TopLearnersLeaderboard: React.FC = () => {
                           )}
                         </div>
 
+                        {/* Name & Level */}
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-extrabold text-xs sm:text-sm text-[#0f233a] truncate">
@@ -468,49 +509,72 @@ export const TopLearnersLeaderboard: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-bold text-slate-400">
+                          <div className="text-[11px] font-semibold text-slate-400">
                             Level {entry.level}
                           </div>
                         </div>
                       </div>
 
-                      {/* Right: XP Chip */}
-                      <div className="shrink-0 flex items-center gap-1 font-mono text-xs sm:text-sm font-black text-slate-800">
-                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400 shrink-0" />
+                      {/* Right: XP Pill */}
+                      <div className="shrink-0 flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-slate-900">
+                        <Zap className="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" />
                         <span>{entry.xp.toLocaleString()} XP</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Bottom Motivation Banner */}
+              <div className="pt-2">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-50/90 via-indigo-50/70 to-blue-50/90 border border-purple-100/90 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                      <Star className="w-5 h-5 fill-purple-500 text-purple-500" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-purple-950">
+                        Keep learning, keep growing!
+                      </h4>
+                      <p className="text-[11px] font-medium text-slate-600">
+                        Every activity you complete helps you climb the leaderboard.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden sm:flex items-center text-xl">
+                    🏆✨
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
 
           {/* 4. CURRENT USER POSITION (When Outside Top 10) */}
           {user && currentUser && !currentUser.isInTop10 && (
-            <div className="pt-3 border-t border-stone-200">
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-brand-50 to-indigo-50/70 border border-brand-200 shadow-xs flex items-center justify-between gap-3">
+            <div className="bg-[#141e34] border border-slate-700/80 rounded-2xl p-4 shadow-xl">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-[#026fc3] text-white font-black text-xs flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-[#026fc3] text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
                     #{currentUser.rank}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-black text-[#0f233a] truncate">
+                      <span className="text-xs sm:text-sm font-black text-white truncate">
                         {currentUser.displayName}
                       </span>
                       <span className="px-1.5 py-0.2 rounded-md bg-[#026fc3] text-white text-[9px] font-black uppercase">
                         Your Rank
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 font-semibold">
+                    <p className="text-[11px] text-slate-300 font-medium">
                       Complete quizzes & lessons to enter the Top 10!
                     </p>
                   </div>
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <div className="text-xs sm:text-sm font-black font-mono text-[#026fc3]">
+                  <div className="text-xs sm:text-sm font-black font-mono text-amber-400">
                     {currentUser.xp.toLocaleString()} XP
                   </div>
                   <div className="text-[10px] font-bold text-slate-400">
@@ -528,9 +592,9 @@ export const TopLearnersLeaderboard: React.FC = () => {
       {/* 5. ADMIN RESET CONFIRMATION MODAL                                     */}
       {/* ===================================================================== */}
       {resetTargetPeriod && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div
-            className="w-full max-w-md bg-white border border-stone-200 rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200"
+            className="w-full max-w-md bg-white border border-stone-200 rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4 text-slate-900 animate-in zoom-in-95 duration-200"
             role="dialog"
             aria-modal="true"
           >

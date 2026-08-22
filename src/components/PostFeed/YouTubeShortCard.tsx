@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { YouTubeShort } from '@/types';
 import { QuizBitCard } from './QuizBitCard';
+import { activityService } from '@/services/activityService';
 
 interface YouTubeShortCardProps {
   short: YouTubeShort;
@@ -26,6 +27,7 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
 }) => {
   const [thumbnailSrc, setThumbnailSrc] = useState<string>(short.thumbnail_url);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const hasRecordedWatchRef = useRef<boolean>(false);
   
   const cardRef = useRef<HTMLElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +39,20 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
   useEffect(() => {
     setThumbnailSrc(short.thumbnail_url);
   }, [short.thumbnail_url]);
+
+  // Track Short watched interaction (after >= 5s of active playback)
+  useEffect(() => {
+    let timer: any = null;
+    if (isActive && !hasRecordedWatchRef.current) {
+      timer = setTimeout(() => {
+        hasRecordedWatchRef.current = true;
+        activityService.recordInteraction(short.id, 'youtube_short', 'watched');
+      }, 5000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isActive, short.id]);
 
   // Helper to send postMessage commands to YouTube iframe API safely
   const sendIframeCommand = useCallback((func: string, args: any[] = []) => {

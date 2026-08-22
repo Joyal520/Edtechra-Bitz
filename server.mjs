@@ -196,6 +196,103 @@ function saveProgress(progress) {
   }
 }
 
+// User activity interactions cache for resilient deduplication
+const INTERACTIONS_FILE = path.resolve(__dirname, 'server/data/interactions_cache.json');
+
+function loadInteractionsCache() {
+  try {
+    if (fs.existsSync(INTERACTIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(INTERACTIONS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading interactions cache:', e);
+  }
+  return [];
+}
+
+function saveInteractionsCache(interactions) {
+  try {
+    fs.writeFileSync(INTERACTIONS_FILE, JSON.stringify(interactions, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving interactions cache:', e);
+  }
+}
+
+async function recordUserActivityInteraction(userId, activityId, activityType, interactionType = 'completed') {
+  if (!userId || !activityId || !activityType || userId === 'guest_user') return;
+  const now = new Date().toISOString();
+
+  // Save to local cache
+  const cached = loadInteractionsCache();
+  const existingIdx = cached.findIndex(i => i.user_id === userId && i.activity_id === String(activityId));
+  if (existingIdx >= 0) {
+    cached[existingIdx].interaction_type = interactionType;
+    cached[existingIdx].completed_at = now;
+  } else {
+    cached.push({
+      id: `int-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      user_id: userId,
+      activity_id: String(activityId),
+      activity_type: activityType,
+      interaction_type: interactionType,
+      completed_at: now
+    });
+  }
+  saveInteractionsCache(cached);
+
+  // Save to Supabase
+  if (serverSupabase) {
+    try {
+      await serverSupabase
+        .from('user_activity_interactions')
+        .upsert(
+          {
+            user_id: userId,
+            activity_id: String(activityId),
+            activity_type: activityType,
+            interaction_type: interactionType,
+            completed_at: now
+          },
+          { onConflict: 'user_id, activity_id' }
+        );
+    } catch (err) {
+      console.warn('[recordUserActivityInteraction notice]:', err.message);
+    }
+  }
+}
+
+async function getUserInteractedIds(userId, activityType) {
+  if (!userId || userId === 'guest_user') return new Set();
+  const interactedIds = new Set();
+
+  // Check Supabase interactions table
+  if (serverSupabase) {
+    try {
+      let query = serverSupabase
+        .from('user_activity_interactions')
+        .select('activity_id')
+        .eq('user_id', userId);
+      if (activityType) {
+        query = query.eq('activity_type', activityType);
+      }
+      const { data } = await query;
+      if (data && Array.isArray(data)) {
+        data.forEach(item => interactedIds.add(String(item.activity_id)));
+      }
+    } catch (err) {
+      // Fallback to cache/specific table
+    }
+  }
+
+  // Check cache
+  const cached = loadInteractionsCache();
+  cached
+    .filter(i => i.user_id === userId && (!activityType || i.activity_type === activityType))
+    .forEach(i => interactedIds.add(String(i.activity_id)));
+
+  return interactedIds;
+}
+
 // In-memory / file-based quiz store for resilient persistence
 const QUIZ_FILE = path.resolve(__dirname, 'server/data/quiz_cache.json');
 const QUIZ_ATTEMPTS_FILE = path.resolve(__dirname, 'server/data/quiz_attempts_cache.json');
@@ -2019,35 +2116,33 @@ app.get('/api/quiz/feed', async (req, res) => {
     let candidatePool = publishedQuizzes;
 
     if (userId) {
-      let userAttempts = [];
-      if (serverSupabase) {
+      const interactedQuizIds = await getUserInteractedIds(userId, 'quiz');
+
+      if (interactedQuizIds.size === 0 && serverSupabase) {
         try {
           const { data: sbAttempts } = await serverSupabase
             .from('quiz_attempts')
-            .select('quiz_id, is_correct')
+            .select('quiz_id')
             .eq('user_id', userId)
             .eq('is_correct', true);
-          if (sbAttempts) userAttempts = sbAttempts;
+          if (sbAttempts) {
+            sbAttempts.forEach(a => interactedQuizIds.add(a.quiz_id));
+          }
         } catch (e) {
-          console.warn('[Supabase user attempts notice]:', e.message);
+          // Ignore
         }
       }
 
-      if (userAttempts.length === 0) {
-        const cachedAttempts = loadQuizAttemptsCache();
-        userAttempts = cachedAttempts.filter(a => a.user_id === userId && a.is_correct);
-      }
+      const cachedAttempts = loadQuizAttemptsCache();
+      cachedAttempts
+        .filter(a => a.user_id === userId && a.is_correct)
+        .forEach(a => interactedQuizIds.add(a.quiz_id));
 
-      const completedQuizIds = new Set(userAttempts.map(a => a.quiz_id));
-      const unattempted = publishedQuizzes.filter(q => !completedQuizIds.has(q.id));
-
-      // Prefer uncompleted quizzes; if all are completed, fall back to the full published pool
-      if (unattempted.length > 0) {
-        candidatePool = unattempted;
-      }
+      // Strictly exclude completed quizzes (Rule: NEVER see completed activity in feed again)
+      candidatePool = publishedQuizzes.filter(q => !interactedQuizIds.has(q.id));
     }
 
-    // Shuffle and pick up to 12 quizzes
+    // Shuffle and pick up to 12 eligible quizzes
     const shuffled = shuffleArray(candidatePool);
     const feedPool = shuffled.slice(0, 12);
 
@@ -2061,45 +2156,38 @@ app.get('/api/quiz/feed', async (req, res) => {
   }
 });
 
-// 8. POST /api/quiz/attempt - Validate answer server-side and record attempt + XP
+// 8. POST /api/quiz/attempt - Submit student quiz answer with XP awarding
 app.post('/api/quiz/attempt', async (req, res) => {
   try {
     const { quizId, selectedAnswer } = req.body;
 
-    if (!quizId || selectedAnswer === undefined || selectedAnswer === null) {
+    if (!quizId || selectedAnswer === undefined) {
       return res.status(400).json({ success: false, error: 'quizId and selectedAnswer are required.' });
     }
 
     const authData = await verifyAuthUser(req);
     const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
 
-    // Find target quiz from Supabase or cache
-    let quiz = null;
-    if (serverSupabase) {
+    const allQuizzes = loadQuizCache();
+    let quiz = allQuizzes.find(q => q.id === quizId);
+
+    if (!quiz && serverSupabase) {
       try {
-        const { data: sbQuiz, error: sbErr } = await serverSupabase
+        const { data: dbQuiz } = await serverSupabase
           .from('quiz_bits')
           .select('*')
           .eq('id', quizId)
           .maybeSingle();
-        if (!sbErr && sbQuiz) {
-          quiz = sbQuiz;
-        }
-      } catch (sbErr) {
-        console.warn('[Supabase find quiz notice]:', sbErr.message);
+        if (dbQuiz) quiz = dbQuiz;
+      } catch (e) {
+        // Fallback
       }
     }
 
     if (!quiz) {
-      const quizCache = loadQuizCache();
-      quiz = quizCache.find(q => q.id === quizId);
+      return res.status(404).json({ success: false, error: 'Quiz not found.' });
     }
 
-    if (!quiz) {
-      return res.status(404).json({ success: false, error: 'Quiz bit not found.' });
-    }
-
-    // Compare answer
     const isCorrect = String(selectedAnswer).trim().toLowerCase() === String(quiz.correct_answer).trim().toLowerCase();
 
     // Check if XP was already awarded to this user for this quiz
@@ -2175,6 +2263,11 @@ app.post('/api/quiz/attempt', async (req, res) => {
       } catch (sbErr) {
         console.warn('[Supabase save attempt notice]:', sbErr.message);
       }
+    }
+
+    // If correctly completed, record to user activity interactions for feed deduplication
+    if (isCorrect && userId && userId !== 'guest_user') {
+      await recordUserActivityInteraction(userId, quizId, 'quiz', 'completed');
     }
 
     res.json({
@@ -2500,6 +2593,45 @@ app.post('/api/leaderboard/reset', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/leaderboard/reset:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to reset leaderboard.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: UNIVERSAL ACTIVITY INTERACTION RECORDING & DEDUPLICATION
+// ============================================================================
+
+// POST /api/activity/interact - Idempotent interaction recording for feed deduplication
+app.post('/api/activity/interact', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || null;
+    const { activityId, activityType, interactionType } = req.body;
+
+    if (!activityId || !activityType) {
+      return res.status(400).json({ success: false, error: 'activityId and activityType are required.' });
+    }
+
+    if (userId && userId !== 'guest_user') {
+      await recordUserActivityInteraction(
+        userId,
+        String(activityId),
+        String(activityType),
+        String(interactionType || 'completed')
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        userId,
+        activityId,
+        activityType,
+        interactionType: interactionType || 'completed'
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/activity/interact:', error);
+    res.status(500).json({ success: false, error: 'Failed to record activity interaction.' });
   }
 });
 
@@ -2867,6 +2999,9 @@ app.put('/api/youtube/shorts/:id/publish', async (req, res) => {
 // 6. GET /api/youtube/shorts/feed - Feed pool of published shorts for students
 app.get('/api/youtube/shorts/feed', async (req, res) => {
   try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+
     let publishedShorts = [];
 
     if (serverSupabase) {
@@ -2903,9 +3038,16 @@ app.get('/api/youtube/shorts/feed', async (req, res) => {
         }));
     }
 
+    // Deduplicate: Exclude watched/completed Shorts for this user
+    let candidatePool = publishedShorts;
+    if (userId) {
+      const watchedShortIds = await getUserInteractedIds(userId, 'youtube_short');
+      candidatePool = publishedShorts.filter(s => !watchedShortIds.has(String(s.id)) && !watchedShortIds.has(String(s.youtube_video_id)));
+    }
+
     res.json({
       success: true,
-      data: publishedShorts
+      data: candidatePool
     });
   } catch (error) {
     console.error('Error in GET /api/youtube/shorts/feed:', error);
@@ -3458,31 +3600,30 @@ app.get('/api/readings/feed', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // Filter completions if authenticated
+    // Filter completions strictly if authenticated
     let candidatePool = published;
     if (userId) {
-      let completions = [];
-      if (serverSupabase) {
+      const completedIds = await getUserInteractedIds(userId, 'reading');
+
+      if (completedIds.size === 0 && serverSupabase) {
         try {
           const { data: dbCompletions } = await serverSupabase
             .from('reading_completions')
             .select('reading_id')
             .eq('user_id', userId);
-          if (dbCompletions) completions = dbCompletions;
+          if (dbCompletions) {
+            dbCompletions.forEach(c => completedIds.add(String(c.reading_id)));
+          }
         } catch (e) {
           // Ignore
         }
       }
-      if (completions.length === 0) {
-        const cachedCompletions = loadReadingCompletionsCache();
-        completions = cachedCompletions.filter(c => c.user_id === userId);
-      }
 
-      const completedIds = new Set(completions.map(c => c.reading_id));
-      const uncompleted = published.filter(r => !completedIds.has(r.id));
-      if (uncompleted.length > 0) {
-        candidatePool = uncompleted;
-      }
+      const cachedCompletions = loadReadingCompletionsCache();
+      cachedCompletions.filter(c => c.user_id === userId).forEach(c => completedIds.add(String(c.reading_id)));
+
+      // Strictly exclude completed readings
+      candidatePool = published.filter(r => !completedIds.has(String(r.id)));
     }
 
     const shuffled = shuffleArray(candidatePool);
@@ -3818,6 +3959,10 @@ app.post('/api/readings/complete', async (req, res) => {
         } catch (e) {
           // Ignore duplicate
         }
+      }
+
+      if (userId && userId !== 'guest_user') {
+        await recordUserActivityInteraction(userId, readingId, 'reading', 'completed');
       }
     }
 
@@ -4194,12 +4339,18 @@ app.get('/api/polls/feed', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
+    const votedPollIds = await getUserInteractedIds(userId, 'poll');
+    allVotes.filter(v => v.user_id === userId).forEach(v => votedPollIds.add(v.poll_id));
+
+    // Deduplicate: Exclude already voted polls for this authenticated user
+    const eligiblePolls = published.filter(p => !votedPollIds.has(String(p.id)));
+
     const userVotesMap = new Map();
     allVotes.filter(v => v.user_id === userId).forEach(v => {
       userVotesMap.set(v.poll_id, Array.isArray(v.selected_options) ? v.selected_options : [v.selected_options]);
     });
 
-    const enriched = published.map(p => {
+    const enriched = eligiblePolls.map(p => {
       const userVote = userVotesMap.get(p.id) || [];
       const stats = computePollVoteStats(p, allVotes, userVote);
       return {
@@ -4353,6 +4504,10 @@ app.post('/api/polls/vote', async (req, res) => {
       } catch (e) {
         console.warn('[Supabase vote notice]:', e.message);
       }
+    }
+
+    if (userId && userId !== 'guest_user') {
+      await recordUserActivityInteraction(userId, pollId, 'poll', 'voted');
     }
 
     const stats = computePollVoteStats(poll, allVotes, cleanSelected);
@@ -4914,24 +5069,14 @@ app.get('/api/reorders/feed', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    const userCompletionsMap = new Map();
-    allCompletions.filter(c => c.user_id === userId).forEach(c => {
-      userCompletionsMap.set(c.activity_id, c);
-    });
+    const completedReorderIds = await getUserInteractedIds(userId, 'reorder');
+    allCompletions.filter(c => c.user_id === userId && c.is_correct).forEach(c => completedReorderIds.add(String(c.activity_id)));
 
-    const enriched = published.map(a => {
-      const userComp = userCompletionsMap.get(a.id);
-      return {
-        ...a,
-        has_completed: Boolean(userComp?.is_correct),
-        user_order: userComp?.user_order || null
-      };
-    });
+    // Deduplicate: Strictly exclude completed activities for this user
+    const eligibleReorders = published.filter(a => !completedReorderIds.has(String(a.id)));
 
-    // Sort to prioritize uncompleted activities, then shuffle lightly
-    const uncompleted = enriched.filter(a => !a.has_completed).sort(() => Math.random() - 0.5);
-    const completed = enriched.filter(a => a.has_completed).sort(() => Math.random() - 0.5);
-    const feedPool = [...uncompleted, ...completed].slice(0, 15);
+    const shuffled = shuffleArray(eligibleReorders);
+    const feedPool = shuffled.slice(0, 15);
 
     res.json({
       success: true,
@@ -5203,6 +5348,10 @@ app.post('/api/reorders/complete', async (req, res) => {
           console.warn('[Supabase completion notice]:', e.message);
         }
       }
+
+      if (isCorrect && userId && userId !== 'guest_user') {
+        await recordUserActivityInteraction(userId, activityId, 'reorder', 'completed');
+      }
     }
 
     res.json({
@@ -5298,31 +5447,33 @@ app.get('/api/spelling-scrambles/feed', async (req, res) => {
       scrambles = loadSpellingScramblesCache().filter(s => s.is_published !== false);
     }
 
-    // Attach completion status if user is authenticated
-    let userCompletions = new Set();
+    // Deduplicate: Exclude completed spelling scrambles for this authenticated user
+    let candidatePool = scrambles;
     if (userId) {
-      if (serverSupabase) {
+      const completedScrambleIds = await getUserInteractedIds(userId, 'spelling_scramble');
+
+      if (completedScrambleIds.size === 0 && serverSupabase) {
         try {
           const { data } = await serverSupabase
             .from('spelling_scramble_completions')
             .select('scramble_id')
             .eq('user_id', userId);
           if (data) {
-            data.forEach(c => userCompletions.add(c.scramble_id));
+            data.forEach(c => completedScrambleIds.add(String(c.scramble_id)));
           }
         } catch {}
-      } else {
-        const completions = loadSpellingCompletionsCache();
-        completions.filter(c => c.user_id === userId).forEach(c => userCompletions.add(c.scramble_id));
       }
+
+      const completions = loadSpellingCompletionsCache();
+      completions.filter(c => c.user_id === userId).forEach(c => completedScrambleIds.add(String(c.scramble_id)));
+
+      candidatePool = scrambles.filter(s => !completedScrambleIds.has(String(s.id)));
     }
 
-    const payload = scrambles.map(s => ({
-      ...s,
-      has_completed: userCompletions.has(s.id)
-    }));
+    const shuffled = shuffleArray(candidatePool);
+    const feedPool = shuffled.slice(0, 15);
 
-    res.json({ success: true, data: payload });
+    res.json({ success: true, data: feedPool });
   } catch (error) {
     console.error('Error in GET /api/spelling-scrambles/feed:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch spelling scrambles feed.' });
@@ -5814,6 +5965,10 @@ app.post('/api/spelling-scrambles/complete', async (req, res) => {
       } catch (e) {
         console.warn('[Supabase scramble completion notice]:', e.message);
       }
+    }
+
+    if (isCorrect && userId && userId !== 'guest_user') {
+      await recordUserActivityInteraction(userId, scrambleId, 'spelling_scramble', 'completed');
     }
 
     res.json({
