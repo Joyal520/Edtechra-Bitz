@@ -35,6 +35,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
   const [displayName, setDisplayName] = useState<string>('');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string>('');
   const [textSize, setTextSize] = useState<TextSizeOption>('medium');
+  const [avatarCategory, setAvatarCategory] = useState<'all' | 'cartoon' | 'photo'>('cartoon');
 
   // Image Upload & Crop State
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,41 +329,87 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                   </div>
                 </div>
 
-                {/* Preset Avatars Grid */}
-                <div>
-                  <span className="text-[11px] font-bold text-slate-500 mb-2 block">
-                    Choose from preset avatars:
-                  </span>
-                  <div className="grid grid-cols-6 gap-2">
-                    {DEFAULT_AVATARS.map((preset) => {
-                      const isSelected = selectedAvatarUrl === preset.url;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => handleSelectPreset(preset)}
-                          className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer hover:scale-105 active:scale-95 ${
-                            isSelected
-                              ? 'border-[#026fc3] ring-2 ring-[#026fc3]/30 shadow-xs'
-                              : 'border-slate-200 hover:border-slate-300'
-                          }`}
-                          title={preset.label}
-                        >
-                          <img
-                            src={preset.url}
-                            alt={preset.label}
-                            className="w-full h-full object-cover rounded-xl"
-                          />
-                          {isSelected && (
-                            <div className="absolute inset-0 bg-[#026fc3]/25 flex items-center justify-center">
-                              <div className="w-5 h-5 rounded-full bg-[#026fc3] text-white flex items-center justify-center shadow-xs">
-                                <Check className="w-3 h-3 stroke-[3]" />
+                {/* Preset Avatars Grid with Category Tabs */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] font-bold text-slate-700">
+                      Choose from preset avatars:
+                    </span>
+
+                    {/* Category Filter Pills */}
+                    <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-xl text-[10px] font-extrabold">
+                      <button
+                        type="button"
+                        onClick={() => setAvatarCategory('cartoon')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          avatarCategory === 'cartoon'
+                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        🎨 Cartoon ({DEFAULT_AVATARS.filter(a => a.category === 'cartoon').length})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAvatarCategory('photo')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          avatarCategory === 'photo'
+                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        📸 Photos ({DEFAULT_AVATARS.filter(a => a.category === 'photo').length})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAvatarCategory('all')}
+                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                          avatarCategory === 'all'
+                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filtered Grid */}
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 bg-stone-50/50 rounded-2xl border border-stone-200/70">
+                    {DEFAULT_AVATARS
+                      .filter((preset) => avatarCategory === 'all' || preset.category === avatarCategory)
+                      .map((preset) => {
+                        const isSelected = selectedAvatarUrl === preset.url;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => handleSelectPreset(preset)}
+                            className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer hover:scale-105 active:scale-95 bg-white ${
+                              isSelected
+                                ? 'border-[#026fc3] ring-2 ring-[#026fc3]/30 shadow-xs'
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                            title={preset.label}
+                          >
+                            <img
+                              src={preset.url}
+                              alt={preset.label}
+                              className="w-full h-full object-cover rounded-xl bg-amber-50"
+                              loading="lazy"
+                            />
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-[#026fc3]/25 flex items-center justify-center">
+                                <div className="w-5 h-5 rounded-full bg-[#026fc3] text-white flex items-center justify-center shadow-xs">
+                                  <Check className="w-3 h-3 stroke-[3]" />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
+                            )}
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
 

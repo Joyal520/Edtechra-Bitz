@@ -22,6 +22,7 @@ import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
 import { UserLearningProgress, CategoryProgress } from '@/types';
 import { quizService } from '@/services/quizService';
 import { UserSettingsModal } from '@/components/UserSettingsModal';
+import { TopLearnersLeaderboard } from '@/components/Dashboard/TopLearnersLeaderboard';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, openAuthModal, isLoading, session } = useAuth();
@@ -299,6 +300,9 @@ export const DashboardPage: React.FC = () => {
         </div>
 
       </div>
+
+      {/* 🏆 Top 10 Learners Leaderboard */}
+      <TopLearnersLeaderboard />
 
       {/* Mastery by Topic Category */}
       <section className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">

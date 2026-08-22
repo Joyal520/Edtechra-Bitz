@@ -2238,6 +2238,272 @@ app.get('/api/quiz/user-xp/:userId', async (req, res) => {
 });
 
 // ============================================================================
+// API ROUTES: TOP 10 LEARNERS LEADERBOARD & SAFE RESETS
+// ============================================================================
+
+// In-memory fallback reset store if Supabase resets table is syncing
+const inMemoryLeaderboardResets = {
+  today: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
+  week: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+  month: new Date(new Date().setDate(1)).toISOString()
+};
+
+// 1. GET /api/leaderboard - Retrieve Top 10 Learners and Current User Ranking
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const period = String(req.query.period || 'week').toLowerCase().trim();
+    const validPeriods = new Set(['today', 'week', 'month', 'all_time']);
+    const selectedPeriod = validPeriods.has(period) ? period : 'week';
+
+    // Optional user authentication for personal rank resolution
+    const authData = await verifyAuthUser(req);
+    const currentUserId = authData?.user?.id || null;
+
+    if (serverSupabase) {
+      try {
+        const { data: rpcData, error: rpcError } = await serverSupabase.rpc('get_top_learners', {
+          p_period: selectedPeriod,
+          p_current_user_id: currentUserId
+        });
+
+        if (!rpcError && rpcData) {
+          return res.json({
+            success: true,
+            data: rpcData
+          });
+        }
+      } catch (rpcErr) {
+        console.warn('[Leaderboard RPC fallback notice]:', rpcErr.message);
+      }
+    }
+
+    // Resilient fallback aggregation if RPC is not yet applied
+    let resetBoundary = null;
+    if (selectedPeriod !== 'all_time') {
+      if (serverSupabase) {
+        const { data: resetRecord } = await serverSupabase
+          .from('leaderboard_resets')
+          .select('reset_at')
+          .eq('period_type', selectedPeriod)
+          .single();
+        if (resetRecord?.reset_at) {
+          resetBoundary = resetRecord.reset_at;
+        }
+      }
+      if (!resetBoundary) {
+        resetBoundary = inMemoryLeaderboardResets[selectedPeriod] || new Date(0).toISOString();
+      }
+    }
+
+    const sinceDate = resetBoundary || '1970-01-01T00:00:00.000Z';
+
+    // Fetch all profiles
+    let profiles = [];
+    if (serverSupabase) {
+      const { data: sbProfiles } = await serverSupabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url, role, created_at');
+      if (sbProfiles) profiles = sbProfiles;
+    }
+
+    // Compute user XP map
+    const userXpMap = new Map();
+
+    // Starter bonus for all-time
+    if (selectedPeriod === 'all_time') {
+      profiles.forEach(p => {
+        userXpMap.set(p.id, 100);
+      });
+    }
+
+    // 1. Quiz Attempts XP
+    if (serverSupabase) {
+      const { data: qAttempts } = await serverSupabase
+        .from('quiz_attempts')
+        .select('user_id, xp_awarded')
+        .eq('is_correct', true)
+        .gte('created_at', sinceDate);
+      (qAttempts || []).forEach(a => {
+        const cur = userXpMap.get(a.user_id) || 0;
+        userXpMap.set(a.user_id, cur + (a.xp_awarded || 10));
+      });
+
+      // 2. Sentence Reorders XP
+      const { data: rCompletions } = await serverSupabase
+        .from('reorder_completions')
+        .select('user_id, xp_awarded')
+        .eq('is_correct', true)
+        .gte('completed_at', sinceDate);
+      (rCompletions || []).forEach(c => {
+        const cur = userXpMap.get(c.user_id) || 0;
+        userXpMap.set(c.user_id, cur + (c.xp_awarded || 10));
+      });
+
+      // 3. Spelling Scrambles XP
+      const { data: sCompletions } = await serverSupabase
+        .from('spelling_scramble_completions')
+        .select('user_id, xp_awarded')
+        .eq('is_correct', true)
+        .gte('completed_at', sinceDate);
+      (sCompletions || []).forEach(c => {
+        const cur = userXpMap.get(c.user_id) || 0;
+        userXpMap.set(c.user_id, cur + (c.xp_awarded || 10));
+      });
+
+      // 4. Reading Completions XP
+      const { data: readCompletions } = await serverSupabase
+        .from('reading_completions')
+        .select('user_id')
+        .gte('completed_at', sinceDate);
+      (readCompletions || []).forEach(c => {
+        const cur = userXpMap.get(c.user_id) || 0;
+        userXpMap.set(c.user_id, cur + 15);
+      });
+
+      // 5. Video Lessons XP
+      const { data: vidProgress } = await serverSupabase
+        .from('youtube_learning_progress')
+        .select('user_id, last_watched_at, updated_at')
+        .eq('completed', true);
+      (vidProgress || []).forEach(v => {
+        const vDate = v.last_watched_at || v.updated_at;
+        if (!sinceDate || !vDate || new Date(vDate) >= new Date(sinceDate)) {
+          const cur = userXpMap.get(v.user_id) || 0;
+          userXpMap.set(v.user_id, cur + 40);
+        }
+      });
+    }
+
+    // Build ranked array
+    const rankedList = profiles.map(p => {
+      const xp = userXpMap.get(p.id) || (selectedPeriod === 'all_time' ? 100 : 0);
+      const level = Math.max(1, Math.min(20, 1 + Math.floor(xp / 100)));
+      const displayName = p.full_name?.trim() || (p.email ? p.email.split('@')[0] : 'Learner');
+      return {
+        userId: p.id,
+        displayName,
+        avatarUrl: p.avatar_url || null,
+        xp,
+        level,
+        createdAt: p.created_at || new Date().toISOString()
+      };
+    })
+    .filter(u => u.xp > 0 || selectedPeriod === 'all_time')
+    .sort((a, b) => b.xp - a.xp || new Date(a.createdAt) - new Date(b.createdAt))
+    .map((item, index) => ({
+      rank: index + 1,
+      userId: item.userId,
+      displayName: item.displayName,
+      avatarUrl: item.avatarUrl,
+      xp: item.xp,
+      level: item.level
+    }));
+
+    const top10 = rankedList.slice(0, 10);
+    let currentUserRank = null;
+
+    if (currentUserId) {
+      const found = rankedList.find(u => u.userId === currentUserId);
+      if (found) {
+        currentUserRank = {
+          ...found,
+          isInTop10: found.rank <= 10
+        };
+      } else {
+        const profile = profiles.find(p => p.id === currentUserId);
+        const displayName = profile?.full_name?.trim() || (authData?.user?.email ? authData.user.email.split('@')[0] : 'Learner');
+        currentUserRank = {
+          rank: rankedList.length + 1,
+          userId: currentUserId,
+          displayName,
+          avatarUrl: profile?.avatar_url || null,
+          xp: selectedPeriod === 'all_time' ? 100 : 0,
+          level: 1,
+          isInTop10: false
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        period: selectedPeriod,
+        top10,
+        currentUser: currentUserRank,
+        lastUpdated: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/leaderboard:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch leaderboard.' });
+  }
+});
+
+// 2. POST /api/leaderboard/reset - Safe Time-Period Reset (Strict Admin Authorization)
+app.post('/api/leaderboard/reset', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userEmail = (authData?.user?.email || '').toLowerCase().trim();
+    const userRole = authData?.profile?.role;
+    const isAuthorizedAdmin = userEmail === 'roshanjoyal520@gmail.com' || userRole === 'admin';
+
+    if (!authData || !isAuthorizedAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access Denied: Administrator privilege required to reset leaderboard.'
+      });
+    }
+
+    const { period } = req.body;
+    if (!period || !['today', 'week', 'month'].includes(period)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid period. Must be today, week, or month.'
+      });
+    }
+
+    const now = new Date().toISOString();
+    inMemoryLeaderboardResets[period] = now;
+
+    if (serverSupabase) {
+      try {
+        const { error: rpcError } = await serverSupabase.rpc('reset_leaderboard_period', {
+          p_period: period
+        });
+
+        if (rpcError) {
+          console.warn('[Leaderboard RPC reset notice]:', rpcError.message);
+          // Direct table upsert fallback
+          await serverSupabase
+            .from('leaderboard_resets')
+            .upsert(
+              {
+                period_type: period,
+                reset_at: now,
+                reset_by: authData.user.id,
+                updated_at: now
+              },
+              { onConflict: 'period_type' }
+            );
+        }
+      } catch (dbErr) {
+        console.warn('[Leaderboard reset database fallback notice]:', dbErr);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Leaderboard for ${period} successfully reset. Historical XP and learning records remain safe.`,
+      period,
+      resetAt: now
+    });
+  } catch (error) {
+    console.error('Error in POST /api/leaderboard/reset:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to reset leaderboard.' });
+  }
+});
+
+// ============================================================================
 // API ROUTES: YOUTUBE SHORTS FEED INTEGRATION & LIBRARY
 // ============================================================================
 
