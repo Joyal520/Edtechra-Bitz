@@ -112,6 +112,21 @@ export const PostFeed: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Stop active Short when tab is blurred/hidden or user navigates away
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setActiveShortId(null);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleVisibilityChange);
+    };
+  }, []);
+
   // Load feed quizzes, shorts, readings, polls, sentence reorders, and spelling scrambles pool
   const loadMediaPool = useCallback(async () => {
     try {
@@ -417,6 +432,10 @@ export const PostFeed: React.FC = () => {
     setActiveShortId((prev) => (prev !== shortId ? shortId : prev));
   }, []);
 
+  const handleShortBecomeInactive = useCallback((shortId: string) => {
+    setActiveShortId((prev) => (prev === shortId ? null : prev));
+  }, []);
+
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6">
       
@@ -570,6 +589,7 @@ export const PostFeed: React.FC = () => {
                   isActive={isShortActive}
                   isNext={isShortNext}
                   onBecomeActive={() => handleShortBecomeActive(item.short.id)}
+                  onBecomeInactive={() => handleShortBecomeInactive(item.short.id)}
                 />
               );
             }

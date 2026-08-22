@@ -14,18 +14,18 @@ interface YouTubeShortCardProps {
   isActive?: boolean;
   isNext?: boolean;
   onBecomeActive?: () => void;
+  onBecomeInactive?: () => void;
 }
 
 export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
   short,
   isActive = false,
   isNext = false,
-  onBecomeActive
+  onBecomeActive,
+  onBecomeInactive
 }) => {
-  const [isIntersecting, setIsIntersecting] = useState<boolean>(false);
-  const [userClickedPlay, setUserClickedPlay] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [thumbnailSrc, setThumbnailSrc] = useState<string>(short.thumbnail_url);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
   
   const cardRef = useRef<HTMLElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -38,9 +38,44 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
     setThumbnailSrc(short.thumbnail_url);
   }, [short.thumbnail_url]);
 
+  // Helper to send postMessage commands to YouTube iframe API safely
+  const sendIframeCommand = useCallback((func: string, args: any[] = []) => {
+    try {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({
+            event: 'command',
+            func,
+            args
+          }),
+          '*'
+        );
+      }
+    } catch {
+      // Safe fallback for cross-origin boundary
+    }
+  }, []);
+
+  // When Short becomes inactive, IMMEDIATELY pause and stop video playback
+  useEffect(() => {
+    if (!isActive) {
+      sendIframeCommand('pauseVideo');
+      sendIframeCommand('stopVideo');
+      setIsPaused(false);
+    }
+  }, [isActive, sendIframeCommand]);
+
+  // Cleanup on unmount — stop all video resources immediately
+  useEffect(() => {
+    return () => {
+      sendIframeCommand('pauseVideo');
+      sendIframeCommand('stopVideo');
+    };
+  }, [sendIframeCommand]);
+
   // Viewport-aware IntersectionObserver:
-  // Activates playback when at least 50% visible in the viewport.
-  // Notifies parent PostFeed coordinator of active Short for intelligent 1-step next-video preloading.
+  // - Activates playback when >= 50% visible in the viewport.
+  // - When scrolling away (< 20% visible), notifies coordinator to deactivate and stop.
   useEffect(() => {
     const el = videoContainerRef.current;
     if (!el) return;
@@ -53,17 +88,16 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            setIsIntersecting(true);
-            setIsPaused(false);
             onBecomeActive?.();
-          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.35) {
-            setIsIntersecting(false);
-            setIsPaused(false);
+          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.2) {
+            if (isActive) {
+              onBecomeInactive?.();
+            }
           }
         });
       },
       {
-        threshold: [0, 0.35, 0.5, 0.8, 1.0]
+        threshold: [0, 0.2, 0.5, 0.8, 1.0]
       }
     );
 
@@ -71,40 +105,22 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
     return () => {
       observer.disconnect();
     };
-  }, [onBecomeActive]);
+  }, [onBecomeActive, onBecomeInactive, isActive]);
 
-  // Determine effective operational state:
-  // - shouldPlayInline: active short playing with sound attempt & autoplay
-  // - shouldPreload: immediately relevant next short warming up in background
-  // - idle / distant: unmounted iframe to save bandwidth and memory during rapid swipes
-  const shouldPlayInline = Boolean(isActive || userClickedPlay || isIntersecting);
-  const shouldPreload = Boolean(isNext && !shouldPlayInline);
-
-  // Toggle Play / Pause on user interaction — completely invisible controls (Issue 1)
-  // Maintains tap-to-play/pause without showing any visual overlay or fade animations.
+  // Silent tap-to-play/pause toggle — COMPLETELY INVISIBLE CONTROLS (Issue 1)
+  // Maintains tap functionality without ever displaying a play/pause icon or overlay.
   const handleTogglePlayPause = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (!shouldPlayInline) {
-      setUserClickedPlay(true);
+    if (!isActive) {
       onBecomeActive?.();
       return;
     }
 
     const nextPaused = !isPaused;
     setIsPaused(nextPaused);
-
-    if (iframeRef.current && iframeRef.current.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({
-          event: 'command',
-          func: nextPaused ? 'pauseVideo' : 'playVideo',
-          args: []
-        }),
-        '*'
-      );
-    }
-  }, [isPaused, shouldPlayInline, onBecomeActive]);
+    sendIframeCommand(nextPaused ? 'pauseVideo' : 'playVideo');
+  }, [isActive, isPaused, onBecomeActive, sendIframeCommand]);
 
   // Fallback for YouTube thumbnail if maxresdefault is unavailable
   const handleThumbnailError = () => {
@@ -117,8 +133,12 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
     ? `&origin=${encodeURIComponent(window.location.origin)}&widget_referrer=${encodeURIComponent(window.location.origin)}`
     : '';
 
-  // Active YouTube Embed URL (autoplay enabled, controls invisible)
-  const activeEmbedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&loop=1&playlist=${short.youtube_video_id}&enablejsapi=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0${originParam}`;
+  // Active YouTube Embed URL:
+  // - NO playlist parameter (removes YouTube's playlist HUD: previous/next buttons and center circle pause icon)
+  // - controls=0 (removes native player controls)
+  // - modestbranding=1, rel=0, showinfo=0, iv_load_policy=3, disablekb=1, fs=0, autohide=1
+  // - enablejsapi=1 (enables authoritative programmatic control)
+  const activeEmbedUrl = `https://www.youtube.com/embed/${short.youtube_video_id}?autoplay=1&playsinline=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&showinfo=0&autohide=1&enablejsapi=1${originParam}`;
 
   return (
     <article
@@ -156,7 +176,7 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
       </div>
 
       {/* 2. RESPONSIVE VIDEO FRAME: 
-             - Mobile: Full width 9:16 edge-to-edge, zero black sidebars (Issue 3)
+             - Mobile: Full width 9:16 edge-to-edge, zero black sidebars (Preserved)
              - Desktop: Centered, compact 9:16 card (sm:max-w-[380px], sm:max-h-[640px]) */}
       <div className="w-full bg-black sm:bg-slate-900/90 sm:p-4 flex items-center justify-center">
         <div
@@ -164,9 +184,9 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
           onClick={handleTogglePlayPause}
           className="relative w-full aspect-[9/16] sm:max-w-[380px] sm:max-h-[640px] mx-auto bg-black overflow-hidden flex items-center justify-center sm:rounded-2xl shadow-md cursor-pointer select-none"
         >
-          {/* Active Video Player Layer */}
-          {shouldPlayInline ? (
-            <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center">
+          {isActive ? (
+            /* ACTIVE SHORT: Exactly ONE active player in the entire feed */
+            <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center pointer-events-auto">
               {/* Immediate Poster image layer underneath video to eliminate white flash */}
               <img
                 src={thumbnailSrc}
@@ -177,7 +197,7 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
                 decoding="async"
               />
 
-              {/* YouTube Embed Player — No visible playback controls, true 9:16 full-bleed */}
+              {/* YouTube Embed Player — Zero visible playback controls, true 9:16 full-bleed */}
               <iframe
                 ref={iframeRef}
                 src={activeEmbedUrl}
@@ -188,45 +208,19 @@ export const YouTubeShortCard: React.FC<YouTubeShortCardProps> = ({
                 loading="eager"
               />
             </div>
-          ) : shouldPreload ? (
-            /* Next-Short Preload Layer: High-priority Eager Poster cached in memory without competing iframe bandwidth */
-            <div className="relative w-full h-full cursor-pointer flex items-center justify-center bg-black overflow-hidden">
-              <img
-                src={thumbnailSrc}
-                alt={short.title}
-                onError={handleThumbnailError}
-                className="w-full h-full object-cover object-center pointer-events-none select-none"
-                loading="eager"
-                decoding="async"
-              />
-
-              {/* Bottom tag without any center play button */}
-              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
-                <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
-                  <Film className="w-3.5 h-3.5 text-red-400" />
-                  <span>EdTechra Short</span>
-                </span>
-                {short.linked_quiz_id && (
-                  <span className="px-2.5 py-1 rounded-xl bg-teal-500/90 backdrop-blur-xs text-white text-[11px] font-extrabold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-300" />
-                    <span>Quiz Attached</span>
-                  </span>
-                )}
-              </div>
-            </div>
           ) : (
-            /* Standby Poster Layer (Clean, instant thumbnail with zero visible play button overlay) */
+            /* INACTIVE SHORT: Lightweight Poster image layer ONLY. NO IFRAME MOUNTED. ZERO competing audio/video */
             <div className="relative w-full h-full cursor-pointer flex items-center justify-center bg-black overflow-hidden">
               <img
                 src={thumbnailSrc}
                 alt={short.title}
                 onError={handleThumbnailError}
                 className="w-full h-full object-cover object-center pointer-events-none select-none transition-transform duration-300 hover:scale-102"
-                loading="lazy"
+                loading={isNext ? 'eager' : 'lazy'}
                 decoding="async"
               />
 
-              {/* Bottom informative tag — Clean & immersive */}
+              {/* Bottom informative tag — Clean & immersive, NO center play/pause controls */}
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold pointer-events-none">
                 <span className="px-2.5 py-1 rounded-xl bg-black/70 backdrop-blur-xs text-[11px] font-bold flex items-center gap-1.5">
                   <Film className="w-3.5 h-3.5 text-red-400" />

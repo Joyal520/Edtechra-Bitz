@@ -99,10 +99,7 @@ export function getYouTubeShortsUrl(videoId: string): string {
   return `https://www.youtube.com/shorts/${videoId}`;
 }
 
-/**
- * Generates official privacy-enhanced YouTube embed player URL
- */
 export function getYouTubeEmbedUrl(videoId: string, autoplay = true): string {
   if (!videoId) return '';
-  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&rel=0&modestbranding=1&playsinline=1`;
+  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${autoplay ? 1 : 0}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&showinfo=0&autohide=1&enablejsapi=1&playsinline=1`;
 }
