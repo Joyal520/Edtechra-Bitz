@@ -111,6 +111,13 @@ export const TopLearnersLeaderboard: React.FC = () => {
     }
   };
 
+  // Handle immediate period selection
+  const handleSelectPeriod = (selectedPeriod: LeaderboardPeriod) => {
+    setPeriod(selectedPeriod);
+    setPeriodDropdownOpen(false);
+    loadLeaderboard(selectedPeriod);
+  };
+
   const top10 = data?.top10 || [];
   const currentUser = data?.currentUser || null;
 
@@ -171,9 +178,10 @@ export const TopLearnersLeaderboard: React.FC = () => {
                   <button
                     key={p}
                     type="button"
-                    onClick={() => {
-                      setPeriod(p);
-                      setPeriodDropdownOpen(false);
+                    onClick={() => handleSelectPeriod(p)}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleSelectPeriod(p);
                     }}
                     className={`w-full text-left px-4 py-2 text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
                       period === p

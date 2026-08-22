@@ -2350,7 +2350,11 @@ app.get('/api/leaderboard', async (req, res) => {
 
     // Optional user authentication for personal rank resolution
     const authData = await verifyAuthUser(req);
-    const currentUserId = authData?.user?.id || null;
+    let currentUserId = authData?.user?.id || null;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!currentUserId || !uuidRegex.test(currentUserId)) {
+      currentUserId = null;
+    }
 
     if (serverSupabase) {
       try {
@@ -2359,7 +2363,7 @@ app.get('/api/leaderboard', async (req, res) => {
           p_current_user_id: currentUserId
         });
 
-        if (!rpcError && rpcData) {
+        if (!rpcError && rpcData && Array.isArray(rpcData.top10)) {
           return res.json({
             success: true,
             data: rpcData
@@ -2370,25 +2374,56 @@ app.get('/api/leaderboard', async (req, res) => {
       }
     }
 
-    // Resilient fallback aggregation if RPC is not yet applied
-    let resetBoundary = null;
+    // Compute natural start dates for periods (UTC)
+    const now = new Date();
+    let naturalStart;
+    if (selectedPeriod === 'today') {
+      const today = new Date(now);
+      today.setUTCHours(0, 0, 0, 0);
+      naturalStart = today.toISOString();
+    } else if (selectedPeriod === 'week') {
+      const week = new Date(now);
+      const day = week.getUTCDay();
+      const diff = week.getUTCDate() - day + (day === 0 ? -6 : 1);
+      week.setUTCDate(diff);
+      week.setUTCHours(0, 0, 0, 0);
+      naturalStart = week.toISOString();
+    } else if (selectedPeriod === 'month') {
+      const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+      naturalStart = month.toISOString();
+    } else {
+      naturalStart = '1970-01-01T00:00:00.000Z';
+    }
+
+    // Check if an explicit admin reset occurred for this period
+    let resetDate = null;
     if (selectedPeriod !== 'all_time') {
       if (serverSupabase) {
-        const { data: resetRecord } = await serverSupabase
-          .from('leaderboard_resets')
-          .select('reset_at')
-          .eq('period_type', selectedPeriod)
-          .single();
-        if (resetRecord?.reset_at) {
-          resetBoundary = resetRecord.reset_at;
-        }
+        try {
+          const { data: resetRecord } = await serverSupabase
+            .from('leaderboard_resets')
+            .select('reset_at')
+            .eq('period_type', selectedPeriod)
+            .maybeSingle();
+          if (resetRecord?.reset_at) {
+            resetDate = resetRecord.reset_at;
+          }
+        } catch (e) {}
       }
-      if (!resetBoundary) {
-        resetBoundary = inMemoryLeaderboardResets[selectedPeriod] || new Date(0).toISOString();
+      if (!resetDate && inMemoryLeaderboardResets[selectedPeriod]) {
+        resetDate = inMemoryLeaderboardResets[selectedPeriod];
       }
     }
 
-    const sinceDate = resetBoundary || '1970-01-01T00:00:00.000Z';
+    // Effective since date: whichever is more recent between natural period start and admin reset
+    let sinceDate = naturalStart;
+    if (resetDate && selectedPeriod !== 'all_time') {
+      const resetTime = new Date(resetDate).getTime();
+      const naturalTime = new Date(naturalStart).getTime();
+      if (!isNaN(resetTime) && resetTime > naturalTime) {
+        sinceDate = new Date(resetTime).toISOString();
+      }
+    }
 
     // Fetch all profiles
     let profiles = [];
