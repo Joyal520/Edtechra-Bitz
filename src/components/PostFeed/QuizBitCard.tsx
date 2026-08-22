@@ -13,6 +13,7 @@ import { QuizBit, QuizAttemptResult } from '@/types';
 import { quizService } from '@/services/quizService';
 import { useAuth } from '@/context/AuthContext';
 import { triggerConfetti } from '@/utils/confetti';
+import { asmrAudio } from '@/utils/reorderAudio';
 
 interface QuizBitCardProps {
   quiz: QuizBit;
@@ -36,6 +37,9 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
   const handleSelectOption = async (option: string) => {
     if (submitting || result) return;
 
+    // Instant tactile ASMR pop feedback on option selection
+    asmrAudio.playAsmrPop();
+
     setSelectedOption(option);
     setSubmitting(true);
     setError(null);
@@ -46,8 +50,13 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
       setResult(attemptResult);
 
       if (attemptResult.is_correct) {
+        // ASMR celebratory double-pop + harmonic sparkle chime
+        asmrAudio.playCorrectAnswerPop();
         // Trigger celebratory confetti burst
         triggerConfetti(cardRef.current);
+      } else {
+        // Gentle wrong feedback sound
+        asmrAudio.playWrongThud();
       }
 
       if (onAttemptCompleted) {

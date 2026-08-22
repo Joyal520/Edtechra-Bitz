@@ -10,6 +10,7 @@ import { PollBit, PollVoteResult } from '@/types';
 import { pollService } from '@/services/pollService';
 import { useAuth } from '@/context/AuthContext';
 import { triggerConfetti } from '@/utils/confetti';
+import { asmrAudio } from '@/utils/reorderAudio';
 
 interface PollBitCardProps {
   poll: PollBit;
@@ -31,6 +32,9 @@ export const PollBitCard: React.FC<PollBitCardProps> = ({ poll, onVoted }) => {
 
   const handleVote = async (option: string) => {
     if (hasVoted || submitting) return;
+
+    // Tactile ASMR Pop feedback
+    asmrAudio.playAsmrPop(1.15);
 
     setSubmitting(true);
     try {
