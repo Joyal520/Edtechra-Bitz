@@ -13,6 +13,7 @@ import { reorderService } from '@/services/reorderService';
 import { reorderAudio } from '@/utils/reorderAudio';
 import { triggerConfetti } from '@/utils/confetti';
 import { useAuth } from '@/context/AuthContext';
+import { shuffleSentenceWords } from '@/utils/reorderValidation';
 
 interface ReorderSentenceCardProps {
   reorder: ReorderActivity;
@@ -26,14 +27,25 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
   const { session } = useAuth();
   const cardRef = useRef<HTMLElement>(null);
 
-  // Initialize word tiles with unique IDs to safely support duplicate words
+  // Initialize word tiles using unbiased Fisher–Yates shuffle with non-identity guarantee
   const initialTiles = useMemo<WordTile[]>(() => {
-    const rawWords = Array.isArray(reorder.scrambled_words) && reorder.scrambled_words.length > 0
-      ? reorder.scrambled_words
-      : reorder.sentence.split(/\s+/);
+    const correctWords = Array.isArray(reorder.correct_order) && reorder.correct_order.length > 0
+      ? reorder.correct_order
+      : reorder.sentence.split(/\s+/).filter(Boolean);
 
-    return rawWords.map((word, index) => ({
-      id: `tile-${reorder.id}-${index}`,
+    let wordsToScramble: string[] = [];
+    if (Array.isArray(reorder.scrambled_words) && reorder.scrambled_words.length === correctWords.length) {
+      // Check if pre-stored scrambled words already differ from correct order
+      const isIdentical = reorder.scrambled_words.every((w, idx) => w === correctWords[idx]);
+      wordsToScramble = isIdentical
+        ? shuffleSentenceWords(correctWords)
+        : reorder.scrambled_words;
+    } else {
+      wordsToScramble = shuffleSentenceWords(correctWords);
+    }
+
+    return wordsToScramble.map((word, index) => ({
+      id: `tile-${reorder.id}-${index}-${word}`,
       word,
       originalIndex: index
     }));
@@ -102,7 +114,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
     // Release animation lock
     setTimeout(() => {
       setIsAnimating(false);
-    }, 320);
+    }, 280);
 
     // If all words are now placed, check answer
     if (nextPlaced.length === targetCount) {
@@ -126,7 +138,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
 
     setTimeout(() => {
       setIsAnimating(false);
-    }, 300);
+    }, 250);
   };
 
   /**
@@ -169,7 +181,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
 
     setTimeout(() => {
       setIsAnimating(false);
-    }, 350);
+    }, 300);
 
     if (nextPlaced.length === targetCount) {
       checkCompletedSentence(nextPlaced);
@@ -224,7 +236,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
       setErrorNotice('Not quite! Try rearranging the words to make the correct sentence.');
       setTimeout(() => {
         setIsShaking(false);
-      }, 600);
+      }, 500);
     }
   };
 
@@ -237,17 +249,17 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
       className="w-full bg-[#031124] border border-blue-900/60 rounded-3xl overflow-hidden shadow-lg transition-all relative text-white"
     >
       {/* 1. Header Strip */}
-      <div className="bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-4 sm:px-5 py-2.5 flex items-center justify-between text-white shadow-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center font-black text-xs shadow-2xs">
+      <div className="bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 px-3.5 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between text-white shadow-xs">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center font-black text-[11px] sm:text-xs shadow-2xs shrink-0">
             🔤
           </div>
-          <span className="text-xs font-black uppercase tracking-wider">
+          <span className="text-xs font-black uppercase tracking-wider truncate">
             Sentence Reorder
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {reorder.category && (
             <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs text-[10px] font-extrabold">
               {reorder.category}
@@ -256,7 +268,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
           <span className="px-2 py-0.5 rounded-full bg-black/30 text-[10px] font-extrabold text-cyan-200">
             Level {reorder.level || 'A1'}
           </span>
-          <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black shadow-2xs flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black shadow-2xs flex items-center gap-1">
             <Zap className="w-3 h-3 fill-slate-950" />
             +{reorder.xp || 10} XP
           </span>
@@ -264,21 +276,21 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
       </div>
 
       {/* 2. Main Game Container */}
-      <div className="p-4 sm:p-6 space-y-5">
-        {/* Instruction and Micro-Goal */}
-        <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
-          <span className="flex items-center gap-1.5 text-cyan-400">
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span>Tap words in the correct grammatical order</span>
+      <div className="p-3.5 sm:p-5 space-y-3.5 sm:space-y-4">
+        {/* Instruction and Micro-Goal (Learning Typography) */}
+        <div className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-slate-400 gap-2">
+          <span className="flex items-center gap-1.5 text-cyan-400 learning-content-text min-w-0">
+            <HelpCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Tap words in the correct order</span>
           </span>
-          <span className="text-slate-400 font-medium">
-            {placedTiles.length} / {targetCount} words
+          <span className="text-slate-400 font-medium shrink-0 text-[11px]">
+            {placedTiles.length} / {targetCount}
           </span>
         </div>
 
-        {/* 3. ANSWER SENTENCE SLOTS (Target Drop Zone) */}
+        {/* 3. ANSWER SENTENCE SLOTS (Target Drop Zone) — Responsive 320px-430px+ Flex Wrap */}
         <div
-          className={`min-h-[72px] p-3.5 rounded-2xl bg-slate-900/80 border transition-all flex flex-wrap items-center gap-2 ${
+          className={`min-h-[58px] sm:min-h-[68px] p-2.5 sm:p-3.5 rounded-2xl bg-slate-900/80 border transition-all flex flex-wrap items-center gap-1.5 sm:gap-2 ${
             isCompleted
               ? 'border-emerald-500/80 bg-emerald-950/20 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
               : isShaking
@@ -290,7 +302,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
             <button
               key={tile.id}
               onClick={() => {
-                // Clicking placed tile removes it
+                // Clicking placed tile returns it to bank
                 if (!isCompleted && !isAnimating) {
                   reorderAudio.playUndoPop();
                   setPlacedTiles((prev) => prev.filter((_, i) => i !== idx));
@@ -298,10 +310,10 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
                 }
               }}
               disabled={isCompleted || isAnimating}
-              className={`px-3.5 py-2 rounded-xl text-sm sm:text-base font-bold shadow-md transition-all cursor-pointer select-none ${
+              className={`min-h-[38px] sm:min-h-[42px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm md:text-base font-bold shadow-md transition-all cursor-pointer select-none max-w-full truncate ${
                 isCompleted
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-emerald-900/30'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:scale-105 active:scale-95 shadow-cyan-900/30'
+                  : 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:scale-103 active:scale-95 shadow-cyan-900/30'
               }`}
               title="Tap to return word to bank"
             >
@@ -314,7 +326,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
             Array.from({ length: Math.max(0, targetCount - placedTiles.length) }).map((_, placeholderIdx) => (
               <div
                 key={`placeholder-${placeholderIdx}`}
-                className="h-10 min-w-[50px] px-3.5 rounded-xl border-2 border-dashed border-slate-700/80 bg-slate-800/30 flex items-center justify-center text-xs text-slate-500 select-none"
+                className="h-9 sm:h-10 min-w-[42px] sm:min-w-[48px] px-2.5 sm:px-3 rounded-xl border-2 border-dashed border-slate-700/80 bg-slate-800/30 flex items-center justify-center text-xs text-slate-500 select-none"
               >
                 _
               </div>
@@ -323,16 +335,16 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
 
         {/* Error Feedback Message (Gentle & Actionable) */}
         {errorNotice && !isCompleted && (
-          <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-2 animate-in fade-in">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-2 animate-in fade-in">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{errorNotice}</span>
+            <span className="learning-content-text">{errorNotice}</span>
           </div>
         )}
 
-        {/* 4. SCRAMBLED WORD BANK (Interactive Tiles) */}
+        {/* 4. SCRAMBLED WORD BANK (Interactive Tiles) — Responsive Auto-Wrap, Touch Targets >= 44px */}
         {!isCompleted && (
-          <div className="space-y-2">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
               <span>Word Bank</span>
               {reorder.hint && !usedHint && (
                 <span className="text-amber-400 text-[10px] lowercase italic font-normal">
@@ -341,7 +353,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
               )}
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-wrap gap-2.5 items-center justify-center min-h-[64px]">
+            <div className="p-3 sm:p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-wrap gap-2 sm:gap-2.5 items-center justify-center min-h-[56px] sm:min-h-[64px]">
               {availableTiles.length === 0 ? (
                 <span className="text-xs text-slate-500 italic py-2">
                   All words placed. Evaluating sentence...
@@ -352,7 +364,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
                     key={tile.id}
                     onClick={() => handleSelectWord(tile)}
                     disabled={isAnimating}
-                    className="min-h-[44px] px-4 py-2 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-blue-900/60 hover:to-slate-800 border border-blue-400/30 hover:border-cyan-400 text-cyan-100 text-sm sm:text-base font-bold shadow-md hover:shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer select-none"
+                    className="min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-blue-900/60 hover:to-slate-800 border border-blue-400/30 hover:border-cyan-400 text-cyan-100 text-xs sm:text-sm md:text-base font-bold shadow-md hover:shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer select-none max-w-full"
                   >
                     {tile.word}
                   </button>
@@ -364,7 +376,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
 
         {/* 5. SUCCESS CARD & EXPLANATION */}
         {isCompleted && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-teal-950/30 border border-emerald-500/40 space-y-3 animate-in zoom-in-95 duration-200">
+          <div className="p-3.5 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-teal-950/30 border border-emerald-500/40 space-y-2.5 sm:space-y-3 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400 font-black text-sm sm:text-base">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -376,12 +388,12 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
               </span>
             </div>
 
-            <div className="text-base sm:text-lg font-black text-white leading-relaxed tracking-wide">
+            <div className="text-sm sm:text-base md:text-lg font-black text-white leading-relaxed tracking-wide">
               &ldquo;{reorder.sentence}&rdquo;
             </div>
 
             {reorder.explanation && (
-              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 text-xs text-slate-300 leading-relaxed font-medium">
+              <div className="p-2.5 sm:p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 text-slate-300 leading-relaxed font-medium learning-content-text">
                 <span className="font-bold text-cyan-300 mr-1">Explanation:</span>
                 {reorder.explanation}
               </div>
@@ -389,10 +401,10 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
           </div>
         )}
 
-        {/* 6. ACTION CONTROLS (Undo, Reset, Hint) */}
+        {/* 6. ACTION CONTROLS (Undo, Reset, Hint) — Mobile Touch-Friendly */}
         {!isCompleted && (
-          <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+          <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={handleUndo}
                 disabled={placedTiles.length === 0 || isAnimating}
@@ -418,7 +430,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
             <button
               onClick={handleUseHint}
               disabled={usedHint || isAnimating || placedTiles.length >= targetCount}
-              className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed ${
+              className={`min-h-[40px] px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed ${
                 usedHint
                   ? 'bg-slate-800/50 text-slate-500 border border-slate-800'
                   : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 hover:border-amber-400 shadow-xs'

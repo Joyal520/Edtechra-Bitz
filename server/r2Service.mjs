@@ -57,6 +57,19 @@ export function buildObjectKey({ userId, filename = 'post.webp', contentType = '
   return `posts/${cleanUserId}/${timestamp}_${randomSuffix}.${ext}`;
 }
 
+export function buildAvatarObjectKey({ userId, contentType = 'image/webp' }) {
+  const cleanUserId = sanitizeSegment(userId) || 'student';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+
+  let ext = 'webp';
+  if (contentType === 'image/png') ext = 'png';
+  else if (contentType === 'image/jpeg' || contentType === 'image/jpg') ext = 'jpg';
+
+  // Standard safe clean structure: avatars/{userId}/{timestamp}_{uniqueId}.webp
+  return `avatars/${cleanUserId}/${timestamp}_${randomSuffix}.${ext}`;
+}
+
 export function buildPublicUrl(objectKey) {
   const { publicBaseUrl } = getR2Config();
   const cleanKey = objectKey.replace(/^\/+/, '');

@@ -101,6 +101,7 @@ export interface UserProfile {
   role: 'student' | 'admin';
   created_at: string;
   updated_at?: string;
+  text_size?: 'small' | 'medium' | 'large' | 'extra-large' | string;
   totalXp?: number;
   currentLevel?: number;
   streakDays?: number;

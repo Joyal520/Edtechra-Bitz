@@ -8,6 +8,33 @@
     --paper-cream: #fbfbf7;
     --brand-blue: #026fc3;
     --brand-green: #22c55e;
+    --learning-text-size: 12px;
+    --learning-text-line-height: 1.5;
+  }
+
+  [data-text-size="small"] {
+    --learning-text-size: 11px;
+    --learning-text-line-height: 1.45;
+  }
+
+  [data-text-size="medium"] {
+    --learning-text-size: 12px;
+    --learning-text-line-height: 1.5;
+  }
+
+  [data-text-size="large"] {
+    --learning-text-size: 14px;
+    --learning-text-line-height: 1.55;
+  }
+
+  [data-text-size="extra-large"] {
+    --learning-text-size: 16px;
+    --learning-text-line-height: 1.6;
+  }
+
+  .learning-content-text {
+    font-size: var(--learning-text-size, 12px);
+    line-height: var(--learning-text-line-height, 1.5);
   }
 
   html,

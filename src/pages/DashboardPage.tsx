@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   GraduationCap,
   Trophy,
-  Zap
+  Zap,
+  Settings
 } from 'lucide-react';
 import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
@@ -20,9 +21,11 @@ import { getTimeBasedGreeting } from '@/utils/greeting';
 import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
 import { UserLearningProgress, CategoryProgress } from '@/types';
 import { quizService } from '@/services/quizService';
+import { UserSettingsModal } from '@/components/UserSettingsModal';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, openAuthModal, isLoading, session } = useAuth();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [stats, setStats] = useState<ProgressSummary>({
     shortsWatched: 0,
     quizzesCompleted: 0,
@@ -166,7 +169,18 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {user && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-stone-50 hover:bg-stone-100 text-slate-700 border border-stone-200 text-xs font-extrabold rounded-2xl transition-all cursor-pointer shadow-2xs"
+            >
+              <Settings className="w-4 h-4 text-slate-500" />
+              <span>Settings</span>
+            </button>
+          )}
+
           {isAdmin && (
             <Link
               to="/admin"
@@ -417,6 +431,12 @@ export const DashboardPage: React.FC = () => {
           )}
         </div>
       </section>
+
+      {/* User Profile & Preferences Settings Modal */}
+      <UserSettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
 
     </div>
   );

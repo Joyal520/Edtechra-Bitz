@@ -33,7 +33,8 @@ import {
   buildQuizContentKey,
   buildPollContentKey,
   buildReorderContentKey,
-  buildSpellingScrambleContentKey
+  buildSpellingScrambleContentKey,
+  buildAvatarObjectKey
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
@@ -848,6 +849,42 @@ app.post('/api/posts/presign-upload', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/posts/presign-upload:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate upload URL' });
+  }
+});
+
+// POST /api/profile/presign-avatar - Generate presigned upload URL for user avatar
+app.post('/api/profile/presign-avatar', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to update avatar.' });
+    }
+
+    const { contentType = 'image/webp', size } = req.body;
+
+    try {
+      validateImageUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const objectKey = buildAvatarObjectKey({
+      userId: authData.user.id,
+      contentType
+    });
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in /api/profile/presign-avatar:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate avatar upload URL' });
   }
 });
 

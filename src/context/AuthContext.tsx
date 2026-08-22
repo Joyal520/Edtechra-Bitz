@@ -28,6 +28,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<{ error?: string; message?: string }>;
   updatePassword: (newPassword: string) => Promise<{ error?: string }>;
   updateProfileName: (newName: string) => Promise<{ error?: string }>;
+  updateUserProfile: (payload: { full_name?: string; avatar_url?: string | null; text_size?: string }) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -123,6 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: effectiveName || data.full_name || '',
           avatar_url: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
           avatarUrl: data.avatar_url || currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
+          text_size: data.text_size || localStorage.getItem('edtechra_text_size') || 'medium',
           role: resolvedRole,
           created_at: data.created_at || currentUser.created_at,
           updated_at: data.updated_at
@@ -139,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: fallbackName,
         avatar_url: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
         avatarUrl: currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || '',
+        text_size: (typeof window !== 'undefined' ? localStorage.getItem('edtechra_text_size') : null) || 'medium',
         role: resolvedRole,
         created_at: currentUser.created_at
       };
@@ -248,6 +251,101 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       console.error('[AuthContext] updateProfileName exception:', err);
       return { error: err.message || 'Failed to save name.' };
+    }
+  };
+
+  // Synchronize document text size attribute across whole application
+  useEffect(() => {
+    const savedSize = profile?.text_size || (typeof window !== 'undefined' ? localStorage.getItem('edtechra_text_size') : null) || 'medium';
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-text-size', savedSize);
+    }
+  }, [profile?.text_size]);
+
+  // Update user profile fields (display name, avatar_url, text_size)
+  const updateUserProfile = async (payload: {
+    full_name?: string;
+    avatar_url?: string | null;
+    text_size?: string;
+  }): Promise<{ error?: string }> => {
+    if (!user || !supabase) {
+      return { error: 'You must be authenticated to update your profile.' };
+    }
+
+    try {
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (payload.full_name !== undefined) {
+        const trimmed = payload.full_name.trim();
+        if (!trimmed) return { error: 'Please enter a valid name.' };
+        updateData.full_name = trimmed;
+      }
+
+      if (payload.avatar_url !== undefined) {
+        updateData.avatar_url = payload.avatar_url;
+      }
+
+      if (payload.text_size !== undefined) {
+        updateData.text_size = payload.text_size;
+        localStorage.setItem('edtechra_text_size', payload.text_size);
+        document.documentElement.setAttribute('data-text-size', payload.text_size);
+      }
+
+      // Upsert into Supabase profiles table
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: user.id,
+            email: user.email,
+            ...updateData
+          },
+          { onConflict: 'id' }
+        );
+
+      if (dbError) {
+        console.warn('[AuthContext] Database profile update notice:', dbError.message);
+      }
+
+      // Update Supabase Auth user metadata
+      try {
+        const metaUpdates: Record<string, any> = {};
+        if (payload.full_name !== undefined) {
+          metaUpdates.full_name = payload.full_name.trim();
+          metaUpdates.name = payload.full_name.trim();
+        }
+        if (payload.avatar_url !== undefined) {
+          metaUpdates.avatar_url = payload.avatar_url;
+          metaUpdates.picture = payload.avatar_url;
+        }
+        if (payload.text_size !== undefined) {
+          metaUpdates.text_size = payload.text_size;
+        }
+        await supabase.auth.updateUser({ data: metaUpdates });
+      } catch (metaErr) {
+        console.warn('[AuthContext] Auth metadata update notice:', metaErr);
+      }
+
+      // Update local profile state immediately
+      setProfile((prev) => ({
+        id: user.id,
+        email: user.email || '',
+        full_name: payload.full_name !== undefined ? payload.full_name.trim() : (prev?.full_name || ''),
+        name: payload.full_name !== undefined ? payload.full_name.trim() : (prev?.name || ''),
+        avatar_url: payload.avatar_url !== undefined ? payload.avatar_url : (prev?.avatar_url || ''),
+        avatarUrl: payload.avatar_url !== undefined ? (payload.avatar_url || '') : (prev?.avatarUrl || ''),
+        text_size: payload.text_size !== undefined ? payload.text_size : (prev?.text_size || 'medium'),
+        role: user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : (prev?.role || 'student'),
+        created_at: prev?.created_at || user.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      return {};
+    } catch (err: any) {
+      console.error('[AuthContext] updateUserProfile exception:', err);
+      return { error: err.message || 'Failed to save profile changes.' };
     }
   };
 
@@ -780,6 +878,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         updatePassword,
         updateProfileName,
+        updateUserProfile,
         signOut,
         refreshProfile
       }}

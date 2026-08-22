@@ -117,7 +117,7 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
         </div>
 
         {/* Question text */}
-        <h3 className="text-sm sm:text-base font-black text-[#0f233a] leading-snug">
+        <h3 className="text-sm sm:text-base font-black text-[#0f233a] leading-snug learning-content-text">
           {quiz.question}
         </h3>
 
@@ -158,13 +158,13 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
                 type="button"
                 onClick={() => handleSelectOption(option)}
                 disabled={submitting || isAnswered}
-                className={`min-h-[50px] sm:min-h-[52px] p-3 rounded-2xl border text-left text-xs sm:text-sm font-bold transition-all flex items-center justify-between gap-2.5 active:scale-[0.99] ${buttonStyle}`}
+                className={`min-h-[48px] sm:min-h-[50px] p-3 rounded-2xl border text-left font-bold transition-all flex items-center justify-between gap-2.5 active:scale-[0.99] ${buttonStyle}`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors ${badgeStyle}`}>
                     {letter}
                   </div>
-                  <span className="truncate break-words">{option}</span>
+                  <span className="truncate break-words learning-content-text">{option}</span>
                 </div>
 
                 {/* Status Indicator Icon */}
@@ -260,7 +260,7 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
                 <BookOpen className="w-3 h-3 text-[#026fc3]" />
                 <span>Why is this correct?</span>
               </div>
-              <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+              <p className="font-semibold text-slate-700 leading-relaxed learning-content-text">
                 {explanation}
               </p>
             </div>

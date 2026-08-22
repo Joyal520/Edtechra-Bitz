@@ -347,7 +347,7 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
           <div className="text-[10px] font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
             <span>💡 Clue</span>
           </div>
-          <p className="text-sm sm:text-base font-bold text-white leading-relaxed">
+          <p className="text-sm sm:text-base font-bold text-white leading-relaxed learning-content-text">
             &ldquo;{scramble.clue}&rdquo;
           </p>
         </div>

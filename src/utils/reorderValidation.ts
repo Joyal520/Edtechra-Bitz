@@ -9,6 +9,50 @@ import {
 } from '@/types/reorder';
 
 /**
+ * Unbiased Fisher–Yates shuffle algorithm for sentence words.
+ * Guarantees a genuine random permutation that differs from the target order where possible.
+ * Punctuation remains attached to its word (e.g. "seven.").
+ */
+export function shuffleSentenceWords(words: string[]): string[] {
+  if (!Array.isArray(words) || words.length <= 1) {
+    return Array.isArray(words) ? [...words] : [];
+  }
+
+  const result = [...words];
+  const n = result.length;
+
+  // Perform Fisher–Yates shuffle with up to 10 attempts to guarantee a different order
+  for (let attempt = 0; attempt < 10; attempt++) {
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = result[i];
+      result[i] = result[j];
+      result[j] = temp;
+    }
+
+    // Check if the result differs from the original target order
+    const isIdentical = result.every((w, idx) => w === words[idx]);
+    if (!isIdentical) {
+      return result;
+    }
+  }
+
+  // Fallback: Swap first two distinct words to guarantee an order difference
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (result[i] !== result[j]) {
+        const temp = result[i];
+        result[i] = result[j];
+        result[j] = temp;
+        return result;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Validates a single sentence reorder object.
  * Enforces strict 3 to 6 word limits.
  */
@@ -61,19 +105,28 @@ export function validateSingleReorder(
     });
   }
 
-  // 4. Scrambled Words
+  // 4. Scrambled Words (Fisher–Yates shuffle if not provided or matches correct order)
   let scrambledWords: string[] = [];
   if (Array.isArray(item.scrambled_words) && item.scrambled_words.length > 0) {
     scrambledWords = item.scrambled_words.map((w: any) => String(w).trim()).filter(Boolean);
-  } else if (Array.isArray(item.words) && item.words.length > 0) {
-    scrambledWords = item.words.map((w: any) => String(w).trim()).filter(Boolean);
+  } else if (Array.isArray(item.words) && item.words.length > 0 && !Array.isArray(item.correct_order)) {
+    // If only `words` was provided, shuffle them
+    scrambledWords = shuffleSentenceWords(correctOrder);
   } else {
-    scrambledWords = [...correctOrder];
+    scrambledWords = shuffleSentenceWords(correctOrder);
   }
 
   // Ensure scrambled order has exact same length as correct order
   if (scrambledWords.length !== correctOrder.length) {
-    scrambledWords = [...correctOrder];
+    scrambledWords = shuffleSentenceWords(correctOrder);
+  }
+
+  // If scrambled words accidentally match correct order, reshuffle
+  if (
+    scrambledWords.length === correctOrder.length &&
+    scrambledWords.every((w, idx) => w === correctOrder[idx])
+  ) {
+    scrambledWords = shuffleSentenceWords(correctOrder);
   }
 
   // 5. Category & Level & XP

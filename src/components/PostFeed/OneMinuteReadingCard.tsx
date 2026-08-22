@@ -177,7 +177,7 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
               onClick={handleOpenReader}
               className="p-4 rounded-2xl bg-stone-50/80 border border-stone-200/70 cursor-pointer hover:bg-stone-100/80 transition-colors group"
             >
-              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-serif">
+              <p className="text-slate-700 leading-relaxed font-serif learning-content-text">
                 <span className="float-left text-2xl sm:text-3xl font-black text-teal-700 mr-2 leading-none font-serif">
                   {excerpt.charAt(0)}
                 </span>
@@ -280,7 +280,7 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
               </div>
 
               {/* Paragraphs with Interactive Vocabulary Highlighter */}
-              <div className="space-y-4 text-slate-800 text-sm sm:text-base leading-relaxed font-serif">
+              <div className="space-y-4 text-slate-800 leading-relaxed font-serif learning-content-text">
                 {reading.paragraphs.map(paragraph => (
                   <p key={paragraph.id} className="text-justify leading-relaxed">
                     {paragraph.text}
