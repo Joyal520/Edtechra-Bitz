@@ -284,6 +284,10 @@ export function buildSpellingScrambleContentKey(id) {
   return `spelling-scrambles/${sanitizeSegment(id)}/content.json`;
 }
 
+export function buildWordOfTheDayContentKey(id) {
+  return `words-of-the-day/${sanitizeSegment(id)}/content.json`;
+}
+
 /**
  * Direct Server Upload: Writes JSON Content directly to Cloudflare R2 via AWS SigV4
  */

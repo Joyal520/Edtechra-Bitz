@@ -26,6 +26,10 @@ export const FEED_CONFIG = {
   SPELLING_FEED_INTERVAL_MIN: 4,
   SPELLING_FEED_INTERVAL_MAX: 6,
 
+  // Word of the Day pacing rules
+  WORD_OF_THE_DAY_FEED_INTERVAL_MIN: 3,
+  WORD_OF_THE_DAY_FEED_INTERVAL_MAX: 5,
+
   // Standard educational categories
   SHORT_CATEGORIES: [
     'General',

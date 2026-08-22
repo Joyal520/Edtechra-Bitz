@@ -32,6 +32,7 @@ import { AdminReadingsSection } from '@/components/AdminReadingsSection';
 import { AdminPollsSection } from '@/components/AdminPollsSection';
 import { AdminReorderSection } from '@/components/AdminReorderSection';
 import { AdminStorageSection } from '@/components/AdminStorageSection';
+import { AdminWordOfTheDaySection } from '@/components/AdminWordOfTheDaySection';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -44,7 +45,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'words' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -242,6 +243,23 @@ export const AdminPage: React.FC = () => {
       {/* Navigation Section Tabs */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-white border border-stone-200/90 rounded-2xl shadow-xs">
         <button
+          onClick={() => setAdminTab('words')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'words'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span>💡</span>
+          <span>Word of the Day</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'words' ? 'bg-amber-200 text-slate-900' : 'bg-amber-100 text-amber-800'
+          }`}>
+            New
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('quizzes')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
             adminTab === 'quizzes'
@@ -403,7 +421,12 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Interactive Quiz Bits Center (Highlighted) */}
+      {/* 1. Word of the Day Section */}
+      {(adminTab === 'all' || adminTab === 'words') && (
+        <AdminWordOfTheDaySection />
+      )}
+
+      {/* 2. Interactive Quiz Bits Center (Highlighted) */}
       {(adminTab === 'all' || adminTab === 'quizzes') && (
         <AdminQuizSection />
       )}

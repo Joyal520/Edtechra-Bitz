@@ -34,6 +34,7 @@ import {
   buildPollContentKey,
   buildReorderContentKey,
   buildSpellingScrambleContentKey,
+  buildWordOfTheDayContentKey,
   buildAvatarObjectKey
 } from './server/r2Service.mjs';
 import { getR2Config } from './server/r2Config.mjs';
@@ -6020,6 +6021,669 @@ app.post('/api/spelling-scrambles/complete', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/spelling-scrambles/complete:', error);
     res.status(500).json({ success: false, error: 'Failed to record completion.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: WORD OF THE DAY (COMMUNITY FEED & BULK ADMIN SYSTEM)
+// ============================================================================
+
+const WORDS_OF_THE_DAY_CACHE_FILE = path.resolve(__dirname, 'server/data/words_of_the_day_cache.json');
+const USER_SAVED_WORDS_CACHE_FILE = path.resolve(__dirname, 'server/data/user_saved_words_cache.json');
+const WORD_LIKES_CACHE_FILE = path.resolve(__dirname, 'server/data/word_likes_cache.json');
+const DEFAULT_WORD_OF_THE_DAY_IMAGE = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
+
+function loadWordsOfTheDayCache() {
+  try {
+    if (fs.existsSync(WORDS_OF_THE_DAY_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(WORDS_OF_THE_DAY_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Words of the Day Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveWordsOfTheDayCache(data) {
+  try {
+    const dir = path.dirname(WORDS_OF_THE_DAY_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(WORDS_OF_THE_DAY_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Words of the Day Cache Write Error]:', err.message);
+  }
+}
+
+function loadUserSavedWordsCache() {
+  try {
+    if (fs.existsSync(USER_SAVED_WORDS_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(USER_SAVED_WORDS_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[User Saved Words Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveUserSavedWordsCache(data) {
+  try {
+    const dir = path.dirname(USER_SAVED_WORDS_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(USER_SAVED_WORDS_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[User Saved Words Cache Write Error]:', err.message);
+  }
+}
+
+function loadWordLikesCache() {
+  try {
+    if (fs.existsSync(WORD_LIKES_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(WORD_LIKES_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Word Likes Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveWordLikesCache(data) {
+  try {
+    const dir = path.dirname(WORD_LIKES_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(WORD_LIKES_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Word Likes Cache Write Error]:', err.message);
+  }
+}
+
+function normalizeWordStr(word) {
+  if (!word || typeof word !== 'string') return '';
+  return word.trim().toLowerCase();
+}
+
+// 1. GET /api/words-of-the-day/feed - Published Words Stream for Explore Feed
+app.get('/api/words-of-the-day/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+
+    let words = [];
+
+    // Attempt Supabase query first
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('words_of_the_day')
+          .select('*')
+          .eq('status', 'published')
+          .order('published_at', { ascending: false })
+          .limit(50);
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          words = data;
+        }
+      } catch (err) {
+        console.warn('[Words Feed Supabase Fetch Notice]:', err.message);
+      }
+    }
+
+    // Fallback to local cache
+    if (words.length === 0) {
+      const cache = loadWordsOfTheDayCache();
+      words = cache.filter(w => w.status === 'published');
+      words.sort((a, b) => new Date(b.published_at || b.created_at).getTime() - new Date(a.published_at || a.created_at).getTime());
+    }
+
+    // Retrieve saved and liked words for current session user
+    let userSavedWordIds = new Set();
+    let userLikedWordIds = new Set();
+
+    if (userId) {
+      if (serverSupabase) {
+        try {
+          const { data: savedRows } = await serverSupabase
+            .from('user_saved_words')
+            .select('word_id')
+            .eq('user_id', userId);
+          if (savedRows) {
+            savedRows.forEach(r => userSavedWordIds.add(r.word_id));
+          }
+        } catch (e) {}
+      } else {
+        const savedCache = loadUserSavedWordsCache();
+        savedCache.filter(s => s.user_id === userId).forEach(s => userSavedWordIds.add(s.word_id));
+      }
+
+      const likesCache = loadWordLikesCache();
+      likesCache.filter(l => l.user_id === userId).forEach(l => userLikedWordIds.add(l.word_id));
+    }
+
+    const decoratedWords = words.map(w => ({
+      ...w,
+      image_url: w.image_url || DEFAULT_WORD_OF_THE_DAY_IMAGE,
+      is_saved_by_me: userSavedWordIds.has(w.id),
+      is_liked_by_me: userLikedWordIds.has(w.id)
+    }));
+
+    res.json({ success: true, data: decoratedWords });
+  } catch (error) {
+    console.error('Error in GET /api/words-of-the-day/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch words of the day feed.' });
+  }
+});
+
+// 2. GET /api/words-of-the-day/existing-words - Fast duplicate lookup
+app.get('/api/words-of-the-day/existing-words', async (req, res) => {
+  try {
+    const cache = loadWordsOfTheDayCache();
+    const normalizedSet = new Set(cache.map(w => w.word_normalized || normalizeWordStr(w.word)).filter(Boolean));
+
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('words_of_the_day').select('word_normalized');
+        if (data) {
+          data.forEach(r => {
+            if (r.word_normalized) normalizedSet.add(r.word_normalized);
+          });
+        }
+      } catch (e) {}
+    }
+
+    res.json({ success: true, data: Array.from(normalizedSet) });
+  } catch (error) {
+    console.error('Error in GET /api/words-of-the-day/existing-words:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch existing words list.' });
+  }
+});
+
+// 3. GET /api/words-of-the-day/admin - Admin Management & Stats
+app.get('/api/words-of-the-day/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    let words = [];
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('words_of_the_day')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          words = data;
+        }
+      } catch (err) {
+        console.warn('[Admin Words Supabase Fetch Notice]:', err.message);
+      }
+    }
+
+    if (words.length === 0) {
+      words = loadWordsOfTheDayCache();
+    }
+
+    const { search, status, partOfSpeech } = req.query;
+
+    let filtered = [...words];
+
+    if (search && String(search).trim()) {
+      const q = String(search).toLowerCase().trim();
+      filtered = filtered.filter(
+        w => (w.word && w.word.toLowerCase().includes(q)) ||
+             (w.meaning && w.meaning.toLowerCase().includes(q)) ||
+             (w.example && w.example.toLowerCase().includes(q))
+      );
+    }
+
+    if (status && status !== 'all') {
+      filtered = filtered.filter(w => w.status === status);
+    }
+
+    if (partOfSpeech && partOfSpeech !== 'all') {
+      filtered = filtered.filter(w => w.part_of_speech && w.part_of_speech.toLowerCase() === partOfSpeech.toLowerCase());
+    }
+
+    const totalWords = words.length;
+    const publishedWords = words.filter(w => w.status === 'published').length;
+    const draftWords = words.filter(w => w.status === 'draft').length;
+    const archivedWords = words.filter(w => w.status === 'archived').length;
+    const totalLikes = words.reduce((sum, w) => sum + (Number(w.likes_count) || 0), 0);
+
+    const savedCache = loadUserSavedWordsCache();
+    const totalSaves = savedCache.length;
+
+    const stats = {
+      totalWords,
+      publishedWords,
+      draftWords,
+      archivedWords,
+      totalLikes,
+      totalSaves
+    };
+
+    res.json({
+      success: true,
+      data: {
+        words: filtered,
+        stats,
+        total: filtered.length
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/words-of-the-day/admin:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch admin words of the day.' });
+  }
+});
+
+// 4. POST /api/words-of-the-day - Create Single Word of the Day
+app.post('/api/words-of-the-day', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { word, pronunciation, partOfSpeech, part_of_speech, meaning, example, status } = req.body;
+
+    const cleanWord = String(word || '').trim();
+    const cleanMeaning = String(meaning || '').trim();
+    const cleanExample = String(example || '').trim();
+    const cleanPronunciation = pronunciation ? String(pronunciation).trim() : null;
+    const cleanPartOfSpeech = (partOfSpeech || part_of_speech) ? String(partOfSpeech || part_of_speech).trim() : null;
+    const wordStatus = status && ['draft', 'published', 'archived'].includes(status) ? status : 'published';
+
+    if (!cleanWord || !cleanMeaning || !cleanExample) {
+      return res.status(400).json({ success: false, error: 'word, meaning, and example are required fields.' });
+    }
+
+    const norm = normalizeWordStr(cleanWord);
+    const cache = loadWordsOfTheDayCache();
+
+    // Check duplicate
+    if (cache.some(w => w.word_normalized === norm)) {
+      return res.status(400).json({ success: false, error: `Word "${cleanWord}" already exists in the database.` });
+    }
+
+    const id = `word_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const r2ContentKey = buildWordOfTheDayContentKey(id);
+
+    const fullRecord = {
+      id,
+      word: cleanWord,
+      word_normalized: norm,
+      pronunciation: cleanPronunciation,
+      part_of_speech: cleanPartOfSpeech,
+      meaning: cleanMeaning,
+      example: cleanExample,
+      image_url: DEFAULT_WORD_OF_THE_DAY_IMAGE,
+      status: wordStatus,
+      likes_count: 0,
+      published_at: new Date().toISOString(),
+      created_by: authData.user.id,
+      import_batch_id: null,
+      r2_content_key: r2ContentKey,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Store in R2
+    try {
+      await putJsonContent(r2ContentKey, fullRecord);
+    } catch (r2Err) {
+      console.warn('[R2 Word Save Warning]:', r2Err.message);
+    }
+
+    // Save to Cache
+    cache.unshift(fullRecord);
+    saveWordsOfTheDayCache(cache);
+
+    // Save to Supabase
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('words_of_the_day').upsert([fullRecord]);
+      } catch (dbErr) {
+        console.warn('[Supabase Word Save Notice]:', dbErr.message);
+      }
+    }
+
+    res.json({ success: true, data: fullRecord });
+  } catch (error) {
+    console.error('Error in POST /api/words-of-the-day:', error);
+    res.status(500).json({ success: false, error: 'Failed to create word of the day.' });
+  }
+});
+
+// 5. POST /api/words-of-the-day/import-batch - Bulk JSON Importer (Up to 1,000 words)
+app.post('/api/words-of-the-day/import-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { words, batchId: incomingBatchId } = req.body;
+    const rawList = Array.isArray(words) ? words : [];
+
+    if (rawList.length === 0) {
+      return res.status(400).json({ success: false, error: 'No words provided for import.' });
+    }
+
+    if (rawList.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum 1,000 words per import. You attempted to import ${rawList.length} words.`
+      });
+    }
+
+    const batchId = incomingBatchId || `batch_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const cache = loadWordsOfTheDayCache();
+    const existingNormSet = new Set(cache.map(w => w.word_normalized || normalizeWordStr(w.word)).filter(Boolean));
+
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('words_of_the_day').select('word_normalized');
+        if (data) {
+          data.forEach(r => {
+            if (r.word_normalized) existingNormSet.add(r.word_normalized);
+          });
+        }
+      } catch (e) {}
+    }
+
+    const inBatchSeen = new Set();
+    const imported = [];
+    const failed = [];
+
+    for (let i = 0; i < rawList.length; i++) {
+      const item = rawList[i];
+      const index = i + 1;
+
+      if (!item || typeof item !== 'object') {
+        failed.push({ index, word: `Record #${index}`, error: 'Record must be an object.', type: 'invalid' });
+        continue;
+      }
+
+      const word = String(item.word || '').trim();
+      const meaning = String(item.meaning || '').trim();
+      const example = String(item.example || '').trim();
+      const pronunciation = item.pronunciation ? String(item.pronunciation).trim() : null;
+      const partOfSpeech = (item.partOfSpeech || item.part_of_speech) ? String(item.partOfSpeech || item.part_of_speech).trim() : null;
+      const status = item.status && ['draft', 'published', 'archived'].includes(item.status) ? item.status : 'published';
+
+      const missing = [];
+      if (!word) missing.push('word');
+      if (!meaning) missing.push('meaning');
+      if (!example) missing.push('example');
+
+      if (missing.length > 0) {
+        failed.push({ index, word: word || `Record #${index}`, error: `Missing required field(s): ${missing.join(', ')}.`, type: 'invalid' });
+        continue;
+      }
+
+      const norm = normalizeWordStr(word);
+
+      // In-batch duplicate check
+      if (inBatchSeen.has(norm)) {
+        failed.push({ index, word, error: `Duplicate word "${word}" within this batch.`, type: 'duplicate_in_batch' });
+        continue;
+      }
+
+      // Existing DB duplicate check
+      if (existingNormSet.has(norm)) {
+        failed.push({ index, word, error: `Word "${word}" already exists in the database.`, type: 'already_exists' });
+        continue;
+      }
+
+      inBatchSeen.add(norm);
+      existingNormSet.add(norm);
+
+      const id = `word_${Date.now()}_${i}_${crypto.randomBytes(3).toString('hex')}`;
+      const r2ContentKey = buildWordOfTheDayContentKey(id);
+
+      const record = {
+        id,
+        word,
+        word_normalized: norm,
+        pronunciation,
+        part_of_speech: partOfSpeech,
+        meaning,
+        example,
+        image_url: DEFAULT_WORD_OF_THE_DAY_IMAGE,
+        status,
+        likes_count: 0,
+        published_at: new Date().toISOString(),
+        created_by: authData.user.id,
+        import_batch_id: batchId,
+        r2_content_key: r2ContentKey,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      imported.push(record);
+    }
+
+    // Persist imported records
+    if (imported.length > 0) {
+      // 1. Update cache
+      const updatedCache = [...imported, ...cache];
+      saveWordsOfTheDayCache(updatedCache);
+
+      // 2. Update Supabase in chunks of 100 for high performance
+      if (serverSupabase) {
+        try {
+          const CHUNK = 100;
+          for (let c = 0; c < imported.length; c += CHUNK) {
+            const chunkRecords = imported.slice(c, c + CHUNK);
+            await serverSupabase.from('words_of_the_day').upsert(chunkRecords);
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase Batch Import Notice]:', dbErr.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        batchId,
+        totalSubmitted: rawList.length,
+        importedCount: imported.length,
+        failedCount: failed.length,
+        imported,
+        failed
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/words-of-the-day/import-batch:', error);
+    res.status(500).json({ success: false, error: 'Failed to process bulk import.' });
+  }
+});
+
+// 6. PUT /api/words-of-the-day/:id - Edit Existing Word
+app.put('/api/words-of-the-day/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const { word, pronunciation, partOfSpeech, part_of_speech, meaning, example, status, image_url } = req.body;
+
+    const cache = loadWordsOfTheDayCache();
+    const idx = cache.findIndex(w => w.id === id);
+
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Word of the day not found.' });
+    }
+
+    const existing = cache[idx];
+    const newWord = word !== undefined ? String(word).trim() : existing.word;
+    const newMeaning = meaning !== undefined ? String(meaning).trim() : existing.meaning;
+    const newExample = example !== undefined ? String(example).trim() : existing.example;
+    const newPronunciation = pronunciation !== undefined ? (pronunciation ? String(pronunciation).trim() : null) : existing.pronunciation;
+    const newPartOfSpeech = (partOfSpeech || part_of_speech) !== undefined ? String(partOfSpeech || part_of_speech).trim() : existing.part_of_speech;
+    const newStatus = status && ['draft', 'published', 'archived'].includes(status) ? status : existing.status;
+    const newImageUrl = image_url !== undefined ? image_url : existing.image_url;
+
+    const updatedRecord = {
+      ...existing,
+      word: newWord,
+      word_normalized: normalizeWordStr(newWord),
+      meaning: newMeaning,
+      example: newExample,
+      pronunciation: newPronunciation,
+      part_of_speech: newPartOfSpeech,
+      status: newStatus,
+      image_url: newImageUrl || DEFAULT_WORD_OF_THE_DAY_IMAGE,
+      updated_at: new Date().toISOString()
+    };
+
+    cache[idx] = updatedRecord;
+    saveWordsOfTheDayCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('words_of_the_day').update(updatedRecord).eq('id', id);
+      } catch (dbErr) {
+        console.warn('[Supabase Word Update Notice]:', dbErr.message);
+      }
+    }
+
+    if (updatedRecord.r2_content_key) {
+      try {
+        await putJsonContent(updatedRecord.r2_content_key, updatedRecord);
+      } catch (r2Err) {
+        console.warn('[R2 Word Update Notice]:', r2Err.message);
+      }
+    }
+
+    res.json({ success: true, data: updatedRecord });
+  } catch (error) {
+    console.error('Error in PUT /api/words-of-the-day/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to update word of the day.' });
+  }
+});
+
+// 7. DELETE /api/words-of-the-day/:id - Delete Word
+app.delete('/api/words-of-the-day/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    let cache = loadWordsOfTheDayCache();
+    cache = cache.filter(w => w.id !== id);
+    saveWordsOfTheDayCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('words_of_the_day').delete().eq('id', id);
+      } catch (dbErr) {
+        console.warn('[Supabase Word Delete Notice]:', dbErr.message);
+      }
+    }
+
+    res.json({ success: true, message: 'Word deleted successfully.' });
+  } catch (error) {
+    console.error('Error in DELETE /api/words-of-the-day/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete word of the day.' });
+  }
+});
+
+// 8. POST /api/words-of-the-day/:id/like - Toggle Like on Word
+app.post('/api/words-of-the-day/:id/like', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.ip || 'guest_user';
+    const { id } = req.params;
+
+    const cache = loadWordsOfTheDayCache();
+    const wordIdx = cache.findIndex(w => w.id === id);
+
+    if (wordIdx === -1) {
+      return res.status(404).json({ success: false, error: 'Word of the day not found.' });
+    }
+
+    const likesCache = loadWordLikesCache();
+    const likeIdx = likesCache.findIndex(l => l.word_id === id && l.user_id === userId);
+    let liked = false;
+
+    if (likeIdx >= 0) {
+      likesCache.splice(likeIdx, 1);
+      liked = false;
+      cache[wordIdx].likes_count = Math.max(0, (Number(cache[wordIdx].likes_count) || 1) - 1);
+    } else {
+      likesCache.push({ word_id: id, user_id: userId, created_at: new Date().toISOString() });
+      liked = true;
+      cache[wordIdx].likes_count = (Number(cache[wordIdx].likes_count) || 0) + 1;
+    }
+
+    saveWordLikesCache(likesCache);
+    saveWordsOfTheDayCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('words_of_the_day').update({ likes_count: cache[wordIdx].likes_count }).eq('id', id);
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      data: {
+        liked,
+        likesCount: cache[wordIdx].likes_count
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/words-of-the-day/:id/like:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle like.' });
+  }
+});
+
+// 9. POST /api/words-of-the-day/:id/save - Toggle "Add to My Words"
+app.post('/api/words-of-the-day/:id/save', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest_user';
+    const { id } = req.params;
+
+    const savedCache = loadUserSavedWordsCache();
+    const saveIdx = savedCache.findIndex(s => s.word_id === id && s.user_id === userId);
+    let saved = false;
+
+    if (saveIdx >= 0) {
+      savedCache.splice(saveIdx, 1);
+      saved = false;
+      if (serverSupabase && userId !== 'guest_user') {
+        try {
+          await serverSupabase.from('user_saved_words').delete().eq('word_id', id).eq('user_id', userId);
+        } catch (e) {}
+      }
+    } else {
+      savedCache.push({ word_id: id, user_id: userId, created_at: new Date().toISOString() });
+      saved = true;
+      if (serverSupabase && userId !== 'guest_user') {
+        try {
+          await serverSupabase.from('user_saved_words').insert([{ word_id: id, user_id: userId }]);
+        } catch (e) {}
+      }
+    }
+
+    saveUserSavedWordsCache(savedCache);
+
+    res.json({
+      success: true,
+      data: {
+        saved
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/words-of-the-day/:id/save:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle saved word.' });
   }
 });
 
