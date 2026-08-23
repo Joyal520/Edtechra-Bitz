@@ -58,7 +58,7 @@ export const BubblePopGame: React.FC<BubblePopGameProps> = ({
   initialLevel
 }) => {
   const [progress, setProgress] = useState<BubblePopProgress>(loadBubblePopProgress);
-  const [currentLevel, setCurrentLevel] = useState<number>(() => initialLevel || progress.highestUnlockedLevel);
+  const [currentLevel] = useState<number>(() => initialLevel || progress.highestUnlockedLevel);
   const [selectedDuration, setSelectedDuration] = useState<30 | 45 | 60>(progress.selectedDuration);
   const [status, setStatus] = useState<GameStatus>('WELCOME');
   const [score, setScore] = useState<number>(0);
@@ -777,32 +777,14 @@ export const BubblePopGame: React.FC<BubblePopGameProps> = ({
               <span>+10 XP Awarded</span>
             </div>
 
-            <div className="w-full space-y-2 pt-1">
+            <div className="w-full pt-1">
               <button
                 type="button"
-                onClick={() => {
-                  if (currentLevel < 100) {
-                    setCurrentLevel((l) => l + 1);
-                  } else {
-                    setCurrentLevel(1);
-                  }
-                  getAudioContext();
-                  startCountdown();
-                }}
-                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-black rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer"
+                onClick={onClose || (() => setStatus('WELCOME'))}
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
-                {currentLevel >= 100 ? 'PLAY AGAIN' : 'NEXT LEVEL'}
+                <span>CONTINUE LEARNING (BACK TO FEED)</span>
               </button>
-
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                >
-                  BACK TO FEED
-                </button>
-              )}
             </div>
           </div>
         </div>

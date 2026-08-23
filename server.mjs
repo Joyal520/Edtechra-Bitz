@@ -7212,12 +7212,17 @@ app.get('/api/words-of-the-day/feed', async (req, res) => {
       likesCache.filter(l => l.user_id === userId).forEach(l => userLikedWordIds.add(l.word_id));
     }
 
-    const decoratedWords = words.map(w => ({
+    let decoratedWords = words.map(w => ({
       ...w,
       image_url: w.image_url || DEFAULT_WORD_OF_THE_DAY_IMAGE,
       is_saved_by_me: userSavedWordIds.has(w.id),
       is_liked_by_me: userLikedWordIds.has(w.id)
     }));
+
+    // Exclude saved words so they don't reappear in Explore feed once saved
+    if (userSavedWordIds.size > 0) {
+      decoratedWords = decoratedWords.filter(w => !userSavedWordIds.has(w.id));
+    }
 
     res.json({ success: true, data: decoratedWords });
   } catch (error) {

@@ -44,20 +44,25 @@ class WordOfTheDayService {
 
   /**
    * Fetches published words of the day for the student feed.
+   * Excludes words already saved/bookmarked by the user so they do not repeat in Explore.
    */
   async getFeedWords(token?: string | null): Promise<WordOfTheDay[]> {
+    const localSaved = this.getLocalSavedWordIds();
+
     try {
       const headers = await this.getAuthHeaders(token);
       const res = await fetch('/api/words-of-the-day/feed', { headers });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: Failed to fetch words feed`);
+      if (res.ok) {
+        const json = await res.json();
+        const words = (json.data || []) as WordOfTheDay[];
+        return words.filter((w) => !w.is_saved_by_me && !localSaved.has(w.id));
       }
-      const json = await res.json();
-      return json.data || [];
     } catch (err) {
       console.warn('[WordOfTheDayService] Feed fetch fallback to direct Supabase query:', err);
+    }
 
-      if (supabase) {
+    if (supabase) {
+      try {
         const { data, error } = await supabase
           .from('words_of_the_day')
           .select('*')
@@ -66,15 +71,16 @@ class WordOfTheDayService {
           .limit(30);
 
         if (!error && data) {
-          const localSaved = this.getLocalSavedWordIds();
-          return data.map((item: any) => ({
-            ...item,
-            is_saved_by_me: localSaved.has(item.id)
-          })) as WordOfTheDay[];
+          return data
+            .filter((item: any) => !localSaved.has(item.id))
+            .map((item: any) => ({
+              ...item,
+              is_saved_by_me: false
+            })) as WordOfTheDay[];
         }
-      }
-      return [];
+      } catch (e) {}
     }
+    return [];
   }
 
   /**
@@ -311,7 +317,7 @@ class WordOfTheDayService {
     return { saved: willBeSaved };
   }
 
-  private getLocalSavedWordIds(): Set<string> {
+  public getLocalSavedWordIds(): Set<string> {
     if (typeof window === 'undefined') return new Set();
     try {
       const raw = localStorage.getItem(SAVED_WORDS_LOCAL_KEY);

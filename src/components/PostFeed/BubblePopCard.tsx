@@ -1,24 +1,80 @@
 // ============================================================================
 // EDTECHRA-BITZ: Bubble Pop Relaxation Feed Break Card
+// Single-use relaxation card: after completion, user must continue learning
+// down the feed to encounter the next level.
 // ============================================================================
 
 import React, { useState } from 'react';
-import { Sparkles, Play, Zap, Trophy, X } from 'lucide-react';
+import { Sparkles, Play, Zap, Trophy, X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { BubblePopGame, loadBubblePopProgress, calculateTargetScore } from '@/components/games/BubblePopGame';
 
 interface BubblePopCardProps {
+  cardKey?: string;
   onGameCompleted?: (level: number, xpEarned: number) => void;
 }
 
 export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isCompleted, setIsCompleted] = useState<boolean>(false);
+  const [completedLevel, setCompletedLevel] = useState<number>(() => loadBubblePopProgress().highestUnlockedLevel);
+
   const progress = loadBubblePopProgress();
   const currentLevel = progress.highestUnlockedLevel;
   const targetScore = calculateTargetScore(currentLevel);
 
+  // If this specific card instance has been completed, show the completion state
+  if (isCompleted) {
+    const nextLevel = Math.min(100, completedLevel + 1);
+    return (
+      <div className="mx-3 sm:mx-0 bg-white border border-stone-200/90 rounded-3xl overflow-hidden shadow-xs">
+        <div className="relative p-5 sm:p-6 bg-gradient-to-br from-slate-900 via-[#0a1e36] to-slate-950 text-white flex flex-col gap-4 overflow-hidden">
+          
+          {/* Ambient Glows */}
+          <div className="absolute -top-12 -left-12 w-48 h-48 rounded-full bg-emerald-500/20 blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-12 -right-12 w-48 h-48 rounded-full bg-cyan-500/20 blur-2xl pointer-events-none" />
+
+          {/* Header Badges */}
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Break Completed</span>
+            </div>
+
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[11px] font-black flex items-center gap-1 shadow-2xs">
+              <Zap className="w-3.5 h-3.5 fill-slate-950" />
+              <span>+10 XP Earned</span>
+            </span>
+          </div>
+
+          {/* Title & Status */}
+          <div className="relative z-10 space-y-1">
+            <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              <span>🫧 Level {completedLevel} Cleared!</span>
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed">
+              Nice break! Your focus is refreshed. Keep exploring your educational feed below to unlock Level {nextLevel}.
+            </p>
+          </div>
+
+          {/* Next Level Teaser Info Box */}
+          <div className="relative z-10 p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-slate-300 font-bold">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <span>Next Relaxation Break:</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-extrabold text-cyan-300">
+              <span>Level {nextLevel} Unlocked</span>
+              <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-3 sm:mx-0 bg-white border border-stone-200/90 rounded-3xl overflow-hidden shadow-xs">
-      
       {!isPlaying ? (
         <div className="relative p-5 sm:p-6 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white flex flex-col gap-4 overflow-hidden">
           
@@ -88,8 +144,18 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted })
           </div>
           
           <BubblePopGame
-            onClose={() => setIsPlaying(false)}
+            initialLevel={currentLevel}
+            onClose={() => {
+              setIsPlaying(false);
+              const latest = loadBubblePopProgress();
+              if (latest.highestUnlockedLevel > currentLevel) {
+                setCompletedLevel(currentLevel);
+                setIsCompleted(true);
+              }
+            }}
             onAwardXP={(xp) => {
+              setCompletedLevel(currentLevel);
+              setIsCompleted(true);
               if (onGameCompleted) onGameCompleted(currentLevel, xp);
             }}
           />

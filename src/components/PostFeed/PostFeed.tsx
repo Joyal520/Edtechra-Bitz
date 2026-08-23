@@ -261,9 +261,18 @@ export const PostFeed: React.FC = () => {
     // be encountered further down the feed as the student scrolls.
   };
 
+  const handleWordSavedChanged = useCallback((wordId: string, isSaved: boolean) => {
+    if (isSaved) {
+      setWordsOfDay((prev) => prev.filter((w) => w.id !== wordId));
+    }
+  }, []);
+
   // Interleave Quizzes, Shorts, One-Minute Readings, Polls, Sentence Reorders, Spelling Scrambles, and Flip Cards stably into the feed stream
   const feedItems = useMemo<FeedItem[]>(() => {
     if (posts.length === 0) return [];
+
+    const localSaved = wordOfTheDayService.getLocalSavedWordIds();
+    const unlearnedWords = wordsOfDay.filter((w) => !w.is_saved_by_me && !localSaved.has(w.id));
 
     const items: FeedItem[] = [];
     let quizIndex = 0;
@@ -351,15 +360,15 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 2. Check if it's time to insert a Word of the Day card
+      // 2. Check if it's time to insert an unlearned Word of the Day card
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastWord >= wordTargetInterval &&
-        wordsOfDay.length > 0
+        unlearnedWords.length > 0
       ) {
-        let availableWord = wordsOfDay.find(w => !seenWordIds.has(w.id));
+        let availableWord = unlearnedWords.find(w => !seenWordIds.has(w.id));
         if (!availableWord) {
-          availableWord = wordsOfDay[wordIndex % wordsOfDay.length];
+          availableWord = unlearnedWords[wordIndex % unlearnedWords.length];
         }
         if (availableWord) {
           seenWordIds.add(availableWord.id);
@@ -671,7 +680,10 @@ export const PostFeed: React.FC = () => {
             if (item.type === 'word_of_the_day') {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
-                  <WordOfTheDayCard word={item.wordOfDay} />
+                  <WordOfTheDayCard
+                    word={item.wordOfDay}
+                    onSavedChanged={handleWordSavedChanged}
+                  />
                 </div>
               );
             }
@@ -738,7 +750,7 @@ export const PostFeed: React.FC = () => {
             if (item.type === 'bubble_pop') {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
-                  <BubblePopCard />
+                  <BubblePopCard cardKey={item.key} />
                 </div>
               );
             }
