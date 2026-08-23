@@ -11,7 +11,7 @@ import {
 } from '@/types/spellingFlipCard';
 import { supabase } from '@/lib/supabase';
 
-const INITIAL_SEED_CARDS: SpellingFlipCardItem[] = [
+export const INITIAL_SEED_CARDS: SpellingFlipCardItem[] = [
   // Easy (3–5 letters, 30s, +10 XP)
   { id: 'flip_seed_1', word: 'HOUSE', level: 'easy', category: 'Everyday Objects', memorize_seconds: 30, xp: 10, is_published: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 'flip_seed_2', word: 'WATER', level: 'easy', category: 'Nature', memorize_seconds: 30, xp: 10, is_published: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },

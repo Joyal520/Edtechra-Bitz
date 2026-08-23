@@ -18,7 +18,7 @@ import { readingService } from '@/services/readingService';
 import { pollService } from '@/services/pollService';
 import { reorderService } from '@/services/reorderService';
 import { spellingScrambleService } from '@/services/spellingScrambleService';
-import { spellingFlipCardService } from '@/services/spellingFlipCardService';
+import { spellingFlipCardService, INITIAL_SEED_CARDS } from '@/services/spellingFlipCardService';
 import { wordOfTheDayService } from '@/services/wordOfTheDayService';
 import { useAuth } from '@/context/AuthContext';
 import { PostCard } from './PostCard';
@@ -95,7 +95,7 @@ export const PostFeed: React.FC = () => {
   const [polls, setPolls] = useState<PollBit[]>([]);
   const [reorders, setReorders] = useState<ReorderActivity[]>([]);
   const [scrambles, setScrambles] = useState<SpellingScramble[]>([]);
-  const [flipCards, setFlipCards] = useState<SpellingFlipCardItem[]>([]);
+  const [flipCards, setFlipCards] = useState<SpellingFlipCardItem[]>(INITIAL_SEED_CARDS);
   const [wordsOfDay, setWordsOfDay] = useState<WordOfTheDay[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -336,192 +336,189 @@ export const PostFeed: React.FC = () => {
       postsSinceLastWord++;
       postsSinceLastBubblePop++;
 
-      let insertedNonPostThisSlot = false;
+      // Candidate activities ready for insertion at this slot
+      const candidates: {
+        type: 'reading' | 'word_of_the_day' | 'youtube_short' | 'quiz' | 'spelling_flip' | 'spelling_scramble' | 'bubble_pop' | 'reorder' | 'poll';
+        overdueRatio: number;
+        insert: () => void;
+      }[] = [];
 
-      // 1. TOP PRIORITY: Insert a One-Minute Reading strictly after every 4 posts
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastReading >= readingTargetInterval &&
-        readings.length > 0
-      ) {
-        let availableReading = readings.find(r => !seenReadingIds.has(r.id));
-        if (!availableReading) {
-          // If all pool readings have been seen in this session, cycle from the published pool
-          availableReading = readings[readingIndex % readings.length];
-        }
-        if (availableReading) {
-          seenReadingIds.add(availableReading.id);
-          items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
-          readingIndex++;
-          postsSinceLastReading = 0;
-          readingPatternIdx = (readingPatternIdx + 1) % READING_INTERVAL_PATTERN.length;
-          readingTargetInterval = READING_INTERVAL_PATTERN[readingPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 1. One-Minute Reading
+      if (readings.length > 0 && postsSinceLastReading >= readingTargetInterval) {
+        candidates.push({
+          type: 'reading',
+          overdueRatio: postsSinceLastReading / readingTargetInterval,
+          insert: () => {
+            let availableReading = readings.find(r => !seenReadingIds.has(r.id)) || readings[readingIndex % readings.length];
+            if (availableReading) {
+              seenReadingIds.add(availableReading.id);
+              items.push({ type: 'reading', reading: availableReading, key: `reading-${availableReading.id}-${index}` });
+              readingIndex++;
+              postsSinceLastReading = 0;
+              readingPatternIdx = (readingPatternIdx + 1) % READING_INTERVAL_PATTERN.length;
+              readingTargetInterval = READING_INTERVAL_PATTERN[readingPatternIdx];
+            }
+          }
+        });
       }
 
-      // 2. Check if it's time to insert an unlearned Word of the Day card
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastWord >= wordTargetInterval &&
-        unlearnedWords.length > 0
-      ) {
-        let availableWord = unlearnedWords.find(w => !seenWordIds.has(w.id));
-        if (!availableWord) {
-          availableWord = unlearnedWords[wordIndex % unlearnedWords.length];
-        }
-        if (availableWord) {
-          seenWordIds.add(availableWord.id);
-          items.push({ type: 'word_of_the_day', wordOfDay: availableWord, key: `word-${availableWord.id}-${index}` });
-          wordIndex++;
-          postsSinceLastWord = 0;
-          wordPatternIdx = (wordPatternIdx + 1) % WORD_OF_THE_DAY_INTERVAL_PATTERN.length;
-          wordTargetInterval = WORD_OF_THE_DAY_INTERVAL_PATTERN[wordPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 2. Spelling Flip Card (High priority memory game)
+      if (flipCards.length > 0 && postsSinceLastFlip >= flipTargetInterval) {
+        candidates.push({
+          type: 'spelling_flip',
+          overdueRatio: postsSinceLastFlip / flipTargetInterval,
+          insert: () => {
+            let availableFlip = flipCards.find(f => !seenFlipIds.has(f.id)) || flipCards[flipIndex % flipCards.length];
+            if (availableFlip) {
+              seenFlipIds.add(availableFlip.id);
+              items.push({ type: 'spelling_flip', flipCard: availableFlip, key: `flip-${availableFlip.id}-${index}` });
+              flipIndex++;
+              postsSinceLastFlip = 0;
+              flipPatternIdx = (flipPatternIdx + 1) % SPELLING_FLIP_INTERVAL_PATTERN.length;
+              flipTargetInterval = SPELLING_FLIP_INTERVAL_PATTERN[flipPatternIdx];
+            }
+          }
+        });
       }
 
-      // 3. Check if it's time to insert a category-rotated YouTube Short
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastShort >= shortTargetInterval &&
-        shorts.length > 0
-      ) {
-        const { selectedShort, updatedRecentCategories } = selectNextRotatedShort(
-          shorts,
-          seenShortIds,
-          recentShortCategories,
-          FEED_CONFIG.SHORT_CATEGORY_COOLDOWN
-        );
-
-        if (selectedShort) {
-          seenShortIds.add(selectedShort.id);
-          seenShortIds.add(selectedShort.youtube_video_id);
-          recentShortCategories = updatedRecentCategories;
-          items.push({ type: 'youtube_short', short: selectedShort, key: `short-${selectedShort.id}-${index}` });
-          postsSinceLastShort = 0;
-          shortPatternIdx = (shortPatternIdx + 1) % SHORT_INTERVAL_PATTERN.length;
-          shortTargetInterval = SHORT_INTERVAL_PATTERN[shortPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 3. Word of the Day (Unlearned only)
+      if (unlearnedWords.length > 0 && postsSinceLastWord >= wordTargetInterval) {
+        candidates.push({
+          type: 'word_of_the_day',
+          overdueRatio: postsSinceLastWord / wordTargetInterval,
+          insert: () => {
+            let availableWord = unlearnedWords.find(w => !seenWordIds.has(w.id)) || unlearnedWords[wordIndex % unlearnedWords.length];
+            if (availableWord) {
+              seenWordIds.add(availableWord.id);
+              items.push({ type: 'word_of_the_day', wordOfDay: availableWord, key: `word-${availableWord.id}-${index}` });
+              wordIndex++;
+              postsSinceLastWord = 0;
+              wordPatternIdx = (wordPatternIdx + 1) % WORD_OF_THE_DAY_INTERVAL_PATTERN.length;
+              wordTargetInterval = WORD_OF_THE_DAY_INTERVAL_PATTERN[wordPatternIdx];
+            }
+          }
+        });
       }
 
-      // 4. Check if it's time to insert an educational Quiz Bit
-      if (
-        !insertedNonPostThisSlot &&
-        QUIZ_CONFIG.ENABLED &&
-        postsSinceLastQuiz >= quizTargetInterval &&
-        quizzes.length > 0
-      ) {
-        let currentQuiz = quizzes.find(q => !seenQuizIds.has(q.id));
-        if (!currentQuiz) {
-          currentQuiz = quizzes[quizIndex % quizzes.length];
-        }
-        if (currentQuiz) {
-          seenQuizIds.add(currentQuiz.id);
-          items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
-          quizIndex++;
-          postsSinceLastQuiz = 0;
-          quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
-          quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 4. YouTube Short
+      if (shorts.length > 0 && postsSinceLastShort >= shortTargetInterval) {
+        candidates.push({
+          type: 'youtube_short',
+          overdueRatio: postsSinceLastShort / shortTargetInterval,
+          insert: () => {
+            const { selectedShort, updatedRecentCategories } = selectNextRotatedShort(
+              shorts,
+              seenShortIds,
+              recentShortCategories,
+              FEED_CONFIG.SHORT_CATEGORY_COOLDOWN
+            );
+            if (selectedShort) {
+              seenShortIds.add(selectedShort.id);
+              seenShortIds.add(selectedShort.youtube_video_id);
+              recentShortCategories = updatedRecentCategories;
+              items.push({ type: 'youtube_short', short: selectedShort, key: `short-${selectedShort.id}-${index}` });
+              postsSinceLastShort = 0;
+              shortPatternIdx = (shortPatternIdx + 1) % SHORT_INTERVAL_PATTERN.length;
+              shortTargetInterval = SHORT_INTERVAL_PATTERN[shortPatternIdx];
+            }
+          }
+        });
       }
 
-      // 5. Check if it's time to insert a Bubble Pop relaxation game break
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastBubblePop >= bubblePopTargetInterval
-      ) {
-        items.push({ type: 'bubble_pop', key: `bubble-pop-${index}` });
-        postsSinceLastBubblePop = 0;
-        bubblePopPatternIdx = (bubblePopPatternIdx + 1) % BUBBLE_POP_INTERVAL_PATTERN.length;
-        bubblePopTargetInterval = BUBBLE_POP_INTERVAL_PATTERN[bubblePopPatternIdx];
-        insertedNonPostThisSlot = true;
+      // 5. Educational Quiz Bit
+      if (QUIZ_CONFIG.ENABLED && quizzes.length > 0 && postsSinceLastQuiz >= quizTargetInterval) {
+        candidates.push({
+          type: 'quiz',
+          overdueRatio: postsSinceLastQuiz / quizTargetInterval,
+          insert: () => {
+            let currentQuiz = quizzes.find(q => !seenQuizIds.has(q.id)) || quizzes[quizIndex % quizzes.length];
+            if (currentQuiz) {
+              seenQuizIds.add(currentQuiz.id);
+              items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
+              quizIndex++;
+              postsSinceLastQuiz = 0;
+              quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
+              quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
+            }
+          }
+        });
       }
 
-      // 6. Check if it's time to insert a Spelling Flip Card memory activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastFlip >= flipTargetInterval &&
-        flipCards.length > 0
-      ) {
-        let availableFlip = flipCards.find(f => !seenFlipIds.has(f.id));
-        if (!availableFlip) {
-          availableFlip = flipCards[flipIndex % flipCards.length];
-        }
-        if (availableFlip) {
-          seenFlipIds.add(availableFlip.id);
-          items.push({ type: 'spelling_flip', flipCard: availableFlip, key: `flip-${availableFlip.id}-${index}` });
-          flipIndex++;
-          postsSinceLastFlip = 0;
-          flipPatternIdx = (flipPatternIdx + 1) % SPELLING_FLIP_INTERVAL_PATTERN.length;
-          flipTargetInterval = SPELLING_FLIP_INTERVAL_PATTERN[flipPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 6. Bubble Pop Relaxation Game
+      if (postsSinceLastBubblePop >= bubblePopTargetInterval) {
+        candidates.push({
+          type: 'bubble_pop',
+          overdueRatio: postsSinceLastBubblePop / bubblePopTargetInterval,
+          insert: () => {
+            items.push({ type: 'bubble_pop', key: `bubble-pop-${index}` });
+            postsSinceLastBubblePop = 0;
+            bubblePopPatternIdx = (bubblePopPatternIdx + 1) % BUBBLE_POP_INTERVAL_PATTERN.length;
+            bubblePopTargetInterval = BUBBLE_POP_INTERVAL_PATTERN[bubblePopPatternIdx];
+          }
+        });
       }
 
-      // 7. Check if it's time to insert a Spelling Scramble activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastScramble >= scrambleTargetInterval &&
-        scrambles.length > 0
-      ) {
-        let availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
-        if (!availableScramble) {
-          availableScramble = scrambles[scrambleIndex % scrambles.length];
-        }
-        if (availableScramble) {
-          seenScrambleIds.add(availableScramble.id);
-          items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
-          scrambleIndex++;
-          postsSinceLastScramble = 0;
-          scramblePatternIdx = (scramblePatternIdx + 1) % SPELLING_INTERVAL_PATTERN.length;
-          scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[scramblePatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 7. Spelling Scramble
+      if (scrambles.length > 0 && postsSinceLastScramble >= scrambleTargetInterval) {
+        candidates.push({
+          type: 'spelling_scramble',
+          overdueRatio: postsSinceLastScramble / scrambleTargetInterval,
+          insert: () => {
+            let availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id)) || scrambles[scrambleIndex % scrambles.length];
+            if (availableScramble) {
+              seenScrambleIds.add(availableScramble.id);
+              items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
+              scrambleIndex++;
+              postsSinceLastScramble = 0;
+              scramblePatternIdx = (scramblePatternIdx + 1) % SPELLING_INTERVAL_PATTERN.length;
+              scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[scramblePatternIdx];
+            }
+          }
+        });
       }
 
-      // 8. Check if it's time to insert a Sentence Reorder activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastReorder >= reorderTargetInterval &&
-        reorders.length > 0
-      ) {
-        let availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
-        if (!availableReorder) {
-          availableReorder = reorders[reorderIndex % reorders.length];
-        }
-        if (availableReorder) {
-          seenReorderIds.add(availableReorder.id);
-          items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
-          reorderIndex++;
-          postsSinceLastReorder = 0;
-          reorderPatternIdx = (reorderPatternIdx + 1) % REORDER_INTERVAL_PATTERN.length;
-          reorderTargetInterval = REORDER_INTERVAL_PATTERN[reorderPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 8. Sentence Reorder
+      if (reorders.length > 0 && postsSinceLastReorder >= reorderTargetInterval) {
+        candidates.push({
+          type: 'reorder',
+          overdueRatio: postsSinceLastReorder / reorderTargetInterval,
+          insert: () => {
+            let availableReorder = reorders.find(r => !seenReorderIds.has(r.id)) || reorders[reorderIndex % reorders.length];
+            if (availableReorder) {
+              seenReorderIds.add(availableReorder.id);
+              items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
+              reorderIndex++;
+              postsSinceLastReorder = 0;
+              reorderPatternIdx = (reorderPatternIdx + 1) % REORDER_INTERVAL_PATTERN.length;
+              reorderTargetInterval = REORDER_INTERVAL_PATTERN[reorderPatternIdx];
+            }
+          }
+        });
       }
 
-      // 9. Check if it's time to insert a Community Poll
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastPoll >= pollTargetInterval &&
-        polls.length > 0
-      ) {
-        let availablePoll = polls.find(p => !seenPollIds.has(p.id));
-        if (!availablePoll) {
-          availablePoll = polls[pollIndex % polls.length];
-        }
-        if (availablePoll) {
-          seenPollIds.add(availablePoll.id);
-          items.push({ type: 'poll', poll: availablePoll, key: `poll-${availablePoll.id}-${index}` });
-          pollIndex++;
-          postsSinceLastPoll = 0;
-          pollPatternIdx = (pollPatternIdx + 1) % POLL_INTERVAL_PATTERN.length;
-          pollTargetInterval = POLL_INTERVAL_PATTERN[pollPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
+      // 9. Community Poll
+      if (polls.length > 0 && postsSinceLastPoll >= pollTargetInterval) {
+        candidates.push({
+          type: 'poll',
+          overdueRatio: postsSinceLastPoll / pollTargetInterval,
+          insert: () => {
+            let availablePoll = polls.find(p => !seenPollIds.has(p.id)) || polls[pollIndex % polls.length];
+            if (availablePoll) {
+              seenPollIds.add(availablePoll.id);
+              items.push({ type: 'poll', poll: availablePoll, key: `poll-${availablePoll.id}-${index}` });
+              pollIndex++;
+              postsSinceLastPoll = 0;
+              pollPatternIdx = (pollPatternIdx + 1) % POLL_INTERVAL_PATTERN.length;
+              pollTargetInterval = POLL_INTERVAL_PATTERN[pollPatternIdx];
+            }
+          }
+        });
+      }
+
+      // Fair Scheduling: Execute the single most overdue ready candidate at this slot
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.overdueRatio - a.overdueRatio);
+        candidates[0].insert();
       }
     });
 
