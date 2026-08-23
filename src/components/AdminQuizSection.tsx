@@ -60,7 +60,7 @@ word,level,category
 Rules:
 - Easy: 3–5 letters (Grades 3–5)
 - Intermediate: 6–8 letters (Grades 6–8)
-- Hard: 9–12 letters (Grades 9–12)
+- Hard: 9–20 letters (Grades 9–12)
 `;
 
 export const AdminQuizSection: React.FC = () => {
@@ -628,8 +628,8 @@ export const AdminQuizSection: React.FC = () => {
       alert(`Intermediate level requires 6–8 letters. "${word}" has ${len} letters.`);
       return;
     }
-    if (level === 'hard' && (len < 9 || len > 12)) {
-      alert(`Hard level requires 9–12 letters. "${word}" has ${len} letters.`);
+    if (level === 'hard' && (len < 9 || len > 20)) {
+      alert(`Hard level requires 9–20 letters. "${word}" has ${len} letters.`);
       return;
     }
 
@@ -731,7 +731,7 @@ export const AdminQuizSection: React.FC = () => {
               ? 'Batch-import AI-generated multiple-choice questions with 4 options, explanations, and confetti celebrations directly inside the Explore feed.'
               : contentType === 'spelling'
               ? 'Batch-import English spelling challenges with clues and 30s/45s/60s timers derived strictly from difficulty, with letter flying animations.'
-              : 'Batch-upload English spelling words with memorization countdowns (Easy: 30s/3–5 letters, Intermediate: 20s/6–8 letters, Hard: 10s/9–12 letters).'}
+              : 'Batch-upload English spelling words with memorization countdowns (Easy: 30s/3–5 letters, Intermediate: 20s/6–8 letters, Hard: 10s/9–20 letters).'}
           </p>
         </div>
 
@@ -1057,7 +1057,7 @@ export const AdminQuizSection: React.FC = () => {
               <>
                 <option value="easy">Easy (Grades 3–5, 3–5 letters)</option>
                 <option value="intermediate">Intermediate (Grades 6–8, 6–8 letters)</option>
-                <option value="hard">Hard (Grades 9–12, 9–12 letters)</option>
+                <option value="hard">Hard (Grades 9–12, 9–20 letters)</option>
               </>
             ) : (
               <>
@@ -1630,7 +1630,7 @@ export const AdminQuizSection: React.FC = () => {
                   >
                     <option value="easy">Easy (3–5 letters, 30s)</option>
                     <option value="intermediate">Intermediate (6–8 letters, 20s)</option>
-                    <option value="hard">Hard (9–12 letters, 10s)</option>
+                    <option value="hard">Hard (9–20 letters, 10s)</option>
                   </select>
                 </div>
 

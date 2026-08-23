@@ -30,6 +30,7 @@ import { ReorderSentenceCard } from './ReorderSentenceCard';
 import { SpellingScrambleCard } from './SpellingScrambleCard';
 import { SpellingFlipCardCard } from './SpellingFlipCardCard';
 import { WordOfTheDayCard } from './WordOfTheDayCard';
+import { BubblePopCard } from './BubblePopCard';
 import { TypographyControls } from './TypographyControls';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
@@ -45,7 +46,8 @@ export type FeedItem =
   | { type: 'reorder'; reorder: ReorderActivity; key: string }
   | { type: 'spelling_scramble'; scramble: SpellingScramble; key: string }
   | { type: 'spelling_flip'; flipCard: SpellingFlipCardItem; key: string }
-  | { type: 'word_of_the_day'; wordOfDay: WordOfTheDay; key: string };
+  | { type: 'word_of_the_day'; wordOfDay: WordOfTheDay; key: string }
+  | { type: 'bubble_pop'; key: string };
 
 // Deterministic intervals for stable session interleaving
 const QUIZ_INTERVAL_PATTERN = [3, 2, 4, 3, 2, 4, 3, 3, 2, 4];
@@ -74,6 +76,7 @@ const SPELLING_INTERVAL_PATTERN = [
   FEED_CONFIG.SPELLING_FEED_INTERVAL_MAX
 ];
 const SPELLING_FLIP_INTERVAL_PATTERN = [4, 5, 4, 6];
+const BUBBLE_POP_INTERVAL_PATTERN = [6, 10, 15, 20];
 const WORD_OF_THE_DAY_INTERVAL_PATTERN = [
   FEED_CONFIG.WORD_OF_THE_DAY_FEED_INTERVAL_MIN,
   FEED_CONFIG.WORD_OF_THE_DAY_FEED_INTERVAL_MAX,
@@ -279,6 +282,7 @@ export const PostFeed: React.FC = () => {
     let postsSinceLastScramble = 0;
     let postsSinceLastFlip = 0;
     let postsSinceLastWord = 0;
+    let postsSinceLastBubblePop = 0;
 
     let quizPatternIdx = 0;
     let shortPatternIdx = 0;
@@ -288,6 +292,7 @@ export const PostFeed: React.FC = () => {
     let scramblePatternIdx = 0;
     let flipPatternIdx = 0;
     let wordPatternIdx = 0;
+    let bubblePopPatternIdx = 0;
 
     let quizTargetInterval = QUIZ_INTERVAL_PATTERN[0];
     let shortTargetInterval = SHORT_INTERVAL_PATTERN[0];
@@ -297,6 +302,7 @@ export const PostFeed: React.FC = () => {
     let scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[0];
     let flipTargetInterval = SPELLING_FLIP_INTERVAL_PATTERN[0];
     let wordTargetInterval = WORD_OF_THE_DAY_INTERVAL_PATTERN[0];
+    let bubblePopTargetInterval = BUBBLE_POP_INTERVAL_PATTERN[0];
 
     // Track shown IDs and recent categories for category-aware rotation with cooldown
     const seenShortIds = new Set<string>();
@@ -319,6 +325,7 @@ export const PostFeed: React.FC = () => {
       postsSinceLastScramble++;
       postsSinceLastFlip++;
       postsSinceLastWord++;
+      postsSinceLastBubblePop++;
 
       let insertedNonPostThisSlot = false;
 
@@ -365,92 +372,7 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 3. Check if it's time to insert an educational Quiz Bit
-      if (
-        !insertedNonPostThisSlot &&
-        QUIZ_CONFIG.ENABLED &&
-        postsSinceLastQuiz >= quizTargetInterval &&
-        quizzes.length > 0
-      ) {
-        let currentQuiz = quizzes.find(q => !seenQuizIds.has(q.id));
-        if (!currentQuiz) {
-          currentQuiz = quizzes[quizIndex % quizzes.length];
-        }
-        if (currentQuiz) {
-          seenQuizIds.add(currentQuiz.id);
-          items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
-          quizIndex++;
-          postsSinceLastQuiz = 0;
-          quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
-          quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
-      }
-
-      // 4. Check if it's time to insert a Spelling Scramble activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastScramble >= scrambleTargetInterval &&
-        scrambles.length > 0
-      ) {
-        let availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
-        if (!availableScramble) {
-          availableScramble = scrambles[scrambleIndex % scrambles.length];
-        }
-        if (availableScramble) {
-          seenScrambleIds.add(availableScramble.id);
-          items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
-          scrambleIndex++;
-          postsSinceLastScramble = 0;
-          scramblePatternIdx = (scramblePatternIdx + 1) % SPELLING_INTERVAL_PATTERN.length;
-          scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[scramblePatternIdx];
-          insertedNonPostThisSlot = true;
-        }
-      }
-
-      // 5. Check if it's time to insert a Spelling Flip Card memory activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastFlip >= flipTargetInterval &&
-        flipCards.length > 0
-      ) {
-        let availableFlip = flipCards.find(f => !seenFlipIds.has(f.id));
-        if (!availableFlip) {
-          availableFlip = flipCards[flipIndex % flipCards.length];
-        }
-        if (availableFlip) {
-          seenFlipIds.add(availableFlip.id);
-          items.push({ type: 'spelling_flip', flipCard: availableFlip, key: `flip-${availableFlip.id}-${index}` });
-          flipIndex++;
-          postsSinceLastFlip = 0;
-          flipPatternIdx = (flipPatternIdx + 1) % SPELLING_FLIP_INTERVAL_PATTERN.length;
-          flipTargetInterval = SPELLING_FLIP_INTERVAL_PATTERN[flipPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
-      }
-
-      // 6. Check if it's time to insert a Sentence Reorder activity
-      if (
-        !insertedNonPostThisSlot &&
-        postsSinceLastReorder >= reorderTargetInterval &&
-        reorders.length > 0
-      ) {
-        let availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
-        if (!availableReorder) {
-          availableReorder = reorders[reorderIndex % reorders.length];
-        }
-        if (availableReorder) {
-          seenReorderIds.add(availableReorder.id);
-          items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
-          reorderIndex++;
-          postsSinceLastReorder = 0;
-          reorderPatternIdx = (reorderPatternIdx + 1) % REORDER_INTERVAL_PATTERN.length;
-          reorderTargetInterval = REORDER_INTERVAL_PATTERN[reorderPatternIdx];
-          insertedNonPostThisSlot = true;
-        }
-      }
-
-      // 7. Check if it's time to insert a category-rotated YouTube Short
+      // 3. Check if it's time to insert a category-rotated YouTube Short
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastShort >= shortTargetInterval &&
@@ -475,7 +397,104 @@ export const PostFeed: React.FC = () => {
         }
       }
 
-      // 8. Check if it's time to insert a Community Poll
+      // 4. Check if it's time to insert an educational Quiz Bit
+      if (
+        !insertedNonPostThisSlot &&
+        QUIZ_CONFIG.ENABLED &&
+        postsSinceLastQuiz >= quizTargetInterval &&
+        quizzes.length > 0
+      ) {
+        let currentQuiz = quizzes.find(q => !seenQuizIds.has(q.id));
+        if (!currentQuiz) {
+          currentQuiz = quizzes[quizIndex % quizzes.length];
+        }
+        if (currentQuiz) {
+          seenQuizIds.add(currentQuiz.id);
+          items.push({ type: 'quiz', quiz: currentQuiz, key: `quiz-${currentQuiz.id}-${index}` });
+          quizIndex++;
+          postsSinceLastQuiz = 0;
+          quizPatternIdx = (quizPatternIdx + 1) % QUIZ_INTERVAL_PATTERN.length;
+          quizTargetInterval = QUIZ_INTERVAL_PATTERN[quizPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 5. Check if it's time to insert a Bubble Pop relaxation game break
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastBubblePop >= bubblePopTargetInterval
+      ) {
+        items.push({ type: 'bubble_pop', key: `bubble-pop-${index}` });
+        postsSinceLastBubblePop = 0;
+        bubblePopPatternIdx = (bubblePopPatternIdx + 1) % BUBBLE_POP_INTERVAL_PATTERN.length;
+        bubblePopTargetInterval = BUBBLE_POP_INTERVAL_PATTERN[bubblePopPatternIdx];
+        insertedNonPostThisSlot = true;
+      }
+
+      // 6. Check if it's time to insert a Spelling Flip Card memory activity
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastFlip >= flipTargetInterval &&
+        flipCards.length > 0
+      ) {
+        let availableFlip = flipCards.find(f => !seenFlipIds.has(f.id));
+        if (!availableFlip) {
+          availableFlip = flipCards[flipIndex % flipCards.length];
+        }
+        if (availableFlip) {
+          seenFlipIds.add(availableFlip.id);
+          items.push({ type: 'spelling_flip', flipCard: availableFlip, key: `flip-${availableFlip.id}-${index}` });
+          flipIndex++;
+          postsSinceLastFlip = 0;
+          flipPatternIdx = (flipPatternIdx + 1) % SPELLING_FLIP_INTERVAL_PATTERN.length;
+          flipTargetInterval = SPELLING_FLIP_INTERVAL_PATTERN[flipPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 7. Check if it's time to insert a Spelling Scramble activity
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastScramble >= scrambleTargetInterval &&
+        scrambles.length > 0
+      ) {
+        let availableScramble = scrambles.find(s => !seenScrambleIds.has(s.id));
+        if (!availableScramble) {
+          availableScramble = scrambles[scrambleIndex % scrambles.length];
+        }
+        if (availableScramble) {
+          seenScrambleIds.add(availableScramble.id);
+          items.push({ type: 'spelling_scramble', scramble: availableScramble, key: `scramble-${availableScramble.id}-${index}` });
+          scrambleIndex++;
+          postsSinceLastScramble = 0;
+          scramblePatternIdx = (scramblePatternIdx + 1) % SPELLING_INTERVAL_PATTERN.length;
+          scrambleTargetInterval = SPELLING_INTERVAL_PATTERN[scramblePatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 8. Check if it's time to insert a Sentence Reorder activity
+      if (
+        !insertedNonPostThisSlot &&
+        postsSinceLastReorder >= reorderTargetInterval &&
+        reorders.length > 0
+      ) {
+        let availableReorder = reorders.find(r => !seenReorderIds.has(r.id));
+        if (!availableReorder) {
+          availableReorder = reorders[reorderIndex % reorders.length];
+        }
+        if (availableReorder) {
+          seenReorderIds.add(availableReorder.id);
+          items.push({ type: 'reorder', reorder: availableReorder, key: `reorder-${availableReorder.id}-${index}` });
+          reorderIndex++;
+          postsSinceLastReorder = 0;
+          reorderPatternIdx = (reorderPatternIdx + 1) % REORDER_INTERVAL_PATTERN.length;
+          reorderTargetInterval = REORDER_INTERVAL_PATTERN[reorderPatternIdx];
+          insertedNonPostThisSlot = true;
+        }
+      }
+
+      // 9. Check if it's time to insert a Community Poll
       if (
         !insertedNonPostThisSlot &&
         postsSinceLastPoll >= pollTargetInterval &&
@@ -712,6 +731,14 @@ export const PostFeed: React.FC = () => {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
                   <SpellingFlipCardCard card={item.flipCard} />
+                </div>
+              );
+            }
+
+            if (item.type === 'bubble_pop') {
+              return (
+                <div key={item.key} className="px-3 sm:px-0">
+                  <BubblePopCard />
                 </div>
               );
             }

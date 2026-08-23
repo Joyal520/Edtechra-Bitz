@@ -6,7 +6,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Zap,
-  RotateCcw,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -130,24 +129,17 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
     } catch (e) {}
   }, [getAudioContext, isMuted]);
 
-  // Load cards if not provided via props
-  useEffect(() => {
-    let isMounted = true;
-    async function loadCards() {
-      if (!initialCards || initialCards.length === 0) {
-        const data = await spellingFlipCardService.getFeedCards(selectedLevel);
-        if (isMounted && data.length > 0) {
-          setCardPool(data);
-          setCurrentIndex(0);
-          startRound(data[0]);
-        }
-      }
+  const handleFlipToRecall = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-    loadCards();
-    return () => { isMounted = false; };
-  }, [initialCards, selectedLevel]);
-
-  const currentCard: SpellingFlipCardItem | undefined = cardPool[currentIndex];
+    playChime('flip');
+    setPhase('RECALL');
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  }, [playChime]);
 
   const startRound = useCallback((card: SpellingFlipCardItem) => {
     if (!card) return;
@@ -157,12 +149,18 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
     setTypedAnswer('');
     setFeedbackResult(null);
 
-    if (timerRef.current) clearInterval(timerRef.current);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current);
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
           handleFlipToRecall();
           return 0;
         }
@@ -170,22 +168,38 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
         return prev - 1;
       });
     }, 1000);
-  }, [playChime]);
+  }, [handleFlipToRecall, playChime]);
 
-  // Transition from MEMORIZE -> RECALL
-  const handleFlipToRecall = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    playChime('flip');
-    setPhase('RECALL');
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-  };
+  // Load cards if not provided, or start immediately with initialCards
+  useEffect(() => {
+    if (initialCards && initialCards.length > 0) {
+      setCardPool(initialCards);
+      setCurrentIndex(0);
+      startRound(initialCards[0]);
+    } else {
+      let isMounted = true;
+      async function loadCards() {
+        const data = await spellingFlipCardService.getFeedCards(selectedLevel);
+        if (isMounted && data.length > 0) {
+          setCardPool(data);
+          setCurrentIndex(0);
+          startRound(data[0]);
+        }
+      }
+      loadCards();
+      return () => { isMounted = false; };
+    }
+  }, [initialCards, selectedLevel, startRound]);
+
+  const currentCard: SpellingFlipCardItem | undefined = cardPool[currentIndex];
 
   // Clean up timer on unmount
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
@@ -278,18 +292,6 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
     }
   };
 
-  // Restart / Play Again
-  const handlePlayAgain = () => {
-    setSessionResults([]);
-    setCurrentIndex(0);
-    if (cardPool.length > 0) {
-      // Shuffle pool
-      const shuffled = [...cardPool].sort(() => Math.random() - 0.5);
-      setCardPool(shuffled);
-      startRound(shuffled[0]);
-    }
-  };
-
   if (!currentCard && phase !== 'SUMMARY') {
     return (
       <div className="p-8 text-center bg-slate-900 text-white rounded-3xl flex flex-col items-center gap-3">
@@ -360,7 +362,13 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
 
             {/* Prominent Word Card */}
             <div className="w-full py-8 px-4 rounded-3xl bg-gradient-to-b from-slate-800 to-slate-850 border border-cyan-400/30 shadow-xl flex flex-col items-center justify-center gap-2">
-              <h2 className="text-3xl sm:text-4xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-sky-300 uppercase">
+              <h2 className={`font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-100 to-sky-300 uppercase break-all text-center ${
+                wordLength > 14
+                  ? 'text-xl sm:text-2xl md:text-3xl'
+                  : wordLength > 9
+                  ? 'text-2xl sm:text-3xl md:text-4xl'
+                  : 'text-3xl sm:text-4xl md:text-5xl'
+              }`}>
                 {currentCard?.word}
               </h2>
             </div>
@@ -399,13 +407,20 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
             </div>
 
             {/* Blank Letter Boxes */}
-            <div className="flex items-center justify-center gap-2 flex-wrap max-w-full py-3">
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap max-w-full py-3">
               {Array.from({ length: wordLength }).map((_, idx) => {
                 const char = typedLetters[idx] || '';
+                const boxSizeClass =
+                  wordLength > 14
+                    ? 'w-6 h-8 sm:w-7 sm:h-10 text-xs sm:text-sm rounded-lg border'
+                    : wordLength > 9
+                    ? 'w-7 h-10 sm:w-9 sm:h-12 text-sm sm:text-base rounded-xl border-2'
+                    : 'w-9 h-11 sm:w-11 sm:h-14 text-lg sm:text-xl rounded-2xl border-2';
+
                 return (
                   <div
                     key={idx}
-                    className={`w-10 h-12 sm:w-11 sm:h-14 rounded-2xl border-2 flex items-center justify-center text-xl font-black uppercase transition-all ${
+                    className={`${boxSizeClass} flex items-center justify-center font-black uppercase transition-all ${
                       char
                         ? 'border-cyan-400 bg-cyan-950/40 text-cyan-300 shadow-sm scale-105'
                         : 'border-slate-700 bg-slate-800/60 text-transparent'
@@ -558,26 +573,15 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
               ))}
             </div>
 
-            {/* Buttons */}
-            <div className="w-full space-y-2 pt-2">
+            {/* Action Buttons */}
+            <div className="w-full pt-2">
               <button
                 type="button"
-                onClick={handlePlayAgain}
-                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={onClose || (() => setPhase('MEMORIZE'))}
+                className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>PLAY AGAIN</span>
+                <span>BACK TO FEED</span>
               </button>
-
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                >
-                  BACK TO FEED
-                </button>
-              )}
             </div>
           </div>
         )}

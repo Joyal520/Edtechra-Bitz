@@ -6603,7 +6603,7 @@ function validateSpellingFlipLength(word, level) {
   const len = word.length;
   if (level === 'easy') return len >= 3 && len <= 5;
   if (level === 'intermediate') return len >= 6 && len <= 8;
-  if (level === 'hard') return len >= 9 && len <= 12;
+  if (level === 'hard') return len >= 9 && len <= 20;
   return false;
 }
 

@@ -13,7 +13,7 @@ import {
 export const SPELLING_FLIP_RULES = {
   easy: { min: 3, max: 5, memorizeSeconds: 30, xp: 10, label: 'Easy (Grades 3–5)' },
   intermediate: { min: 6, max: 8, memorizeSeconds: 20, xp: 15, label: 'Intermediate (Grades 6–8)' },
-  hard: { min: 9, max: 12, memorizeSeconds: 10, xp: 20, label: 'Hard (Grades 9–12)' }
+  hard: { min: 9, max: 20, memorizeSeconds: 10, xp: 20, label: 'Hard (Grades 9–12)' }
 };
 
 export function normalizeSpellingLevel(levelStr?: string): SpellingFlipLevel | null {
@@ -25,7 +25,7 @@ export function normalizeSpellingLevel(levelStr?: string): SpellingFlipLevel | n
   if (l === 'intermediate' || l === 'medium' || l.includes('grade 6') || l.includes('grade 7') || l.includes('grade 8') || l.includes('6-8')) {
     return 'intermediate';
   }
-  if (l === 'hard' || l === 'advanced' || l.includes('grade 9') || l.includes('grade 10') || l.includes('grade 11') || l.includes('grade 12') || l.includes('9-12')) {
+  if (l === 'hard' || l === 'advanced' || l.includes('grade 9') || l.includes('grade 10') || l.includes('grade 11') || l.includes('grade 12') || l.includes('9-12') || l.includes('9-20')) {
     return 'hard';
   }
   return null;
@@ -57,7 +57,7 @@ export function validateSpellingFlipEntry(
 
   const level = normalizeSpellingLevel(raw.level);
   if (!level) {
-    errors.push(`Invalid level "${raw.level}". Must be Easy (3-5), Intermediate (6-8), or Hard (9-12).`);
+    errors.push(`Invalid level "${raw.level}". Must be Easy (3-5), Intermediate (6-8), or Hard (9-20).`);
   }
 
   if (cleanWord && level) {

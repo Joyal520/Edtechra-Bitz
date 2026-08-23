@@ -4,6 +4,23 @@
 
 import { YouTubeShort, CreateYouTubeShortInput, YouTubeShortAdminStats } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { ELEKTRA_LEVELS_1_20 } from '@/utils/levelsData';
+
+const FALLBACK_SHORTS: YouTubeShort[] = ELEKTRA_LEVELS_1_20.map((lvl) => ({
+  id: `short_lvl_${lvl.levelNumber}_${lvl.youtubeVideoId}`,
+  youtube_video_id: lvl.youtubeVideoId,
+  youtube_url: `https://www.youtube.com/watch?v=${lvl.youtubeVideoId}`,
+  title: lvl.title,
+  description: lvl.explanation,
+  thumbnail_url: `https://img.youtube.com/vi/${lvl.youtubeVideoId}/hqdefault.jpg`,
+  category: 'Micro Learning',
+  duration: 30,
+  duration_formatted: '30s',
+  sort_order: lvl.levelNumber,
+  is_published: true,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
+}));
 
 class YouTubeShortsService {
   /**
@@ -39,21 +56,42 @@ class YouTubeShortsService {
    * Student Feed API: Fetches published shorts pool for feed interleaving
    */
   async getFeedShorts(token?: string | null): Promise<YouTubeShort[]> {
+    // 1. Try Express API endpoint
     try {
       const headers = await this.getAuthHeaders(token);
       const res = await fetch('/api/youtube/shorts/feed', { headers });
       const json = await res.json().catch(() => ({}));
 
-      if (!res.ok) {
-        console.warn('[YouTubeShortsService] getFeedShorts non-ok status:', res.status, json.error);
-        return [];
+      if (res.ok && Array.isArray(json.data) && json.data.length > 0) {
+        return json.data as YouTubeShort[];
       }
-
-      return (json.data || []) as YouTubeShort[];
     } catch (err) {
-      console.warn('[YouTubeShortsService] getFeedShorts error:', err);
-      return [];
+      console.warn('[YouTubeShortsService] Express API unreachable, trying Supabase...', err);
     }
+
+    // 2. Direct Supabase query fallback (essential for Vercel and serverless deployments)
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('youtube_shorts')
+          .select('*, quiz_bits:linked_quiz_id(*)')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map((s: any) => ({
+            ...s,
+            linked_quiz: s.quiz_bits || null,
+            duration_formatted: `${s.duration || 30}s`
+          })) as YouTubeShort[];
+        }
+      } catch (sbErr) {
+        console.warn('[YouTubeShortsService] Supabase query fallback failed:', sbErr);
+      }
+    }
+
+    // 3. Fallback to curated Level 1-20 video shorts
+    return FALLBACK_SHORTS;
   }
 
   /**
