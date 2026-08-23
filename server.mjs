@@ -6542,6 +6542,543 @@ app.post('/api/spelling-scrambles/complete', async (req, res) => {
 });
 
 // ============================================================================
+// API ROUTES: SPELLING FLIP CARD (MEMORY SPELLING CHALLENGE)
+// ============================================================================
+
+const SPELLING_FLIP_CARDS_CACHE_FILE = path.resolve(__dirname, 'server/data/spelling_flip_cards_cache.json');
+const SPELLING_FLIP_COMPLETIONS_CACHE_FILE = path.resolve(__dirname, 'server/data/spelling_flip_completions_cache.json');
+
+function loadSpellingFlipCardsCache() {
+  try {
+    if (fs.existsSync(SPELLING_FLIP_CARDS_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(SPELLING_FLIP_CARDS_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Spelling Flip Cards Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveSpellingFlipCardsCache(data) {
+  try {
+    const dir = path.dirname(SPELLING_FLIP_CARDS_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SPELLING_FLIP_CARDS_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Spelling Flip Cards Cache Write Error]:', err.message);
+  }
+}
+
+function loadSpellingFlipCompletionsCache() {
+  try {
+    if (fs.existsSync(SPELLING_FLIP_COMPLETIONS_CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(SPELLING_FLIP_COMPLETIONS_CACHE_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.warn('[Spelling Flip Completions Cache Read Error]:', err.message);
+  }
+  return [];
+}
+
+function saveSpellingFlipCompletionsCache(data) {
+  try {
+    const dir = path.dirname(SPELLING_FLIP_COMPLETIONS_CACHE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SPELLING_FLIP_COMPLETIONS_CACHE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Spelling Flip Completions Cache Write Error]:', err.message);
+  }
+}
+
+function normalizeSpellingFlipLevel(levelStr) {
+  if (!levelStr) return null;
+  const l = String(levelStr).trim().toLowerCase();
+  if (l === 'easy' || l.includes('grade 3') || l.includes('3-5')) return 'easy';
+  if (l === 'intermediate' || l === 'medium' || l.includes('grade 6') || l.includes('6-8')) return 'intermediate';
+  if (l === 'hard' || l === 'advanced' || l.includes('grade 9') || l.includes('9-12')) return 'hard';
+  return null;
+}
+
+function validateSpellingFlipLength(word, level) {
+  const len = word.length;
+  if (level === 'easy') return len >= 3 && len <= 5;
+  if (level === 'intermediate') return len >= 6 && len <= 8;
+  if (level === 'hard') return len >= 9 && len <= 12;
+  return false;
+}
+
+// 1. GET /api/spelling-flip-cards/feed - Student Feed Pool
+app.get('/api/spelling-flip-cards/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+    const requestedLevel = req.query.level ? normalizeSpellingFlipLevel(req.query.level) : null;
+
+    let cards = [];
+    if (serverSupabase) {
+      try {
+        let query = serverSupabase
+          .from('spelling_flip_cards')
+          .select('*')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (requestedLevel) {
+          query = query.eq('level', requestedLevel);
+        }
+
+        const { data, error } = await query.limit(25);
+        if (!error && data && data.length > 0) {
+          cards = data;
+        }
+      } catch (err) {
+        console.warn('[Supabase flip feed query fallback]:', err.message);
+      }
+    }
+
+    if (cards.length === 0) {
+      cards = loadSpellingFlipCardsCache().filter(c => c.is_published !== false);
+      if (requestedLevel) {
+        cards = cards.filter(c => c.level === requestedLevel);
+      }
+    }
+
+    const shuffled = shuffleArray(cards);
+    const feedPool = shuffled.slice(0, 15);
+
+    res.json({ success: true, data: feedPool });
+  } catch (error) {
+    console.error('Error in GET /api/spelling-flip-cards/feed:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch spelling flip cards feed.' });
+  }
+});
+
+// 2. GET /api/spelling-flip-cards/admin - Admin management list with stats
+app.get('/api/spelling-flip-cards/admin', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    let cards = [];
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('spelling_flip_cards')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          cards = data;
+        }
+      } catch (err) {
+        console.warn('[Supabase admin flip cards query fallback]:', err.message);
+      }
+    }
+
+    if (cards.length === 0) {
+      cards = loadSpellingFlipCardsCache();
+    }
+
+    // Filters
+    const { level, category, status, search, page = 1, limit = 50 } = req.query;
+    let filtered = [...cards];
+
+    if (level && level !== 'all') {
+      const normLevel = normalizeSpellingFlipLevel(level);
+      if (normLevel) filtered = filtered.filter(c => c.level === normLevel);
+    }
+    if (category && category !== 'all') {
+      filtered = filtered.filter(c => c.category?.toLowerCase() === category.toLowerCase());
+    }
+    if (status && status !== 'all') {
+      if (status === 'published') filtered = filtered.filter(c => c.is_published !== false);
+      if (status === 'draft') filtered = filtered.filter(c => c.is_published === false);
+    }
+    if (search) {
+      const q = search.toLowerCase().trim();
+      filtered = filtered.filter(c =>
+        c.word.toLowerCase().includes(q) ||
+        c.category?.toLowerCase().includes(q)
+      );
+    }
+
+    // Stats
+    const allCache = loadSpellingFlipCardsCache();
+    const completions = loadSpellingFlipCompletionsCache();
+
+    const stats = {
+      totalCards: allCache.length,
+      publishedCards: allCache.filter(c => c.is_published !== false).length,
+      draftCards: allCache.filter(c => c.is_published === false).length,
+      totalCompletions: completions.length,
+      totalXpAwarded: completions.reduce((sum, c) => sum + (c.xp_awarded || 0), 0)
+    };
+
+    const startIndex = (Number(page) - 1) * Number(limit);
+    const paginated = filtered.slice(startIndex, startIndex + Number(limit));
+
+    res.json({
+      success: true,
+      data: {
+        cards: paginated,
+        stats,
+        total: filtered.length
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/spelling-flip-cards/admin:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch admin spelling flip cards.' });
+  }
+});
+
+// 3. POST /api/spelling-flip-cards - Create single card
+app.post('/api/spelling-flip-cards', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    const { word, level: rawLevel, category, is_published } = req.body;
+    const cleanWord = typeof word === 'string' ? word.trim().toUpperCase().replace(/[^A-Z]/g, '') : '';
+    if (!cleanWord) {
+      return res.status(400).json({ success: false, error: 'Valid word is required (letters only).' });
+    }
+
+    const level = normalizeSpellingFlipLevel(rawLevel);
+    if (!level) {
+      return res.status(400).json({ success: false, error: 'Invalid level. Must be easy, intermediate, or hard.' });
+    }
+
+    if (!validateSpellingFlipLength(cleanWord, level)) {
+      return res.status(400).json({
+        success: false,
+        error: `Word "${cleanWord}" has ${cleanWord.length} letters, invalid for ${level} level.`
+      });
+    }
+
+    const memorizeSeconds = level === 'easy' ? 30 : level === 'intermediate' ? 20 : 10;
+    const xp = level === 'easy' ? 10 : level === 'intermediate' ? 15 : 20;
+
+    const newCard = {
+      id: `flip_${Date.now()}_${cleanWord.toLowerCase()}`,
+      word: cleanWord,
+      level,
+      category: typeof category === 'string' ? category.trim() : 'General',
+      memorize_seconds: memorizeSeconds,
+      xp,
+      is_published: is_published !== false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const cache = loadSpellingFlipCardsCache();
+    cache.unshift(newCard);
+    saveSpellingFlipCardsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_flip_cards').insert([newCard]);
+      } catch (err) {
+        console.warn('[Supabase flip insert fallback]:', err.message);
+      }
+    }
+
+    res.json({ success: true, data: newCard });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-flip-cards:', error);
+    res.status(500).json({ success: false, error: 'Failed to create spelling flip card.' });
+  }
+});
+
+// 4. POST /api/spelling-flip-cards/import-batch - Admin batch import
+app.post('/api/spelling-flip-cards/import-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    const { cards: rawCards } = req.body;
+    if (!Array.isArray(rawCards) || rawCards.length === 0) {
+      return res.status(400).json({ success: false, error: 'Payload must contain a non-empty array of cards.' });
+    }
+
+    const cache = loadSpellingFlipCardsCache();
+    const existingWords = new Set(cache.map(c => c.word.toUpperCase()));
+    const validCards = [];
+    const invalidCards = [];
+
+    rawCards.forEach((raw, idx) => {
+      const index = idx + 1;
+      const cleanWord = typeof raw.word === 'string' ? raw.word.trim().toUpperCase().replace(/[^A-Z]/g, '') : '';
+      const level = normalizeSpellingFlipLevel(raw.level);
+
+      if (!cleanWord) {
+        invalidCards.push({ index, word: raw.word || '', error: 'Missing or invalid word.' });
+        return;
+      }
+      if (!level) {
+        invalidCards.push({ index, word: cleanWord, error: 'Invalid level (must be easy, intermediate, or hard).' });
+        return;
+      }
+      if (!validateSpellingFlipLength(cleanWord, level)) {
+        invalidCards.push({
+          index,
+          word: cleanWord,
+          error: `Length ${cleanWord.length} does not match level "${level}".`
+        });
+        return;
+      }
+
+      if (existingWords.has(cleanWord)) {
+        // Skip duplicate or update
+        return;
+      }
+
+      existingWords.add(cleanWord);
+
+      const memorizeSeconds = level === 'easy' ? 30 : level === 'intermediate' ? 20 : 10;
+      const xp = level === 'easy' ? 10 : level === 'intermediate' ? 15 : 20;
+
+      validCards.push({
+        id: `flip_${Date.now()}_${idx}_${cleanWord.toLowerCase()}`,
+        word: cleanWord,
+        level,
+        category: typeof raw.category === 'string' ? raw.category.trim() : 'General',
+        memorize_seconds: memorizeSeconds,
+        xp,
+        is_published: raw.is_published !== false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    });
+
+    const updatedCache = [...validCards, ...cache];
+    saveSpellingFlipCardsCache(updatedCache);
+
+    if (serverSupabase && validCards.length > 0) {
+      try {
+        await serverSupabase.from('spelling_flip_cards').insert(validCards);
+      } catch (err) {
+        console.warn('[Supabase batch flip insert fallback]:', err.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        importedCount: validCards.length,
+        batchId: `batch_${Date.now()}`,
+        cards: validCards,
+        invalidCount: invalidCards.length,
+        invalid: invalidCards
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-flip-cards/import-batch:', error);
+    res.status(500).json({ success: false, error: 'Failed to batch import spelling flip cards.' });
+  }
+});
+
+// 5. PUT /api/spelling-flip-cards/:id - Update card
+app.put('/api/spelling-flip-cards/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const { word, level: rawLevel, category, is_published } = req.body;
+
+    const cache = loadSpellingFlipCardsCache();
+    const index = cache.findIndex(c => c.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Card not found.' });
+    }
+
+    const target = { ...cache[index] };
+    if (word) {
+      const cleanWord = word.trim().toUpperCase().replace(/[^A-Z]/g, '');
+      target.word = cleanWord;
+    }
+    if (rawLevel) {
+      const level = normalizeSpellingFlipLevel(rawLevel);
+      if (level) {
+        target.level = level;
+        target.memorize_seconds = level === 'easy' ? 30 : level === 'intermediate' ? 20 : 10;
+        target.xp = level === 'easy' ? 10 : level === 'intermediate' ? 15 : 20;
+      }
+    }
+    if (category) target.category = category.trim();
+    if (typeof is_published === 'boolean') target.is_published = is_published;
+    target.updated_at = new Date().toISOString();
+
+    cache[index] = target;
+    saveSpellingFlipCardsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_flip_cards').update(target).eq('id', id);
+      } catch (err) {
+        console.warn('[Supabase flip update fallback]:', err.message);
+      }
+    }
+
+    res.json({ success: true, data: target });
+  } catch (error) {
+    console.error('Error in PUT /api/spelling-flip-cards/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to update spelling flip card.' });
+  }
+});
+
+// 6. PUT /api/spelling-flip-cards/:id/publish - Toggle published status
+app.put('/api/spelling-flip-cards/:id/publish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const { is_published } = req.body;
+
+    const cache = loadSpellingFlipCardsCache();
+    const index = cache.findIndex(c => c.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Card not found.' });
+    }
+
+    cache[index].is_published = is_published !== false;
+    cache[index].updated_at = new Date().toISOString();
+    saveSpellingFlipCardsCache(cache);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_flip_cards').update({ is_published: cache[index].is_published }).eq('id', id);
+      } catch (err) {
+        console.warn('[Supabase flip publish fallback]:', err.message);
+      }
+    }
+
+    res.json({ success: true, data: cache[index] });
+  } catch (error) {
+    console.error('Error in PUT /api/spelling-flip-cards/:id/publish:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle published status.' });
+  }
+});
+
+// 7. DELETE /api/spelling-flip-cards/:id - Delete card
+app.delete('/api/spelling-flip-cards/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const cache = loadSpellingFlipCardsCache();
+    const updated = cache.filter(c => c.id !== id);
+    saveSpellingFlipCardsCache(updated);
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase.from('spelling_flip_cards').delete().eq('id', id);
+      } catch (err) {
+        console.warn('[Supabase flip delete fallback]:', err.message);
+      }
+    }
+
+    res.json({ success: true, message: 'Spelling flip card deleted successfully.' });
+  } catch (error) {
+    console.error('Error in DELETE /api/spelling-flip-cards/:id:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete spelling flip card.' });
+  }
+});
+
+// 8. POST /api/spelling-flip-cards/complete - Record completion and award XP
+app.post('/api/spelling-flip-cards/complete', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || null;
+    const { cardId, userWord, timeTakenSeconds } = req.body;
+
+    if (!cardId) {
+      return res.status(400).json({ success: false, error: 'cardId is required.' });
+    }
+
+    const cache = loadSpellingFlipCardsCache();
+    const card = cache.find(c => c.id === cardId);
+    if (!card) {
+      return res.status(404).json({ success: false, error: 'Spelling flip card not found.' });
+    }
+
+    // Case-insensitive comparison (e.g. "house" vs "HOUSE")
+    const cleanUserWord = typeof userWord === 'string' ? userWord.trim().toUpperCase().replace(/[^A-Z]/g, '') : '';
+    const cleanTargetWord = card.word.trim().toUpperCase().replace(/[^A-Z]/g, '');
+    const isCorrect = cleanUserWord === cleanTargetWord;
+
+    let xpAwarded = 0;
+    if (isCorrect) {
+      xpAwarded = card.xp || 10;
+    }
+
+    // Record completion in cache
+    const completions = loadSpellingFlipCompletionsCache();
+    const newCompletion = {
+      id: `completion_flip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      user_id: userId,
+      card_id: cardId,
+      user_word: cleanUserWord,
+      is_correct: isCorrect,
+      xp_awarded: xpAwarded,
+      time_taken_seconds: timeTakenSeconds || 0,
+      created_at: new Date().toISOString()
+    };
+    completions.push(newCompletion);
+    saveSpellingFlipCompletionsCache(completions);
+
+    // If authenticated user, award XP in profile
+    if (userId && xpAwarded > 0 && serverSupabase) {
+      try {
+        const { data: prof } = await serverSupabase
+          .from('user_profiles')
+          .select('xp')
+          .eq('id', userId)
+          .single();
+
+        if (prof) {
+          const updatedXp = (prof.xp || 0) + xpAwarded;
+          await serverSupabase
+            .from('user_profiles')
+            .update({ xp: updatedXp })
+            .eq('id', userId);
+        }
+      } catch (err) {
+        console.warn('[Supabase flip XP update fallback]:', err.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        is_correct: isCorrect,
+        correct_word: card.word,
+        xp_awarded: xpAwarded,
+        already_completed: false,
+        level: card.level,
+        time_taken_seconds: timeTakenSeconds
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/spelling-flip-cards/complete:', error);
+    res.status(500).json({ success: false, error: 'Failed to submit spelling flip attempt.' });
+  }
+});
+
+// ============================================================================
 // API ROUTES: WORD OF THE DAY (COMMUNITY FEED & BULK ADMIN SYSTEM)
 // ============================================================================
 
