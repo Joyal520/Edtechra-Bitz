@@ -126,7 +126,7 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
         </div>
 
         {/* Question text */}
-        <h3 className="text-sm sm:text-base font-black text-[#0f233a] leading-snug learning-content-text">
+        <h3 className="font-black text-[#0f233a] leading-snug learning-question-text">
           {quiz.question}
         </h3>
 
@@ -173,7 +173,7 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
                   <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors ${badgeStyle}`}>
                     {letter}
                   </div>
-                  <span className="truncate break-words learning-content-text">{option}</span>
+                  <span className="truncate break-words learning-option-text">{option}</span>
                 </div>
 
                 {/* Status Indicator Icon */}

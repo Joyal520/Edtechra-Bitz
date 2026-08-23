@@ -93,7 +93,7 @@ export const PollBitCard: React.FC<PollBitCardProps> = ({ poll, onVoted }) => {
       <div className="p-4 sm:p-5 space-y-4">
         
         {/* Question Text */}
-        <h3 className="text-sm sm:text-base font-black text-[#0f233a] leading-snug">
+        <h3 className="font-black text-[#0f233a] leading-snug learning-question-text">
           {poll.question}
         </h3>
 
@@ -127,7 +127,7 @@ export const PollBitCard: React.FC<PollBitCardProps> = ({ poll, onVoted }) => {
                   />
 
                   {/* Option Content Foreground */}
-                  <div className="relative z-10 flex items-center justify-between gap-3 text-xs sm:text-sm">
+                  <div className="relative z-10 flex items-center justify-between gap-3 learning-option-text">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
@@ -163,7 +163,7 @@ export const PollBitCard: React.FC<PollBitCardProps> = ({ poll, onVoted }) => {
                 type="button"
                 onClick={() => handleVote(option)}
                 disabled={submitting}
-                className="w-full min-h-[48px] sm:min-h-[50px] p-3 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-purple-50/80 hover:border-purple-300 text-slate-800 font-bold text-left text-xs sm:text-sm transition-all flex items-center justify-between gap-2.5 active:scale-[0.99] cursor-pointer group"
+                className="w-full min-h-[48px] sm:min-h-[50px] p-3 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-purple-50/80 hover:border-purple-300 text-slate-800 font-bold text-left learning-option-text transition-all flex items-center justify-between gap-2.5 active:scale-[0.99] cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-6 h-6 rounded-lg bg-slate-200 group-hover:bg-purple-600 group-hover:text-white text-slate-700 flex items-center justify-center text-xs font-black shrink-0 transition-colors">

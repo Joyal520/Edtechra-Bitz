@@ -8,33 +8,87 @@
     --paper-cream: #fbfbf7;
     --brand-blue: #026fc3;
     --brand-green: #22c55e;
-    --learning-text-size: 12px;
-    --learning-text-line-height: 1.5;
+
+    /* Educational Typography System (Default: Medium) */
+    --learning-text-size: 14px;
+    --learning-text-line-height: 1.55;
+    --learning-word-size: 1.75rem;
+    --learning-meaning-size: 0.9375rem;
+    --learning-example-size: 0.875rem;
+    --learning-question-size: 1rem;
+    --learning-option-size: 0.875rem;
+    --learning-meta-size: 0.75rem;
   }
 
   [data-text-size="small"] {
-    --learning-text-size: 11px;
+    --learning-text-size: 12px;
     --learning-text-line-height: 1.45;
+    --learning-word-size: 1.45rem;
+    --learning-meaning-size: 0.8125rem;
+    --learning-example-size: 0.75rem;
+    --learning-question-size: 0.875rem;
+    --learning-option-size: 0.775rem;
+    --learning-meta-size: 0.6875rem;
   }
 
   [data-text-size="medium"] {
-    --learning-text-size: 12px;
-    --learning-text-line-height: 1.5;
-  }
-
-  [data-text-size="large"] {
     --learning-text-size: 14px;
     --learning-text-line-height: 1.55;
+    --learning-word-size: 1.75rem;
+    --learning-meaning-size: 0.9375rem;
+    --learning-example-size: 0.875rem;
+    --learning-question-size: 1rem;
+    --learning-option-size: 0.875rem;
+    --learning-meta-size: 0.75rem;
   }
 
+  [data-text-size="large"],
   [data-text-size="extra-large"] {
     --learning-text-size: 16px;
     --learning-text-line-height: 1.6;
+    --learning-word-size: 2.1rem;
+    --learning-meaning-size: 1.0625rem;
+    --learning-example-size: 1rem;
+    --learning-question-size: 1.125rem;
+    --learning-option-size: 0.975rem;
+    --learning-meta-size: 0.8125rem;
+  }
+
+  /* Educational Typography Classes */
+  .learning-word-title {
+    font-size: var(--learning-word-size, 1.75rem);
+    line-height: 1.2;
+    transition: font-size 0.2s ease-in-out;
+  }
+
+  .learning-meaning-text {
+    font-size: var(--learning-meaning-size, 0.9375rem);
+    line-height: var(--learning-text-line-height, 1.55);
+    transition: font-size 0.2s ease-in-out;
+  }
+
+  .learning-example-text {
+    font-size: var(--learning-example-size, 0.875rem);
+    line-height: var(--learning-text-line-height, 1.55);
+    transition: font-size 0.2s ease-in-out;
+  }
+
+  .learning-question-text {
+    font-size: var(--learning-question-size, 1rem);
+    line-height: 1.45;
+    transition: font-size 0.2s ease-in-out;
+  }
+
+  .learning-option-text {
+    font-size: var(--learning-option-size, 0.875rem);
+    line-height: 1.4;
+    transition: font-size 0.2s ease-in-out;
   }
 
   .learning-content-text {
-    font-size: var(--learning-text-size, 12px);
-    line-height: var(--learning-text-line-height, 1.5);
+    font-size: var(--learning-text-size, 14px);
+    line-height: var(--learning-text-line-height, 1.55);
+    transition: font-size 0.2s ease-in-out;
   }
 
   html,

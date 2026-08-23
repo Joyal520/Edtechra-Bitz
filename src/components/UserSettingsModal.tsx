@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   User as UserIcon,
@@ -14,7 +14,7 @@ import {
   Check
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { DEFAULT_AVATARS, AvatarPreset } from '@/utils/avatarConstants';
+import { DEFAULT_AVATARS, AvatarPreset, AVATAR_CATEGORY_TABS, AvatarCategory } from '@/utils/avatarConstants';
 import { ImageSquareCropper } from '@/components/PostFeed/ImageSquareCropper';
 import {
   OptimizationResult,
@@ -35,7 +35,13 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
   const [displayName, setDisplayName] = useState<string>('');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string>('');
   const [textSize, setTextSize] = useState<TextSizeOption>('medium');
-  const [avatarCategory, setAvatarCategory] = useState<'all' | 'cartoon' | 'photo'>('cartoon');
+  const [avatarCategory, setAvatarCategory] = useState<AvatarCategory>('all');
+
+  // Filtered preset avatars based on selected category tab
+  const filteredPresets = useMemo<AvatarPreset[]>(() => {
+    if (avatarCategory === 'all') return DEFAULT_AVATARS;
+    return DEFAULT_AVATARS.filter((preset) => preset.group === avatarCategory || (avatarCategory === 'photo' && preset.category === 'photo'));
+  }, [avatarCategory]);
 
   // Image Upload & Crop State
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -333,83 +339,73 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="text-[11px] font-bold text-slate-700">
-                      Choose from preset avatars:
+                      Choose ready-made avatar ({DEFAULT_AVATARS.length} available):
                     </span>
-
-                    {/* Category Filter Pills */}
-                    <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-xl text-[10px] font-extrabold">
-                      <button
-                        type="button"
-                        onClick={() => setAvatarCategory('cartoon')}
-                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          avatarCategory === 'cartoon'
-                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        🎨 Cartoon ({DEFAULT_AVATARS.filter(a => a.category === 'cartoon').length})
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setAvatarCategory('photo')}
-                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          avatarCategory === 'photo'
-                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        📸 Photos ({DEFAULT_AVATARS.filter(a => a.category === 'photo').length})
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setAvatarCategory('all')}
-                        className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          avatarCategory === 'all'
-                            ? 'bg-white text-[#026fc3] shadow-2xs font-black'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        All
-                      </button>
-                    </div>
                   </div>
 
-                  {/* Filtered Grid */}
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1 bg-stone-50/50 rounded-2xl border border-stone-200/70">
-                    {DEFAULT_AVATARS
-                      .filter((preset) => avatarCategory === 'all' || preset.category === avatarCategory)
-                      .map((preset) => {
-                        const isSelected = selectedAvatarUrl === preset.url;
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => handleSelectPreset(preset)}
-                            className={`relative aspect-square rounded-2xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer hover:scale-105 active:scale-95 bg-white ${
-                              isSelected
-                                ? 'border-[#026fc3] ring-2 ring-[#026fc3]/30 shadow-xs'
-                                : 'border-slate-200 hover:border-slate-300'
-                            }`}
-                            title={preset.label}
-                          >
-                            <img
-                              src={preset.url}
-                              alt={preset.label}
-                              className="w-full h-full object-cover rounded-xl bg-amber-50"
-                              loading="lazy"
-                            />
-                            {isSelected && (
-                              <div className="absolute inset-0 bg-[#026fc3]/25 flex items-center justify-center">
-                                <div className="w-5 h-5 rounded-full bg-[#026fc3] text-white flex items-center justify-center shadow-xs">
-                                  <Check className="w-3 h-3 stroke-[3]" />
-                                </div>
+                  {/* Category Filter Pills (Scrollable on small mobile) */}
+                  <div className="flex items-center gap-1 overflow-x-auto p-1 bg-stone-100/90 rounded-2xl border border-stone-200/60 no-scrollbar">
+                    {AVATAR_CATEGORY_TABS.map((tab) => {
+                      const count = tab.id === 'all'
+                        ? DEFAULT_AVATARS.length
+                        : DEFAULT_AVATARS.filter((a) => a.group === tab.id || (tab.id === 'photo' && a.category === 'photo')).length;
+                      const isActive = avatarCategory === tab.id;
+
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setAvatarCategory(tab.id)}
+                          className={`px-2.5 sm:px-3 py-1 rounded-xl text-[11px] font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+                            isActive
+                              ? 'bg-white text-[#026fc3] shadow-2xs font-black'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-stone-200/60'
+                          }`}
+                        >
+                          <span>{tab.icon}</span>
+                          <span>{tab.label}</span>
+                          <span className={`text-[10px] ml-0.5 px-1.5 py-0.2 rounded-full ${isActive ? 'bg-brand-50 text-[#026fc3]' : 'bg-slate-200/70 text-slate-500'}`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Filtered Responsive Avatars Grid */}
+                  <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-2 sm:gap-2.5 max-h-56 sm:max-h-64 overflow-y-auto p-2 bg-stone-50/70 rounded-2xl border border-stone-200/80">
+                    {filteredPresets.map((preset) => {
+                      const isSelected = selectedAvatarUrl === preset.url;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectPreset(preset)}
+                          className={`group relative aspect-square rounded-2xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer hover:scale-105 active:scale-95 bg-white ${
+                            isSelected
+                              ? 'border-[#026fc3] ring-3 ring-[#026fc3]/25 shadow-sm scale-105 z-10'
+                              : 'border-stone-200/80 hover:border-[#026fc3]/60'
+                          }`}
+                          title={`${preset.label} (${preset.group})`}
+                          aria-label={`Select ${preset.label} avatar`}
+                          aria-pressed={isSelected}
+                        >
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            className="w-full h-full object-cover rounded-xl bg-amber-50/50"
+                            loading="lazy"
+                          />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-[#026fc3]/20 flex items-center justify-center backdrop-blur-[0.5px]">
+                              <div className="w-5 h-5 rounded-full bg-[#026fc3] text-white flex items-center justify-center shadow-xs">
+                                <Check className="w-3 h-3 stroke-[3]" />
                               </div>
-                            )}
-                          </button>
-                        );
-                      })}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -447,12 +443,11 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 </p>
 
                 {/* Text Size Radio Selector */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 'small', label: 'Small', size: '11px' },
-                    { id: 'medium', label: 'Medium (Default)', size: '12px' },
-                    { id: 'large', label: 'Large', size: '14px' },
-                    { id: 'extra-large', label: 'Extra Large', size: '16px' }
+                    { id: 'small', label: 'Small (A−)', size: '12px' },
+                    { id: 'medium', label: 'Medium (A)', size: '14px' },
+                    { id: 'large', label: 'Large (A+)', size: '16px' }
                   ].map((option) => {
                     const isSelected = textSize === option.id;
                     return (
@@ -460,9 +455,14 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                         key={option.id}
                         type="button"
                         onClick={() => {
-                          setTextSize(option.id as TextSizeOption);
+                          const nextSize = option.id as TextSizeOption;
+                          setTextSize(nextSize);
                           // Live update body attribute for instant preview
-                          document.documentElement.setAttribute('data-text-size', option.id);
+                          document.documentElement.setAttribute('data-text-size', nextSize);
+                          localStorage.setItem('edtechra_text_size', nextSize);
+                          window.dispatchEvent(
+                            new CustomEvent('edtechra:text-size-changed', { detail: nextSize })
+                          );
                         }}
                         className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
                           isSelected

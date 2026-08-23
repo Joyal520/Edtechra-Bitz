@@ -119,7 +119,7 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
 
             {/* Bottom Content Preview */}
             <div className="p-4 sm:p-5 space-y-3">
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-serif italic">
+              <p className="text-slate-600 leading-relaxed font-serif italic learning-content-text">
                 "{excerpt}"
               </p>
 
@@ -350,7 +350,7 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
                         key={q.id || qIdx}
                         className="p-4 bg-white border border-stone-200 rounded-2xl shadow-2xs space-y-3"
                       >
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                        <h4 className="font-bold text-slate-900 learning-question-text">
                           {q.question}
                         </h4>
 
@@ -373,7 +373,7 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
                                 type="button"
                                 disabled={isSubmitted}
                                 onClick={() => handleAnswerQuestion(q.id || qIdx, opt)}
-                                className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all flex items-center justify-between ${style}`}
+                                className={`p-2.5 rounded-xl border text-left font-semibold transition-all flex items-center justify-between learning-option-text ${style}`}
                               >
                                 <span>{opt}</span>
                                 {isSubmitted && opt === q.correct_answer && (

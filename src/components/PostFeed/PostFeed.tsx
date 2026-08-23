@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus,
-  Image as ImageIcon,
   SlidersHorizontal,
   BookOpen,
   Loader2,
@@ -29,6 +28,7 @@ import { PollBitCard } from './PollBitCard';
 import { ReorderSentenceCard } from './ReorderSentenceCard';
 import { SpellingScrambleCard } from './SpellingScrambleCard';
 import { WordOfTheDayCard } from './WordOfTheDayCard';
+import { TypographyControls } from './TypographyControls';
 import { PostComposerModal } from './PostComposerModal';
 import { AdminModerationModal } from './AdminModerationModal';
 import { QUIZ_CONFIG } from '@/utils/quizConfig';
@@ -516,15 +516,7 @@ export const PostFeed: React.FC = () => {
           </button>
         </div>
 
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-          <button
-            onClick={handleOpenComposer}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-brand-50 text-[#026fc3] text-xs font-bold transition-colors cursor-pointer min-h-[36px]"
-          >
-            <ImageIcon className="w-4 h-4 text-[#026fc3]" />
-            <span>Add Square Photo</span>
-          </button>
-
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
           <button
             onClick={handleOpenComposer}
             className="px-3.5 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer min-h-[36px]"
@@ -536,20 +528,20 @@ export const PostFeed: React.FC = () => {
       </div>
 
       {/* 2. Feed Controls & Filter Header */}
-      <div className="flex items-center justify-between px-3 sm:px-1 text-xs text-slate-500 font-semibold">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <span className="font-extrabold text-slate-800 text-xs sm:text-sm">Community Feed</span>
-          <span className="text-slate-300">•</span>
-          <span className="text-[11px] sm:text-xs">{posts.length} {posts.length === 1 ? 'post' : 'posts'}</span>
+      <div className="flex items-center justify-between gap-2 px-3 sm:px-1 text-xs text-slate-500 font-semibold min-h-[36px]">
+        <div>
           {quizzes.length > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200">
-              <Zap className="w-3 h-3 text-teal-600" />
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-[10px] sm:text-[11px] font-bold border border-teal-200 shadow-2xs">
+              <Zap className="w-3.5 h-3.5 text-teal-600" />
               <span>Quizzes Active</span>
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto">
+          {/* Global Educational Typography Control (A- / A / A+) */}
+          <TypographyControls showLabel={false} />
+
           {profile?.role === 'admin' && (
             <button
               onClick={() => setAdminModalOpen(true)}
