@@ -49,6 +49,7 @@ import { pronunciationService } from '@/services/pronunciationService';
 import { useAuth } from '@/context/AuthContext';
 import { VocabularyCard } from './PostFeed/VocabularyCard';
 import { CollapsibleCatalogue } from './CollapsibleCatalogue';
+import { cleanImageTitle, optimizeImageFile } from '@/utils/imageOptimizer';
 
 const DEFAULT_VOCAB_ASSET = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
 
@@ -256,7 +257,7 @@ export const AdminVocabularySection: React.FC = () => {
   // --------------------------------------------------------------------------
   // Bulk Image Upload & Scheduler State
   // --------------------------------------------------------------------------
-  const [imageFiles, setImageFiles] = useState<{ file: File; preview: string; title: string; meaning: string; status: 'ready' | 'uploading' | 'done' | 'failed' }[]>([]);
+  const [imageFiles, setImageFiles] = useState<{ file: File; preview: string; title: string; meaning: string; example?: string; status: 'ready' | 'uploading' | 'done' | 'failed' }[]>([]);
   const [imageContentType, setImageContentType] = useState<VocabularyContentType>('word');
   const [imageScheduleMode, setImageScheduleMode] = useState<'immediate' | 'schedule'>('schedule');
   const [imageStartDate, setImageStartDate] = useState<string>(() => {
@@ -478,13 +479,23 @@ export const AdminVocabularySection: React.FC = () => {
   // Image Selection Handler
   const handleSelectImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    const defaultLabel =
+      imageContentType === 'idiom'
+        ? 'Idiom of the Day'
+        : imageContentType === 'phrasal_verb'
+        ? 'Phrasal Verb of the Day'
+        : imageContentType === 'collocation'
+        ? 'Collocation of the Day'
+        : 'Word of the Day';
+
     const newItems = Array.from(files).map((f, idx) => {
-      const baseName = f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+      const cleanTitle = cleanImageTitle(f.name, `${defaultLabel} ${idx + 1}`);
       return {
         file: f,
         preview: URL.createObjectURL(f),
-        title: baseName || `Image ${idx + 1}`,
-        meaning: `Visual learning lesson for ${baseName}.`,
+        title: cleanTitle,
+        meaning: `Visual learning lesson for ${cleanTitle}.`,
+        example: `Study the image for ${cleanTitle}.`,
         status: 'ready' as const
       };
     });
@@ -501,14 +512,28 @@ export const AdminVocabularySection: React.FC = () => {
     setIsUploadingImages(true);
     try {
       const token = session?.access_token || null;
-      // In web app, we mock or upload to R2 public URL
-      const payloadImages = imageFiles.map((img) => ({
-        filename: img.file.name,
-        publicUrl: img.preview, // Will be replaced by R2 upload URL or asset
-        title: img.title,
-        meaning: img.meaning,
-        example: `Study the image for ${img.title}.`
-      }));
+
+      // 1. Automatically compress each image to lightweight WebP
+      const payloadImages = [];
+      for (const img of imageFiles) {
+        let compressedPublicUrl = img.preview;
+        try {
+          const opt = await optimizeImageFile(img.file, {
+            maxDimension: 1600,
+            initialQuality: 0.85,
+            preserveTransparency: true
+          });
+          compressedPublicUrl = opt.objectUrl;
+        } catch (e) {}
+
+        payloadImages.push({
+          filename: `${img.title.toLowerCase().replace(/\s+/g, '_')}.webp`,
+          publicUrl: compressedPublicUrl,
+          title: img.title.trim() || 'Visual Learning Resource',
+          meaning: img.meaning.trim() || `Visual learning lesson for ${img.title}.`,
+          example: img.example?.trim() || `Study the image for ${img.title}.`
+        });
+      }
 
       const res = await vocabularyService.scheduleBulkImages(
         {
@@ -1680,30 +1705,57 @@ export const AdminVocabularySection: React.FC = () => {
             {/* Selected Images List */}
             {imageFiles.length > 0 && (
               <div className="space-y-2">
-                <span className="text-xs font-black text-slate-700">
-                  Selected Images ({imageFiles.length}):
-                </span>
-                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-700">
+                    Selected Images ({imageFiles.length}) — Auto-Compressed to WebP:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setImageFiles([])}
+                    className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {imageFiles.map((img, idx) => (
-                    <div key={idx} className="flex items-center gap-2.5 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-                      <img src={img.preview} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                      <input
-                        type="text"
-                        value={img.title}
-                        onChange={(e) => {
-                          const updated = [...imageFiles];
-                          updated[idx].title = e.target.value;
-                          setImageFiles(updated);
-                        }}
-                        placeholder="Title / Caption"
-                        className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                      />
-                      <button
-                        onClick={() => setImageFiles(imageFiles.filter((_, i) => i !== idx))}
-                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <img src={img.preview} alt="" className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0" />
+                        <div className="flex-1 space-y-1">
+                          <input
+                            type="text"
+                            value={img.title}
+                            onChange={(e) => {
+                              const updated = [...imageFiles];
+                              updated[idx].title = e.target.value;
+                              setImageFiles(updated);
+                            }}
+                            placeholder="Title / Keyword (e.g. Time Flies)"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-900"
+                          />
+                          <input
+                            type="text"
+                            value={img.meaning}
+                            onChange={(e) => {
+                              const updated = [...imageFiles];
+                              updated[idx].meaning = e.target.value;
+                              setImageFiles(updated);
+                            }}
+                            placeholder="Meaning / Definition"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-700"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setImageFiles(imageFiles.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer shrink-0"
+                          title="Remove image"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

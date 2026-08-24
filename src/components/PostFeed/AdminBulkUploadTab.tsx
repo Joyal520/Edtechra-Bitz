@@ -25,7 +25,11 @@ import {
   CreateBatchQueueItemInput
 } from '@/types';
 import { adminPostQueueService } from '@/services/adminPostQueueService';
-import { formatBytes } from '@/utils/imageOptimizer';
+import {
+  formatBytes,
+  optimizeImageFile,
+  cleanImageTitle
+} from '@/utils/imageOptimizer';
 
 interface AdminBulkUploadTabProps {
   onQueueCreated?: (batchId: string) => void;
@@ -193,38 +197,87 @@ export const AdminBulkUploadTab: React.FC<AdminBulkUploadTabProps> = ({
     try {
       const token = session?.access_token || null;
 
-      // 1. Request batch presigned URLs from server for all images
-      const presignPayload = selectedImages.map((img) => ({
+      // 1. Automatically compress & optimize all images to crisp lightweight WebP
+      const processedImages: {
+        file: File | Blob;
+        name: string;
+        width?: number;
+        height?: number;
+        size: number;
+        caption?: string;
+      }[] = [];
+
+      for (let i = 0; i < selectedImages.length; i++) {
+        const item = selectedImages[i];
+        setUploadProgress({
+          current: i + 1,
+          total: selectedImages.length,
+          percent: Math.round(((i + 1) / selectedImages.length) * 20)
+        });
+
+        try {
+          const opt = await optimizeImageFile(item.file, {
+            maxDimension: 1600,
+            initialQuality: 0.85,
+            preserveTransparency: true
+          });
+          const webpName = `${item.name.replace(/\.[^/.]+$/, '')}.webp`;
+          const compressedFile = new File([opt.blob], webpName, { type: 'image/webp' });
+          processedImages.push({
+            file: compressedFile,
+            name: webpName,
+            width: opt.width,
+            height: opt.height,
+            size: opt.optimizedSizeBytes,
+            caption: defaultCaption.trim() || cleanImageTitle(item.name, 'Educational Resource')
+          });
+        } catch (compErr) {
+          // Fallback to original file safely if optimization cannot run
+          processedImages.push({
+            file: item.file,
+            name: item.name,
+            width: item.width,
+            height: item.height,
+            size: item.size,
+            caption: defaultCaption.trim() || cleanImageTitle(item.name, 'Educational Resource')
+          });
+        }
+      }
+
+      // 2. Request batch presigned URLs from server for all optimized images
+      const presignPayload = processedImages.map((img) => ({
         filename: img.name,
-        contentType: img.file.type || 'image/webp',
+        contentType: 'image/webp',
         size: img.size
       }));
 
       const presignedList = await adminPostQueueService.requestBatchPresignedUploads(presignPayload, token);
 
-      if (presignedList.length !== selectedImages.length) {
+      if (presignedList.length !== processedImages.length) {
         throw new Error('Server returned incomplete presigned upload batch.');
       }
 
-      // 2. Upload images directly to Cloudflare R2 with progress
-      const uploadQueue = selectedImages.map((img, idx) => ({
-        file: img.file,
+      // 3. Upload images directly to Cloudflare R2 with progress
+      const uploadQueue = processedImages.map((img, idx) => ({
+        file: img.file instanceof File ? img.file : new File([img.file], img.name, { type: 'image/webp' }),
         presigned: presignedList[idx]
       }));
 
       await adminPostQueueService.uploadBatchImagesToR2(uploadQueue, (cur, tot, pct) => {
-        setUploadProgress({ current: cur, total: tot, percent: pct });
+        // Map remaining 80% progress
+        const overallPercent = 20 + Math.round((pct * 0.8));
+        setUploadProgress({ current: cur, total: tot, percent: overallPercent });
       });
 
-      // 3. Create persistent Queue records on the server (Zero Gemini calls!)
-      const queueItems: CreateBatchQueueItemInput[] = selectedImages.map((img, idx) => ({
+      // 4. Create persistent Queue records on the server (Zero Gemini calls!)
+      const queueItems: CreateBatchQueueItemInput[] = processedImages.map((img, idx) => ({
         imageUrl: presignedList[idx].publicUrl,
         imageObjectKey: presignedList[idx].objectKey,
-        caption: defaultCaption.trim() || undefined,
+        caption: img.caption || defaultCaption.trim() || undefined,
         imageWidth: img.width || undefined,
         imageHeight: img.height || undefined,
         imageSizeBytes: img.size,
-        imageFormat: img.file.type.split('/')[1] || 'webp',
+        imageFormat: 'webp',
         queuePosition: idx + 1
       }));
 

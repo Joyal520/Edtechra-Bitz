@@ -237,6 +237,124 @@ export async function optimizeAndCropImage(
 }
 
 /**
+ * General automatic image compression pipeline (preserves natural aspect ratio while scaling & compressing)
+ */
+export async function optimizeImageFile(
+  file: File,
+  options: ImageOptimizationOptions = {}
+): Promise<OptimizationResult> {
+  const {
+    maxDimension = MAX_TARGET_DIMENSION,
+    initialQuality = 0.86,
+    minQuality = MIN_ALLOWED_QUALITY,
+    preserveTransparency = true
+  } = options;
+
+  const img = await loadImageElement(file);
+  const naturalWidth = img.naturalWidth || img.width;
+  const naturalHeight = img.naturalHeight || img.height;
+
+  // Compute scaled dimensions preserving aspect ratio
+  let targetWidth = naturalWidth;
+  let targetHeight = naturalHeight;
+
+  if (targetWidth > maxDimension || targetHeight > maxDimension) {
+    if (targetWidth >= targetHeight) {
+      targetHeight = Math.round((targetHeight * maxDimension) / targetWidth);
+      targetWidth = maxDimension;
+    } else {
+      targetWidth = Math.round((targetWidth * maxDimension) / targetHeight);
+      targetHeight = maxDimension;
+    }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) {
+    throw new Error('Could not initialize 2D canvas context for image optimization.');
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+  const isTransparent = preserveTransparency && hasTransparentPixels(ctx, targetWidth, targetHeight);
+  const targetMime = isTransparent ? 'image/png' : 'image/webp';
+  const format: 'webp' | 'png' | 'jpeg' = isTransparent ? 'png' : 'webp';
+
+  let currentQuality = initialQuality;
+  let blob: Blob;
+
+  if (targetMime === 'image/png') {
+    blob = await canvasToBlob(canvas, 'image/png');
+  } else {
+    blob = await canvasToBlob(canvas, 'image/webp', currentQuality);
+
+    // Adaptive step-down for large files
+    if (blob.size > 1.5 * 1024 * 1024 && currentQuality > 0.82) {
+      currentQuality = 0.82;
+      blob = await canvasToBlob(canvas, 'image/webp', currentQuality);
+    }
+    if (blob.size > 1024 * 1024 && currentQuality > minQuality) {
+      currentQuality = Math.max(minQuality, 0.78);
+      blob = await canvasToBlob(canvas, 'image/webp', currentQuality);
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const originalSize = file.size;
+  const optimizedSize = blob.size;
+  const reduction = originalSize > 0 ? Math.max(0, 1 - optimizedSize / originalSize) : 0;
+
+  return {
+    blob,
+    width: targetWidth,
+    height: targetHeight,
+    format,
+    originalSizeBytes: originalSize,
+    optimizedSizeBytes: optimizedSize,
+    objectUrl,
+    compressionRatio: Number(reduction.toFixed(2))
+  };
+}
+
+/**
+ * Sanitizes messy filenames (like "Gemini_Generated_Image_4hyvei4hyvei4hyv.png") into human-readable titles
+ */
+export function cleanImageTitle(filename: string, fallbackDefault = 'Idiom of the Day'): string {
+  if (!filename) return fallbackDefault;
+
+  let clean = filename.replace(/\.[^/.]+$/, ''); // Strip file extension
+
+  // Remove common AI & camera prefixes
+  clean = clean.replace(/^(gemini[-_ ]?generated[-_ ]?image[-_ ]?|chatgpt[-_ ]?image[-_ ]?|dall[-_ ]?e[-_ ]?image[-_ ]?|dalle[-_ ]?image[-_ ]?|bing[-_ ]?image[-_ ]?|ai[-_ ]?generated[-_ ]?|img[-_ ]?|image[-_ ]?|screenshot[-_ ]?|whatsapp[-_ ]?image[-_ ]?|pasted[-_ ]?image[-_ ]?)/gi, '');
+
+  // Remove long random alphanumeric hash tokens (e.g. 4hyvei4hyvei4hyv or 32-char hashes)
+  clean = clean.replace(/\b[a-z0-9]{10,}\b/gi, '');
+
+  // Remove date-time stamps (e.g. 2026-08-24, Aug 22 2026, 05_39_51 PM)
+  clean = clean.replace(/\b\d{4}[-_.]\d{2}[-_.]\d{2}\b/g, '');
+  clean = clean.replace(/\b\d{2}[-_.]\d{2}[-_.]\d{2,4}\b/g, '');
+  clean = clean.replace(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-_ ]+\d{1,2}([-_ ]+\d{2,4})?/gi, '');
+  clean = clean.replace(/\b\d{1,2}[-_.]\d{2}[-_.]\d{2}[-_ ]?(am|pm)?\b/gi, '');
+
+  // Replace underscores, dashes, multiple spaces
+  clean = clean.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // If after cleaning it's empty or too short, return fallback
+  if (!clean || clean.length < 2) {
+    return fallbackDefault;
+  }
+
+  // Convert to clean Title Case
+  return clean.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.substring(1).toLowerCase());
+}
+
+/**
  * Format bytes into human-friendly string (e.g., "780 KB", "1.4 MB")
  */
 export function formatBytes(bytes: number): string {
