@@ -68,47 +68,72 @@ export const AdminBulkUploadTab: React.FC<AdminBulkUploadTabProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
   // Process files selected from input or dropped
   const processFiles = useCallback((files: FileList | File[]) => {
     setErrorMessage(null);
+    setDuplicateWarning(null);
     const validExtensions = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     const newItems: SelectedImageItem[] = [];
+    let duplicateCount = 0;
 
-    Array.from(files).forEach((file) => {
-      if (!validExtensions.includes(file.type.toLowerCase())) {
-        return; // skip non-images
+    setSelectedImages((currentSelected) => {
+      const existingFingerprints = new Set(
+        currentSelected.map((i) => `${i.name.toLowerCase().trim()}_${i.size}`)
+      );
+      const batchFingerprints = new Set<string>();
+
+      Array.from(files).forEach((file) => {
+        if (!validExtensions.includes(file.type.toLowerCase())) {
+          return; // skip non-images
+        }
+
+        if (file.size > 20 * 1024 * 1024) {
+          return; // skip files > 20MB
+        }
+
+        const fingerprint = `${file.name.toLowerCase().trim()}_${file.size}`;
+        if (existingFingerprints.has(fingerprint) || batchFingerprints.has(fingerprint)) {
+          duplicateCount++;
+          return; // Skip duplicate image
+        }
+
+        batchFingerprints.add(fingerprint);
+
+        const previewUrl = URL.createObjectURL(file);
+        const item: SelectedImageItem = {
+          id: `${file.name}_${file.size}_${Date.now()}_${Math.random()}`,
+          file,
+          previewUrl,
+          name: file.name,
+          size: file.size
+        };
+
+        // Probe dimensions asynchronously
+        const img = new Image();
+        img.onload = () => {
+          item.width = img.naturalWidth;
+          item.height = img.naturalHeight;
+        };
+        img.src = previewUrl;
+
+        newItems.push(item);
+      });
+
+      if (duplicateCount > 0) {
+        setDuplicateWarning(
+          `Skipped ${duplicateCount} duplicate ${duplicateCount === 1 ? 'image' : 'images'} to prevent repeated uploads.`
+        );
       }
 
-      if (file.size > 20 * 1024 * 1024) {
-        return; // skip files > 20MB
+      if (newItems.length === 0 && files.length > 0 && duplicateCount === 0) {
+        setErrorMessage('No valid image files (JPG, PNG, WEBP) detected.');
+        return currentSelected;
       }
 
-      const previewUrl = URL.createObjectURL(file);
-      const item: SelectedImageItem = {
-        id: `${file.name}_${file.size}_${Date.now()}_${Math.random()}`,
-        file,
-        previewUrl,
-        name: file.name,
-        size: file.size
-      };
-
-      // Probe dimensions asynchronously
-      const img = new Image();
-      img.onload = () => {
-        item.width = img.naturalWidth;
-        item.height = img.naturalHeight;
-      };
-      img.src = previewUrl;
-
-      newItems.push(item);
+      return [...currentSelected, ...newItems];
     });
-
-    if (newItems.length === 0 && files.length > 0) {
-      setErrorMessage('No valid image files (JPG, PNG, WEBP) detected.');
-      return;
-    }
-
-    setSelectedImages((prev) => [...prev, ...newItems]);
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,6 +287,23 @@ export const AdminBulkUploadTab: React.FC<AdminBulkUploadTabProps> = ({
         <div className="p-3.5 bg-rose-950/60 border border-rose-500/40 text-rose-200 rounded-2xl text-xs flex items-center gap-2.5">
           <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
           <span className="font-semibold">{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Duplicate Warning Notice */}
+      {duplicateWarning && (
+        <div className="p-3.5 bg-amber-950/60 border border-amber-500/40 text-amber-200 rounded-2xl text-xs flex items-center justify-between gap-2.5 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-bold">{duplicateWarning}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDuplicateWarning(null)}
+            className="text-amber-400 hover:text-white text-xs font-black px-2 py-0.5 rounded-lg bg-amber-900/50 hover:bg-amber-900 cursor-pointer"
+          >
+            ✕
+          </button>
         </div>
       )}
 

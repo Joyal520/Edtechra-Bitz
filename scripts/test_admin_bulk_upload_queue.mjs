@@ -221,6 +221,26 @@ async function runTests() {
     assert.strictEqual(retryRes.success, true);
     pass('Retries failed queue item and resumes publishing cleanly');
 
+    // ------------------------------------------------------------------------
+    console.log('\n🚫 Test Group 8: Duplicate Image Filtering & Rejection');
+    // ------------------------------------------------------------------------
+
+    // Test 8.1: Filters out repeated images within the same batch payload
+    const duplicateBatchPayload = {
+      batchName: 'Duplicate Test Batch',
+      intervalMinutes: 10,
+      items: [
+        { imageUrl: 'https://r2.dev/unique_a.webp', imageObjectKey: 'posts/unique_a.webp', queuePosition: 1 },
+        { imageUrl: 'https://r2.dev/unique_a.webp', imageObjectKey: 'posts/unique_a.webp', queuePosition: 2 }, // Duplicate
+        { imageUrl: 'https://r2.dev/unique_b.webp', imageObjectKey: 'posts/unique_b.webp', queuePosition: 3 },
+        { imageUrl: 'https://r2.dev/unique_b.webp', imageObjectKey: 'posts/unique_b.webp', queuePosition: 4 }  // Duplicate
+      ]
+    };
+
+    const dupRes = await createQueueBatch(mockAdminUser, duplicateBatchPayload, null);
+    assert.strictEqual(dupRes.totalQueued, 2, 'Should deduplicate 4 items to 2 unique items');
+    pass('Automatically filters out repeated images within the same batch');
+
     console.log('\n=======================================================');
     console.log(`🎯 Test Summary: ${passed}/${total} tests passed (${Math.round((passed / total) * 100)}%)`);
     console.log('=======================================================\n');
