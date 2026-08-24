@@ -239,6 +239,8 @@ export const AdminVocabularySection: React.FC = () => {
     category: '',
     status: 'published'
   });
+  const [singleImageFile, setSingleImageFile] = useState<File | null>(null);
+  const [singleImagePreview, setSingleImagePreview] = useState<string | null>(null);
   const [isSavingSingle, setIsSavingSingle] = useState<boolean>(false);
   const [showSinglePreview, setShowSinglePreview] = useState<boolean>(true);
 
@@ -360,14 +362,48 @@ export const AdminVocabularySection: React.FC = () => {
     setIsSavingSingle(true);
     try {
       const token = session?.access_token || null;
+      let finalImageUrl = singleForm.image_url || undefined;
+
+      if (singleImageFile) {
+        let fileToUpload: File | Blob = singleImageFile;
+        let size = singleImageFile.size;
+        const safeName = `${titleVal.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}.webp`;
+
+        try {
+          const opt = await optimizeImageFile(singleImageFile, {
+            maxDimension: 1600,
+            initialQuality: 0.85,
+            preserveTransparency: true
+          });
+          fileToUpload = opt.blob;
+          size = opt.optimizedSizeBytes;
+        } catch (e) {}
+
+        const presignedList = await adminPostQueueService.requestBatchPresignedUploads([
+          { filename: safeName, contentType: 'image/webp', size }
+        ], token);
+
+        if (presignedList && presignedList.length > 0) {
+          await adminPostQueueService.uploadBatchImagesToR2([
+            {
+              file: fileToUpload instanceof File ? fileToUpload : new File([fileToUpload], safeName, { type: 'image/webp' }),
+              presigned: presignedList[0]
+            }
+          ]);
+          finalImageUrl = presignedList[0].publicUrl;
+        }
+      }
+
       const created = await vocabularyService.createVocabulary({
         ...singleForm,
         content_type: selectedTypeTab,
         title: titleVal,
         word: titleVal,
         meaning: meaningVal,
-        example: exampleVal
+        example: exampleVal,
+        image_url: finalImageUrl
       }, token);
+
       showToast(`${getTypeBadgeLabel(selectedTypeTab)} "${created.title}" created successfully!`, 'success');
       setSingleForm({
         content_type: selectedTypeTab,
@@ -380,6 +416,8 @@ export const AdminVocabularySection: React.FC = () => {
         category: '',
         status: 'published'
       });
+      setSingleImageFile(null);
+      setSingleImagePreview(null);
       setActiveSubTab('list');
       loadData();
     } catch (err: any) {
@@ -741,7 +779,7 @@ export const AdminVocabularySection: React.FC = () => {
     status: singleForm.status || 'published',
     validation_status: 'manually_approved',
     validation_provider: 'manual',
-    image_url: DEFAULT_VOCAB_ASSET,
+    image_url: singleImagePreview || singleForm.image_url || DEFAULT_VOCAB_ASSET,
     likes_count: 0,
     published_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
@@ -1106,6 +1144,49 @@ export const AdminVocabularySection: React.FC = () => {
                   onChange={(e) => setSingleForm({ ...singleForm, example: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 />
+              </div>
+
+              {/* Optional 1:1 Feature Image Upload */}
+              <div className="space-y-1">
+                <label className="text-xs font-black text-slate-700">
+                  Feature Educational Image (Optional — 1:1 Feed Media)
+                </label>
+                {singleImagePreview ? (
+                  <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <img src={singleImagePreview} alt="" className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0" />
+                    <div className="flex-1 text-xs text-slate-600 truncate">
+                      <span className="font-bold block text-slate-900 truncate">{singleImageFile?.name}</span>
+                      <span className="text-[11px] text-emerald-600 font-semibold">Auto-compresses to WebP & uploads to R2</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSingleImageFile(null);
+                        setSingleImagePreview(null);
+                      }}
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-slate-200 hover:border-amber-400 bg-slate-50/50 hover:bg-amber-50/30 rounded-xl p-3 text-center cursor-pointer transition-colors flex items-center justify-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-600">Attach 1:1 Graphic (PNG, JPG, WebP)</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          setSingleImageFile(f);
+                          setSingleImagePreview(URL.createObjectURL(f));
+                        }
+                      }}
+                    />
+                  </label>
+                )}
               </div>
 
               <div className="pt-2 flex items-center gap-3">
