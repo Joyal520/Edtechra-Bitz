@@ -50,6 +50,7 @@ import { useAuth } from '@/context/AuthContext';
 import { VocabularyCard } from './PostFeed/VocabularyCard';
 import { CollapsibleCatalogue } from './CollapsibleCatalogue';
 import { cleanImageTitle, optimizeImageFile } from '@/utils/imageOptimizer';
+import { adminPostQueueService } from '@/services/adminPostQueueService';
 
 const DEFAULT_VOCAB_ASSET = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
 
@@ -514,26 +515,66 @@ export const AdminVocabularySection: React.FC = () => {
       const token = session?.access_token || null;
 
       // 1. Automatically compress each image to lightweight WebP
-      const payloadImages = [];
-      for (const img of imageFiles) {
-        let compressedPublicUrl = img.preview;
+      const processedList: {
+        fileToUpload: File | Blob;
+        filename: string;
+        title: string;
+        meaning: string;
+        example?: string;
+        size: number;
+      }[] = [];
+
+      for (let i = 0; i < imageFiles.length; i++) {
+        const img = imageFiles[i];
+        let fileToUpload: File | Blob = img.file;
+        let size = img.file.size;
+        const safeName = `${img.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}_${i}.webp`;
+
         try {
           const opt = await optimizeImageFile(img.file, {
             maxDimension: 1600,
             initialQuality: 0.85,
             preserveTransparency: true
           });
-          compressedPublicUrl = opt.objectUrl;
+          fileToUpload = opt.blob;
+          size = opt.optimizedSizeBytes;
         } catch (e) {}
 
-        payloadImages.push({
-          filename: `${img.title.toLowerCase().replace(/\s+/g, '_')}.webp`,
-          publicUrl: compressedPublicUrl,
+        processedList.push({
+          fileToUpload,
+          filename: safeName,
           title: img.title.trim() || 'Visual Learning Resource',
           meaning: img.meaning.trim() || `Visual learning lesson for ${img.title}.`,
-          example: img.example?.trim() || `Study the image for ${img.title}.`
+          example: img.example?.trim() || `Study the image for ${img.title}.`,
+          size
         });
       }
+
+      // 2. Request presigned R2 upload URLs
+      const presignPayload = processedList.map((item) => ({
+        filename: item.filename,
+        contentType: 'image/webp',
+        size: item.size
+      }));
+
+      const presignedList = await adminPostQueueService.requestBatchPresignedUploads(presignPayload, token);
+
+      // 3. Upload each WebP blob directly to Cloudflare R2
+      const uploadQueue = processedList.map((item, idx) => ({
+        file: item.fileToUpload instanceof File ? item.fileToUpload : new File([item.fileToUpload], item.filename, { type: 'image/webp' }),
+        presigned: presignedList[idx]
+      }));
+
+      await adminPostQueueService.uploadBatchImagesToR2(uploadQueue);
+
+      // 4. Send permanent Cloudflare R2 public URLs to vocabulary scheduler
+      const payloadImages = processedList.map((item, idx) => ({
+        filename: item.filename,
+        publicUrl: presignedList[idx].publicUrl,
+        title: item.title,
+        meaning: item.meaning,
+        example: item.example
+      }));
 
       const res = await vocabularyService.scheduleBulkImages(
         {

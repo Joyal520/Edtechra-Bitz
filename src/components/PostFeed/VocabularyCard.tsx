@@ -67,13 +67,16 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [imageModalOpen, setImageModalOpen] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<boolean>(false);
 
-  // Check if this vocabulary record has an administrator-uploaded visual
+  // Check if this vocabulary record has a valid administrator-uploaded visual
   const hasCustomImage = Boolean(
+    !imageError &&
     item.image_url &&
     item.image_url.trim() !== '' &&
     item.image_url !== DEFAULT_VOCAB_ASSET &&
-    !item.image_url.includes('ChatGPT Image')
+    !item.image_url.includes('ChatGPT Image') &&
+    !item.image_url.startsWith('blob:')
   );
 
   // Subscribe to pronunciation service speaking state
@@ -285,6 +288,7 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
                 alt={`Visual learning graphic for ${titleText}`}
                 loading="lazy"
                 decoding="async"
+                onError={() => setImageError(true)}
                 className="w-full h-full object-contain sm:object-cover group-hover:scale-102 transition-transform duration-300"
               />
 
