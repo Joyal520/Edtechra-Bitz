@@ -32,7 +32,8 @@ import { AdminReadingsSection } from '@/components/AdminReadingsSection';
 import { AdminPollsSection } from '@/components/AdminPollsSection';
 import { AdminReorderSection } from '@/components/AdminReorderSection';
 import { AdminStorageSection } from '@/components/AdminStorageSection';
-import { AdminWordOfTheDaySection } from '@/components/AdminWordOfTheDaySection';
+import { AdminVocabularySection } from '@/components/AdminVocabularySection';
+import { CollapsibleCatalogue } from '@/components/CollapsibleCatalogue';
 import { getAllLevels } from '@/utils/levelsData';
 
 export const AdminPage: React.FC = () => {
@@ -45,7 +46,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'words' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'vocabulary' | 'words' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'youtube' | 'users' | 'thumbnails'>('all');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,19 +244,19 @@ export const AdminPage: React.FC = () => {
       {/* Navigation Section Tabs */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-white border border-stone-200/90 rounded-2xl shadow-xs">
         <button
-          onClick={() => setAdminTab('words')}
+          onClick={() => setAdminTab('vocabulary')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-            adminTab === 'words'
+            adminTab === 'vocabulary' || adminTab === 'words'
               ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
               : 'text-slate-700 hover:bg-slate-100'
           }`}
         >
-          <span>💡</span>
-          <span>Word of the Day</span>
+          <span>📚</span>
+          <span>Vocabulary</span>
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
-            adminTab === 'words' ? 'bg-amber-200 text-slate-900' : 'bg-amber-100 text-amber-800'
+            adminTab === 'vocabulary' || adminTab === 'words' ? 'bg-amber-200 text-slate-900' : 'bg-amber-100 text-amber-800'
           }`}>
-            New
+            4 Types
           </span>
         </button>
 
@@ -421,9 +422,9 @@ export const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. Word of the Day Section */}
-      {(adminTab === 'all' || adminTab === 'words') && (
-        <AdminWordOfTheDaySection />
+      {/* 1. Vocabulary Content System Section (Words, Collocations, Phrasal Verbs, Idioms) */}
+      {(adminTab === 'all' || adminTab === 'vocabulary' || adminTab === 'words') && (
+        <AdminVocabularySection />
       )}
 
       {/* 2. Interactive Quiz Bits Center (Highlighted) */}
@@ -643,16 +644,20 @@ export const AdminPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 3. User Directory Table */}
-      <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
-        
+      {/* 3. User Directory Table (Collapsible by default) */}
+      <CollapsibleCatalogue
+        title="User Accounts Directory"
+        count={users.length}
+        icon={<Users className="w-4 h-4 text-[#026fc3]" />}
+        subtitle="Manage registered learner and administrator accounts, emails, and roles."
+      >
         {/* Controls Toolbar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-50/70 p-3 sm:p-4 rounded-2xl border border-stone-200/80">
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-[#0f233a]">
-              Registered User Directory
-            </h2>
-            <p className="text-xs text-slate-500">
+            <h3 className="text-sm font-black text-[#0f233a]">
+              Registered Accounts
+            </h3>
+            <p className="text-[11px] text-slate-500">
               Showing {users.length} {users.length === 1 ? 'user' : 'users'}
             </p>
           </div>
@@ -666,19 +671,19 @@ export const AdminPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name or email..."
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white"
+                className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#026fc3]"
               />
             </div>
 
             {/* Role Filter */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-xl">
               {(['all', 'student', 'admin'] as const).map((r) => (
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
                   className={`px-2.5 py-1 text-xs font-extrabold rounded-lg capitalize transition-all ${
                     roleFilter === r
-                      ? 'bg-white text-[#026fc3] shadow-xs'
+                      ? 'bg-slate-100 text-[#026fc3] shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -693,7 +698,7 @@ export const AdminPage: React.FC = () => {
               className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ${
                 showAllDetails
                   ? 'bg-[#026fc3] text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-700'
               }`}
               title={showAllDetails ? 'Hide All User Details' : 'Show All User Details'}
             >
@@ -713,7 +718,7 @@ export const AdminPage: React.FC = () => {
             {/* Sort Order */}
             <button
               onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+              className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
               title="Toggle Sort Date"
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
@@ -723,15 +728,15 @@ export const AdminPage: React.FC = () => {
         </div>
 
         {/* Users Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border border-stone-200/80 rounded-2xl">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-stone-200 text-slate-400 uppercase text-[10px] font-extrabold tracking-wider">
-                <th className="pb-3 px-3">User</th>
-                <th className="pb-3 px-3">Email</th>
-                <th className="pb-3 px-3">Role</th>
-                <th className="pb-3 px-3">Registered</th>
-                <th className="pb-3 px-3">Last Sign In</th>
+            <thead className="bg-slate-50 border-b border-slate-200/80">
+              <tr className="text-slate-500 uppercase text-[10px] font-black tracking-wider">
+                <th className="py-3 px-3">User</th>
+                <th className="py-3 px-3">Email</th>
+                <th className="py-3 px-3">Role</th>
+                <th className="py-3 px-3">Registered</th>
+                <th className="py-3 px-3">Last Sign In</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -847,187 +852,171 @@ export const AdminPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-      </section>
+      </CollapsibleCatalogue>
         </>
       )}
 
-      {/* 4. Micro-Learning Video & 1:1 Thumbnail Management Section */}
+      {/* 4. Micro-Learning Video & 1:1 Thumbnail Management Section (Collapsible by default) */}
       {(adminTab === 'all' || adminTab === 'thumbnails') && (
-        <section className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
-        
-        {/* Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 text-[#026fc3] border border-brand-200 flex items-center justify-center font-bold">
-              <ImageIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-[#0f233a]">
-                Micro-Learning Video & 1:1 Thumbnail Management
-              </h2>
-              <p className="text-xs text-slate-500">
-                Upload and manage official 1:1 square thumbnails for Levels 1–20 and catalogue videos. Powered by Cloudflare R2.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-3 py-1 bg-brand-50 text-[#026fc3] border border-brand-200 rounded-full text-xs font-black">
+        <CollapsibleCatalogue
+          title="Video & 1:1 Thumbnail Catalogue"
+          count={videos.length}
+          icon={<ImageIcon className="w-4 h-4 text-[#026fc3]" />}
+          subtitle="Upload and manage official 1:1 square thumbnails for Levels 1–20 and catalogue videos. Powered by Cloudflare R2."
+          badge={
+            <span className="px-2.5 py-0.5 bg-brand-50 text-[#026fc3] border border-brand-200 rounded-full text-[11px] font-black">
               {videos.filter(v => v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com')).length} Custom 1:1 Active
             </span>
-          </div>
-        </div>
+          }
+        >
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-50/70 p-3 sm:p-4 rounded-2xl border border-stone-200/80">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={videoSearchQuery}
+                onChange={(e) => setVideoSearchQuery(e.target.value)}
+                placeholder="Search by title, category, video ID, or Level..."
+                className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#026fc3]"
+              />
+            </div>
 
-        {/* Search & Filter Toolbar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1 sm:max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={videoSearchQuery}
-              onChange={(e) => setVideoSearchQuery(e.target.value)}
-              placeholder="Search by title, category, video ID, or Level..."
-              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white"
-            />
-          </div>
-
-          {/* Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-            {[
-              { id: 'all', label: `All Videos (${videos.length})` },
-              { id: 'levels', label: `Levels 1–20 (20)` },
-              { id: 'custom_thumbnail', label: `1:1 Custom R2 (${videos.filter(v => v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com')).length})` },
-              { id: 'default_thumbnail', label: `YouTube Default (${videos.filter(v => !(v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com'))).length})` }
-            ].map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setVideoFilter(f.id as any)}
-                className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
-                  videoFilter === f.id
-                    ? 'bg-white text-[#026fc3] shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Video Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {videos
-            .filter((v) => {
-              const isLevel = levelMap.has(v.youtube_video_id);
-              const hasCustomThumb = v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com');
-              
-              if (videoFilter === 'levels' && !isLevel) return false;
-              if (videoFilter === 'custom_thumbnail' && !hasCustomThumb) return false;
-              if (videoFilter === 'default_thumbnail' && hasCustomThumb) return false;
-
-              if (videoSearchQuery.trim()) {
-                const q = videoSearchQuery.toLowerCase().trim();
-                const titleMatch = v.title?.toLowerCase().includes(q);
-                const catMatch = v.category?.toLowerCase().includes(q);
-                const idMatch = v.youtube_video_id?.toLowerCase().includes(q);
-                const levelNum = levelMap.get(v.youtube_video_id);
-                const levelMatch = levelNum ? `level ${levelNum}`.includes(q) : false;
-                return titleMatch || catMatch || idMatch || levelMatch;
-              }
-
-              return true;
-            })
-            .map((v) => {
-              const levelNum = levelMap.get(v.youtube_video_id);
-              const currentThumb = v.thumbnail_url || `https://i.ytimg.com/vi/${v.youtube_video_id}/maxresdefault.jpg`;
-              const isCustom = currentThumb.includes('r2.dev') || currentThumb.includes('cloudflarestorage.com');
-
-              return (
-                <div
-                  key={v.youtube_video_id || v.id}
-                  className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-4 hover:bg-white hover:border-brand-300 hover:shadow-xs transition-all"
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-white border border-slate-200 p-1 rounded-xl">
+              {[
+                { id: 'all', label: `All (${videos.length})` },
+                { id: 'levels', label: `Levels 1–20 (20)` },
+                { id: 'custom_thumbnail', label: `1:1 Custom R2 (${videos.filter(v => v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com')).length})` },
+                { id: 'default_thumbnail', label: `YouTube Default (${videos.filter(v => !(v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com'))).length})` }
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setVideoFilter(f.id as any)}
+                  className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                    videoFilter === f.id
+                      ? 'bg-slate-100 text-[#026fc3] shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  {/* 1:1 Square Thumbnail Preview Container */}
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-slate-900 shrink-0 shadow-2xs relative group">
-                    <img
-                      src={currentThumb}
-                      alt={v.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                      <ImageIcon className="w-5 h-5 text-white" />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Video Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {videos
+              .filter((v) => {
+                const isLevel = levelMap.has(v.youtube_video_id);
+                const hasCustomThumb = v.thumbnail_url?.includes('r2.dev') || v.thumbnail_url?.includes('cloudflarestorage.com');
+                
+                if (videoFilter === 'levels' && !isLevel) return false;
+                if (videoFilter === 'custom_thumbnail' && !hasCustomThumb) return false;
+                if (videoFilter === 'default_thumbnail' && hasCustomThumb) return false;
+
+                if (videoSearchQuery.trim()) {
+                  const q = videoSearchQuery.toLowerCase().trim();
+                  const titleMatch = v.title?.toLowerCase().includes(q);
+                  const catMatch = v.category?.toLowerCase().includes(q);
+                  const idMatch = v.youtube_video_id?.toLowerCase().includes(q);
+                  const levelNum = levelMap.get(v.youtube_video_id);
+                  const levelMatch = levelNum ? `level ${levelNum}`.includes(q) : false;
+                  return titleMatch || catMatch || idMatch || levelMatch;
+                }
+
+                return true;
+              })
+              .map((v) => {
+                const levelNum = levelMap.get(v.youtube_video_id);
+                const currentThumb = v.thumbnail_url || `https://i.ytimg.com/vi/${v.youtube_video_id}/maxresdefault.jpg`;
+                const isCustom = currentThumb.includes('r2.dev') || currentThumb.includes('cloudflarestorage.com');
+
+                return (
+                  <div
+                    key={v.youtube_video_id || v.id}
+                    className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex items-start gap-4 hover:bg-white hover:border-brand-300 hover:shadow-xs transition-all"
+                  >
+                    {/* 1:1 Square Thumbnail Preview Container */}
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 aspect-square rounded-2xl overflow-hidden border border-stone-200 bg-slate-900 shrink-0 shadow-2xs relative group">
+                      <img
+                        src={currentThumb}
+                        alt={v.title}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <ImageIcon className="w-5 h-5 text-white" />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Video Metadata & Controls */}
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {levelNum && (
-                        <span className="px-2 py-0.5 bg-[#026fc3] text-white text-[10px] font-black rounded-md flex items-center gap-1">
-                          <Trophy className="w-2.5 h-2.5 text-amber-300" />
-                          Level {levelNum}
-                        </span>
-                      )}
-                      <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 text-[10px] font-bold rounded-md">
-                        {v.category || 'General'}
-                      </span>
-                      {isCustom ? (
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black rounded-md flex items-center gap-1">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                          1:1 Custom R2
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md">
-                          YouTube Default
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-xs sm:text-sm font-extrabold text-[#0f233a] leading-tight line-clamp-2" title={v.title}>
-                      {v.title}
-                    </h3>
-
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-                      <span>ID: {v.youtube_video_id}</span>
-                      <span>•</span>
-                      <span>{v.duration_formatted || `${v.duration_seconds || 30}s`}</span>
-                    </div>
-
-                    <div className="pt-1">
-                      <button
-                        onClick={() => {
-                          setSelectedVideoForThumbnail(v);
-                          setSelectedLevelNumber(levelNum);
-                          setThumbnailModalOpen(true);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
-                          isCustom
-                            ? 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200'
-                            : 'bg-[#026fc3] hover:bg-[#025ea6] text-white shadow-xs'
-                        }`}
-                      >
-                        {isCustom ? (
-                          <>
-                            <ImageIcon className="w-3.5 h-3.5" />
-                            <span>Change 1:1 Thumbnail</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>Upload 1:1 Thumbnail</span>
-                          </>
+                    {/* Video Metadata & Controls */}
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {levelNum && (
+                          <span className="px-2 py-0.5 bg-[#026fc3] text-white text-[10px] font-black rounded-md flex items-center gap-1">
+                            <Trophy className="w-2.5 h-2.5 text-amber-300" />
+                            Level {levelNum}
+                          </span>
                         )}
-                      </button>
+                        <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 text-[10px] font-bold rounded-md">
+                          {v.category || 'General'}
+                        </span>
+                        {isCustom ? (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black rounded-md flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            1:1 Custom R2
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md">
+                            YouTube Default
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="text-xs sm:text-sm font-extrabold text-[#0f233a] leading-tight line-clamp-2" title={v.title}>
+                        {v.title}
+                      </h3>
+
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                        <span>ID: {v.youtube_video_id}</span>
+                        <span>•</span>
+                        <span>{v.duration_formatted || `${v.duration_seconds || 30}s`}</span>
+                      </div>
+
+                      <div className="pt-1">
+                        <button
+                          onClick={() => {
+                            setSelectedVideoForThumbnail(v);
+                            setSelectedLevelNumber(levelNum);
+                            setThumbnailModalOpen(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isCustom
+                              ? 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200'
+                              : 'bg-[#026fc3] hover:bg-[#025ea6] text-white shadow-xs'
+                          }`}
+                        >
+                          {isCustom ? (
+                            <>
+                              <ImageIcon className="w-3.5 h-3.5" />
+                              <span>Change 1:1 Thumbnail</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Upload 1:1 Thumbnail</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-        </div>
-
-      </section>
+                );
+              })}
+          </div>
+        </CollapsibleCatalogue>
       )}
 
       {/* Admin 1:1 Thumbnail Management Modal */}

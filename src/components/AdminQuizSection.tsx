@@ -44,6 +44,7 @@ import { quizService } from '@/services/quizService';
 import { spellingScrambleService } from '@/services/spellingScrambleService';
 import { spellingFlipCardService } from '@/services/spellingFlipCardService';
 import { useAuth } from '@/context/AuthContext';
+import { CollapsibleCatalogue } from './CollapsibleCatalogue';
 import { validateQuizBatch } from '@/utils/quizValidation';
 import { validateSpellingScrambleBatch } from '@/utils/spellingScrambleValidation';
 import { validateSpellingFlipBatch } from '@/utils/spellingFlipValidation';
@@ -1032,349 +1033,366 @@ export const AdminQuizSection: React.FC = () => {
         )}
       </div>
 
-      {/* 4. Filter Toolbar */}
-      <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`Search ${contentType === 'quiz' ? 'quizzes' : contentType === 'spelling' ? 'spelling scrambles' : 'spelling flip words'}…`}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold focus:outline-hidden focus:border-[#026fc3]"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Difficulty / Level Filter */}
-          <select
-            value={difficultyFilter}
-            onChange={(e) => setDifficultyFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-          >
-            <option value="all">All Levels</option>
-            {contentType === 'spelling_flip' ? (
-              <>
-                <option value="easy">Easy (Grades 3–5, 3–5 letters)</option>
-                <option value="intermediate">Intermediate (Grades 6–8, 6–8 letters)</option>
-                <option value="hard">Hard (Grades 9–12, 9–20 letters)</option>
-              </>
-            ) : (
-              <>
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </>
-            )}
-          </select>
-
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-          >
-            <option value="all">All Status</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft / Hidden</option>
-          </select>
-        </div>
-      </div>
-
-      {/* 5. Management Data List */}
-      <div className="bg-white border border-stone-200/80 rounded-3xl overflow-hidden shadow-xs">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-sm font-black text-[#0f233a]">
-            {contentType === 'quiz'
-              ? `Manage Quiz Bits (${quizzes.length})`
-              : contentType === 'spelling'
-              ? `Manage Spelling Scrambles (${scrambles.length})`
-              : `Manage Spelling Flip Cards (${flipCards.length})`}
-          </h3>
-        </div>
-
-        {loading ? (
-          <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
-            <Loader2 className="w-6 h-6 animate-spin text-[#026fc3]" />
-            <span>Loading records…</span>
+      {/* 4 & 5. Management Data List (Collapsible Catalogue) */}
+      <CollapsibleCatalogue
+        key={contentType}
+        title={
+          contentType === 'quiz'
+            ? 'Quiz Bits Catalogue'
+            : contentType === 'spelling'
+            ? 'Spelling Scramble Catalogue'
+            : 'Spelling Flip Cards Catalogue'
+        }
+        count={
+          contentType === 'quiz'
+            ? quizzes.length
+            : contentType === 'spelling'
+            ? scrambles.length
+            : flipCards.length
+        }
+        icon={<span>{contentType === 'quiz' ? '🎯' : contentType === 'spelling' ? '🔠' : '🃏'}</span>}
+        subtitle={`Search, filter, edit, and toggle publishing status for all ${
+          contentType === 'quiz'
+            ? 'quiz bits'
+            : contentType === 'spelling'
+            ? 'spelling scrambles'
+            : 'spelling flip cards'
+        }.`}
+      >
+        {/* Filter Toolbar */}
+        <div className="bg-slate-50/70 border border-stone-200/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${contentType === 'quiz' ? 'quizzes' : contentType === 'spelling' ? 'spelling scrambles' : 'spelling flip words'}…`}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-semibold focus:outline-hidden focus:border-[#026fc3]"
+            />
           </div>
-        ) : contentType === 'quiz' ? (
-          // Quiz List
-          quizzes.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs font-bold">
-              No quizzes found matching your filters.
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Difficulty / Level Filter */}
+            <select
+              value={difficultyFilter}
+              onChange={(e) => setDifficultyFilter(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
+            >
+              <option value="all">All Levels</option>
+              {contentType === 'spelling_flip' ? (
+                <>
+                  <option value="easy">Easy (Grades 3–5, 3–5 letters)</option>
+                  <option value="intermediate">Intermediate (Grades 6–8, 6–8 letters)</option>
+                  <option value="hard">Hard (Grades 9–12, 9–20 letters)</option>
+                </>
+              ) : (
+                <>
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </>
+              )}
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
+            >
+              <option value="all">All Status</option>
+              <option value="published">Published</option>
+              <option value="draft">Draft / Hidden</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Management Data List */}
+        <div className="border border-stone-200/80 rounded-2xl overflow-hidden shadow-2xs">
+          {loading ? (
+            <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
+              <Loader2 className="w-6 h-6 animate-spin text-[#026fc3]" />
+              <span>Loading records…</span>
             </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {quizzes.map((quiz) => (
-                <div
-                  key={quiz.id}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
-                >
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          quiz.is_published
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {quiz.is_published ? 'Published' : 'Draft'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
-                        {quiz.category}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
-                        {quiz.difficulty}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black">
-                        +{quiz.xp || 10} XP
-                      </span>
-                    </div>
-
-                    <h4 className="text-sm sm:text-base font-bold text-[#0f233a]">
-                      {quiz.question}
-                    </h4>
-
-                    <div className="text-xs text-emerald-700 font-semibold">
-                      ✓ Correct: {quiz.correct_answer}
-                    </div>
-
-                    {quiz.explanation && (
-                      <p className="text-xs text-slate-500 line-clamp-1 italic">
-                        💡 {quiz.explanation}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleQuizPublish(quiz)}
-                      className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        quiz.is_published
-                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
-                      }`}
-                      title={quiz.is_published ? 'Unpublish' : 'Publish'}
-                    >
-                      {quiz.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenEditQuizModal(quiz)}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-                      title="Edit quiz"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteQuiz(quiz)}
-                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
-                      title="Delete quiz"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        ) : contentType === 'spelling' ? (
-          // Spelling Scrambles List
-          scrambles.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs font-bold">
-              No spelling scrambles found matching your filters.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {scrambles.map((scramble) => (
-                <div
-                  key={scramble.id}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          scramble.is_published
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {scramble.is_published ? 'Published' : 'Draft'}
-                      </span>
-
-                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
-                        {scramble.category}
-                      </span>
-
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                        scramble.difficulty === 'Hard'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : scramble.difficulty === 'Medium'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}>
-                        {scramble.difficulty}
-                      </span>
-
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        <span>{scramble.timer_seconds}s</span>
-                      </span>
-
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black flex items-center gap-1">
-                        <Zap className="w-3 h-3 fill-amber-700" />
-                        <span>+{scramble.xp} XP</span>
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <h4 className="text-base font-black text-[#0f233a] font-mono tracking-wider">
-                        {scramble.word}
-                      </h4>
-                      <div className="flex items-center gap-1">
-                        {scramble.scrambled_letters?.map((l, lIdx) => (
-                          <span
-                            key={lIdx}
-                            className="w-5 h-6 bg-slate-100 text-slate-700 rounded-md font-mono text-xs font-bold flex items-center justify-center border border-slate-200"
-                          >
-                            {l}
-                          </span>
-                        ))}
+          ) : contentType === 'quiz' ? (
+            // Quiz List
+            quizzes.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-bold">
+                No quizzes found matching your filters.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {quizzes.map((quiz) => (
+                  <div
+                    key={quiz.id}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                  >
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            quiz.is_published
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {quiz.is_published ? 'Published' : 'Draft'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
+                          {quiz.category}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
+                          {quiz.difficulty}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black">
+                          +{quiz.xp || 10} XP
+                        </span>
                       </div>
+
+                      <h4 className="text-sm sm:text-base font-bold text-[#0f233a]">
+                        {quiz.question}
+                      </h4>
+
+                      <div className="text-xs text-emerald-700 font-semibold">
+                        ✓ Correct: {quiz.correct_answer}
+                      </div>
+
+                      {quiz.explanation && (
+                        <p className="text-xs text-slate-500 line-clamp-1 italic">
+                          💡 {quiz.explanation}
+                        </p>
+                      )}
                     </div>
 
-                    <p className="text-xs text-slate-600 font-medium line-clamp-2">
-                      💡 &ldquo;{scramble.clue}&rdquo;
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleScramblePublish(scramble)}
-                      className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        scramble.is_published
-                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
-                      }`}
-                      title={scramble.is_published ? 'Unpublish' : 'Publish'}
-                    >
-                      {scramble.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenEditScrambleModal(scramble)}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-                      title="Edit scramble"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteScramble(scramble)}
-                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
-                      title="Delete scramble"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        ) : (
-          // Spelling Flip Card List
-          flipCards.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs font-bold">
-              No spelling flip cards found matching your filters.
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {flipCards.map((card) => (
-                <div
-                  key={card.id}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          card.is_published
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleToggleQuizPublish(quiz)}
+                        className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                          quiz.is_published
+                            ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                            : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
                         }`}
+                        title={quiz.is_published ? 'Unpublish' : 'Publish'}
                       >
-                        {card.is_published ? 'Published' : 'Draft'}
-                      </span>
+                        {quiz.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
 
-                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
-                        {card.category || 'General'}
-                      </span>
+                      <button
+                        onClick={() => handleOpenEditQuizModal(quiz)}
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                        title="Edit quiz"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
 
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                        card.level === 'hard'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : card.level === 'intermediate'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
-                      }`}>
-                        {card.level} ({card.word.length} letters)
-                      </span>
+                      <button
+                        onClick={() => handleDeleteQuiz(quiz)}
+                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                        title="Delete quiz"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : contentType === 'spelling' ? (
+            // Spelling Scrambles List
+            scrambles.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-bold">
+                No spelling scrambles found matching your filters.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {scrambles.map((scramble) => (
+                  <div
+                    key={scramble.id}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            scramble.is_published
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {scramble.is_published ? 'Published' : 'Draft'}
+                        </span>
 
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        <span>{card.memorize_seconds}s</span>
-                      </span>
+                        <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
+                          {scramble.category}
+                        </span>
 
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black flex items-center gap-1">
-                        <Zap className="w-3 h-3 fill-amber-700" />
-                        <span>+{card.xp} XP</span>
-                      </span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          scramble.difficulty === 'Hard'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : scramble.difficulty === 'Medium'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}>
+                          {scramble.difficulty}
+                        </span>
+
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-500" />
+                          <span>{scramble.timer_seconds}s</span>
+                        </span>
+
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black flex items-center gap-1">
+                          <Zap className="w-3 h-3 fill-amber-700" />
+                          <span>+{scramble.xp} XP</span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <h4 className="text-base font-black text-[#0f233a] font-mono tracking-wider">
+                          {scramble.word}
+                        </h4>
+                        <div className="flex items-center gap-1">
+                          {scramble.scrambled_letters?.map((l, lIdx) => (
+                            <span
+                              key={lIdx}
+                              className="w-5 h-6 bg-slate-100 text-slate-700 rounded-md font-mono text-xs font-bold flex items-center justify-center border border-slate-200"
+                            >
+                              {l}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 font-medium line-clamp-2">
+                        💡 &ldquo;{scramble.clue}&rdquo;
+                      </p>
                     </div>
 
-                    <h4 className="text-lg font-black text-[#0f233a] font-mono tracking-widest uppercase">
-                      {card.word}
-                    </h4>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleToggleScramblePublish(scramble)}
+                        className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                          scramble.is_published
+                            ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                            : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                        }`}
+                        title={scramble.is_published ? 'Unpublish' : 'Publish'}
+                      >
+                        {scramble.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEditScrambleModal(scramble)}
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                        title="Edit scramble"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteScramble(scramble)}
+                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                        title="Delete scramble"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )
+          ) : (
+            // Spelling Flip Card List
+            flipCards.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-bold">
+                No spelling flip cards found matching your filters.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {flipCards.map((card) => (
+                  <div
+                    key={card.id}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            card.is_published
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {card.is_published ? 'Published' : 'Draft'}
+                        </span>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleFlipPublish(card)}
-                      className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        card.is_published
-                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
-                      }`}
-                      title={card.is_published ? 'Unpublish' : 'Publish'}
-                    >
-                      {card.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
+                        <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[10px] font-extrabold">
+                          {card.category || 'General'}
+                        </span>
 
-                    <button
-                      onClick={() => handleOpenEditFlipModal(card)}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-                      title="Edit word"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          card.level === 'hard'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : card.level === 'intermediate'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                        }`}>
+                          {card.level} ({card.word.length} letters)
+                        </span>
 
-                    <button
-                      onClick={() => handleDeleteFlipCard(card)}
-                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
-                      title="Delete word"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-500" />
+                          <span>{card.memorize_seconds}s</span>
+                        </span>
+
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black flex items-center gap-1">
+                          <Zap className="w-3 h-3 fill-amber-700" />
+                          <span>+{card.xp} XP</span>
+                        </span>
+                      </div>
+
+                      <h4 className="text-lg font-black text-[#0f233a] font-mono tracking-widest uppercase">
+                        {card.word}
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleToggleFlipPublish(card)}
+                        className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                          card.is_published
+                            ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                            : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                        }`}
+                        title={card.is_published ? 'Unpublish' : 'Publish'}
+                      >
+                        {card.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEditFlipModal(card)}
+                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                        title="Edit word"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteFlipCard(card)}
+                        className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                        title="Delete word"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-      </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+      </CollapsibleCatalogue>
 
       {/* 6. Edit Modal for Quiz */}
       {editingQuiz && (

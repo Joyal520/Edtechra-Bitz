@@ -23,6 +23,7 @@ import {
 } from '@/types';
 import { readingService } from '@/services/readingService';
 import { useAuth } from '@/context/AuthContext';
+import { CollapsibleCatalogue } from './CollapsibleCatalogue';
 import { validateReadingJSON } from '@/utils/readingValidation';
 
 export const AdminReadingsSection: React.FC = () => {
@@ -809,16 +810,20 @@ export const AdminReadingsSection: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Catalogue List Table */}
-      <div className="bg-white border border-stone-200/90 rounded-3xl p-5 sm:p-7 shadow-xs space-y-5">
-        
+      {/* 4. Catalogue List Table (Collapsible by default) */}
+      <CollapsibleCatalogue
+        title="Readings Catalogue"
+        count={readings.length}
+        icon={<FileText className="w-4 h-4 text-teal-600" />}
+        subtitle="Search, filter, edit, and manage educational reading passages."
+      >
         {/* Controls Toolbar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-slate-50/70 p-3 sm:p-4 rounded-2xl border border-stone-200/80">
           <div>
-            <h3 className="text-base sm:text-lg font-black text-[#0f233a]">
-              Readings Catalogue
-            </h3>
-            <p className="text-xs text-slate-500">
+            <h4 className="text-sm font-black text-[#0f233a]">
+              Passages Directory
+            </h4>
+            <p className="text-[11px] text-slate-500">
               Showing {readings.length} {readings.length === 1 ? 'article' : 'articles'}
             </p>
           </div>
@@ -858,12 +863,12 @@ export const AdminReadingsSection: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search title, category, or level..."
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
+                className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
             </div>
 
             {/* Status Filter */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-xl">
               {[
                 { id: 'all', label: 'All' },
                 { id: 'published', label: 'Published' },
@@ -874,7 +879,7 @@ export const AdminReadingsSection: React.FC = () => {
                   onClick={() => setStatusFilter(f.id)}
                   className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                     statusFilter === f.id
-                      ? 'bg-white text-teal-800 shadow-xs'
+                      ? 'bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -886,15 +891,15 @@ export const AdminReadingsSection: React.FC = () => {
         </div>
 
         {/* Readings Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border border-stone-200/80 rounded-2xl">
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-stone-200 text-slate-400 uppercase text-[10px] font-black tracking-wider">
-                <th className="pb-3 px-3">Article</th>
-                <th className="pb-3 px-3">Format / Cover</th>
-                <th className="pb-3 px-3">Level & Time</th>
-                <th className="pb-3 px-3">Status</th>
-                <th className="pb-3 px-3 text-right">Actions</th>
+            <thead className="bg-slate-50 border-b border-slate-200/80">
+              <tr className="text-slate-500 uppercase text-[10px] font-black tracking-wider">
+                <th className="py-3 px-3">Article</th>
+                <th className="py-3 px-3">Format / Cover</th>
+                <th className="py-3 px-3">Level & Time</th>
+                <th className="py-3 px-3">Status</th>
+                <th className="py-3 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 font-medium">
@@ -1112,7 +1117,7 @@ export const AdminReadingsSection: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </CollapsibleCatalogue>
 
       {/* Hidden File Input for "Upload/Replace Cover Image Later" */}
       <input

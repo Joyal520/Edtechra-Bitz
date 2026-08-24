@@ -288,6 +288,18 @@ export function buildWordOfTheDayContentKey(id) {
   return `words-of-the-day/${sanitizeSegment(id)}/content.json`;
 }
 
+export function buildVocabularyContentKey(type, id) {
+  const cleanType = sanitizeSegment(type) || 'vocabulary';
+  return `vocabulary/${cleanType}/${sanitizeSegment(id)}/content.json`;
+}
+
+export function buildVocabularyImageKey(type, id, ext = 'webp') {
+  const cleanType = sanitizeSegment(type) || 'vocabulary';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  return `vocabulary/${cleanType}/${sanitizeSegment(id)}/${timestamp}_${randomSuffix}.${ext}`;
+}
+
 /**
  * Direct Server Upload: Writes JSON Content directly to Cloudflare R2 via AWS SigV4
  */

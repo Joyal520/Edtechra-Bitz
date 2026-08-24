@@ -28,6 +28,7 @@ import {
 } from '@/types/reorder';
 import { reorderService } from '@/services/reorderService';
 import { useAuth } from '@/context/AuthContext';
+import { CollapsibleCatalogue } from './CollapsibleCatalogue';
 import { validateReorderJSON } from '@/utils/reorderValidation';
 
 const SAMPLE_JSON_TEMPLATE = JSON.stringify(
@@ -618,167 +619,174 @@ export const AdminReorderSection: React.FC = () => {
         )}
       </div>
 
-      {/* 3. Search & Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sentences, categories, explanations..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl border border-stone-200 text-xs focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-          />
+      {/* 3 & 4. Sentence Reorder Activities Catalogue (Collapsible by default) */}
+      <CollapsibleCatalogue
+        title="Sentence Reorder Catalogue"
+        count={activities.length}
+        subtitle="Search, filter, edit, and toggle publishing status for sentence reorder activities."
+      >
+        {/* Search & Filter Toolbar */}
+        <div className="bg-slate-50/70 p-3 sm:p-4 rounded-2xl border border-stone-200/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sentences, categories, explanations..."
+              className="w-full pl-9 pr-4 py-2 rounded-xl border border-stone-200 text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
+            >
+              <option value="all">All Categories</option>
+              <option value="Grammar">Grammar</option>
+              <option value="Vocabulary">Vocabulary</option>
+              <option value="Daily Life">Daily Life</option>
+              <option value="Science">Science</option>
+              <option value="General">General</option>
+            </select>
+
+            <select
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
+            >
+              <option value="all">All Levels</option>
+              <option value="A1">Level A1</option>
+              <option value="A2">Level A2</option>
+              <option value="B1">Level B1</option>
+              <option value="B2">Level B2</option>
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
+            >
+              <option value="all">All Status</option>
+              <option value="published">Published</option>
+              <option value="draft">Drafts</option>
+            </select>
+
+            <button
+              onClick={loadData}
+              disabled={refreshing}
+              className="p-2 rounded-xl border border-stone-200 bg-white hover:bg-slate-50 text-slate-600 cursor-pointer"
+              title="Refresh List"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-brand-600' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
-          >
-            <option value="all">All Categories</option>
-            <option value="Grammar">Grammar</option>
-            <option value="Vocabulary">Vocabulary</option>
-            <option value="Daily Life">Daily Life</option>
-            <option value="Science">Science</option>
-            <option value="General">General</option>
-          </select>
-
-          <select
-            value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
-          >
-            <option value="all">All Levels</option>
-            <option value="A1">Level A1</option>
-            <option value="A2">Level A2</option>
-            <option value="B1">Level B1</option>
-            <option value="B2">Level B2</option>
-          </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold bg-white text-slate-700"
-          >
-            <option value="all">All Status</option>
-            <option value="published">Published</option>
-            <option value="draft">Drafts</option>
-          </select>
-
-          <button
-            onClick={loadData}
-            disabled={refreshing}
-            className="p-2 rounded-xl border border-stone-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
-            title="Refresh List"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-brand-600' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Activities Data List */}
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
-            <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
-            <span>Loading activities…</span>
-          </div>
-        ) : activities.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs font-bold">
-            No sentence reorder activities found matching your filters.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {activities.map((activity) => (
-              <div
-                key={activity.id}
-                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
-              >
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                        activity.is_published
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}
-                    >
-                      {activity.is_published ? 'Published' : 'Draft'}
-                    </span>
-
-                    <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-[10px] font-extrabold">
-                      {activity.category || 'Grammar'}
-                    </span>
-
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
-                      Level {activity.level || 'A1'}
-                    </span>
-
-                    <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black">
-                      +{activity.xp || 10} XP
-                    </span>
-                  </div>
-
-                  <h4 className="text-sm sm:text-base font-bold text-[#0f233a] leading-snug">
-                    {activity.sentence}
-                  </h4>
-
-                  {/* Scrambled Word Badges */}
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {activity.scrambled_words?.map((word, wIdx) => (
+        {/* Activities Data List */}
+        <div className="border border-stone-200/80 rounded-2xl overflow-hidden shadow-2xs">
+          {loading ? (
+            <div className="p-12 flex flex-col items-center justify-center gap-2 text-slate-400 text-xs font-semibold">
+              <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
+              <span>Loading activities…</span>
+            </div>
+          ) : activities.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-xs font-bold">
+              No sentence reorder activities found matching your filters.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {activities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                >
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
-                        key={wIdx}
-                        className="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-mono text-xs border border-slate-200/80"
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          activity.is_published
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
                       >
-                        {word}
+                        {activity.is_published ? 'Published' : 'Draft'}
                       </span>
-                    ))}
+
+                      <span className="px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-[10px] font-extrabold">
+                        {activity.category || 'Grammar'}
+                      </span>
+
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
+                        Level {activity.level || 'A1'}
+                      </span>
+
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black">
+                        +{activity.xp || 10} XP
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm sm:text-base font-bold text-[#0f233a] leading-snug">
+                      {activity.sentence}
+                    </h4>
+
+                    {/* Scrambled Word Badges */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {activity.scrambled_words?.map((word, wIdx) => (
+                        <span
+                          key={wIdx}
+                          className="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-mono text-xs border border-slate-200/80"
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+
+                    {activity.explanation && (
+                      <p className="text-xs text-slate-500 line-clamp-1 italic">
+                        💡 {activity.explanation}
+                      </p>
+                    )}
                   </div>
 
-                  {activity.explanation && (
-                    <p className="text-xs text-slate-500 line-clamp-1 italic">
-                      💡 {activity.explanation}
-                    </p>
-                  )}
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleTogglePublish(activity)}
+                      className={`p-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer ${
+                        activity.is_published
+                          ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                          : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                      }`}
+                      title={activity.is_published ? 'Unpublish activity' : 'Publish activity'}
+                    >
+                      {activity.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEdit(activity)}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                      title="Edit activity"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(activity.id)}
+                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                      title="Delete activity"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => handleTogglePublish(activity)}
-                    className={`p-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer ${
-                      activity.is_published
-                        ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                        : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
-                    }`}
-                    title={activity.is_published ? 'Unpublish activity' : 'Publish activity'}
-                  >
-                    {activity.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenEdit(activity)}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                    title="Edit activity"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => handleDelete(activity.id)}
-                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                    title="Delete activity"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CollapsibleCatalogue>
 
       {/* 5. Edit Modal */}
       {editingActivity && (
