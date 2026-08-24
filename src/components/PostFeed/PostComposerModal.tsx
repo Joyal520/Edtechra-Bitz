@@ -20,6 +20,8 @@ import {
 } from '@/utils/imageOptimizer';
 import { postService } from '@/services/postService';
 import { StudentPost } from '@/types/post';
+import { AdminBulkUploadTab } from './AdminBulkUploadTab';
+import { AdminQueueDashboard } from './AdminQueueDashboard';
 
 interface PostComposerModalProps {
   isOpen: boolean;
@@ -34,9 +36,11 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
   onClose,
   onPostCreated
 }) => {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
+  const isAdmin = profile?.role === 'admin' || profile?.email === 'roshanjoyal520@gmail.com';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [activeMode, setActiveMode] = useState<'single' | 'bulk' | 'queue'>('single');
   const [stage, setStage] = useState<ComposerStage>('select');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [optimizedImage, setOptimizedImage] = useState<OptimizationResult | null>(null);
@@ -244,7 +248,7 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-[500px] bg-gradient-to-b from-[#0b1b36] to-[#071328] rounded-[28px] sm:rounded-[32px] border border-sky-500/30 shadow-[0_0_50px_rgba(2,111,195,0.35)] p-5 sm:p-6 space-y-4 sm:space-y-4.5 relative animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+      <div className={`w-full ${isAdmin && (activeMode === 'bulk' || activeMode === 'queue') ? 'max-w-[620px]' : 'max-w-[500px]'} bg-gradient-to-b from-[#0b1b36] to-[#071328] rounded-[28px] sm:rounded-[32px] border border-sky-500/30 shadow-[0_0_50px_rgba(2,111,195,0.35)] p-5 sm:p-6 space-y-4 sm:space-y-4.5 relative animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto transition-all`}>
         
         {/* Close Button in Top Right */}
         <button
@@ -265,34 +269,97 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
               Share Your Knowledge
             </h2>
             <p className="text-xs sm:text-sm text-sky-200/70 font-normal mt-0.5">
-              Share something useful you’ve learned.
+              {isAdmin && activeMode === 'bulk'
+                ? 'Admin bulk image upload with sequential automatic feed publishing.'
+                : isAdmin && activeMode === 'queue'
+                ? 'Manage active and scheduled image publishing batches.'
+                : 'Share something useful you’ve learned.'}
             </p>
           </div>
+
+          {/* Admin Mode Switcher (Visible ONLY to Admins) */}
+          {isAdmin && (
+            <div className="bg-slate-900/90 p-1 rounded-2xl border border-slate-700/80 flex items-center justify-center gap-1 max-w-sm mx-auto shadow-inner">
+              <button
+                type="button"
+                onClick={() => setActiveMode('single')}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  activeMode === 'single'
+                    ? 'bg-sky-500 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                Single Upload
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveMode('bulk')}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  activeMode === 'bulk'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <span>⚡</span>
+                <span>Bulk Upload</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveMode('queue')}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  activeMode === 'queue'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <span>🕒</span>
+                <span>Queue</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Hidden File Input */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-        />
-
-        {/* 2. Crop Stage Overlay */}
-        {stage === 'crop' && selectedFile && (
-          <div className="pt-1">
-            <ImageSquareCropper
-              imageFile={selectedFile}
-              onCropComplete={handleCropComplete}
-              onCancel={handleResetImage}
-            />
-          </div>
+        {/* Admin Bulk Upload View */}
+        {isAdmin && activeMode === 'bulk' && (
+          <AdminBulkUploadTab
+            onQueueCreated={() => setActiveMode('queue')}
+            onCancel={handleClose}
+          />
         )}
 
-        {/* 3. Main Form (Select / Ready / Uploading / Success) */}
-        {stage !== 'crop' && (
-          <div className="space-y-3.5 sm:space-y-4">
+        {/* Admin Queue View */}
+        {isAdmin && activeMode === 'queue' && (
+          <AdminQueueDashboard />
+        )}
+
+        {/* Normal Single Upload Mode (Always for students, default for admin) */}
+        {(!isAdmin || activeMode === 'single') && (
+          <>
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+            />
+
+            {/* 2. Crop Stage Overlay */}
+            {stage === 'crop' && selectedFile && (
+              <div className="pt-1">
+                <ImageSquareCropper
+                  imageFile={selectedFile}
+                  onCropComplete={handleCropComplete}
+                  onCancel={handleResetImage}
+                />
+              </div>
+            )}
+
+            {/* 3. Main Form (Select / Ready / Uploading / Success) */}
+            {stage !== 'crop' && (
+              <div className="space-y-3.5 sm:space-y-4">
             
             {/* Upload Area / Dropzone */}
             {!optimizedImage ? (
@@ -463,7 +530,9 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
               )}
             </button>
 
-          </div>
+            </div>
+          )}
+        </>
         )}
 
       </div>

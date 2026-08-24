@@ -1,4 +1,5 @@
 export type { PresignedUploadResponse, StudentPost, PostAuthor } from './post';
+export * from './postQueue';
 
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 

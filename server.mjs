@@ -57,6 +57,17 @@ import {
   DEFAULT_VOCABULARY_IMAGE
 } from './server/vocabularyService.mjs';
 
+import {
+  createQueueBatch,
+  processPublishingQueue,
+  getQueueOverview,
+  publishItemNow,
+  pauseQueueBatch,
+  resumeQueueBatch,
+  cancelQueueBatch,
+  retryQueueItem
+} from './server/postQueueService.mjs';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -1180,6 +1191,9 @@ app.post('/api/posts', async (req, res) => {
 // 3. GET /api/posts - Retrieve paginated student posts ordered newest -> oldest (APPROVED ONLY)
 app.get('/api/posts', async (req, res) => {
   try {
+    // Check and trigger scheduled post queue publishing on demand
+    await processPublishingQueue(serverSupabase).catch(() => {});
+
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const sort = req.query.sort || 'newest';
@@ -1633,6 +1647,184 @@ app.post('/api/admin/moderation/posts/:id/action', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/admin/moderation/posts/:id/action:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to process moderation action.' });
+  }
+});
+
+// ============================================================================
+// API ROUTES: ADMIN BULK IMAGE UPLOAD & SEQUENTIAL PUBLISHING QUEUE
+// Admin-Only | Zero Gemini Validation | Resilient Server-Side Execution
+// ============================================================================
+
+// Background admin post queue scheduler tick: Process due items every 30 seconds
+setInterval(() => {
+  processPublishingQueue(serverSupabase).catch((err) => {
+    console.warn('[Admin Post Queue Scheduler Error]:', err.message);
+  });
+}, 30000);
+
+// 1. POST /api/admin/posts/queue/presign-batch - Batch presign R2 upload URLs
+app.post('/api/admin/posts/queue/presign-batch', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { files } = req.body;
+    if (!Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ success: false, error: 'Files array is required.' });
+    }
+
+    const presignedResults = [];
+    for (const file of files) {
+      const { filename, contentType = 'image/webp', size } = file;
+      try {
+        validateImageUpload({ contentType, size: size || 1024 * 1024 });
+      } catch (valErr) {
+        return res.status(400).json({ success: false, error: `Invalid file "${filename}": ${valErr.message}` });
+      }
+
+      const objectKey = buildObjectKey({
+        userId: authData.user.id,
+        filename: filename || `bulk_${Date.now()}.webp`,
+        contentType
+      });
+
+      const presigned = buildPresignedUpload({
+        objectKey,
+        contentType
+      });
+
+      presignedResults.push({
+        filename,
+        ...presigned
+      });
+    }
+
+    res.json({
+      success: true,
+      data: presignedResults
+    });
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/presign-batch:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate batch upload URLs' });
+  }
+});
+
+// 2. POST /api/admin/posts/queue/submit - Create batch queue records and start sequential publishing
+app.post('/api/admin/posts/queue/submit', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const result = await createQueueBatch(authData.user, req.body, serverSupabase);
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/submit:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create bulk publishing queue' });
+  }
+});
+
+// 3. GET /api/admin/posts/queue - Get queue overview & batch progress
+app.get('/api/admin/posts/queue', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const overview = await getQueueOverview(serverSupabase);
+    res.json(overview);
+  } catch (error) {
+    console.error('Error in GET /api/admin/posts/queue:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch queue overview' });
+  }
+});
+
+// 4. POST /api/admin/posts/queue/:id/publish-now - Force immediate publication of queue item
+app.post('/api/admin/posts/queue/:id/publish-now', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const result = await publishItemNow(id, serverSupabase);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/:id/publish-now:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to publish queue item' });
+  }
+});
+
+// 5. POST /api/admin/posts/queue/batch/:batchId/pause - Pause batch
+app.post('/api/admin/posts/queue/batch/:batchId/pause', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { batchId } = req.params;
+    const result = await pauseQueueBatch(batchId, serverSupabase);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/batch/:batchId/pause:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to pause batch' });
+  }
+});
+
+// 6. POST /api/admin/posts/queue/batch/:batchId/resume - Resume batch
+app.post('/api/admin/posts/queue/batch/:batchId/resume', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { batchId } = req.params;
+    const result = await resumeQueueBatch(batchId, serverSupabase);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/batch/:batchId/resume:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to resume batch' });
+  }
+});
+
+// 7. POST /api/admin/posts/queue/batch/:batchId/cancel - Cancel batch
+app.post('/api/admin/posts/queue/batch/:batchId/cancel', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { batchId } = req.params;
+    const result = await cancelQueueBatch(batchId, serverSupabase);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/batch/:batchId/cancel:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to cancel batch' });
+  }
+});
+
+// 8. POST /api/admin/posts/queue/:id/retry - Retry failed item
+app.post('/api/admin/posts/queue/:id/retry', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData || authData.profile?.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { id } = req.params;
+    const result = await retryQueueItem(id, serverSupabase);
+    res.json(result);
+  } catch (error) {
+    console.error('Error in /api/admin/posts/queue/:id/retry:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retry queue item' });
   }
 });
 
