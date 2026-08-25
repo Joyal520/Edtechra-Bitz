@@ -47,6 +47,7 @@ import { ClassroomExamModal } from '@/components/classes/ClassroomExamModal';
 import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedbackModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
+import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
 
@@ -680,6 +681,15 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Teacher/Admin Danger Zone */}
+      {isTeacher && classroom && (
+        <ClassroomDangerZone
+          classroom={classroom}
+          isOwnerOrAdmin={isTeacher}
+          stats={stats}
+        />
       )}
 
       {/* Modals */}
