@@ -1,0 +1,9 @@
+{
+  "name": "edtechra-digital-classroom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static server for the Edtechra Digital Classroom module",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

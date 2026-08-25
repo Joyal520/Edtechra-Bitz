@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create Classroom | Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="create">
+    <div class="page-shell" id="app-shell">
+      <main class="main-content">
+        <div class="mobile-topbar">
+          <button class="icon-button glass-chip" data-sidebar-toggle type="button" aria-label="Open navigation">
+            <span class="icon-lines"><span></span><span></span></span>
+          </button>
+          <div class="mobile-topbar-copy">
+            <strong>Edtechra Classroom</strong>
+            <span>Teacher setup</span>
+          </div>
+          <a class="btn btn-secondary btn-compact" href="teacher-dashboard.html">Back</a>
+        </div>
+
+        <header class="dashboard-hero glass-panel page-hero page-hero-slim">
+          <div class="dashboard-hero-copy">
+            <p class="eyebrow">Teacher Setup</p>
+            <h1>Create Classroom</h1>
+            <p class="subtitle">Launch a focused classroom space with a clearer structure, a subject theme, and invite-ready student access.</p>
+            <div class="hero-meta-row">
+              <span class="soft-pill">Responsive teaching workspace</span>
+              <span class="soft-pill">Supabase-ready with fallback</span>
+            </div>
+          </div>
+          <div class="dashboard-hero-actions">
+            <a class="btn btn-secondary" href="teacher-dashboard.html">Return to Dashboard</a>
+          </div>
+        </header>
+
+        <section class="glass-panel section-surface">
+          <div class="section-header">
+            <div>
+              <h2>Classroom Details</h2>
+              <p class="muted">Everything here is saved immediately to the current classroom store.</p>
+            </div>
+          </div>
+          <form id="create-classroom-form" class="form-grid">
+            <div class="form-row">
+              <label class="form-group">
+                <span class="form-label">Classroom name *</span>
+                <input class="form-control" name="name" required placeholder="Grade 10 Biology">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Subject *</span>
+                <input class="form-control" name="subject" required placeholder="Science">
+              </label>
+            </div>
+
+            <div class="form-row">
+              <label class="form-group">
+                <span class="form-label">Grade / level *</span>
+                <input class="form-control" name="grade" required placeholder="Grade 10">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Theme / banner</span>
+                <select class="form-control" name="theme">
+                  <option value="theme-blue">Blue focus</option>
+                  <option value="theme-purple">Purple studio</option>
+                  <option value="theme-green">Green growth</option>
+                  <option value="theme-amber">Amber workshop</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="form-group">
+              <span class="form-label">Description</span>
+              <textarea class="form-control" name="description" placeholder="What students will learn in this classroom"></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Create Classroom</button>
+              <a class="btn btn-secondary" href="teacher-dashboard.html">Cancel</a>
+              <p id="create-notice" class="notice" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

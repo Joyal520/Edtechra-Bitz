@@ -81,13 +81,9 @@ CREATE INDEX IF NOT EXISTS idx_vocabulary_import_batches_created ON public.vocab
 -- 6. Enable RLS on import batches
 ALTER TABLE public.vocabulary_import_batches ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can manage vocabulary import batches" ON public.vocabulary_import_batches;
 CREATE POLICY "Admins can manage vocabulary import batches"
   ON public.vocabulary_import_batches
   FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND (profiles.role = 'admin' OR profiles.is_admin = true)
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());

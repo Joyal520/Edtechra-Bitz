@@ -8,6 +8,15 @@ import { BitzLessonPage } from '@/pages/BitzLessonPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { AuthPage } from '@/pages/AuthPage';
 import { AdminRoute } from '@/routes/AdminRoute';
+import { ClassesPage } from '@/pages/classes/ClassesPage';
+import { ClassroomDetailPage } from '@/pages/classes/ClassroomDetailPage';
+import { JoinClassroomPage } from '@/pages/classes/JoinClassroomPage';
+import { CreateClassroomPage } from '@/pages/classes/CreateClassroomPage';
+import { TeacherResourcesPage } from '@/pages/classes/TeacherResourcesPage';
+import { LiveQuizLobbyPage } from '@/pages/classes/live-quiz/LiveQuizLobbyPage';
+import { LiveQuizHostPage } from '@/pages/classes/live-quiz/LiveQuizHostPage';
+import { LiveQuizPlayPage } from '@/pages/classes/live-quiz/LiveQuizPlayPage';
+import { LiveQuizJoinPage } from '@/pages/classes/live-quiz/LiveQuizJoinPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -16,6 +25,20 @@ export const AppRoutes: React.FC = () => {
         <Route index element={<HomePage />} />
         <Route path="explore" element={<ExplorePage />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="classes" element={<ClassesPage />} />
+        <Route path="classes/create" element={<CreateClassroomPage />} />
+        <Route path="classes/join" element={<JoinClassroomPage />} />
+        <Route path="classes/join/:code" element={<JoinClassroomPage />} />
+        <Route path="classes/:id" element={<ClassroomDetailPage />} />
+        <Route path="classes/:id/resources" element={<TeacherResourcesPage />} />
+        
+        {/* Live Quiz Routes */}
+        <Route path="classes/live-quiz/join" element={<LiveQuizJoinPage />} />
+        <Route path="classes/live-quiz/join/:pin" element={<LiveQuizJoinPage />} />
+        <Route path="classes/:classroomId/live-quiz/lobby/:pin" element={<LiveQuizLobbyPage />} />
+        <Route path="classes/:classroomId/live-quiz/host/:sessionId" element={<LiveQuizHostPage />} />
+        <Route path="classes/:classroomId/live-quiz/play/:sessionId" element={<LiveQuizPlayPage />} />
+
         <Route path="bitz/:id" element={<BitzLessonPage />} />
         <Route path="auth" element={<AuthPage />} />
         <Route path="login" element={<AuthPage />} />

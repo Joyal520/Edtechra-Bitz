@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>StudentHub | EdTechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body class="student-page" data-page="student">
+    <main class="main-content">
+      <header class="dashboard-hero glass-panel page-hero page-hero-slim">
+        <div class="dashboard-hero-copy">
+          <p class="eyebrow">Student Invite</p>
+          <h1 id="student-classroom-title">Loading classroom</h1>
+          <p class="subtitle" id="student-classroom-subtitle"></p>
+          <p class="muted" id="student-classroom-description"></p>
+          <div class="hero-meta-row">
+            <span class="soft-pill">Join in one step</span>
+            <span class="soft-pill">Assignments and content in one place</span>
+          </div>
+        </div>
+        <div class="dashboard-hero-actions">
+          <a class="btn btn-secondary" href="teacher-dashboard.html">Teacher Dashboard</a>
+        </div>
+      </header>
+
+      <section class="glass-panel section-surface mb-20" id="student-join-panel">
+        <div class="section-header section-header-tight">
+          <div>
+            <h2>Join Classroom</h2>
+            <p class="muted">Enter your name to join this learning space and start submitting work.</p>
+          </div>
+        </div>
+        <form id="student-join-form" class="form-grid">
+          <label class="form-group">
+            <span class="form-label">Your name *</span>
+            <input class="form-control" name="studentName" required placeholder="Enter your full name">
+          </label>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Join Classroom</button>
+            <p id="student-notice" class="notice" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <section class="hidden stack" id="student-workspace">
+        <div class="stats-grid grid">
+          <div class="stat-card glass-card">
+            <div class="stat-card-top">
+              <span class="stat-label">Student</span>
+              <span class="stat-icon stat-icon-violet"></span>
+            </div>
+            <strong class="stat-value" id="student-name">-</strong>
+          </div>
+          <div class="stat-card glass-card">
+            <div class="stat-card-top">
+              <span class="stat-label">Points</span>
+              <span class="stat-icon stat-icon-blue"></span>
+            </div>
+            <strong class="stat-value" id="student-points">0 pts</strong>
+          </div>
+        </div>
+
+        <div class="two-col-grid grid">
+          <section class="glass-panel section-surface">
+            <div class="section-header section-header-tight">
+              <div>
+                <h2>Assigned Work</h2>
+                <p class="muted">Submit your tasks here as they appear.</p>
+              </div>
+            </div>
+            <div class="item-list" id="student-assignments"></div>
+          </section>
+
+          <section class="glass-panel section-surface">
+            <div class="section-header section-header-tight">
+              <div>
+                <h2>Classroom Content</h2>
+                <p class="muted">Assigned learning resources from your teacher.</p>
+              </div>
+            </div>
+            <div class="item-list" id="student-content"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Exam | Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="exam">
+    <div class="page-shell" id="app-shell">
+      <main class="exam2-route-page">
+        <a class="exam2-back-button" href="#classroom" data-exam2-back>
+          <span data-icon="arrow"></span>
+          Back to classroom
+        </a>
+        <section class="exam2-frame-shell" aria-label="Edtechra Exam">
+          <iframe
+            class="exam2-frame"
+            title="Edtechra Exam"
+            data-exam2-frame
+            scrolling="no"
+            referrerpolicy="same-origin"
+            allow="clipboard-read; clipboard-write"
+          ></iframe>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

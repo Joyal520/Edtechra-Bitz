@@ -70,6 +70,18 @@ export function buildAvatarObjectKey({ userId, contentType = 'image/webp' }) {
   return `avatars/${cleanUserId}/${timestamp}_${randomSuffix}.${ext}`;
 }
 
+export function buildClassroomObjectKey({ classroomId, userId, filename = 'document.pdf', contentType = 'application/pdf' }) {
+  const cleanClassroomId = sanitizeSegment(classroomId) || 'general';
+  const cleanUserId = sanitizeSegment(userId) || 'user';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  
+  const rawExt = filename.split('.').pop() || 'bin';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'bin';
+
+  return `classrooms/${cleanClassroomId}/${cleanUserId}/${timestamp}_${randomSuffix}.${cleanExt}`;
+}
+
 export function buildPublicUrl(objectKey) {
   const { publicBaseUrl } = getR2Config();
   const cleanKey = objectKey.replace(/^\/+/, '');
@@ -88,6 +100,37 @@ export function validateImageUpload({ contentType, size }) {
 
   if (size && Number(size) > MAX_UPLOAD_SIZE) {
     throw new Error(`File exceeds the 15 MB limit. Please select a smaller image.`);
+  }
+
+  return true;
+}
+
+const ALLOWED_CLASSROOM_TYPES = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  'application/pdf', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain', 'application/zip', 'application/x-zip-compressed',
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/webm',
+  'video/mp4', 'video/webm'
+]);
+
+export function validateClassroomUpload({ contentType, size }) {
+  if (!contentType) {
+    return true; // Allow if content type couldn't be accurately sniffed
+  }
+
+  const normalizedType = contentType.toLowerCase().trim();
+  if (!ALLOWED_CLASSROOM_TYPES.has(normalizedType) && !normalizedType.startsWith('image/') && !normalizedType.startsWith('video/') && !normalizedType.startsWith('audio/')) {
+    throw new Error('Unsupported file format. Please upload documents (PDF/Word), images, videos, audio, or ZIP.');
+  }
+
+  const MAX_CLASSROOM_SIZE = 50 * 1024 * 1024; // 50 MB
+  if (size && Number(size) > MAX_CLASSROOM_SIZE) {
+    throw new Error(`File exceeds the 50 MB limit. Please select a smaller file.`);
   }
 
   return true;

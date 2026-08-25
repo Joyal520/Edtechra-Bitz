@@ -53,16 +53,12 @@ CREATE POLICY "Public can view published words of the day"
   USING (status = 'published');
 
 -- Admins can view all, insert, update, and delete
+DROP POLICY IF EXISTS "Admins can manage all words of the day" ON public.words_of_the_day;
 CREATE POLICY "Admins can manage all words of the day"
   ON public.words_of_the_day
   FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid() AND (profiles.role = 'admin' OR profiles.is_admin = true)
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- 6. RLS Policies for user_saved_words
 -- Users can view their own saved words

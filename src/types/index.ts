@@ -1,5 +1,7 @@
 export type { PresignedUploadResponse, StudentPost, PostAuthor } from './post';
 export * from './postQueue';
+export * from './classroom';
+export * from './liveQuiz';
 
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 
@@ -99,7 +101,7 @@ export interface UserProfile {
   name?: string; // UI alias
   avatar_url?: string | null;
   avatarUrl?: string; // UI alias
-  role: 'student' | 'admin';
+  role: 'student' | 'teacher' | 'admin';
   created_at: string;
   updated_at?: string;
   text_size?: 'small' | 'medium' | 'large' | 'extra-large' | string;
@@ -123,7 +125,7 @@ export interface AdminUserListItem {
   email: string;
   full_name: string | null;
   avatar_url: string | null;
-  role: 'student' | 'admin';
+  role: 'student' | 'teacher' | 'admin';
   created_at: string;
   last_sign_in_at?: string | null;
 }

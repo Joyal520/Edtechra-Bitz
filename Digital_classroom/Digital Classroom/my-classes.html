@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Classes | Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body class="student-page" data-page="my-classes">
+    <main class="main-content">
+      <header class="dashboard-hero glass-panel page-hero page-hero-slim student-classes-hero">
+        <div class="dashboard-hero-copy student-classes-hero-copy">
+          <p class="eyebrow student-workspace-badge"><span data-icon="book" aria-hidden="true"></span>STUDENT WORKSPACE</p>
+          <h1>My Classes</h1>
+          <p class="subtitle">All your classrooms in one place. Stay updated with tasks, deadlines, and your learning progress.</p>
+          <div class="student-classes-feature-row" aria-label="Student workspace highlights">
+            <span class="feature-chip"><span class="feature-chip-icon" data-icon="clipboard" aria-hidden="true"></span><span>All your classes in one place</span></span>
+            <span class="feature-chip"><span class="feature-chip-icon" data-icon="calendar" aria-hidden="true"></span><span>Track tasks and deadlines</span></span>
+            <span class="feature-chip"><span class="feature-chip-icon" data-icon="check" aria-hidden="true"></span><span>Learn, complete, and grow</span></span>
+          </div>
+        </div>
+        <div class="student-hero-visual" aria-hidden="true">
+          <div class="student-asset-frame student-hero-image">
+            <img src="../../assets/images/student-classroom-hero.webp" alt="" loading="eager" decoding="async">
+          </div>
+        </div>
+      </header>
+
+      <section class="glass-panel section-surface student-joined-panel">
+        <div class="section-header student-joined-header">
+          <div class="student-joined-title">
+            <span class="student-joined-icon" data-icon="users" aria-hidden="true"></span>
+            <div>
+              <h2>Joined Classrooms</h2>
+              <p class="muted">Classrooms you&rsquo;ve joined and are part of.</p>
+            </div>
+          </div>
+          <div class="student-class-controls" aria-hidden="true">
+            <span class="student-class-select">All Classes <span data-icon="arrowDown"></span></span>
+            <span class="student-class-toggle is-active" data-icon="plusSquare"></span>
+            <span class="student-class-toggle" data-icon="bars"></span>
+          </div>
+        </div>
+        <div class="student-class-grid grid" id="my-classes-container"></div>
+      </section>
+    </main>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.youtube_learning_content (
 -- 3. YouTube Student Learning Progress Table
 CREATE TABLE IF NOT EXISTS public.youtube_learning_progress (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   youtube_video_id TEXT NOT NULL,
   watched BOOLEAN DEFAULT FALSE,
   watch_progress INTEGER DEFAULT 0,

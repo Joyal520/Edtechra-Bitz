@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Teacher Dashboard | Edtechra Digital Classroom</title>
+    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="dashboard">
+    <div class="page-shell" id="app-shell">
+      <main class="main-content">
+        <div class="mobile-topbar">
+          <button class="icon-button glass-chip" data-sidebar-toggle type="button" aria-label="Open navigation">
+            <span class="icon-lines"><span></span><span></span></span>
+          </button>
+          <div class="mobile-topbar-copy">
+            <strong>Edtechra Classroom</strong>
+            <span>Teacher workspace</span>
+          </div>
+          <a class="btn btn-primary btn-compact" href="create-classroom.html">New</a>
+        </div>
+
+        <header class="dashboard-hero glass-panel">
+          <div class="dashboard-hero-copy">
+            <h1>Welcome back, <span id="teacher-welcome-name">Teacher</span>! <span aria-hidden="true">&#128075;</span></h1>
+            <p class="subtitle">Create classrooms, invite students, assign work, and track progress in a calmer, more focused teaching workspace.</p>
+            <a class="btn btn-primary hero-create-button" href="create-classroom.html">+ Create Classroom</a>
+          </div>
+          <div class="dashboard-hero-visual" aria-hidden="true">
+            <img
+              class="dashboard-hero-image"
+              src="/assets/images/classroom.webp"
+              alt=""
+              loading="eager"
+              decoding="async"
+              onerror="this.hidden=true;this.closest('.dashboard-hero-visual')?.classList.add('is-image-fallback');"
+            >
+            <div class="dashboard-hero-fallback"></div>
+          </div>
+        </header>
+
+        <section class="stats-grid grid" aria-label="Classroom summary stats">
+          <div class="stat-card glass-card">
+            <span class="stat-icon-tile stat-icon-students" data-dashboard-icon="students" aria-hidden="true"></span>
+            <div class="stat-card-content">
+              <div class="stat-card-top">
+                <span class="stat-label">Students</span>
+                <span class="stat-chevron" data-dashboard-icon="chevron" aria-hidden="true"></span>
+              </div>
+              <strong class="stat-value" id="stat-total-students">0</strong>
+              <span class="stat-subtext" id="stat-trend-students">Waiting for joins</span>
+            </div>
+          </div>
+          <div class="stat-card glass-card">
+            <span class="stat-icon-tile stat-icon-assignments" data-dashboard-icon="assignments" aria-hidden="true"></span>
+            <div class="stat-card-content">
+              <div class="stat-card-top">
+                <span class="stat-label">Assignments</span>
+                <span class="stat-chevron" data-dashboard-icon="chevron" aria-hidden="true"></span>
+              </div>
+              <strong class="stat-value" id="stat-total-assignments">0</strong>
+              <span class="stat-subtext" id="stat-trend-assignments">No tasks yet</span>
+            </div>
+          </div>
+          <div class="stat-card glass-card">
+            <span class="stat-icon-tile stat-icon-submissions" data-dashboard-icon="submissions" aria-hidden="true"></span>
+            <div class="stat-card-content">
+              <div class="stat-card-top">
+                <span class="stat-label">Submissions</span>
+                <span class="stat-chevron" data-dashboard-icon="chevron" aria-hidden="true"></span>
+              </div>
+              <strong class="stat-value" id="stat-total-submissions">0</strong>
+              <span class="stat-subtext" id="stat-trend-submissions">No submissions</span>
+            </div>
+          </div>
+          <div class="stat-card glass-card">
+            <span class="stat-icon-tile stat-icon-completion" data-dashboard-icon="completion" aria-hidden="true"></span>
+            <div class="stat-card-content">
+              <div class="stat-card-top">
+                <span class="stat-label">Average Completion</span>
+                <span class="stat-chevron" data-dashboard-icon="chevron" aria-hidden="true"></span>
+              </div>
+              <strong class="stat-value" id="stat-average-completion">0%</strong>
+              <span class="stat-subtext">Across all classes</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-main-grid grid mb-20">
+          <div class="glass-panel section-surface classrooms-panel">
+            <div class="section-header">
+              <div>
+                <h2>Your Classrooms</h2>
+                <p class="muted">Active learning spaces you're teaching.</p>
+              </div>
+              <a class="text-action" href="create-classroom.html">View all</a>
+            </div>
+            <div class="classroom-grid grid" id="classrooms-container"></div>
+          </div>
+        </section>
+
+        <section class="dashboard-insight-strip glass-panel" aria-label="Classroom insights">
+          <div class="insight-strip-item" id="analytics">
+            <span class="insight-icon insight-blue" data-dashboard-icon="performance" aria-hidden="true"></span>
+            <div>
+              <h2>Class Performance</h2>
+              <p>A quick pulse check across active classrooms.</p>
+            </div>
+            <span class="sr-only">Average completion <span id="dashboard-completion">0%</span>, average points <span id="dashboard-average">0</span></span>
+          </div>
+
+          <div class="insight-strip-item">
+            <span class="insight-icon insight-violet" data-dashboard-icon="deadlines" aria-hidden="true"></span>
+            <div>
+              <h2>Upcoming Deadlines</h2>
+              <p>Deadlines that need your attention next.</p>
+            </div>
+            <div class="sr-only" id="upcoming-activities"></div>
+          </div>
+
+          <div class="insight-strip-item" id="content">
+            <span class="insight-icon insight-green" data-dashboard-icon="contentPreview" aria-hidden="true"></span>
+            <div>
+              <h2>Content Preview</h2>
+              <p>Recommended bucket items ready to assign.</p>
+            </div>
+            <div class="sr-only" id="content-preview"></div>
+          </div>
+
+          <div class="insight-strip-item">
+            <span class="insight-icon insight-amber" data-dashboard-icon="attendance" aria-hidden="true"></span>
+            <div>
+              <h2>Smart Attendance</h2>
+              <p>Attendance tracked automatically based on student activity.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

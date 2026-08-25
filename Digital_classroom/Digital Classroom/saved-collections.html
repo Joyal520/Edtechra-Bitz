@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Collections - Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="saved-collections">
+    <div id="app-shell" class="page-shell">
+      <main class="main-content">
+        <div class="mobile-topbar">
+          <button class="icon-button glass-chip" data-sidebar-toggle type="button" aria-label="Open navigation">
+            <span class="icon-lines"><span></span><span></span></span>
+          </button>
+          <div class="mobile-topbar-copy">
+            <strong>Saved Collections</strong>
+            <span>Saved materials for assignment</span>
+          </div>
+          <a class="btn btn-secondary btn-compact saved-mobile-back" href="activity-hub.html" data-saved-collections-back>Back to Assign a Task</a>
+        </div>
+
+        <header class="activity-hub-header">
+          <div>
+            <a class="detail-back-link" href="activity-hub.html" data-saved-collections-back>Back to Assign a Task</a>
+            <p class="eyebrow">Assign a Task</p>
+            <h1>Saved Collections</h1>
+            <p class="subtitle">Choose saved materials to assign to your class</p>
+          </div>
+        </header>
+
+        <section class="teacher-panel teaching-resources-panel">
+          <div class="teacher-panel-title panel-title-row">
+            <span data-icon="library"></span>
+            <h2>Saved Collections</h2>
+            <button class="btn btn-secondary btn-small select-multiple-btn" type="button" data-select-multiple>Select Multiple</button>
+            <span class="panel-filter">Bookmarked by you</span>
+          </div>
+          <div id="saved-collections-list" class="teaching-resources-list">
+            <div class="resource-loading">Loading saved collections...</div>
+          </div>
+          <div class="saved-selection-bar" data-saved-selection-bar hidden>
+            <strong data-selected-count>0 materials selected</strong>
+            <div class="saved-selection-actions">
+              <button class="btn btn-primary btn-small" type="button" data-assign-selected>Assign Selected</button>
+              <button class="btn btn-secondary btn-small learning-spree-action" type="button" data-create-learning-spree>Create Learning Spree</button>
+              <button class="btn btn-secondary btn-small" type="button" data-clear-selection>Clear Selection</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="teacher-panel teaching-resource-assign-panel" id="resource-assign-panel" hidden>
+          <div class="teacher-panel-title panel-title-row">
+            <span data-icon="assignment"></span>
+            <h2>Assign Saved Work</h2>
+            <span class="panel-filter" id="assign-resource-name">Select a saved work</span>
+          </div>
+          <form id="resource-assignment-form" class="form-grid compact-assignment-form">
+            <input type="hidden" name="resourceId">
+            <label class="form-group">
+              <span class="form-label">Classroom *</span>
+              <select class="form-control" name="classroomId" required></select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Title *</span>
+              <input class="form-control" name="title" required>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Instructions</span>
+              <textarea class="form-control" name="instructions" placeholder="What students should do with this saved work"></textarea>
+            </label>
+            <div class="form-row">
+              <label class="form-group">
+                <span class="form-label">Due date *</span>
+                <span class="date-picker-shell">
+                  <span class="date-picker-icon" aria-hidden="true"></span>
+                  <input class="form-control date-picker-input" name="dueDate" type="date" required data-modern-date>
+                  <span class="date-picker-preview" data-date-preview>Select date</span>
+                </span>
+              </label>
+              <label class="form-group">
+                <span class="form-label">Points *</span>
+                <input class="form-control" name="points" type="number" min="1" value="100" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Create Assignment</button>
+              <p id="resource-assignment-notice" class="notice" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+
+        <section class="teacher-panel learning-spree-panel" id="learning-spree-panel" hidden>
+          <div class="teacher-panel-title panel-title-row">
+            <span data-icon="assignment"></span>
+            <div>
+              <h2>Create Learning Spree</h2>
+              <p class="muted">Group selected materials into one structured learning path for your students.</p>
+            </div>
+            <span class="panel-filter" id="learning-spree-count">0 selected</span>
+          </div>
+          <form id="learning-spree-form" class="form-grid compact-assignment-form">
+            <input type="hidden" name="resourceIds">
+            <label class="form-group">
+              <span class="form-label">Classroom *</span>
+              <select class="form-control" name="classroomId" required></select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Spree title *</span>
+              <input class="form-control" name="title" required value="Learning Spree">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Instructions</span>
+              <textarea class="form-control" name="instructions" placeholder="What students should do across this learning path"></textarea>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Deadline *</span>
+              <span class="date-picker-shell">
+                <span class="date-picker-icon" aria-hidden="true"></span>
+                <input class="form-control date-picker-input" name="dueDate" type="date" required data-modern-date>
+                <span class="date-picker-preview" data-date-preview>Select deadline</span>
+              </span>
+              <span class="form-helper">Students should complete the spree before this date.</span>
+            </label>
+            <fieldset class="unlock-mode-fieldset">
+              <legend class="form-label">Unlock Mode *</legend>
+              <div class="unlock-mode-options">
+                <label class="unlock-mode-card">
+                  <input type="radio" name="unlockMode" value="open_access" checked>
+                  <span>
+                    <strong>Open Access</strong>
+                    <small>Students can access all lessons immediately.</small>
+                  </span>
+                </label>
+                <label class="unlock-mode-card">
+                  <input type="radio" name="unlockMode" value="one_lesson_per_day">
+                  <span>
+                    <strong>One Lesson Per Day</strong>
+                    <small>Students can access one lesson each day. The next lesson unlocks after midnight.</small>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+            <label class="form-group" data-start-date-group hidden>
+              <span class="form-label">Start date *</span>
+              <span class="date-picker-shell">
+                <span class="date-picker-icon" aria-hidden="true"></span>
+                <input class="form-control date-picker-input" name="startDate" type="date" data-modern-date>
+                <span class="date-picker-preview" data-date-preview>Select start date</span>
+              </span>
+              <span class="form-helper">Lesson 1 unlocks at midnight in the classroom timezone.</span>
+            </label>
+            <section class="spree-lessons-section" aria-label="Selected lessons">
+              <div class="section-header-tight">
+                <div>
+                  <h3>Selected Lessons</h3>
+                  <p class="muted">Use the arrow controls to set the order students will see.</p>
+                </div>
+              </div>
+              <div class="spree-selected-list" id="learning-spree-selected-list"></div>
+            </section>
+            <div class="spree-form-footer">
+              <button class="btn btn-primary" type="submit">Create Learning Spree</button>
+              <a class="btn btn-secondary" href="#saved-collections-list">Back to Saved Collections</a>
+              <p id="learning-spree-notice" class="notice" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

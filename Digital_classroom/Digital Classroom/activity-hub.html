@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create Learning Activity | Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="activity-hub">
+    <div class="page-shell" id="app-shell">
+      <main class="main-content">
+        <div class="mobile-topbar">
+          <button class="icon-button glass-chip" data-sidebar-toggle type="button" aria-label="Open navigation">
+            <span class="icon-lines"><span></span><span></span></span>
+          </button>
+          <div class="mobile-topbar-copy">
+            <strong>Create Learning Activity</strong>
+            <span>Choose a creation path</span>
+          </div>
+          <a class="btn btn-secondary btn-compact" data-activity-back href="teacher-dashboard.html">Back</a>
+        </div>
+
+        <header class="activity-hub-header">
+          <div>
+            <a class="detail-back-link" data-activity-back href="teacher-dashboard.html">Back to Classroom</a>
+            <h1>Create Learning Activity</h1>
+            <p class="subtitle">Choose how you want to create and assign meaningful learning experiences for your students.</p>
+          </div>
+          <button class="btn btn-secondary activity-guide-trigger" id="activity-guide-btn" type="button">
+            <span class="btn-icon" aria-hidden="true"></span>
+            Activity Guide
+          </button>
+        </header>
+
+        <section class="activity-hub-grid" aria-label="Learning activity creation options">
+          <article class="hub-option-card hub-card-blue">
+            <div class="hub-card-art">
+              <span class="hub-card-number">01</span>
+              <span class="hub-illustration hub-illustration-resources" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
+            <div class="hub-card-copy">
+              <h2>My Teaching Resources</h2>
+              <p>Access and reuse your own materials, lessons, quizzes, and activities.</p>
+              <ul>
+                <li>Your uploaded resources</li>
+                <li>Previously created activities</li>
+                <li>Past assignments</li>
+                <li>Organised by folders</li>
+              </ul>
+            </div>
+            <a class="hub-card-button" data-hub-action="resources" href="#my-uploads">Explore Resources <span aria-hidden="true">-&gt;</span></a>
+          </article>
+
+          <article class="hub-option-card hub-card-violet">
+            <div class="hub-card-art">
+              <span class="hub-card-number">02</span>
+              <span class="hub-illustration hub-illustration-collections" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
+            <div class="hub-card-copy">
+              <h2>Saved Collections</h2>
+              <p>Explore your saved resources and build engaging activity sprees for your class.</p>
+              <ul>
+                <li>Bookmarked content</li>
+                <li>Saved from Edtechra</li>
+                <li>Curated collections</li>
+                <li>Quick assign &amp; reuse</li>
+              </ul>
+            </div>
+              <a class="hub-card-button" data-hub-action="collections" href="saved-collections.html">View Collections <span aria-hidden="true">-&gt;</span></a>
+          </article>
+
+          <article class="hub-option-card hub-card-green">
+            <div class="hub-card-art">
+              <span class="hub-card-number">03</span>
+              <span class="hub-illustration hub-illustration-premium" aria-hidden="true">
+                <span></span><span></span>
+              </span>
+            </div>
+            <div class="hub-card-copy">
+              <h2>Premium Learning Library</h2>
+              <p>Discover premium lessons, AI-powered activities, and curated course content.</p>
+              <ul>
+                <li>Premium worksheets</li>
+                <li>AI learning experiences</li>
+                <li>Exam &amp; practice packs</li>
+                <li>Expert-made courses</li>
+              </ul>
+            </div>
+            <button class="hub-card-button" data-hub-action="premium" type="button">Explore Library <span aria-hidden="true">-&gt;</span></button>
+          </article>
+
+          <article class="hub-option-card hub-card-amber">
+            <div class="hub-card-art">
+              <span class="hub-card-number">04</span>
+              <span class="hub-illustration hub-illustration-upload" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </span>
+            </div>
+            <div class="hub-card-copy">
+              <h2>Upload New Resource</h2>
+              <p>Upload your own materials and create new learning content from scratch.</p>
+              <ul>
+                <li>Worksheets &amp; PDFs</li>
+                <li>Presentations &amp; docs</li>
+                <li>Videos &amp; audio</li>
+                <li>Interactive content</li>
+              </ul>
+            </div>
+            <a class="hub-card-button" data-hub-action="upload" href="#upload">Upload Resource <span aria-hidden="true">-&gt;</span></a>
+          </article>
+        </section>
+
+        <section class="activity-feature-strip glass-panel" aria-label="Learning spree capabilities">
+          <div class="feature-strip-item feature-blue">
+            <span class="feature-icon" aria-hidden="true"></span>
+            <div>
+              <strong>Build Learning Sprees</strong>
+              <p>Combine multiple resources into engaging learning journeys.</p>
+            </div>
+          </div>
+          <div class="feature-strip-item feature-violet">
+            <span class="feature-icon" aria-hidden="true"></span>
+            <div>
+              <strong>Track &amp; Monitor</strong>
+              <p>Monitor progress, performance, and student engagement.</p>
+            </div>
+          </div>
+          <div class="feature-strip-item feature-green">
+            <span class="feature-icon" aria-hidden="true"></span>
+            <div>
+              <strong>Smart Attendance</strong>
+              <p>Attendance is tracked automatically based on student activity.</p>
+            </div>
+          </div>
+          <div class="feature-strip-item feature-amber">
+            <span class="feature-icon" aria-hidden="true"></span>
+            <div>
+              <strong>Gamify Learning</strong>
+              <p>Boost motivation with points, badges, and leaderboards.</p>
+            </div>
+          </div>
+        </section>
+
+        <aside class="activity-tip glass-panel" id="premium-library-placeholder" hidden></aside>
+
+        <div class="activity-modal-backdrop" id="activity-guide-modal" hidden>
+          <section class="activity-guide-modal glass-panel" role="dialog" aria-modal="true" aria-labelledby="activity-guide-title">
+            <button class="card-icon-button activity-modal-close" id="activity-guide-close" type="button" aria-label="Close activity guide">x</button>
+            <h2 id="activity-guide-title">Activity Guide</h2>
+            <p>Choose resources, arrange them into a spree, add instructions, set deadline and points, then assign to students.</p>
+            <div class="activity-guide-flow">
+              <span>Choose resources</span>
+              <span>Arrange spree</span>
+              <span>Add instructions</span>
+              <span>Assign &amp; track</span>
+            </div>
+            <div class="activity-guide-actions">
+              <button class="btn btn-primary" id="activity-guide-ok" type="button">OK</button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>

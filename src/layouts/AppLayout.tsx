@@ -11,7 +11,8 @@ import {
   LogOut,
   ChevronDown,
   Download,
-  Settings
+  Settings,
+  GraduationCap
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
@@ -190,6 +191,22 @@ export const AppLayout: React.FC = () => {
             >
               <LayoutGrid className="w-4 h-4" />
               <span>Dashboard</span>
+            </NavLink>
+
+            <NavLink
+              to="/classes"
+              className={({ isActive }) =>
+                isHomePage
+                  ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white/90 hover:text-white transition-all py-1'
+                  : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
+                      isActive
+                        ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`
+              }
+            >
+              <GraduationCap className="w-4 h-4" />
+              <span>Classes</span>
             </NavLink>
 
             {/* Admin Link — Only visible when authenticated as Admin */}
@@ -482,6 +499,19 @@ export const AppLayout: React.FC = () => {
               >
                 <LayoutGrid className="w-4 h-4" />
                 <span>Dashboard & Stats</span>
+              </NavLink>
+
+              <NavLink
+                to="/classes"
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                    isActive ? 'bg-brand-50 text-[#026fc3]' : 'text-slate-700 hover:bg-slate-50'
+                  }`
+                }
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Classes</span>
               </NavLink>
 
               {/* Admin Link for Mobile */}

@@ -9,6 +9,7 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   isAdmin: boolean;
+  isTeacher: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
   isProfileComplete: boolean;
@@ -23,11 +24,11 @@ interface AuthContextType {
   setPendingIntent: (intent: AuthIntent) => void;
   executePendingIntent: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
-  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error?: string; message?: string; sessionEstablished?: boolean }>;
-  signInWithGoogle: () => Promise<{ error?: string }>;
+  signUpWithEmail: (email: string, password: string, fullName?: string, role?: 'student' | 'teacher') => Promise<{ error?: string; message?: string; sessionEstablished?: boolean }>;
+  signInWithGoogle: (role?: 'student' | 'teacher') => Promise<{ error?: string }>;
   resetPassword: (email: string) => Promise<{ error?: string; message?: string }>;
   updatePassword: (newPassword: string) => Promise<{ error?: string }>;
-  updateProfileName: (newName: string) => Promise<{ error?: string }>;
+  updateProfileName: (newName: string, role?: 'student' | 'teacher') => Promise<{ error?: string }>;
   updateUserProfile: (payload: { full_name?: string; avatar_url?: string | null; text_size?: string }) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -95,6 +96,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (profile?.role === 'admin' || user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com')
   );
 
+  const isTeacher = Boolean(
+    isAdmin || profile?.role === 'teacher' || profile?.role === 'admin'
+  );
+
   // Safely fetch or resolve user profile from Supabase
   const fetchUserProfile = useCallback(async (currentUser: User): Promise<UserProfile | null> => {
     if (!supabase) return null;
@@ -114,7 +119,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const effectiveName = data?.full_name?.trim() || metaName.trim() || '';
 
       const isUserAdmin = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
-      const resolvedRole = isUserAdmin ? 'admin' : (data?.role === 'admin' ? 'admin' : (data?.role || 'student'));
+      const resolvedRole: 'student' | 'teacher' | 'admin' = isUserAdmin
+        ? 'admin'
+        : (data?.role === 'admin' ? 'admin' : (data?.role === 'teacher' ? 'teacher' : (data?.role || 'student')));
 
       if (data) {
         const userProfile: UserProfile = {
@@ -186,7 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setPendingIntent]);
 
   // Update profile name in Supabase database & Auth metadata
-  const updateProfileName = async (newName: string): Promise<{ error?: string }> => {
+  const updateProfileName = async (newName: string, role?: 'student' | 'teacher'): Promise<{ error?: string }> => {
     const trimmed = newName.trim();
     if (!trimmed) {
       return { error: 'Please enter a valid name.' };
@@ -199,8 +206,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: 'You must be authenticated to update your profile.' };
     }
 
+    const sanitizedRole = role === 'teacher' ? 'teacher' : 'student';
+
     try {
-      // 1. Upsert into public.profiles table
+      // 1. If role is provided, call secure complete_user_onboarding stored procedure
+      if (role) {
+        try {
+          await supabase.rpc('complete_user_onboarding', {
+            p_full_name: trimmed,
+            p_role: sanitizedRole
+          });
+        } catch (rpcErr) {
+          console.warn('[AuthContext] complete_user_onboarding RPC notice:', rpcErr);
+        }
+      }
+
+      // 2. Upsert into public.profiles table
       const { error: dbError } = await supabase
         .from('profiles')
         .upsert(
@@ -217,12 +238,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Database profile upsert notice:', dbError.message);
       }
 
-      // 2. Update Supabase Auth metadata
+      // 3. Update Supabase Auth metadata
       try {
         await supabase.auth.updateUser({
           data: {
             full_name: trimmed,
             name: trimmed,
+            role: role ? sanitizedRole : (user.user_metadata?.role || 'student'),
             onboarding_completed: true
           }
         });
@@ -230,7 +252,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Auth metadata update notice:', metaErr);
       }
 
-      // 3. Update local state
+      // 4. Update local state
+      const targetRole = user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com'
+        ? 'admin'
+        : (role ? sanitizedRole : (profile?.role || 'student'));
+
       setProfile((prev) => ({
         id: user.id,
         email: user.email || '',
@@ -238,12 +264,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: trimmed,
         avatar_url: prev?.avatar_url || user.user_metadata?.avatar_url || '',
         avatarUrl: prev?.avatarUrl || user.user_metadata?.avatar_url || '',
-        role: user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : (prev?.role || 'student'),
+        role: targetRole,
         created_at: prev?.created_at || user.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
       }));
 
-      // 4. Close modal and execute pending destination
+      // 5. Close modal and execute pending destination
       closeAuthModal();
       executePendingIntent();
 
@@ -544,7 +570,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setAuthState('authenticated');
 
             if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-              const userProfile = await fetchUserProfile(newSession.user);
+              let userProfile = await fetchUserProfile(newSession.user);
+
+              // Check if user has a pending onboarding role from Google OAuth redirect
+              try {
+                const savedRole = localStorage.getItem('edtechra_onboarding_role');
+                if (savedRole && (savedRole === 'student' || savedRole === 'teacher')) {
+                  if (!userProfile?.role || userProfile.role === 'student') {
+                    if (savedRole === 'teacher' && supabase) {
+                      await supabase.rpc('complete_user_onboarding', {
+                        p_full_name: userProfile?.full_name || newSession.user.user_metadata?.full_name || '',
+                        p_role: 'teacher'
+                      });
+                      userProfile = await fetchUserProfile(newSession.user);
+                    }
+                  }
+                  localStorage.removeItem('edtechra_onboarding_role');
+                }
+              } catch (e) {
+                // ignore
+              }
+
               if (isMounted) {
                 setProfile(userProfile);
 
@@ -638,12 +684,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUpWithEmail = async (
     email: string,
     password: string,
-    fullName?: string
+    fullName?: string,
+    role: 'student' | 'teacher' = 'student'
   ): Promise<{ error?: string; message?: string; sessionEstablished?: boolean }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
     const trimmedEmail = email.trim();
     const trimmedName = (fullName || '').trim();
+    const sanitizedRole: 'student' | 'teacher' = role === 'teacher' ? 'teacher' : 'student';
 
     if (!trimmedEmail) {
       return { error: 'Please enter an email address.' };
@@ -659,7 +707,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         options: {
           data: {
             full_name: trimmedName,
-            name: trimmedName
+            name: trimmedName,
+            role: sanitizedRole
           },
           emailRedirectTo: `${getAppOrigin()}`
         }
@@ -734,11 +783,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...(userProfile || {
                 id: data.user.id,
                 email: data.user.email || '',
-                role: 'student',
+                role: sanitizedRole,
                 created_at: new Date().toISOString()
               }),
               full_name: trimmedName,
-              name: trimmedName
+              name: trimmedName,
+              role: userProfile?.role || sanitizedRole
             };
           } catch (e) {
             console.warn('[AuthContext] Error upserting signup name:', e);
@@ -769,10 +819,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Sign In with Google OAuth
-  const signInWithGoogle = async (): Promise<{ error?: string }> => {
+  const signInWithGoogle = async (role?: 'student' | 'teacher'): Promise<{ error?: string }> => {
     if (!supabase) return { error: 'Supabase is not configured' };
 
     try {
+      if (role) {
+        try {
+          localStorage.setItem('edtechra_onboarding_role', role);
+        } catch (e) {
+          // ignore
+        }
+      }
+
       console.log('[OAuth] Google sign-in started');
       const redirectUrl = `${getAppOrigin()}`;
 
@@ -859,6 +917,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         profile,
         isAdmin,
+        isTeacher,
         isLoading,
         isAuthenticated,
         isProfileComplete,

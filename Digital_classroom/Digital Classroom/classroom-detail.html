@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Classroom Detail | Edtechra Digital Classroom</title>
+    <link rel="stylesheet" href="assets/css/classroom.css">
+  </head>
+  <body data-page="detail" class="teacher-classroom-detail">
+    <div class="page-shell" id="app-shell">
+      <main class="main-content classroom-detail-main">
+        <div class="mobile-topbar">
+          <button class="icon-button glass-chip" data-sidebar-toggle type="button" aria-label="Open navigation">
+            <span class="icon-lines"><span></span><span></span></span>
+          </button>
+          <div class="mobile-topbar-copy">
+            <strong>Teacher Classroom</strong>
+            <span id="mobile-classroom-title">Classroom detail</span>
+          </div>
+          <a class="btn btn-secondary btn-compact" href="teacher-dashboard.html">Back</a>
+        </div>
+
+        <header class="teacher-class-hero">
+          <div class="teacher-class-hero-copy">
+            <span class="welcome-pill">Welcome back, Teacher</span>
+            <h1 id="classroom-title">Loading classroom</h1>
+            <div class="teacher-class-meta" aria-label="Classroom summary">
+              <span><i data-icon="classroom"></i><strong id="hero-subject">Subject</strong><small>Subject</small></span>
+              <span><i data-icon="assignment"></i><strong id="hero-grade">Grade</strong><small>Grade</small></span>
+              <span><i data-icon="users"></i><strong id="detail-students">0</strong><small>Students</small></span>
+            </div>
+            <div class="teacher-hero-bottom">
+              <div class="teacher-mini-profile">
+                <span class="avatar" id="teacher-avatar">T</span>
+                <span><strong id="teacher-name">Class Teacher</strong><small>Class Teacher</small></span>
+              </div>
+              <a class="btn btn-primary wa-share-link" target="_blank" rel="noopener">Invite Students via WhatsApp</a>
+            </div>
+            <p class="sr-only" id="classroom-subtitle"></p>
+            <p class="sr-only" id="classroom-description"></p>
+          </div>
+          <div class="teacher-class-hero-visual" id="classroom-hero-asset"></div>
+        </header>
+
+        <section class="teacher-section">
+          <div class="teacher-section-header">
+            <h2>Assign Your Students</h2>
+            <div class="teacher-action-scroll-controls" aria-label="Scroll classroom actions">
+              <button class="teacher-action-scroll-btn" type="button" aria-label="Scroll actions left" data-action-scroll="left">
+                <i data-icon="arrow"></i>
+              </button>
+              <button class="teacher-action-scroll-btn" type="button" aria-label="Scroll actions right" data-action-scroll="right">
+                <i data-icon="arrow"></i>
+              </button>
+            </div>
+          </div>
+          <div class="teacher-action-scroll-shell">
+          <div class="teacher-action-grid" data-action-card-row>
+            <a class="teacher-action-card action-task" href="#assignment-form" data-activity-hub-link>
+              <span class="action-illustration" aria-hidden="true">📋</span>
+              <span><strong>Task</strong><small>Create and assign tasks for students</small></span>
+              <i class="action-arrow" data-icon="arrow"></i>
+            </a>
+            <a class="teacher-action-card action-quiz" href="#" data-future-route="live-quiz">
+              <span class="action-illustration" aria-hidden="true">▶</span>
+              <span><strong>Live Quiz</strong><small>Start a live quiz and engage class</small></span>
+              <i class="action-arrow" data-icon="arrow"></i>
+            </a>
+            <a class="teacher-action-card action-exam" href="#classroom/exam" data-exam2-link>
+              <span class="action-illustration" aria-hidden="true">📝</span>
+              <span><strong>Exam</strong><small>Create exams and assessments</small></span>
+              <i class="action-arrow" data-icon="arrow"></i>
+            </a>
+            <a class="teacher-action-card action-competition" href="#future-activity-routing" data-future-route="competition-exam">
+              <span class="action-illustration" aria-hidden="true">🏆</span>
+              <span><strong>Competition</strong><small>Organize contests and challenges</small></span>
+              <i class="action-arrow" data-icon="arrow"></i>
+            </a>
+            <a class="teacher-action-card action-ocr-grading" href="#classroom/ocr-grading" data-ocr-grading-link>
+              <span class="action-illustration" aria-hidden="true"><i data-icon="sparkles"></i></span>
+              <span><strong>OCR Grading</strong><small>Open the AI assessment engine</small></span>
+              <i class="action-arrow" data-icon="arrow"></i>
+            </a>
+          </div>
+          </div>
+        </section>
+
+        <section class="teacher-two-col">
+          <article class="teacher-panel message-panel">
+            <div class="teacher-panel-title">
+              <span data-icon="message"></span>
+              <h2>Share a Message to Your Students</h2>
+            </div>
+            <form id="class-message-form" class="teacher-message-form">
+              <textarea class="form-control" name="message" rows="3" placeholder="Type your message here..."></textarea>
+              <button class="btn btn-primary btn-small" type="submit"><span data-icon="send"></span> Send Message</button>
+            </form>
+            <p id="message-notice" class="notice" aria-live="polite"></p>
+            <h3 class="subsection-title">Recent Messages</h3>
+            <div class="teacher-message-list" id="messages-container"></div>
+          </article>
+
+          <article class="teacher-panel students-panel">
+            <div class="teacher-panel-title panel-title-row">
+              <span data-icon="users"></span>
+              <h2>Students Details</h2>
+              <label class="teacher-search">
+                <input id="student-search-input" type="search" placeholder="Search students...">
+                <span data-icon="search"></span>
+              </label>
+            </div>
+            <div class="student-table-wrap">
+              <table class="student-detail-table">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Score</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="students-container"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="teacher-two-col">
+          <article class="teacher-panel">
+            <div class="teacher-panel-title panel-title-row">
+              <span data-icon="attendance"></span>
+              <h2>Attendance Panel</h2>
+              <span class="panel-filter">This Week</span>
+            </div>
+            <div id="attendance-container"></div>
+          </article>
+
+          <article class="teacher-panel">
+            <div class="teacher-panel-title panel-title-row">
+              <span data-icon="trophy"></span>
+              <h2>Students Leaderboard</h2>
+              <select id="leaderboard-filter" class="panel-select" aria-label="Leaderboard range">
+                <option>This Month</option>
+                <option>This Week</option>
+              </select>
+            </div>
+            <div class="leaderboard-table" id="leaderboard-container"></div>
+          </article>
+        </section>
+
+        <section class="teacher-two-col">
+          <article class="teacher-panel">
+            <div class="teacher-panel-title panel-title-row">
+              <span data-icon="bars"></span>
+              <h2>Weekly Performance Overview</h2>
+              <span class="panel-filter">This Week</span>
+            </div>
+            <div id="analytics-container"></div>
+          </article>
+
+          <article class="teacher-panel">
+            <div class="teacher-panel-title panel-title-row">
+              <span data-icon="assignment"></span>
+              <h2>Assignments Status</h2>
+              <span class="panel-filter">This Month</span>
+            </div>
+            <div id="assignment-status-container"></div>
+          </article>
+        </section>
+
+        <section class="teacher-two-col teacher-bottom-row">
+          <article class="teacher-panel ai-report-panel">
+            <div class="teacher-panel-title">
+              <span data-icon="sparkles"></span>
+              <h2>AI Classroom Report</h2>
+            </div>
+            <div class="ai-report-content">
+              <div class="ai-report-asset" id="ai-report-asset"></div>
+              <div id="ai-feedback-output"></div>
+            </div>
+            <button class="btn btn-primary ai-report-btn" id="generate-feedback-btn" type="button">Get AI Report</button>
+          </article>
+
+          <article class="teacher-panel danger-panel">
+            <div class="teacher-panel-title">
+              <span data-icon="warning"></span>
+              <div>
+                <h2>Danger Zone</h2>
+                <p>These actions are irreversible. Please be careful.</p>
+              </div>
+            </div>
+            <div class="danger-actions">
+              <div class="danger-action">
+                <span data-icon="archive"></span>
+                <div><strong>Archive Classroom</strong><small>Hide this classroom from the active list.</small></div>
+                <button class="btn btn-secondary btn-small" id="archive-classroom-btn" type="button">Archive</button>
+              </div>
+              <div class="danger-action danger-delete">
+                <span data-icon="trash"></span>
+                <div><strong>Delete Classroom</strong><small>Permanently delete this classroom and all data.</small></div>
+                <button class="btn btn-danger btn-small" id="open-delete-modal-btn" type="button">Delete</button>
+              </div>
+            </div>
+            <p id="danger-notice" class="notice" aria-live="polite"></p>
+          </article>
+        </section>
+
+        <section class="teacher-panel assignment-creation-panel" id="assignment-form-panel">
+          <div class="teacher-panel-title panel-title-row">
+            <span data-icon="assignment"></span>
+            <h2>Create Assignment</h2>
+            <span class="panel-filter">Task, Exam, or Competition prep</span>
+          </div>
+          <form id="assignment-form" class="form-grid compact-assignment-form">
+            <label class="form-group">
+              <span class="form-label">Title *</span>
+              <input class="form-control" name="title" required placeholder="Chapter review">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Instructions</span>
+              <textarea class="form-control" name="instructions" placeholder="What students should submit"></textarea>
+            </label>
+            <div class="form-row">
+              <label class="form-group">
+                <span class="form-label">Due date *</span>
+                <span class="date-picker-shell">
+                  <span class="date-picker-icon" aria-hidden="true"></span>
+                  <input class="form-control date-picker-input" name="dueDate" type="date" required data-modern-date>
+                  <span class="date-picker-preview" data-date-preview>Select date</span>
+                </span>
+              </label>
+              <label class="form-group">
+                <span class="form-label">Points *</span>
+                <input class="form-control" name="points" type="number" min="1" value="100" required>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit">Create Assignment</button>
+              <p id="assignment-notice" class="notice" aria-live="polite"></p>
+            </div>
+          </form>
+          <h3 class="subsection-title">Assignment Details</h3>
+          <div class="item-list" id="assignments-container"></div>
+          <p class="notice" id="future-activity-routing">Live Quiz opens the existing quiz flow. Competition routing is prepared for the next backend connection.</p>
+        </section>
+
+        <section class="teacher-hidden-data" aria-hidden="true">
+          <input id="invite-link-input" readonly>
+          <button id="copy-invite-btn" type="button">Copy Link</button>
+          <span id="classroom-invite-code">Loading</span>
+          <p id="invite-notice" class="notice" aria-live="polite"></p>
+          <div id="class-activity-container"></div>
+          <div id="bucket-items"></div>
+          <div id="content-library"></div>
+          <span id="detail-assignments">0</span>
+          <span id="detail-completion">0%</span>
+          <span id="detail-pending">0</span>
+        </section>
+      </main>
+    </div>
+
+    <div class="delete-modal" id="delete-classroom-modal" hidden>
+      <div class="delete-modal-card" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+        <h2 id="delete-modal-title">Delete Classroom</h2>
+        <p>Type <strong id="delete-classroom-name">this classroom</strong> to confirm. This button will not run until the name matches.</p>
+        <input class="form-control" id="delete-confirm-input" autocomplete="off">
+        <div class="delete-modal-actions">
+          <button class="btn btn-secondary" id="cancel-delete-btn" type="button">Cancel</button>
+          <button class="btn btn-danger" id="confirm-delete-btn" type="button" disabled>Confirm Delete</button>
+        </div>
+        <p id="delete-modal-notice" class="notice" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <script type="module" src="assets/js/root-supabase-bridge.js"></script>
+  </body>
+</html>
