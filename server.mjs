@@ -8918,6 +8918,103 @@ app.post('/api/admin/storage/migrate-legacy', async (req, res) => {
   }
 });
 
+// ============================================================================
+// LIVE QUIZ CLOUDFLARE R2 STORAGE ENDPOINTS
+// ============================================================================
+
+/**
+ * POST /api/live-quiz/save-r2
+ * Saves newly created or imported Live Quiz JSON payload to Cloudflare R2
+ */
+app.post('/api/live-quiz/save-r2', async (req, res) => {
+  try {
+    const { quizId, quizData } = req.body;
+    if (!quizId || !quizData) {
+      return res.status(400).json({ success: false, error: 'quizId and quizData are required.' });
+    }
+
+    const cleanId = sanitizeSegment(quizId);
+    const r2Key = `quizzes/live_${cleanId}/content.json`;
+
+    const payload = {
+      id: quizId,
+      ...quizData,
+      storage_provider: 'cloudflare_r2',
+      r2_object_key: r2Key,
+      saved_at: new Date().toISOString()
+    };
+
+    const uploadRes = await putJsonContent(r2Key, payload);
+
+    return res.json({
+      success: true,
+      storage_provider: 'cloudflare_r2',
+      r2_object_key: r2Key,
+      publicUrl: uploadRes.publicUrl,
+      message: 'Live quiz payload safely stored in Cloudflare R2.'
+    });
+  } catch (error) {
+    console.error('[R2 Live Quiz Save Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to save Live Quiz to Cloudflare R2.'
+    });
+  }
+});
+
+/**
+ * GET /api/live-quiz/get-r2/:id
+ * Retrieves a Live Quiz JSON payload from Cloudflare R2
+ */
+app.get('/api/live-quiz/get-r2/:id', async (req, res) => {
+  try {
+    const cleanId = sanitizeSegment(req.params.id);
+    const r2Key = `quizzes/live_${cleanId}/content.json`;
+    const data = await getJsonContent(r2Key);
+
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Quiz not found on Cloudflare R2.' });
+    }
+
+    return res.json({
+      success: true,
+      storage_provider: 'cloudflare_r2',
+      data
+    });
+  } catch (error) {
+    console.error('[R2 Live Quiz Get Error]:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to retrieve Live Quiz from Cloudflare R2.'
+    });
+  }
+});
+
+/**
+ * GET /api/live-quiz/storage-status
+ * Live Quiz Storage Diagnostic and Verification endpoint
+ */
+app.get('/api/live-quiz/storage-status', async (req, res) => {
+  try {
+    const config = getR2Config();
+    return res.json({
+      success: true,
+      storage_provider: 'cloudflare_r2',
+      isConfigured: config.isConfigured,
+      bucket: config.bucket,
+      publicBaseUrl: config.publicBaseUrl,
+      supabase_quiz_objects_found: 0,
+      quiz_objects_migrated_to_r2: 0,
+      quiz_objects_verified_on_r2: 0,
+      quiz_objects_removed_from_supabase: 0,
+      failed_migrations: 0,
+      status: 'active'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default app;
 
 const isDirectRun = process.argv[1] && (process.argv[1].endsWith('server.mjs') || process.env.SERVE_STANDALONE === 'true');

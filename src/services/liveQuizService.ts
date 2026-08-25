@@ -130,6 +130,7 @@ class LiveQuizService {
 
   /**
    * Creates a new custom quiz in Supabase (normalized with live_quiz_questions)
+   * and persists full object payload to Cloudflare R2
    */
   async createCustomQuiz(payload: {
     classroom_id?: string | null;
@@ -180,6 +181,24 @@ class LiveQuizService {
 
       if (qError) {
         console.warn('[LiveQuizService] live_quiz_questions insert notice:', qError);
+      }
+
+      // 3. Persist full Quiz Object to Cloudflare R2 storage
+      try {
+        await fetch('/api/live-quiz/save-r2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quizId: quizData.id,
+            quizData: {
+              ...quizData,
+              questions: payload.questions,
+              storage_provider: 'cloudflare_r2'
+            }
+          })
+        });
+      } catch (r2Err) {
+        console.warn('[LiveQuizService] R2 mirror upload notice:', r2Err);
       }
 
       return {
