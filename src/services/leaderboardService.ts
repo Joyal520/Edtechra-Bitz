@@ -90,6 +90,45 @@ class LeaderboardService {
       message: json.message || `Leaderboard for ${period} successfully reset.`
     };
   }
+
+  /**
+   * Admin API: Retrieves Leaderboard Settings (reset frequency)
+   */
+  async getLeaderboardSettings(token?: string | null): Promise<{ reset_frequency: 'weekly' | 'monthly' | 'never' }> {
+    try {
+      const headers = await this.getAuthHeaders(token);
+      const res = await fetch('/api/admin/leaderboard/settings', { headers });
+      if (!res.ok) {
+        return { reset_frequency: 'weekly' };
+      }
+      const json = await res.json();
+      return json.data || { reset_frequency: 'weekly' };
+    } catch {
+      return { reset_frequency: 'weekly' };
+    }
+  }
+
+  /**
+   * Admin API: Updates Leaderboard Reset Frequency (Weekly / Monthly / Never)
+   */
+  async updateLeaderboardSettings(
+    frequency: 'weekly' | 'monthly' | 'never',
+    token?: string | null
+  ): Promise<{ success: boolean; message: string; data: any }> {
+    const headers = await this.getAuthHeaders(token);
+    const res = await fetch('/api/admin/leaderboard/settings', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ reset_frequency: frequency })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Failed to update leaderboard settings.');
+    }
+
+    return json;
+  }
 }
 
 export const leaderboardService = new LeaderboardService();

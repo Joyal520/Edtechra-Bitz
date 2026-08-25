@@ -51,7 +51,8 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
         Object.values(state).forEach((presences: any) => {
           presences.forEach((p: any) => {
-            if (p.student_id && p.display_name) {
+            // Exclude teacher role from participants list
+            if (p.student_id && p.display_name && p.role !== 'teacher') {
               liveUsers.push({
                 id: p.student_id,
                 session_id: session.id,

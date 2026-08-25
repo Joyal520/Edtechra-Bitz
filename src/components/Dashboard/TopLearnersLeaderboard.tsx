@@ -211,22 +211,77 @@ export const TopLearnersLeaderboard: React.FC = () => {
               </button>
 
               {adminMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-[#141e34] border border-purple-500/40 rounded-2xl shadow-2xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+                <div className="absolute right-0 mt-2 w-56 bg-[#141e34] border border-purple-500/40 rounded-2xl shadow-2xl py-2 z-30 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+                  
+                  {/* Reset Frequency Setting */}
                   <div className="px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-purple-300 border-b border-slate-700/80">
-                    Leaderboard Resets
+                    Leaderboard Reset Schedule
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdminMenuOpen(false);
-                      setResetTargetPeriod('today');
-                    }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Reset Today</span>
-                  </button>
+                  <div className="p-2 space-y-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const token = session?.access_token || null;
+                        await leaderboardService.updateLeaderboardSettings('weekly', token);
+                        setPeriod('week');
+                        setAdminMenuOpen(false);
+                        setResetNotice('Leaderboard reset schedule set to Weekly (Monday-Sunday).');
+                        await loadLeaderboard('week');
+                        setTimeout(() => setResetNotice(null), 4000);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
+                        period === 'week' ? 'bg-purple-600 text-white' : 'text-slate-200 hover:bg-white/10'
+                      }`}
+                    >
+                      <span>Weekly (Mon-Sun)</span>
+                      {period === 'week' && <Check className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const token = session?.access_token || null;
+                        await leaderboardService.updateLeaderboardSettings('monthly', token);
+                        setPeriod('month');
+                        setAdminMenuOpen(false);
+                        setResetNotice('Leaderboard reset schedule set to Monthly (1st - End of Month).');
+                        await loadLeaderboard('month');
+                        setTimeout(() => setResetNotice(null), 4000);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
+                        period === 'month' ? 'bg-purple-600 text-white' : 'text-slate-200 hover:bg-white/10'
+                      }`}
+                    >
+                      <span>Monthly (1st - End)</span>
+                      {period === 'month' && <Check className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const token = session?.access_token || null;
+                        await leaderboardService.updateLeaderboardSettings('never', token);
+                        setPeriod('all_time');
+                        setAdminMenuOpen(false);
+                        setResetNotice('Leaderboard reset schedule set to Never (All-Time Cumulative).');
+                        await loadLeaderboard('all_time');
+                        setTimeout(() => setResetNotice(null), 4000);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
+                        period === 'all_time' ? 'bg-purple-600 text-white' : 'text-slate-200 hover:bg-white/10'
+                      }`}
+                    >
+                      <span>Never (All Time)</span>
+                      {period === 'all_time' && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+
+                  <div className="border-t border-slate-700/80 my-1"></div>
+
+                  <div className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Instant Manual Resets
+                  </div>
 
                   <button
                     type="button"
@@ -234,10 +289,10 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setAdminMenuOpen(false);
                       setResetTargetPeriod('week');
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3.5 py-1.5 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Reset Weekly</span>
+                    <span>Reset Weekly Now</span>
                   </button>
 
                   <button
@@ -246,21 +301,12 @@ export const TopLearnersLeaderboard: React.FC = () => {
                       setAdminMenuOpen(false);
                       setResetTargetPeriod('month');
                     }}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3.5 py-1.5 text-xs font-bold text-slate-200 hover:bg-rose-500/20 hover:text-rose-200 transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Reset Monthly</span>
+                    <span>Reset Monthly Now</span>
                   </button>
 
-                  <div className="border-t border-slate-700/80 my-1"></div>
-
-                  <button
-                    type="button"
-                    onClick={() => setAdminMenuOpen(false)}
-                    className="w-full text-left px-3.5 py-2 text-xs font-bold text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    Keep Options
-                  </button>
                 </div>
               )}
             </div>

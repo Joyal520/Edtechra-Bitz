@@ -2712,6 +2712,13 @@ app.get('/api/quiz/user-xp/:userId', async (req, res) => {
 // API ROUTES: TOP 10 LEARNERS LEADERBOARD & SAFE RESETS
 // ============================================================================
 
+// Leaderboard Settings State (Weekly, Monthly, Never)
+let leaderboardConfig = {
+  reset_frequency: 'weekly',
+  updated_at: new Date().toISOString(),
+  updated_by: null
+};
+
 // In-memory fallback reset store if Supabase resets table is syncing
 const inMemoryLeaderboardResets = {
   today: new Date(new Date().setHours(0, 0, 0, 0)).toISOString(),
@@ -2719,12 +2726,89 @@ const inMemoryLeaderboardResets = {
   month: new Date(new Date().setDate(1)).toISOString()
 };
 
+// GET /api/admin/leaderboard/settings - Retrieve Admin Leaderboard Configuration
+app.get('/api/admin/leaderboard/settings', async (req, res) => {
+  try {
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase
+          .from('leaderboard_settings')
+          .select('*')
+          .maybeSingle();
+        if (data?.reset_frequency) {
+          leaderboardConfig.reset_frequency = data.reset_frequency;
+          leaderboardConfig.updated_at = data.updated_at || leaderboardConfig.updated_at;
+        }
+      } catch {}
+    }
+    return res.json({ success: true, data: leaderboardConfig });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/admin/leaderboard/settings - Update Leaderboard Reset Frequency (Weekly / Monthly / Never)
+app.post('/api/admin/leaderboard/settings', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userRole = authData?.profile?.role;
+    const isAuthorized = userRole === 'admin' || authData?.user?.email === 'roshanjoyal520@gmail.com';
+
+    if (!authData || !isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Admin privileges required to update leaderboard settings.' });
+    }
+
+    const { reset_frequency } = req.body;
+    const validFrequencies = ['weekly', 'monthly', 'never'];
+    if (!reset_frequency || !validFrequencies.includes(reset_frequency.toLowerCase())) {
+      return res.status(400).json({ success: false, error: 'Invalid reset_frequency. Must be weekly, monthly, or never.' });
+    }
+
+    const cleanFreq = reset_frequency.toLowerCase();
+    const now = new Date().toISOString();
+    leaderboardConfig = {
+      reset_frequency: cleanFreq,
+      updated_at: now,
+      updated_by: authData.user.id
+    };
+
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('leaderboard_settings')
+          .upsert({
+            id: 'default',
+            reset_frequency: cleanFreq,
+            updated_at: now,
+            updated_by: authData.user.id
+          }, { onConflict: 'id' });
+      } catch (dbErr) {
+        console.warn('[Leaderboard Settings DB update notice]:', dbErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Leaderboard reset frequency updated to "${cleanFreq}".`,
+      data: leaderboardConfig
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/leaderboard/settings:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 1. GET /api/leaderboard - Retrieve Top 10 Learners and Current User Ranking
 app.get('/api/leaderboard', async (req, res) => {
   try {
-    const period = String(req.query.period || 'week').toLowerCase().trim();
+    // Default to admin-configured frequency if no period param is passed
+    let defaultPeriod = 'week';
+    if (leaderboardConfig.reset_frequency === 'monthly') defaultPeriod = 'month';
+    else if (leaderboardConfig.reset_frequency === 'never') defaultPeriod = 'all_time';
+
+    const reqPeriod = req.query.period ? String(req.query.period).toLowerCase().trim() : null;
     const validPeriods = new Set(['today', 'week', 'month', 'all_time']);
-    const selectedPeriod = validPeriods.has(period) ? period : 'week';
+    const selectedPeriod = reqPeriod && validPeriods.has(reqPeriod) ? reqPeriod : defaultPeriod;
 
     // Optional user authentication for personal rank resolution
     const authData = await verifyAuthUser(req);
@@ -2744,7 +2828,10 @@ app.get('/api/leaderboard', async (req, res) => {
         if (!rpcError && rpcData && Array.isArray(rpcData.top10)) {
           return res.json({
             success: true,
-            data: rpcData
+            data: {
+              ...rpcData,
+              configured_frequency: leaderboardConfig.reset_frequency
+            }
           });
         }
       } catch (rpcErr) {
@@ -2803,7 +2890,7 @@ app.get('/api/leaderboard', async (req, res) => {
       }
     }
 
-    // Fetch all profiles
+    // Fetch all profiles (filtering out teachers from student ranking)
     let profiles = [];
     if (serverSupabase) {
       const { data: sbProfiles } = await serverSupabase
@@ -2812,12 +2899,15 @@ app.get('/api/leaderboard', async (req, res) => {
       if (sbProfiles) profiles = sbProfiles;
     }
 
+    // Filter learners strictly (exclude teachers from learner leaderboard)
+    const learnerProfiles = profiles.filter((p) => p.role !== 'teacher');
+
     // Compute user XP map
     const userXpMap = new Map();
 
     // Starter bonus for all-time
     if (selectedPeriod === 'all_time') {
-      profiles.forEach(p => {
+      learnerProfiles.forEach(p => {
         userXpMap.set(p.id, 100);
       });
     }
@@ -2880,8 +2970,8 @@ app.get('/api/leaderboard', async (req, res) => {
       });
     }
 
-    // Build ranked array
-    const rankedList = profiles.map(p => {
+    // Build ranked array for learners only
+    const rankedList = learnerProfiles.map(p => {
       const xp = userXpMap.get(p.id) || (selectedPeriod === 'all_time' ? 100 : 0);
       const level = Math.max(1, Math.min(20, 1 + Math.floor(xp / 100)));
       const displayName = p.full_name?.trim() || (p.email ? p.email.split('@')[0] : 'Learner');
@@ -2934,6 +3024,7 @@ app.get('/api/leaderboard', async (req, res) => {
       success: true,
       data: {
         period: selectedPeriod,
+        configured_frequency: leaderboardConfig.reset_frequency,
         top10,
         currentUser: currentUserRank,
         lastUpdated: new Date().toISOString()

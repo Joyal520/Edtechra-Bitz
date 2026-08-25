@@ -33,6 +33,7 @@ import { AdminPollsSection } from '@/components/AdminPollsSection';
 import { AdminReorderSection } from '@/components/AdminReorderSection';
 import { AdminStorageSection } from '@/components/AdminStorageSection';
 import { AdminVocabularySection } from '@/components/AdminVocabularySection';
+import { AdminLeaderboardSection } from '@/components/AdminLeaderboardSection';
 import { AdminQueueDashboard } from '@/components/PostFeed/AdminQueueDashboard';
 import { CollapsibleCatalogue } from '@/components/CollapsibleCatalogue';
 import { getAllLevels } from '@/utils/levelsData';
@@ -475,7 +476,12 @@ export const AdminPage: React.FC = () => {
         <AdminStorageSection />
       )}
 
-      {/* 7. Feed Image Publishing Queue Dashboard (Admin-Only | Sequential Auto-Publish) */}
+      {/* 7. Leaderboard Reset Frequency & Competition Settings */}
+      {(adminTab === 'all') && (
+        <AdminLeaderboardSection />
+      )}
+
+      {/* 8. Feed Image Publishing Queue Dashboard (Admin-Only | Sequential Auto-Publish) */}
       {(adminTab === 'all' || adminTab === 'queue') && (
         <CollapsibleCatalogue
           title="Feed Image Publishing Queue"

@@ -241,10 +241,10 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       <div className="text-center text-xs text-slate-400 font-bold">
         {isLocked && !revealData ? (
           <span className="text-sky-300 font-black animate-pulse">
-            ✓ Answer locked in! Waiting for time to expire...
+            ✓ Answer submitted. Waiting for other players...
           </span>
         ) : (
-          <span>Select an answer card above before timer expires</span>
+          <span>Select an answer card above before the timer expires</span>
         )}
       </div>
 
