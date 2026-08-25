@@ -206,19 +206,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: 'You must be authenticated to update your profile.' };
     }
 
-    const sanitizedRole = role === 'teacher' ? 'teacher' : 'student';
+    const effectiveRole: 'student' | 'teacher' = role === 'teacher'
+      ? 'teacher'
+      : (role === 'student' ? 'student' : (profile?.role === 'teacher' || user.user_metadata?.role === 'teacher' ? 'teacher' : 'student'));
 
     try {
-      // 1. If role is provided, call secure complete_user_onboarding stored procedure
-      if (role) {
-        try {
-          await supabase.rpc('complete_user_onboarding', {
-            p_full_name: trimmed,
-            p_role: sanitizedRole
-          });
-        } catch (rpcErr) {
-          console.warn('[AuthContext] complete_user_onboarding RPC notice:', rpcErr);
-        }
+      // 1. Call secure complete_user_onboarding stored procedure
+      try {
+        await supabase.rpc('complete_user_onboarding', {
+          p_full_name: trimmed,
+          p_role: effectiveRole
+        });
+      } catch (rpcErr) {
+        console.warn('[AuthContext] complete_user_onboarding RPC notice:', rpcErr);
       }
 
       // 2. Upsert into public.profiles table
@@ -229,6 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: user.id,
             email: user.email,
             full_name: trimmed,
+            role: effectiveRole,
             updated_at: new Date().toISOString()
           },
           { onConflict: 'id' }
@@ -244,7 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             full_name: trimmed,
             name: trimmed,
-            role: role ? sanitizedRole : (user.user_metadata?.role || 'student'),
+            role: effectiveRole,
             onboarding_completed: true
           }
         });
@@ -255,7 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 4. Update local state
       const targetRole = user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com'
         ? 'admin'
-        : (role ? sanitizedRole : (profile?.role || 'student'));
+        : effectiveRole;
 
       setProfile((prev) => ({
         id: user.id,
@@ -775,6 +776,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: data.user.id,
                 email: data.user.email,
                 full_name: trimmedName,
+                role: sanitizedRole,
                 updated_at: new Date().toISOString()
               },
               { onConflict: 'id' }

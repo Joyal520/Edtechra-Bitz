@@ -29,7 +29,8 @@ export const AuthModal: React.FC = () => {
     resetPassword,
     updatePassword,
     updateProfileName,
-    profile
+    profile,
+    user
   } = useAuth();
 
   const [mode, setMode] = useState<AuthModalMode>(authModalMode);
@@ -59,12 +60,21 @@ export const AuthModal: React.FC = () => {
       setNameInput(currentName);
     }
 
+    try {
+      const savedRole = localStorage.getItem('edtechra_onboarding_role');
+      if (savedRole === 'teacher' || profile?.role === 'teacher' || user?.user_metadata?.role === 'teacher') {
+        setRole('teacher');
+      }
+    } catch (e) {
+      // ignore
+    }
+
     if (authModalMode === 'name_prompt') {
       setTimeout(() => {
         nameInputRef.current?.focus();
       }, 100);
     }
-  }, [authModalMode, authModalOpen, profile]);
+  }, [authModalMode, authModalOpen, profile, user]);
 
   if (!authModalOpen) return null;
 
