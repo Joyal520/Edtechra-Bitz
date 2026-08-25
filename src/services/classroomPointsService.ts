@@ -78,24 +78,41 @@ class ClassroomPointsService {
     if (!supabase || !classroomId) return [];
 
     try {
-      // 1. Fetch active members
+      // 1. Fetch classroom to obtain teacher_id
+      const { data: classroom } = await supabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      const ownerId = classroom?.teacher_id;
+
+      // 2. Fetch active members
       const { data: members, error: memError } = await supabase
         .from('classroom_members')
         .select(`
           profile_id,
           display_name,
-          profile:profiles!profile_id (id, full_name, email, avatar_url)
+          role,
+          profile:profiles!profile_id (id, full_name, email, avatar_url, role)
         `)
         .eq('classroom_id', classroomId)
-        .eq('status', 'active')
-        .eq('role', 'student');
+        .eq('status', 'active');
 
       if (memError) throw memError;
 
-      const studentList = members || [];
+      // Filter out any teacher, co-teacher, classroom owner, or global teacher/admin
+      const studentList = (members || []).filter((m: any) => {
+        if (ownerId && m.profile_id === ownerId) return false;
+        if (m.role === 'teacher' || m.role === 'co-teacher') return false;
+        if (m.profile?.role === 'teacher' || m.profile?.role === 'admin') return false;
+        if (m.profile?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com') return false;
+        return true;
+      });
+
       if (studentList.length === 0) return [];
 
-      // 2. Aggregate points
+      // 3. Aggregate points
       const { data: pointsData } = await supabase
         .from('classroom_points')
         .select('student_id, points')

@@ -437,6 +437,16 @@ class ClassroomService {
         return { error: 'Invalid or expired classroom invite code.' };
       }
 
+      // Check if user is classroom owner
+      const { data: targetClass } = await supabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', targetClassroomId)
+        .maybeSingle();
+
+      const isOwner = targetClass?.teacher_id === userId;
+      const assignedRole = isOwner ? 'teacher' : 'student';
+
       // Insert membership record
       const { error: joinError } = await supabase
         .from('classroom_members')
@@ -444,7 +454,7 @@ class ClassroomService {
           {
             classroom_id: targetClassroomId,
             profile_id: userId,
-            role: 'student',
+            role: assignedRole,
             status: 'active'
           },
           { onConflict: 'classroom_id,profile_id' }
