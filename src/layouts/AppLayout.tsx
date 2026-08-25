@@ -292,13 +292,28 @@ export const AppLayout: React.FC = () => {
                 {/* Dropdown Menu */}
                 {userDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-white text-slate-900 rounded-2xl shadow-xl border border-stone-200/90 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                    <div className="px-4 py-2.5 border-b border-stone-100">
-                      <div className="font-extrabold text-xs text-[#0f233a] truncate">
-                        {displayName}
+                    <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-extrabold text-xs text-[#0f233a] truncate">
+                          {displayName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate font-mono">
+                          {user.email}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate font-mono">
-                        {user.email}
-                      </div>
+                      {isAdmin ? (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-black rounded-md shrink-0">
+                          Admin
+                        </span>
+                      ) : profile?.role === 'teacher' ? (
+                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-black rounded-md border border-purple-200 shrink-0">
+                          Teacher
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md shrink-0">
+                          Student
+                        </span>
+                      )}
                     </div>
 
                     <div className="py-1">
@@ -431,6 +446,10 @@ export const AppLayout: React.FC = () => {
                 {isAdmin ? (
                   <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-black rounded-md">
                     Admin
+                  </span>
+                ) : profile?.role === 'teacher' ? (
+                  <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-black rounded-md border border-purple-200">
+                    Teacher
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md">

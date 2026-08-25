@@ -10,6 +10,7 @@ import {
   Type,
   ShieldCheck,
   GraduationCap,
+  Sparkles,
   Save,
   Check
 } from 'lucide-react';
@@ -503,6 +504,11 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                   <span className="px-2.5 py-1 bg-purple-100 text-purple-800 text-[11px] font-black rounded-lg border border-purple-200 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5" />
                     Admin
+                  </span>
+                ) : profile?.role === 'teacher' ? (
+                  <span className="px-2.5 py-1 bg-purple-50 text-purple-700 text-[11px] font-black rounded-lg border border-purple-200 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    Teacher
                   </span>
                 ) : (
                   <span className="px-2.5 py-1 bg-brand-50 text-brand-700 text-[11px] font-extrabold rounded-lg border border-brand-200 flex items-center gap-1">
