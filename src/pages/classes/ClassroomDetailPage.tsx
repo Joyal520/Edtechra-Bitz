@@ -4,13 +4,7 @@ import {
   Award,
   Sparkles,
   Plus,
-  Search,
-  Bell,
   ArrowRight,
-  Menu,
-  ChevronDown,
-  LogOut,
-  Settings,
   ArrowLeft,
   Share2,
   Copy,
@@ -38,7 +32,6 @@ import { classroomExamService } from '@/services/classroomExamService';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 
-import { ClassroomSidebar } from '@/components/classes/ClassroomSidebar';
 import {
   OverviewIllustration,
   TaskIllustration,
@@ -67,14 +60,13 @@ import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedba
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
-import { UserSettingsModal } from '@/components/UserSettingsModal';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
 
 export const ClassroomDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, profile, isTeacher: authIsTeacher, signOut } = useAuth();
+  const { user, profile, isTeacher: authIsTeacher } = useAuth();
 
   const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [invite, setInvite] = useState<ClassroomInvite | null>(null);
@@ -94,12 +86,6 @@ export const ClassroomDetailPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Invite code copied feedback
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -125,20 +111,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [taskDueDate, setTaskDueDate] = useState('');
   const [isCreatingTask, setIsCreatingTask] = useState(false);
 
-  const topDropdownRef = useRef<HTMLDivElement>(null);
   const contentSectionRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (topDropdownRef.current && !topDropdownRef.current.contains(event.target as Node)) {
-        setUserDropdownOpen(false);
-        setNotificationsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const handleLaunchLiveQuiz = async (selectedQuiz: LiveQuiz) => {
     if (!id) return;
@@ -227,14 +200,6 @@ export const ClassroomDetailPage: React.FC = () => {
     user?.user_metadata?.full_name?.trim() ||
     'Mr. Joy';
 
-  const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
-  const initials = teacherDisplayName
-    .split(' ')
-    .map((n: string) => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase() || 'MJ';
-
   const handleSelectTab = (tab: TabType) => {
     setActiveTab(tab);
     if (contentSectionRef.current) {
@@ -305,187 +270,58 @@ export const ClassroomDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#111827] flex font-sans antialiased text-slate-800">
-      {/* 1. LEFT SIDEBAR */}
-      <ClassroomSidebar
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenReports={() => setAiReportModalOpen(true)}
-        onSelectMessagesTab={() => handleSelectTab('stream')}
-        isOpenMobile={mobileSidebarOpen}
-        onCloseMobile={() => setMobileSidebarOpen(false)}
-      />
-
-      {/* 2. MAIN DIGITAL CLASSROOM WORKSPACE */}
-      <div className="flex-1 bg-[#f8fafc] min-w-0 flex flex-col min-h-screen">
+    <div className="min-h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 py-6 sm:py-8">
+      {/* MAIN DIGITAL CLASSROOM WORKSPACE */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
-        {/* TOP APP BAR */}
-        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
-          {/* Left: Mobile Menu Toggle & Classroom Quick Breadcrumb */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMobileSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              aria-label="Open sidebar"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-
+        {/* TOP CLASSROOM NAVIGATION & BREADCRUMB */}
+        <div className="flex items-center justify-between gap-4 flex-wrap pb-4 border-b border-slate-200/80">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Link
               to="/classes"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-extrabold text-slate-500 hover:text-indigo-600 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-black text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 px-3.5 py-1.5 rounded-full transition-all border border-indigo-100"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Classes</span>
+              <span>All Classes</span>
             </Link>
 
-            <span className="hidden sm:inline text-slate-300">/</span>
+            <span className="text-slate-300">/</span>
 
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-black border border-indigo-100">
-                {classroom.subject || 'Class'}
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-black border border-indigo-100">
+              {classroom.subject || 'Class'}
+            </span>
+
+            {classroom.grade && (
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-extrabold">
+                {classroom.grade}
               </span>
-              <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate max-w-[200px] sm:max-w-[320px]">
-                {classroom.title}
-              </h2>
-            </div>
+            )}
+
+            <h2 className="text-sm sm:text-base font-black text-slate-900 truncate max-w-[240px] sm:max-w-md">
+              {classroom.title}
+            </h2>
           </div>
 
-          {/* Right: Search, Notifications & Teacher Avatar */}
-          <div className="flex items-center gap-2 sm:gap-4" ref={topDropdownRef}>
-            {/* Search Input / Icon */}
-            <div className="relative">
-              {searchOpen ? (
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64 sm:w-80 animate-in fade-in slide-in-from-right-4 duration-150 z-20">
-                  <div className="relative flex items-center">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3" />
-                    <input
-                      type="search"
-                      autoFocus
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search tasks, students..."
-                      className="w-full pl-9 pr-8 py-2 bg-white border-2 border-indigo-500 rounded-full text-xs font-semibold shadow-lg focus:outline-none"
-                    />
-                    <button
-                      onClick={() => setSearchOpen(false)}
-                      className="absolute right-2.5 text-xs font-black text-slate-400 hover:text-slate-600"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setSearchOpen(true)}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all cursor-pointer"
-                  title="Search Classroom"
-                  aria-label="Search"
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Notification Bell with Badge 5 */}
-            <div className="relative">
-              <button
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all relative cursor-pointer"
-                title="Notifications"
-                aria-label="Notifications"
-              >
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs border-2 border-white">
-                  5
-                </span>
-              </button>
-
-              {/* Notifications Dropdown */}
-              {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white text-slate-900 rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-black text-slate-900">Classroom Alerts</span>
-                    <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                      5 New
-                    </span>
-                  </div>
-                  <div className="py-2 space-y-2 text-xs">
-                    <div className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
-                      <div className="font-bold text-slate-800">3 new student submissions</div>
-                      <div className="text-[11px] text-slate-500">Weekly Quiz & Reading Task</div>
-                    </div>
-                    <div className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
-                      <div className="font-bold text-slate-800">Live Quiz scheduled</div>
-                      <div className="text-[11px] text-slate-500">Tomorrow at 10:00 AM</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Teacher Profile Avatar Button */}
-            <div className="relative">
-              <button
-                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                className="flex items-center gap-1.5 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
-                aria-label="Profile menu"
-              >
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-400 to-amber-200 text-slate-900 font-black text-xs sm:text-sm flex items-center justify-center shadow-xs overflow-hidden border-2 border-white">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt={teacherDisplayName} className="w-full h-full object-cover" />
-                  ) : (
-                    <span>{initials}</span>
-                  )}
-                </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500 hidden sm:block" />
-              </button>
-
-              {/* Profile Dropdown */}
-              {userDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white text-slate-900 rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <div className="font-black text-xs text-slate-900 truncate">{teacherDisplayName}</div>
-                    <div className="text-[11px] text-slate-500 font-mono truncate">{user?.email || 'Teacher'}</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setUserDropdownOpen(false);
-                      setSettingsOpen(true);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors text-left"
-                  >
-                    <Settings className="w-4 h-4 text-slate-400" />
-                    <span>Profile & Settings</span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setUserDropdownOpen(false);
-                      await signOut();
-                      navigate('/');
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left border-t border-slate-100"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAiReportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-3.5 py-1.5 rounded-full transition-all shadow-xs active:scale-95 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Classroom Report</span>
+            </button>
           </div>
-        </header>
+        </div>
 
-        {/* MAIN WORKSPACE BODY */}
-        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-          
-          {/* GREETING HERO HEADER */}
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-              Welcome back, {teacherDisplayName}! 👋
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold">
-              Manage your class, engage students and track progress.
-            </p>
-          </div>
+        {/* GREETING HERO HEADER */}
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
+            Welcome back, {teacherDisplayName}! 👋
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 font-semibold">
+            Manage your class, engage students and track progress.
+          </p>
+        </div>
 
           {/* ========================================================================= */}
           {/* LAYER 1: FIVE EXISTING CLASSROOM MANAGEMENT CARDS                          */}
@@ -1258,7 +1094,6 @@ export const ClassroomDetailPage: React.FC = () => {
           )}
 
         </main>
-      </div>
 
       {/* ALL MODALS PRESERVED */}
       <StudentSubmitModal
@@ -1332,11 +1167,6 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         onClose={() => setCreateLiveQuizOpen(false)}
         onSuccess={handleLaunchLiveQuiz}
-      />
-
-      <UserSettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
       />
 
     </div>
