@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  BookOpen,
-  Users,
-  MessageSquare,
-  Folder,
-  Trophy,
   Award,
   Sparkles,
   Plus,
-  Layers,
-  Zap
+  Search,
+  Bell,
+  ArrowRight,
+  Menu,
+  ChevronDown,
+  LogOut,
+  Settings,
+  ArrowLeft,
+  Share2,
+  Copy,
+  Check,
+  MessageSquareShare
 } from 'lucide-react';
 import {
   Classroom,
@@ -33,7 +38,21 @@ import { classroomExamService } from '@/services/classroomExamService';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 
-import { ClassroomHeader } from '@/components/classes/ClassroomHeader';
+import { ClassroomSidebar } from '@/components/classes/ClassroomSidebar';
+import {
+  OverviewIllustration,
+  TaskIllustration,
+  StudentsIllustration,
+  StreamIllustration,
+  ResourcesIllustration,
+  AssignStudentsIllustration,
+  LiveQuizIllustration,
+  ExamIllustration,
+  OCRIllustration,
+  CompetitionIllustration,
+  BottomBannerIllustration
+} from '@/components/classes/ClassroomIllustrations';
+
 import { AssignmentList } from '@/components/classes/AssignmentList';
 import { StudentRoster } from '@/components/classes/StudentRoster';
 import { ClassroomLeaderboard } from '@/components/classes/ClassroomLeaderboard';
@@ -48,13 +67,14 @@ import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedba
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
+import { UserSettingsModal } from '@/components/UserSettingsModal';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
 
 export const ClassroomDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, isTeacher: authIsTeacher } = useAuth();
+  const { user, profile, isTeacher: authIsTeacher, signOut } = useAuth();
 
   const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [invite, setInvite] = useState<ClassroomInvite | null>(null);
@@ -74,6 +94,15 @@ export const ClassroomDetailPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Invite code copied feedback
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   // Modals state
   const [activeSubmitAssignment, setActiveSubmitAssignment] = useState<Assignment | null>(null);
@@ -95,6 +124,21 @@ export const ClassroomDetailPage: React.FC = () => {
   const [taskPoints, setTaskPoints] = useState(100);
   const [taskDueDate, setTaskDueDate] = useState('');
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+
+  const topDropdownRef = useRef<HTMLDivElement>(null);
+  const contentSectionRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (topDropdownRef.current && !topDropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false);
+        setNotificationsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLaunchLiveQuiz = async (selectedQuiz: LiveQuiz) => {
     if (!id) return;
@@ -176,6 +220,28 @@ export const ClassroomDetailPage: React.FC = () => {
     authIsTeacher
   );
 
+  const teacherDisplayName =
+    profile?.full_name?.trim() ||
+    profile?.name?.trim() ||
+    classroom?.teacher?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    'Mr. Joy';
+
+  const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
+  const initials = teacherDisplayName
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || 'MJ';
+
+  const handleSelectTab = (tab: TabType) => {
+    setActiveTab(tab);
+    if (contentSectionRef.current) {
+      contentSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleCreateTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id || !taskTitle.trim()) return;
@@ -215,484 +281,986 @@ export const ClassroomDetailPage: React.FC = () => {
     }
   };
 
+  const inviteCode = invite?.invite_code || '...';
+  const inviteUrl = `${window.location.origin}/classes/join/${inviteCode}`;
+
+  const handleCopyInvite = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 2000);
+  };
+
+  const handleWhatsAppShare = () => {
+    const text = `Join my classroom "${classroom?.title}" on EdTechra!\nUse code: ${inviteCode}\nOr click link: ${inviteUrl}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   if (loading || !classroom) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12 text-center space-y-3">
-        <div className="w-10 h-10 border-4 border-[#026fc3] border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-extrabold text-slate-500">Loading digital classroom...</p>
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-[#6366f1] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-extrabold text-slate-600">Loading EdTechra Digital Classroom...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      
-      {/* Classroom Banner & Header */}
-      <ClassroomHeader
-        classroom={classroom}
-        invite={invite}
-        onOpenAIFeedback={() => setAiReportModalOpen(true)}
+    <div className="min-h-screen bg-[#111827] flex font-sans antialiased text-slate-800">
+      {/* 1. LEFT SIDEBAR */}
+      <ClassroomSidebar
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenReports={() => setAiReportModalOpen(true)}
+        onSelectMessagesTab={() => handleSelectTab('stream')}
+        isOpenMobile={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
       />
 
-      {/* Tabs Navigation Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'overview'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Overview</span>
-        </button>
+      {/* 2. MAIN DIGITAL CLASSROOM WORKSPACE */}
+      <div className="flex-1 bg-[#f8fafc] min-w-0 flex flex-col min-h-screen">
+        
+        {/* TOP APP BAR */}
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
+          {/* Left: Mobile Menu Toggle & Classroom Quick Breadcrumb */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              aria-label="Open sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('assignments')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'assignments'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Tasks ({assignments.length})</span>
-        </button>
+            <Link
+              to="/classes"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-extrabold text-slate-500 hover:text-indigo-600 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Classes</span>
+            </Link>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('roster')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'roster'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Students ({members.length})</span>
-        </button>
+            <span className="hidden sm:inline text-slate-300">/</span>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('stream')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'stream'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>Stream</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('resources')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'resources'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Folder className="w-4 h-4" />
-          <span>Resources ({buckets.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('leaderboard')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'leaderboard'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Trophy className="w-4 h-4" />
-          <span>Leaderboard</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('exams')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'exams'
-              ? 'bg-[#026fc3] text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Award className="w-4 h-4" />
-          <span>Exams ({exams.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('live-quiz')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-            activeTab === 'live-quiz'
-              ? 'bg-purple-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Zap className="w-4 h-4" />
-          <span>Live Quiz</span>
-        </button>
-      </div>
-
-      {/* Main Tab Content Display */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          
-          {/* Left 2 Cols: Assignments & Stream overview */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Quick Create Task Form Modal/Inline (Teacher) */}
-            {isTeacher && showQuickCreateTask && (
-              <form onSubmit={handleCreateTaskSubmit} className="bg-white p-6 rounded-3xl border-2 border-brand-200 shadow-md space-y-4 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black text-slate-900">Create New Classroom Task</h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickCreateTask(false)}
-                    className="text-xs font-bold text-slate-400 hover:text-slate-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                <div>
-                  <input
-                    type="text"
-                    required
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    placeholder="Assignment Title (e.g. Weekly Reading Analysis)"
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <textarea
-                    rows={3}
-                    value={taskInstructions}
-                    onChange={(e) => setTaskInstructions(e.target.value)}
-                    placeholder="Instructions and assignment requirements..."
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Max Points</label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={500}
-                      required
-                      value={taskPoints}
-                      onChange={(e) => setTaskPoints(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Due Date</label>
-                    <input
-                      type="date"
-                      value={taskDueDate}
-                      onChange={(e) => setTaskDueDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="submit"
-                    disabled={isCreatingTask}
-                    className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all"
-                  >
-                    {isCreatingTask ? 'Publishing...' : 'Publish Task'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Assignments Widget */}
-            <AssignmentList
-              assignments={assignments}
-              isTeacher={isTeacher}
-              onCreateAssignment={() => setShowQuickCreateTask(true)}
-              onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
-              onSubmitWork={(a) => setActiveSubmitAssignment(a)}
-              onDeleteAssignment={handleDeleteAssignment}
-            />
-
-            {/* Stream Announcements Widget */}
-            <ClassroomMessages
-              classroomId={classroom.id}
-              messages={messages}
-              isTeacher={isTeacher}
-              onMessageUpdated={loadAllClassroomData}
-            />
-
-          </div>
-
-          {/* Right Col: Leaderboard Preview & Activity Hub Shortcut */}
-          <div className="space-y-6">
-            
-            {/* Activity Hub Launcher (Teacher) */}
-            {isTeacher && (
-              <div className="bg-gradient-to-br from-purple-700 to-indigo-800 text-white rounded-3xl p-6 shadow-md space-y-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-purple-200" />
-                  <h3 className="text-sm font-black text-white">Teacher Activity Hub</h3>
-                </div>
-                <p className="text-xs text-purple-100 font-medium leading-relaxed">
-                  Quickly assign multiple-choice exams, launch AI OCR worksheet evaluations, or build new learning modules.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setActivityHubOpen(true)}
-                  className="w-full py-2.5 bg-white text-purple-900 hover:bg-purple-50 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
-                >
-                  Open Activity Hub
-                </button>
-              </div>
-            )}
-
-            {/* Leaderboard Card Widget */}
-            <ClassroomLeaderboard
-              entries={leaderboard}
-              currentUserId={user?.id}
-            />
-
-          </div>
-
-        </div>
-      )}
-
-      {activeTab === 'assignments' && (
-        <AssignmentList
-          assignments={assignments}
-          isTeacher={isTeacher}
-          onCreateAssignment={() => setShowQuickCreateTask(true)}
-          onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
-          onSubmitWork={(a) => setActiveSubmitAssignment(a)}
-          onDeleteAssignment={handleDeleteAssignment}
-        />
-      )}
-
-      {activeTab === 'roster' && (
-        <StudentRoster
-          classroomId={classroom.id}
-          members={members}
-          isTeacher={isTeacher}
-          onMemberRemoved={loadAllClassroomData}
-        />
-      )}
-
-      {activeTab === 'stream' && (
-        <ClassroomMessages
-          classroomId={classroom.id}
-          messages={messages}
-          isTeacher={isTeacher}
-          onMessageUpdated={loadAllClassroomData}
-        />
-      )}
-
-      {activeTab === 'resources' && (
-        <ClassroomResources
-          classroomId={classroom.id}
-          buckets={buckets}
-          isTeacher={isTeacher}
-          onUpdated={loadAllClassroomData}
-          onOpenActivityHub={() => setActivityHubOpen(true)}
-        />
-      )}
-
-      {activeTab === 'leaderboard' && (
-        <ClassroomLeaderboard
-          entries={leaderboard}
-          currentUserId={user?.id}
-        />
-      )}
-
-      {activeTab === 'exams' && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-100 shadow-xs">
-            <div>
-              <h2 className="text-base font-black text-slate-900">Classroom Timed Assessments</h2>
-              <p className="text-xs text-slate-500 font-semibold">{exams.length} active exams</p>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-black border border-indigo-100">
+                {classroom.subject || 'Class'}
+              </span>
+              <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate max-w-[200px] sm:max-w-[320px]">
+                {classroom.title}
+              </h2>
             </div>
-            {isTeacher && (
+          </div>
+
+          {/* Right: Search, Notifications & Teacher Avatar */}
+          <div className="flex items-center gap-2 sm:gap-4" ref={topDropdownRef}>
+            {/* Search Input / Icon */}
+            <div className="relative">
+              {searchOpen ? (
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64 sm:w-80 animate-in fade-in slide-in-from-right-4 duration-150 z-20">
+                  <div className="relative flex items-center">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3" />
+                    <input
+                      type="search"
+                      autoFocus
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search tasks, students..."
+                      className="w-full pl-9 pr-8 py-2 bg-white border-2 border-indigo-500 rounded-full text-xs font-semibold shadow-lg focus:outline-none"
+                    />
+                    <button
+                      onClick={() => setSearchOpen(false)}
+                      className="absolute right-2.5 text-xs font-black text-slate-400 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSearchOpen(true)}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all cursor-pointer"
+                  title="Search Classroom"
+                  aria-label="Search"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Notification Bell with Badge 5 */}
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all relative cursor-pointer"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shadow-xs border-2 border-white">
+                  5
+                </span>
+              </button>
+
+              {/* Notifications Dropdown */}
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white text-slate-900 rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-black text-slate-900">Classroom Alerts</span>
+                    <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                      5 New
+                    </span>
+                  </div>
+                  <div className="py-2 space-y-2 text-xs">
+                    <div className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
+                      <div className="font-bold text-slate-800">3 new student submissions</div>
+                      <div className="text-[11px] text-slate-500">Weekly Quiz & Reading Task</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/50 transition-colors">
+                      <div className="font-bold text-slate-800">Live Quiz scheduled</div>
+                      <div className="text-[11px] text-slate-500">Tomorrow at 10:00 AM</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Teacher Profile Avatar Button */}
+            <div className="relative">
+              <button
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="flex items-center gap-1.5 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                aria-label="Profile menu"
+              >
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-400 to-amber-200 text-slate-900 font-black text-xs sm:text-sm flex items-center justify-center shadow-xs overflow-hidden border-2 border-white">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={teacherDisplayName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 hidden sm:block" />
+              </button>
+
+              {/* Profile Dropdown */}
+              {userDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white text-slate-900 rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <div className="font-black text-xs text-slate-900 truncate">{teacherDisplayName}</div>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">{user?.email || 'Teacher'}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      setSettingsOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition-colors text-left"
+                  >
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    <span>Profile & Settings</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setUserDropdownOpen(false);
+                      await signOut();
+                      navigate('/');
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left border-t border-slate-100"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* MAIN WORKSPACE BODY */}
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+          
+          {/* GREETING HERO HEADER */}
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
+              Welcome back, {teacherDisplayName}! 👋
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-semibold">
+              Manage your class, engage students and track progress.
+            </p>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* LAYER 1: FIVE EXISTING CLASSROOM MANAGEMENT CARDS                          */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+            
+            {/* Card 1: Overview */}
+            <div
+              onClick={() => handleSelectTab('overview')}
+              className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+                activeTab === 'overview'
+                  ? 'bg-[#eaf4ff] border-sky-300 shadow-md ring-2 ring-sky-400/50'
+                  : 'bg-[#f0f7ff] border-sky-100 hover:border-sky-300'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <OverviewIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-left">
+                  <h3 className="text-base font-black text-slate-900">Overview</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    See class summary, performance & activity.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <div className="w-8 h-8 rounded-full bg-sky-200/80 group-hover:bg-sky-300 text-sky-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Task */}
+            <div
+              onClick={() => handleSelectTab('assignments')}
+              className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+                activeTab === 'assignments'
+                  ? 'bg-[#e6f9ed] border-emerald-300 shadow-md ring-2 ring-emerald-400/50'
+                  : 'bg-[#f0fdf4] border-emerald-100 hover:border-emerald-300'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <TaskIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-left">
+                  <h3 className="text-base font-black text-slate-900">Task</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Create, manage and review assignments.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-200/80 group-hover:bg-emerald-300 text-emerald-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Students */}
+            <div
+              onClick={() => handleSelectTab('roster')}
+              className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+                activeTab === 'roster'
+                  ? 'bg-[#eee9fe] border-purple-300 shadow-md ring-2 ring-purple-400/50'
+                  : 'bg-[#f5f3ff] border-purple-100 hover:border-purple-300'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <StudentsIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-left">
+                  <h3 className="text-base font-black text-slate-900">Students</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    View students, progress and engagement.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <div className="w-8 h-8 rounded-full bg-purple-200/80 group-hover:bg-purple-300 text-purple-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Stream */}
+            <div
+              onClick={() => handleSelectTab('stream')}
+              className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+                activeTab === 'stream'
+                  ? 'bg-[#fef9c3] border-amber-300 shadow-md ring-2 ring-amber-400/50'
+                  : 'bg-[#fefce8] border-amber-100 hover:border-amber-300'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <StreamIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-left">
+                  <h3 className="text-base font-black text-slate-900">Stream</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    View class updates, announcements & posts.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <div className="w-8 h-8 rounded-full bg-amber-200/80 group-hover:bg-amber-300 text-amber-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 5: Resources */}
+            <div
+              onClick={() => handleSelectTab('resources')}
+              className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+                activeTab === 'resources'
+                  ? 'bg-[#ffe4e6] border-rose-300 shadow-md ring-2 ring-rose-400/50'
+                  : 'bg-[#fff1f2] border-rose-100 hover:border-rose-300'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <ResourcesIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-left">
+                  <h3 className="text-base font-black text-slate-900">Resources</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Access teaching materials, files and links.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <div className="w-8 h-8 rounded-full bg-rose-200/80 group-hover:bg-rose-300 text-rose-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* ========================================================================= */}
+          {/* SECTION DIVIDER: ASSIGN YOUR STUDENTS                                     */}
+          {/* ========================================================================= */}
+          <div className="flex items-center gap-4 py-3">
+            <div className="flex-1 h-[2px] bg-slate-200 flex items-center justify-end">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
+            </div>
+            <h2 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 tracking-wider uppercase px-2 text-center select-none">
+              ASSIGN YOUR STUDENTS
+            </h2>
+            <div className="flex-1 h-[2px] bg-slate-200 flex items-center justify-start">
+              <div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* LAYER 2: FIVE ASSESSMENT & ENGAGEMENT FEATURE CARDS                        */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+            
+            {/* Card 1: Assign Your Students */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <AssignStudentsIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-base font-black text-slate-900">Assign Your Students</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Assign tasks, lessons or activities to selected students or groups.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityHubOpen(true);
+                }}
+                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                Get Started
+              </button>
+            </div>
+
+            {/* Card 2: Live Quiz */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <LiveQuizIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-base font-black text-slate-900">Live Quiz</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Conduct live quizzes, engage students in real time and view results instantly.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isTeacher) {
+                    setLiveQuizBankOpen(true);
+                  } else {
+                    navigate('/classes/live-quiz/join');
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                Start Quiz
+              </button>
+            </div>
+
+            {/* Card 3: Exam */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <ExamIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-base font-black text-slate-900">Exam</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Create exams, set time limits and evaluate student performance.
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setSelectedExam(null);
                   setExamModalOpen(true);
                 }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>Create Exam</span>
+                Create Exam
               </button>
-            )}
+            </div>
+
+            {/* Card 4: OCR Assessment */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <OCRIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-base font-black text-slate-900">OCR Assessment</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Upload handwritten papers and get AI evaluation with smart feedback.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOcrModalOpen(true)}
+                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                Start OCR
+              </button>
+            </div>
+
+            {/* Card 5: Competition */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
+              <div className="space-y-3">
+                <div className="flex justify-center py-1">
+                  <CompetitionIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
+                </div>
+                <div className="space-y-1 text-center">
+                  <h3 className="text-base font-black text-slate-900">Competition</h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Organize competitions, challenges and track leaderboard.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectTab('leaderboard')}
+                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                Create Competition
+              </button>
+            </div>
+
           </div>
 
-          {exams.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 text-center border border-slate-100 shadow-xs space-y-2">
-              <Award className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-xs font-bold text-slate-500">No exams scheduled for this classroom.</p>
-              <p className="text-[11px] text-slate-400">
-                {isTeacher
-                  ? 'Click "+ Create Exam" to build an interactive timed assessment.'
-                  : 'Check back when your teacher announces an assessment.'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {exams.map((exam) => (
-                <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xs space-y-4 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
-                        {exam.duration_minutes} Minutes
-                      </span>
-                      <span className="text-xs font-extrabold text-slate-600">
-                        {exam.total_marks} Marks Total
-                      </span>
-                    </div>
-
-                    <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
-                    {exam.description && (
-                      <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
-                    )}
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    {exam.latest_result ? (
-                      <span className="text-xs font-black text-emerald-600">
-                        Score: {exam.latest_result.score} / {exam.total_marks} ({exam.latest_result.percentage}%)
-                      </span>
-                    ) : (
-                      <span className="text-xs font-semibold text-slate-400">
-                        {exam.questions.length} questions
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedExam(exam);
-                        setExamModalOpen(true);
-                      }}
-                      className="px-4 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
-                    >
-                      {exam.latest_result ? 'View Result' : 'Take Exam'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Live Quiz Tab Display */}
-      {activeTab === 'live-quiz' && (
-        <div className="space-y-6">
-          <div className="p-8 rounded-3xl bg-gradient-to-r from-purple-700 via-indigo-700 to-[#026fc3] text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-black uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Multiplayer Classroom Games</span>
+          {/* ========================================================================= */}
+          {/* BOTTOM CLASSROOM INFORMATION BANNER                                       */}
+          {/* ========================================================================= */}
+          <div className="rounded-3xl bg-slate-100/90 border border-slate-200 p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
+            <div className="flex items-center gap-3.5 text-left">
+              <span className="text-2xl shrink-0" role="img" aria-label="lightbulb">💡</span>
+              <div className="space-y-0.5">
+                <h4 className="text-xs sm:text-sm font-black text-[#6366f1]">
+                  Empower your classroom, inspire your students.
+                </h4>
+                <p className="text-xs text-slate-600 font-medium">
+                  Everything you need to teach, assess and motivate—all in one place.
+                </p>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black">Interactive Live Quizzes</h2>
-              <p className="text-xs sm:text-sm text-purple-100 font-medium leading-relaxed">
-                Host synchronized, fast-paced live games. Students compete on their devices in real-time with speed bonuses and live podium rankings.
-              </p>
+            </div>
+            <div className="hidden sm:block shrink-0 opacity-90">
+              <BottomBannerIllustration className="w-36 h-16" />
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* ACTIVE TAB CONTENT DISPLAY SECTION                                        */}
+          {/* ========================================================================= */}
+          <div ref={contentSectionRef} className="pt-4 space-y-6">
+            
+            {/* Quick Share Banner for Invite Code */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Classroom Invite Code</div>
+                  <div className="text-base font-black text-slate-900 font-mono tracking-widest">{inviteCode}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleCopyInvite}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedInvite ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedInvite ? 'Copied!' : 'Copy Code & Link'}</span>
+                </button>
+
+                <button
+                  onClick={handleWhatsAppShare}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <MessageSquareShare className="w-3.5 h-3.5" />
+                  <span>Share via WhatsApp</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {isTeacher ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setLiveQuizBankOpen(true)}
-                    className="px-5 py-3 bg-white text-purple-900 hover:bg-purple-50 rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Zap className="w-4 h-4 text-purple-600 fill-current" />
-                    <span>Open Quiz Bank</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreateLiveQuizOpen(true)}
-                    className="px-5 py-3 bg-purple-950/40 hover:bg-purple-950/60 text-white border border-white/20 rounded-2xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create Quiz</span>
-                  </button>
-                </>
-              ) : (
+            {/* Tab Secondary Navigation Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 gap-2 overflow-x-auto">
+              <div className="flex items-center gap-2">
                 <button
-                  type="button"
-                  onClick={() => navigate('/classes/live-quiz/join')}
-                  className="px-6 py-3.5 bg-white text-purple-900 hover:bg-purple-50 rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+                  onClick={() => setActiveTab('overview')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'overview'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
                 >
-                  <Zap className="w-4 h-4 text-purple-600 fill-current" />
-                  <span>Enter 6-Digit PIN</span>
+                  Overview & Feed
+                </button>
+                <button
+                  onClick={() => setActiveTab('assignments')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'assignments'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Tasks ({assignments.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('roster')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'roster'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Students ({members.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('stream')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'stream'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Stream ({messages.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('resources')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'resources'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Resources ({buckets.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('exams')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'exams'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Exams ({exams.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('leaderboard')}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                    activeTab === 'leaderboard'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Leaderboard
+                </button>
+              </div>
+
+              {isTeacher && (
+                <button
+                  onClick={() => setShowQuickCreateTask(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shrink-0 shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Task</span>
                 </button>
               )}
             </div>
+
+            {/* TAB: OVERVIEW */}
+            {activeTab === 'overview' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                
+                {/* Left 2 Columns: Tasks list & Stream messages */}
+                <div className="lg:col-span-2 space-y-6">
+                  
+                  {/* Inline Quick Task Creation (Teacher) */}
+                  {isTeacher && showQuickCreateTask && (
+                    <form onSubmit={handleCreateTaskSubmit} className="bg-white p-6 rounded-3xl border-2 border-indigo-200 shadow-md space-y-4 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-black text-slate-900">Create New Classroom Task</h3>
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickCreateTask(false)}
+                          className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          value={taskTitle}
+                          onChange={(e) => setTaskTitle(e.target.value)}
+                          placeholder="Assignment Title (e.g. Chapter 4 Chemistry Review)"
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <textarea
+                          rows={3}
+                          value={taskInstructions}
+                          onChange={(e) => setTaskInstructions(e.target.value)}
+                          placeholder="Instructions and requirements for students..."
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 resize-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Max Points</label>
+                          <input
+                            type="number"
+                            min={10}
+                            max={500}
+                            required
+                            value={taskPoints}
+                            onChange={(e) => setTaskPoints(Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Due Date</label>
+                          <input
+                            type="date"
+                            value={taskDueDate}
+                            onChange={(e) => setTaskDueDate(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="submit"
+                          disabled={isCreatingTask}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                        >
+                          {isCreatingTask ? 'Publishing...' : 'Publish Task'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Tasks List */}
+                  <AssignmentList
+                    assignments={assignments}
+                    isTeacher={isTeacher}
+                    onCreateAssignment={() => setShowQuickCreateTask(true)}
+                    onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
+                    onSubmitWork={(a) => setActiveSubmitAssignment(a)}
+                    onDeleteAssignment={handleDeleteAssignment}
+                  />
+
+                  {/* Stream Messages */}
+                  <ClassroomMessages
+                    classroomId={classroom.id}
+                    messages={messages}
+                    isTeacher={isTeacher}
+                    onMessageUpdated={loadAllClassroomData}
+                  />
+                </div>
+
+                {/* Right Column: Leaderboard & AI Feedback hub */}
+                <div className="space-y-6">
+                  {/* AI Report Card */}
+                  <div className="bg-gradient-to-br from-[#6366f1] to-[#7c3aed] text-white rounded-3xl p-6 shadow-md space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-indigo-200" />
+                      <h3 className="text-sm font-black text-white">AI Classroom Insights</h3>
+                    </div>
+                    <p className="text-xs text-indigo-100 font-medium leading-relaxed">
+                      Analyze student submissions, comprehension trends, and generate personalized feedback summaries.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAiReportModalOpen(true)}
+                      className="w-full py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                    >
+                      Generate AI Report
+                    </button>
+                  </div>
+
+                  {/* Leaderboard Card */}
+                  <ClassroomLeaderboard
+                    entries={leaderboard}
+                    currentUserId={user?.id}
+                  />
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB: ASSIGNMENTS (TASK) */}
+            {activeTab === 'assignments' && (
+              <div className="space-y-6">
+                {isTeacher && showQuickCreateTask && (
+                  <form onSubmit={handleCreateTaskSubmit} className="bg-white p-6 rounded-3xl border-2 border-indigo-200 shadow-md space-y-4 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-black text-slate-900">Create New Classroom Task</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickCreateTask(false)}
+                        className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        required
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                        placeholder="Assignment Title"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <textarea
+                        rows={3}
+                        value={taskInstructions}
+                        onChange={(e) => setTaskInstructions(e.target.value)}
+                        placeholder="Instructions and requirements..."
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 resize-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Max Points</label>
+                        <input
+                          type="number"
+                          min={10}
+                          max={500}
+                          required
+                          value={taskPoints}
+                          onChange={(e) => setTaskPoints(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Due Date</label>
+                        <input
+                          type="date"
+                          value={taskDueDate}
+                          onChange={(e) => setTaskDueDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="submit"
+                        disabled={isCreatingTask}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                      >
+                        {isCreatingTask ? 'Publishing...' : 'Publish Task'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <AssignmentList
+                  assignments={assignments}
+                  isTeacher={isTeacher}
+                  onCreateAssignment={() => setShowQuickCreateTask(true)}
+                  onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
+                  onSubmitWork={(a) => setActiveSubmitAssignment(a)}
+                  onDeleteAssignment={handleDeleteAssignment}
+                />
+              </div>
+            )}
+
+            {/* TAB: STUDENTS (ROSTER) */}
+            {activeTab === 'roster' && (
+              <StudentRoster
+                classroomId={classroom.id}
+                members={members}
+                isTeacher={isTeacher}
+                onMemberRemoved={loadAllClassroomData}
+              />
+            )}
+
+            {/* TAB: STREAM */}
+            {activeTab === 'stream' && (
+              <ClassroomMessages
+                classroomId={classroom.id}
+                messages={messages}
+                isTeacher={isTeacher}
+                onMessageUpdated={loadAllClassroomData}
+              />
+            )}
+
+            {/* TAB: RESOURCES */}
+            {activeTab === 'resources' && (
+              <ClassroomResources
+                classroomId={classroom.id}
+                buckets={buckets}
+                isTeacher={isTeacher}
+                onUpdated={loadAllClassroomData}
+                onOpenActivityHub={() => setActivityHubOpen(true)}
+              />
+            )}
+
+            {/* TAB: EXAMS */}
+            {activeTab === 'exams' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">Classroom Timed Assessments</h2>
+                    <p className="text-xs text-slate-500 font-semibold">{exams.length} active exams</p>
+                  </div>
+                  {isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedExam(null);
+                        setExamModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Create Exam</span>
+                    </button>
+                  )}
+                </div>
+
+                {exams.length === 0 ? (
+                  <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-2">
+                    <Award className="w-10 h-10 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">No exams scheduled for this classroom.</p>
+                    <p className="text-[11px] text-slate-400">
+                      {isTeacher
+                        ? 'Click "+ Create Exam" to build an interactive timed assessment.'
+                        : 'Check back when your teacher announces an assessment.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {exams.map((exam) => (
+                      <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                              {exam.duration_minutes} Minutes
+                            </span>
+                            <span className="text-xs font-extrabold text-slate-600">
+                              {exam.total_marks} Marks Total
+                            </span>
+                          </div>
+
+                          <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
+                          {exam.description && (
+                            <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
+                          )}
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                          {exam.latest_result ? (
+                            <span className="text-xs font-black text-emerald-600">
+                              Score: {exam.latest_result.score} / {exam.total_marks} ({exam.latest_result.percentage}%)
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-400">
+                              {exam.questions.length} questions
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedExam(exam);
+                              setExamModalOpen(true);
+                            }}
+                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                          >
+                            {exam.latest_result ? 'View Result' : 'Take Exam'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: LEADERBOARD / COMPETITION */}
+            {activeTab === 'leaderboard' && (
+              <ClassroomLeaderboard
+                entries={leaderboard}
+                currentUserId={user?.id}
+              />
+            )}
+
           </div>
 
-          {/* Quick Info Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-2">
-              <div className="w-9 h-9 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center font-black">
-                1
-              </div>
-              <h3 className="text-sm font-black text-slate-900">Synchronized Multiplayer</h3>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Supabase Realtime ensures all devices display questions and countdowns simultaneously with zero latency lag.
-              </p>
-            </div>
+          {/* DANGER ZONE (Teacher/Admin) */}
+          {isTeacher && classroom && (
+            <ClassroomDangerZone
+              classroom={classroom}
+              isOwnerOrAdmin={isTeacher}
+              stats={stats}
+            />
+          )}
 
-            <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-2">
-              <div className="w-9 h-9 rounded-2xl bg-sky-50 text-sky-700 flex items-center justify-center font-black">
-                2
-              </div>
-              <h3 className="text-sm font-black text-slate-900">Speed Bonus Scoring</h3>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Earn 500 to 1,000 points per question. Faster correct responses get higher speed multipliers!
-              </p>
-            </div>
+        </main>
+      </div>
 
-            <div className="p-5 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-2">
-              <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-black">
-                3
-              </div>
-              <h3 className="text-sm font-black text-slate-900">Classroom Points Ledger</h3>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                All game scores instantly feed into the Classroom Leaderboard points total for the term.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Teacher/Admin Danger Zone */}
-      {isTeacher && classroom && (
-        <ClassroomDangerZone
-          classroom={classroom}
-          isOwnerOrAdmin={isTeacher}
-          stats={stats}
-        />
-      )}
-
-      {/* Modals */}
+      {/* ALL MODALS PRESERVED */}
       <StudentSubmitModal
         isOpen={Boolean(activeSubmitAssignment)}
         assignment={activeSubmitAssignment}
@@ -764,6 +1332,11 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         onClose={() => setCreateLiveQuizOpen(false)}
         onSuccess={handleLaunchLiveQuiz}
+      />
+
+      <UserSettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
 
     </div>

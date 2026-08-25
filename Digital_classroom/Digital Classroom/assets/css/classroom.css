@@ -11175,3 +11175,440 @@ body.teacher-exam2-page .exam2-frame {
   }
 }
 
+/* ========================================================================= */
+/* EDTECHRA DIGITAL CLASSROOM - TWO LAYER & DARK SIDEBAR SAAS STYLES         */
+/* ========================================================================= */
+.teacher-classroom-detail {
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.teacher-classroom-detail .page-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.teacher-classroom-detail .sidebar {
+  width: 250px;
+  background: #111827;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 16px;
+  border-right: 1px solid #1f2937;
+  flex-shrink: 0;
+}
+
+.teacher-classroom-detail .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 8px;
+  margin-bottom: 24px;
+}
+
+.teacher-classroom-detail .brand-logo-icon {
+  font-size: 24px;
+}
+
+.teacher-classroom-detail .brand-copy {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.teacher-classroom-detail .sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.teacher-classroom-detail .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.teacher-classroom-detail .nav-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.teacher-classroom-detail .nav-link.active {
+  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+
+.teacher-classroom-detail .nav-badge {
+  margin-left: auto;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.teacher-classroom-detail .sidebar-footer {
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.teacher-classroom-detail .sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.teacher-classroom-detail .sidebar-profile .avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fbbf24;
+  color: #1e293b;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.teacher-classroom-detail .profile-info strong {
+  display: block;
+  font-size: 12px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.teacher-classroom-detail .profile-info small {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.teacher-classroom-detail .profile-chevron {
+  margin-left: auto;
+  font-size: 9px;
+  color: #64748b;
+}
+
+.teacher-classroom-detail .main-content {
+  flex: 1;
+  padding: 32px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.teacher-class-hero-modern {
+  margin-bottom: 28px;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: none;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.header-icon-btn:hover {
+  background: #e2e8f0;
+}
+
+.header-icon-btn .badge-count {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+}
+
+.header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fbbf24;
+  color: #1e293b;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* Layer 1 Cards */
+.classroom-top-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.class-feature-card {
+  padding: 20px;
+  border-radius: 24px;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.class-feature-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+}
+
+.card-overview { background: #f0f7ff; border: 1px solid #e0f2fe; }
+.card-task { background: #f0fdf4; border: 1px solid #dcfce7; }
+.card-students { background: #f5f3ff; border: 1px solid #ede9fe; }
+.card-stream { background: #fefce8; border: 1px solid #fef9c3; }
+.card-resources { background: #fff1f2; border: 1px solid #ffe4e6; }
+
+.card-art-box {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.card-svg-art {
+  width: 90px;
+  height: 70px;
+}
+
+.class-feature-card h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+}
+
+.class-feature-card p {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.card-arrow-btn {
+  margin-top: 14px;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+/* Divider */
+.section-divider-shell {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 36px 0 28px 0;
+}
+
+.divider-line {
+  flex: 1;
+  height: 2px;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+}
+
+.divider-line:first-child { justify-content: flex-end; }
+.divider-line:last-child { justify-content: flex-start; }
+
+.divider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6366f1;
+}
+
+.divider-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* Layer 2 Assessment Cards */
+.classroom-assessment-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.assessment-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.assessment-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.card-icon-art {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.assessment-card h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.assessment-card p {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.btn-purple-action {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 14px;
+  text-decoration: none;
+  text-align: center;
+  transition: background 0.15s ease;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+
+.btn-purple-action:hover {
+  background: #4f46e5;
+}
+
+/* Bottom Banner */
+.bottom-classroom-banner {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.banner-copy {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.banner-icon {
+  font-size: 24px;
+}
+
+.banner-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+  color: #6366f1;
+  margin-bottom: 2px;
+}
+
+.banner-subtext {
+  font-size: 12px;
+  color: #475569;
+  margin: 0;
+}
+
+.banner-svg {
+  width: 110px;
+  height: 50px;
+}
+
+@media (max-width: 1200px) {
+  .classroom-top-cards-grid,
+  .classroom-assessment-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .teacher-classroom-detail .sidebar {
+    display: none;
+  }
+  .teacher-classroom-detail .main-content {
+    padding: 16px;
+  }
+  .classroom-top-cards-grid,
+  .classroom-assessment-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
