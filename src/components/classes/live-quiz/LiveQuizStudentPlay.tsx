@@ -4,7 +4,8 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
-  Lock
+  Lock,
+  Hourglass
 } from 'lucide-react';
 import { LiveQuizSession } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -46,7 +47,21 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
   const [pointsEarned, setPointsEarned] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(20);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(20);
+
+  // Total Quiz Timer State
+  const isTotalTimed = Boolean(session.quiz?.timer_enabled || session.expires_at);
+  const totalDurationSec = session.quiz?.timer_seconds || 60;
+  
+  const [totalTimeLeft, setTotalTimeLeft] = useState<number>(() => {
+    if (!isTotalTimed) return 0;
+    if (session.expires_at) {
+      const remainingMs = new Date(session.expires_at).getTime() - Date.now();
+      return Math.max(0, Math.ceil(remainingMs / 1000));
+    }
+    return totalDurationSec;
+  });
+  const [isTotalTimeExpired, setIsTotalTimeExpired] = useState(false);
 
   // Connect to Supabase Realtime Channel
   useEffect(() => {
@@ -61,7 +76,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         setIsLocked(false);
         setRevealData(null);
         setPointsEarned(0);
-        setTimeLeft(data.durationSec || 20);
+        setQuestionTimeLeft(data.durationSec || 20);
       })
       .on('broadcast', { event: 'question_reveal' }, (payload: any) => {
         setRevealData(payload.payload);
@@ -78,14 +93,14 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     };
   }, [session.pin, onQuizFinished]);
 
-  // Local synchronized countdown
+  // Question synchronized countdown
   useEffect(() => {
     if (!questionData || revealData) return;
 
     const timer = setInterval(() => {
       const elapsed = (Date.now() - questionData.questionStartMs) / 1000;
       const remaining = Math.max(0, Math.ceil(questionData.durationSec - elapsed));
-      setTimeLeft(remaining);
+      setQuestionTimeLeft(remaining);
 
       if (remaining <= 0) {
         clearInterval(timer);
@@ -95,8 +110,36 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     return () => clearInterval(timer);
   }, [questionData, revealData]);
 
+  // Total Quiz authoritative countdown timer
+  useEffect(() => {
+    if (!isTotalTimed) return;
+
+    const interval = setInterval(() => {
+      let remaining = 0;
+      if (session.expires_at) {
+        const remainingMs = new Date(session.expires_at).getTime() - Date.now();
+        remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+      } else {
+        setTotalTimeLeft((prev) => {
+          remaining = Math.max(0, prev - 1);
+          return remaining;
+        });
+      }
+
+      setTotalTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        setIsTotalTimeExpired(true);
+        setIsLocked(true);
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isTotalTimed, session.expires_at]);
+
   const handleSelectOption = async (index: number) => {
-    if (isLocked || revealData || !questionData) return;
+    if (isLocked || revealData || !questionData || isTotalTimeExpired) return;
 
     setSelectedIndex(index);
     setIsLocked(true);
@@ -134,6 +177,12 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     }
   };
 
+  const formatTotalTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
   if (!questionData) {
     return (
       <div className="min-h-[70vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-sky-500/20">
@@ -142,6 +191,13 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-medium">
           The teacher will start the next question shortly. Fast answers earn up to +1000 points!
         </p>
+
+        {isTotalTimed && (
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full border border-white/20 text-xs font-black">
+            <Hourglass className="w-3.5 h-3.5 text-amber-400" />
+            <span>Quiz Timer: {formatTotalTime(totalTimeLeft)}</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -149,24 +205,60 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const isCorrect = revealData && selectedIndex === revealData.correctIndex;
 
   return (
-    <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6">
+    <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6 relative">
       
+      {/* Total Time Expired Modal / Overlay */}
+      {isTotalTimeExpired && (
+        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center text-center p-6 space-y-3 animate-in fade-in duration-200">
+          <div className="w-14 h-14 rounded-3xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center">
+            <Clock className="w-7 h-7 animate-pulse" />
+          </div>
+          <h3 className="text-xl sm:text-2xl font-black text-white">Time's up!</h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-medium">
+            Your answers have been submitted automatically.
+          </p>
+        </div>
+      )}
+
       {/* Top Header */}
-      <div className="flex items-center justify-between gap-4 border-b border-white/15 pb-3">
+      <div className="flex items-center justify-between gap-3 border-b border-white/15 pb-3 flex-wrap">
         <span className="text-xs font-black uppercase tracking-wider bg-purple-500/30 text-purple-200 px-3 py-1 rounded-full border border-purple-400/30">
           Question {questionData.qIndex + 1} of {questionData.totalQuestions}
         </span>
 
-        <div className="flex items-center gap-3">
-          <div className="text-xs font-black text-amber-300 bg-amber-400/20 px-3 py-1 rounded-full border border-amber-400/30">
-            Score: {totalScore} pts
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Total Quiz Timer (if enabled) */}
+          {isTotalTimed && (
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-all ${
+                totalTimeLeft <= 10
+                  ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
+                  : totalTimeLeft <= 60
+                  ? 'bg-amber-500/30 text-amber-300 border-amber-500'
+                  : 'bg-white/10 text-white border-white/20'
+              }`}
+              title="Total Quiz Time Remaining"
+            >
+              <Hourglass className="w-3.5 h-3.5" />
+              <span>Total: {formatTotalTime(totalTimeLeft)}</span>
+            </div>
+          )}
+
+          {/* Current Question Countdown */}
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
+              questionTimeLeft <= 5
+                ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
+                : 'bg-white/10 text-white border-white/20'
+            }`}
+            title="Question Timer"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>{questionTimeLeft}s</span>
           </div>
 
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
-            timeLeft <= 5 ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse' : 'bg-white/10 text-white border-white/20'
-          }`}>
-            <Clock className="w-3.5 h-3.5" />
-            <span>{timeLeft}s</span>
+          <div className="text-xs font-black text-amber-300 bg-amber-400/20 px-3 py-1 rounded-full border border-amber-400/30">
+            Score: {totalScore} pts
           </div>
         </div>
       </div>
@@ -205,7 +297,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
             <button
               key={idx}
               type="button"
-              disabled={isLocked || isRevealed}
+              disabled={isLocked || isRevealed || isTotalTimeExpired}
               onClick={() => handleSelectOption(idx)}
               className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${theme.bg} ${
                 isSelected

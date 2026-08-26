@@ -26,9 +26,21 @@ export interface LiveQuiz {
   accent_color?: string;
   questions: LiveQuizQuestion[];
   is_public: boolean;
+  visibility?: 'private' | 'common';
+  timer_enabled?: boolean;
+  timer_seconds?: number | null;
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+
+  // Joined / Computed metadata
+  creator_name?: string;
+  is_owner?: boolean;
+  teacher?: {
+    id: string;
+    full_name?: string | null;
+    avatar_url?: string | null;
+  } | null;
 }
 
 export interface LiveQuizSession {
@@ -41,6 +53,8 @@ export interface LiveQuizSession {
   current_question_index: number;
   question_start_ms?: number | null;
   question_duration_sec: number;
+  started_at?: string | null;
+  expires_at?: string | null;
   correct_answer_index?: number | null;
   created_at: string;
   ended_at?: string | null;

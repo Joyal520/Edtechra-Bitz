@@ -42,10 +42,11 @@ class LiveQuizService {
   // ==========================================================================
 
   /**
-   * Retrieves all available quizzes (ready-made + custom)
+   * Retrieves all available quizzes (ready-made + custom) with ownership metadata
    */
   async getAllQuizzes(classroomId?: string): Promise<LiveQuiz[]> {
     const customList: LiveQuiz[] = [];
+    const currentUserId = await this.getUserId();
 
     if (supabase) {
       try {
@@ -53,29 +54,46 @@ class LiveQuizService {
           .from('live_quizzes')
           .select(`
             *,
-            questions:live_quiz_questions (*)
+            questions:live_quiz_questions (*),
+            teacher:profiles!created_by (id, full_name, email)
           `)
           .order('created_at', { ascending: false });
 
         if (classroomId) {
-          query = query.or(`classroom_id.eq.${classroomId},is_public.eq.true`);
+          query = query.or(`visibility.eq.common,created_by.eq.${currentUserId || '00000000-0000-0000-0000-000000000000'}`);
         } else {
-          query = query.eq('is_public', true);
+          query = query.or(`visibility.eq.common,created_by.eq.${currentUserId || '00000000-0000-0000-0000-000000000000'}`);
         }
 
         const { data, error } = await query;
         if (!error && data) {
-          const parsed = data.map((q: any) => ({
-            ...q,
-            questions: (q.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
-              id: item.id,
-              question: item.question_text,
-              options: item.options,
-              correctIndex: item.correct_index,
-              durationSec: item.duration_sec,
-              explanation: item.explanation
-            }))
-          }));
+          const parsed = data.map((q: any) => {
+            const isOwner = Boolean(currentUserId && q.created_by === currentUserId);
+            const creatorName = isOwner
+              ? 'Created by You'
+              : q.teacher?.full_name
+              ? `Created by ${q.teacher.full_name}`
+              : q.created_by
+              ? 'Created by Teacher'
+              : 'Created by EdTechra';
+
+            return {
+              ...q,
+              visibility: q.visibility || 'private',
+              timer_enabled: q.timer_enabled ?? false,
+              timer_seconds: q.timer_seconds ?? null,
+              is_owner: isOwner,
+              creator_name: creatorName,
+              questions: (q.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
+                id: item.id,
+                question: item.question_text,
+                options: item.options,
+                correctIndex: item.correct_index,
+                durationSec: item.duration_sec,
+                explanation: item.explanation
+              }))
+            };
+          });
           customList.push(...parsed);
         }
       } catch (err) {
@@ -83,11 +101,34 @@ class LiveQuizService {
       }
     }
 
-    // Merge ready-made quizzes and custom ones (avoiding duplicate IDs)
+    // Merge ready-made quizzes (as common system quizzes)
     const customIds = new Set(customList.map((q) => q.id));
-    const filteredReadyMade = READY_MADE_QUIZZES.filter((q) => !customIds.has(q.id));
+    const filteredReadyMade: LiveQuiz[] = READY_MADE_QUIZZES.filter((q) => !customIds.has(q.id)).map((q) => ({
+      ...q,
+      visibility: 'common' as const,
+      timer_enabled: false,
+      timer_seconds: null,
+      is_owner: false,
+      creator_name: 'Created by EdTechra'
+    }));
 
     return [...customList, ...filteredReadyMade];
+  }
+
+  /**
+   * Retrieves quizzes created by the current authenticated user (Your Quizzes)
+   */
+  async getYourQuizzes(classroomId?: string): Promise<LiveQuiz[]> {
+    const all = await this.getAllQuizzes(classroomId);
+    return all.filter((q) => q.is_owner === true);
+  }
+
+  /**
+   * Retrieves quizzes shared as common / public from other users (Common Quizzes)
+   */
+  async getCommonQuizzes(classroomId?: string): Promise<LiveQuiz[]> {
+    const all = await this.getAllQuizzes(classroomId);
+    return all.filter((q) => q.is_owner !== true && q.visibility === 'common');
   }
 
   /**
@@ -96,24 +137,49 @@ class LiveQuizService {
   async getQuizById(quizId: string): Promise<LiveQuiz | null> {
     // Check ready-made bank first
     const readyMade = READY_MADE_QUIZZES.find((q) => q.id === quizId);
-    if (readyMade) return readyMade;
+    if (readyMade) {
+      return {
+        ...readyMade,
+        visibility: 'common',
+        timer_enabled: false,
+        timer_seconds: null,
+        is_owner: false,
+        creator_name: 'Created by EdTechra'
+      };
+    }
 
     if (!supabase || !quizId) return null;
+    const currentUserId = await this.getUserId();
 
     try {
       const { data, error } = await supabase
         .from('live_quizzes')
         .select(`
           *,
-          questions:live_quiz_questions (*)
+          questions:live_quiz_questions (*),
+          teacher:profiles!created_by (id, full_name, email)
         `)
         .eq('id', quizId)
         .maybeSingle();
 
       if (error || !data) return null;
 
+      const isOwner = Boolean(currentUserId && data.created_by === currentUserId);
+      const creatorName = isOwner
+        ? 'Created by You'
+        : data.teacher?.full_name
+        ? `Created by ${data.teacher.full_name}`
+        : data.created_by
+        ? 'Created by Teacher'
+        : 'Created by EdTechra';
+
       return {
         ...data,
+        visibility: data.visibility || 'private',
+        timer_enabled: data.timer_enabled ?? false,
+        timer_seconds: data.timer_seconds ?? null,
+        is_owner: isOwner,
+        creator_name: creatorName,
         questions: (data.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
           id: item.id,
           question: item.question_text,
@@ -141,9 +207,27 @@ class LiveQuizService {
     accent_color?: string;
     questions: LiveQuizQuestion[];
     is_public?: boolean;
+    visibility?: 'private' | 'common';
+    timer_enabled?: boolean;
+    timer_seconds?: number | null;
   }): Promise<{ data?: LiveQuiz; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const userId = await this.getUserId();
+
+    // Server-side validation of timer
+    let timerEnabled = Boolean(payload.timer_enabled);
+    let timerSeconds: number | null = null;
+    if (timerEnabled) {
+      const parsedSec = Number(payload.timer_seconds);
+      if (isNaN(parsedSec) || parsedSec <= 0 || !Number.isInteger(parsedSec)) {
+        timerSeconds = 60; // Fallback to standard 60s
+      } else {
+        timerSeconds = Math.min(36000, Math.max(1, Math.floor(parsedSec)));
+      }
+    }
+
+    // Strictly default to 'private' unless explicitly declared 'common'
+    const visibility = payload.visibility === 'common' ? 'common' : 'private';
 
     try {
       // 1. Insert quiz header
@@ -156,7 +240,10 @@ class LiveQuizService {
           category: payload.category || 'General',
           difficulty: payload.difficulty || 'Medium',
           accent_color: payload.accent_color || '#026fc3',
-          is_public: payload.is_public ?? true,
+          is_public: visibility === 'common',
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerSeconds,
           created_by: userId
         })
         .select()
@@ -192,6 +279,9 @@ class LiveQuizService {
             quizId: quizData.id,
             quizData: {
               ...quizData,
+              visibility,
+              timer_enabled: timerEnabled,
+              timer_seconds: timerSeconds,
               questions: payload.questions,
               storage_provider: 'cloudflare_r2'
             }
@@ -204,6 +294,11 @@ class LiveQuizService {
       return {
         data: {
           ...quizData,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerSeconds,
+          is_owner: true,
+          creator_name: 'Created by You',
           questions: payload.questions
         }
       };
@@ -211,6 +306,30 @@ class LiveQuizService {
       console.error('[LiveQuizService] createCustomQuiz error:', err);
       return { error: err.message || 'Failed to save quiz' };
     }
+  }
+
+  /**
+   * Clones a Common Quiz to create a teacher-owned personal copy
+   */
+  async copyQuiz(quizId: string, classroomId?: string): Promise<{ data?: LiveQuiz; error?: string }> {
+    const original = await this.getQuizById(quizId);
+    if (!original) {
+      return { error: 'Source quiz not found' };
+    }
+
+    return this.createCustomQuiz({
+      classroom_id: classroomId || original.classroom_id || null,
+      title: `${original.title} (Copy)`,
+      description: original.description || '',
+      category: original.category,
+      difficulty: original.difficulty,
+      accent_color: original.accent_color,
+      questions: original.questions,
+      timer_enabled: original.timer_enabled ?? false,
+      timer_seconds: original.timer_seconds ?? null,
+      visibility: 'private',
+      is_public: false
+    });
   }
 
   // ==========================================================================
@@ -242,7 +361,10 @@ class LiveQuizService {
           difficulty: payload.custom_quiz.difficulty,
           accent_color: payload.custom_quiz.accent_color,
           questions: payload.custom_quiz.questions,
-          is_public: false
+          visibility: payload.custom_quiz.visibility || 'private',
+          timer_enabled: payload.custom_quiz.timer_enabled,
+          timer_seconds: payload.custom_quiz.timer_seconds,
+          is_public: payload.custom_quiz.visibility === 'common'
         });
         targetQuizId = savedQuiz.data?.id;
       } else if (targetQuizId && !targetQuizId.includes('-')) {
@@ -257,11 +379,20 @@ class LiveQuizService {
             difficulty: readyMade.difficulty,
             accent_color: readyMade.accent_color,
             questions: readyMade.questions,
+            visibility: 'common',
             is_public: true
           });
           targetQuizId = savedQuiz.data?.id;
         }
       }
+
+      const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null);
+      const totalTimerEnabled = Boolean(quiz?.timer_enabled);
+      const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
+      const startedAt = new Date().toISOString();
+      const expiresAt = totalTimerEnabled && totalTimerSeconds
+        ? new Date(Date.now() + totalTimerSeconds * 1000).toISOString()
+        : null;
 
       // Generate unique PIN
       const pin = this.generatePin();
@@ -275,7 +406,9 @@ class LiveQuizService {
           pin,
           status: 'lobby',
           current_question_index: 0,
-          question_duration_sec: 20
+          question_duration_sec: 20,
+          started_at: startedAt,
+          expires_at: expiresAt
         })
         .select(`
           *,
@@ -285,8 +418,6 @@ class LiveQuizService {
         .single();
 
       if (error) throw error;
-
-      const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null);
 
       return {
         data: {

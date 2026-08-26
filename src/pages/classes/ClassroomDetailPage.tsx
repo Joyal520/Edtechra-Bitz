@@ -59,6 +59,7 @@ import { ClassroomExamModal } from '@/components/classes/ClassroomExamModal';
 import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedbackModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
+import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
@@ -102,6 +103,9 @@ export const ClassroomDetailPage: React.FC = () => {
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
   const [createLiveQuizOpen, setCreateLiveQuizOpen] = useState(false);
+
+  // AI Challenge Competition State
+  const [challengeListModalOpen, setChallengeListModalOpen] = useState(false);
 
   // Quick Assignment Creation Inline State
   const [showQuickCreateTask, setShowQuickCreateTask] = useState(false);
@@ -593,13 +597,13 @@ export const ClassroomDetailPage: React.FC = () => {
                 <div className="space-y-1 text-center">
                   <h3 className="text-base font-black text-slate-900">Competition</h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Organize competitions, challenges and track leaderboard.
+                    Create challenges, collect student work and let AI evaluate submissions automatically.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => handleSelectTab('leaderboard')}
+                onClick={() => setChallengeListModalOpen(true)}
                 className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
                 Create Competition
@@ -1167,6 +1171,12 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         onClose={() => setCreateLiveQuizOpen(false)}
         onSuccess={handleLaunchLiveQuiz}
+      />
+
+      <ChallengeListModal
+        isOpen={challengeListModalOpen}
+        classroomId={classroom.id}
+        onClose={() => setChallengeListModalOpen(false)}
       />
 
     </div>

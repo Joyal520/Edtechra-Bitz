@@ -622,3 +622,123 @@ export async function testR2Connection() {
     };
   }
 }
+
+// ============================================================================
+// AI OCR WORKSHEET GRADER R2 EXTENSIONS
+// ============================================================================
+
+const ALLOWED_OCR_TYPES = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'
+]);
+const MAX_OCR_SIZE = 15 * 1024 * 1024; // 15 MB
+
+export function validateOcrUpload({ contentType, size }) {
+  if (!contentType) {
+    throw new Error('Missing file content type.');
+  }
+  const normalizedType = contentType.toLowerCase().trim();
+  if (!ALLOWED_OCR_TYPES.has(normalizedType)) {
+    throw new Error('Unsupported format for AI OCR. Please upload JPG, JPEG, PNG, WebP, or PDF.');
+  }
+  if (size && Number(size) > MAX_OCR_SIZE) {
+    throw new Error('File exceeds the 15 MB limit. Please select a smaller file.');
+  }
+  return true;
+}
+
+export function buildTemporaryOcrKey({ evaluationId, filename = 'worksheet.jpg', contentType = 'image/jpeg' }) {
+  const cleanEvalId = sanitizeSegment(evaluationId) || crypto.randomUUID();
+  const randomSuffix = crypto.randomBytes(6).toString('hex');
+  const rawExt = (filename.split('.').pop() || 'jpg').toLowerCase();
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 8) || (contentType.includes('pdf') ? 'pdf' : 'jpg');
+  return `tmp/ocr/${cleanEvalId}/${randomSuffix}.${cleanExt}`;
+}
+
+export function buildOcrReportKey({ teacherId, studentId, evaluationId }) {
+  const cleanTeacherId = sanitizeSegment(teacherId) || 'teacher';
+  const cleanStudentId = sanitizeSegment(studentId) || 'student';
+  const cleanEvalId = sanitizeSegment(evaluationId) || crypto.randomUUID();
+  return `reports/${cleanTeacherId}/${cleanStudentId}/${cleanEvalId}.pdf`;
+}
+
+export function buildPresignedDownloadUrl({ objectKey, expiresInSeconds = 3600 }) {
+  const config = getR2Config();
+  if (!config.isConfigured) {
+    throw new Error(`R2 Storage is not configured. Missing: ${config.missing.join(', ')}`);
+  }
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
+  const { accessKeyId, secretAccessKey, endpoint, bucket } = config;
+  const url = new URL(endpoint);
+  const now = new Date();
+  const amzDate = formatAmzDate(now);
+  const dateStamp = getDateStamp(amzDate);
+  const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
+  const canonicalUri = buildCanonicalPath(bucket, cleanKey);
+
+  const queryEntries = [
+    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', `${accessKeyId}/${credentialScope}`],
+    ['X-Amz-Date', amzDate],
+    ['X-Amz-Expires', String(expiresInSeconds)],
+    ['X-Amz-SignedHeaders', 'host']
+  ];
+
+  const canonicalQueryString = queryEntries
+    .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
+    .join('&');
+
+  const canonicalHeaders = `host:${url.host}\n`;
+  const canonicalRequest = [
+    'GET',
+    canonicalUri,
+    canonicalQueryString,
+    canonicalHeaders,
+    'host',
+    'UNSIGNED-PAYLOAD'
+  ].join('\n');
+
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest)
+  ].join('\n');
+
+  const signingKey = getSigningKey(secretAccessKey, dateStamp);
+  const signature = hmac(signingKey, stringToSign, 'hex');
+  const presignedUrl = `${endpoint}${canonicalUri}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
+
+  return {
+    downloadUrl: presignedUrl,
+    objectKey: cleanKey,
+    publicUrl: buildPublicUrl(cleanKey),
+    expiresInSeconds
+  };
+}
+
+export async function getBinaryContent(objectKey) {
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
+  if (!cleanKey) return null;
+
+  try {
+    const signed = signRequest({
+      method: 'GET',
+      objectKey: cleanKey
+    });
+
+    const response = await fetch(`${signed.endpoint}/${signed.bucket}/${cleanKey}`, {
+      method: 'GET',
+      headers: signed.headers
+    });
+
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+  } catch (err) {
+    console.warn(`[R2 Get Binary Notice] Failed to retrieve ${cleanKey}:`, err.message);
+  }
+
+  return null;
+}
+

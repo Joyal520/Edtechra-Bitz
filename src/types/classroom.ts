@@ -248,3 +248,58 @@ export interface ClassroomStats {
   average_completion_percent: number;
   average_score: number;
 }
+
+// ============================================================================
+// AI OCR WORKSHEET GRADER TYPES
+// ============================================================================
+
+export type OCREvaluationCategory =
+  | 'Paragraph Writing'
+  | 'Essay Writing'
+  | 'Story Writing'
+  | 'Letter Writing'
+  | 'Handwritten Neatness'
+  | 'Other';
+
+export interface OCRBreakdownItem {
+  criterion: string;
+  score: number;
+  max: number;
+}
+
+export type OCRJobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+
+export interface OCREvaluation {
+  id: string;
+  teacher_id: string;
+  class_id: string;
+  student_id: string;
+  category: OCREvaluationCategory;
+  title?: string;
+  max_marks: number;
+  score: number;
+  ai_original_score: number;
+  final_score: number;
+  percentage: number;
+  performance: string;
+  breakdown_json: OCRBreakdownItem[];
+  feedback: string;
+  ai_original_feedback?: string;
+  is_teacher_adjusted: boolean;
+  status: OCRJobStatus;
+  error_message?: string | null;
+  temporary_file_key?: string | null;
+  report_file_key?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+
+  // Joined fields
+  student?: {
+    id: string;
+    full_name?: string | null;
+    email?: string | null;
+    avatar_url?: string | null;
+  };
+}
+

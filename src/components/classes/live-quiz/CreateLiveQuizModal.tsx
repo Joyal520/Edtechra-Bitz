@@ -14,7 +14,9 @@ import {
   Shuffle,
   Play,
   BookmarkPlus,
-  FileText
+  FileText,
+  Clock,
+  Globe
 } from 'lucide-react';
 import { LiveQuizQuestion, LiveQuizDifficulty, LiveQuiz } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -54,6 +56,7 @@ const CATEGORY_OPTIONS = [
   'Other'
 ];
 const DIFFICULTY_OPTIONS: LiveQuizDifficulty[] = ['Easy', 'Medium', 'Hard'];
+const TIMER_PRESETS = [30, 60, 90, 120, 300, 600];
 
 type ModalMode = 'ai' | 'manual';
 type AiStep = 'create_prompt' | 'view_prompt' | 'paste_quiz' | 'quiz_ready';
@@ -75,6 +78,11 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [customCountValue, setCustomCountValue] = useState('10');
   const [difficulty, setDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [category, setCategory] = useState('Grammar');
+
+  // Quiz Timer & Visibility State
+  const [timerEnabled, setTimerEnabled] = useState<boolean>(false);
+  const [timerSeconds, setTimerSeconds] = useState<number>(60);
+  const [visibility, setVisibility] = useState<'common' | 'private'>('private');
 
   // Generated Prompt State
   const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -207,7 +215,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         category: parsedQuiz.category || category,
         difficulty: parsedQuiz.difficulty || difficulty,
         questions: parsedQuiz.questions,
-        is_public: true
+        visibility,
+        timer_enabled: timerEnabled,
+        timer_seconds: timerEnabled ? timerSeconds : null,
+        is_public: visibility === 'common'
       });
 
       if (res.error || !res.data) {
@@ -273,7 +284,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         category: manualCategory,
         difficulty: manualDifficulty,
         questions: manualQuestions,
-        is_public: true
+        visibility,
+        timer_enabled: timerEnabled,
+        timer_seconds: timerEnabled ? timerSeconds : null,
+        is_public: visibility === 'common'
       });
 
       if (res.error || !res.data) {
@@ -605,6 +619,139 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       </select>
                       <p className="text-[11px] text-slate-400 font-medium pt-1">
                         Saved into your Quiz Bank catalog
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Quiz Timer & Visibility Settings */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Quiz Timer */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-purple-600" />
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                            Quiz Timer
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setTimerEnabled(false)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                              !timerEnabled
+                                ? 'bg-slate-900 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            No Timer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTimerEnabled(true)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                              timerEnabled
+                                ? 'bg-purple-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Timed
+                          </button>
+                        </div>
+                      </div>
+
+                      {timerEnabled ? (
+                        <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-xs font-bold text-slate-700">
+                              Time Limit:
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min={1}
+                                max={36000}
+                                value={timerSeconds}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10);
+                                  if (!isNaN(val)) setTimerSeconds(Math.max(1, Math.min(36000, val)));
+                                }}
+                                className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                              />
+                              <span className="text-xs font-bold text-slate-500">
+                                sec ({Math.floor(timerSeconds / 60)}m {timerSeconds % 60}s)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-wrap pt-1">
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
+                              Presets:
+                            </span>
+                            {TIMER_PRESETS.map((sec) => (
+                              <button
+                                key={sec}
+                                type="button"
+                                onClick={() => setTimerSeconds(sec)}
+                                className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                                  timerSeconds === sec
+                                    ? 'bg-purple-600 text-white shadow-2xs'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                                }`}
+                              >
+                                {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 font-medium pt-1">
+                          No overall time limit. Students can complete at their own pace.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Quiz Visibility */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-indigo-600" />
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                            Library Sharing
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => setVisibility('private')}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                              visibility === 'private'
+                                ? 'bg-slate-900 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Private
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVisibility('common')}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                              visibility === 'common'
+                                ? 'bg-indigo-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Common
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-slate-500 font-medium pt-1">
+                        {visibility === 'common'
+                          ? 'Available in Common Quizzes for other teachers to view and reuse.'
+                          : 'Visible only under "Your Quizzes" for your personal use.'}
                       </p>
                     </div>
 
@@ -995,6 +1142,139 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                   placeholder="What concepts will this live quiz cover?"
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-purple-600 focus:bg-white resize-none"
                 />
+              </div>
+
+              {/* Quiz Timer & Visibility Settings (Manual Mode) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Quiz Timer */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Quiz Timer
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setTimerEnabled(false)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          !timerEnabled
+                            ? 'bg-slate-900 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        No Timer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTimerEnabled(true)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          timerEnabled
+                            ? 'bg-purple-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Timed
+                      </button>
+                    </div>
+                  </div>
+
+                  {timerEnabled ? (
+                    <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-bold text-slate-700">
+                          Time Limit:
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={1}
+                            max={36000}
+                            value={timerSeconds}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val)) setTimerSeconds(Math.max(1, Math.min(36000, val)));
+                            }}
+                            className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                          />
+                          <span className="text-xs font-bold text-slate-500">
+                            sec ({Math.floor(timerSeconds / 60)}m {timerSeconds % 60}s)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-wrap pt-1">
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
+                          Presets:
+                        </span>
+                        {TIMER_PRESETS.map((sec) => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => setTimerSeconds(sec)}
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                              timerSeconds === sec
+                                ? 'bg-purple-600 text-white shadow-2xs'
+                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                            }`}
+                          >
+                            {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 font-medium pt-1">
+                      No overall time limit. Students can complete at their own pace.
+                    </p>
+                  )}
+                </div>
+
+                {/* Quiz Visibility */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Library Sharing
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setVisibility('private')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          visibility === 'private'
+                            ? 'bg-slate-900 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Private
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisibility('common')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          visibility === 'common'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Common
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 font-medium pt-1">
+                    {visibility === 'common'
+                      ? 'Available in Common Quizzes for other teachers to view and reuse.'
+                      : 'Visible only under "Your Quizzes" for your personal use.'}
+                  </p>
+                </div>
+
               </div>
 
               {/* Questions List */}

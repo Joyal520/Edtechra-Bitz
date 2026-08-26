@@ -39,8 +39,27 @@ import {
   buildVocabularyImageKey,
   buildAvatarObjectKey,
   buildClassroomObjectKey,
-  validateClassroomUpload
+  validateClassroomUpload,
+  buildTemporaryOcrKey,
+  validateOcrUpload,
+  buildPresignedDownloadUrl,
+  buildOcrReportKey
 } from './server/r2Service.mjs';
+import {
+  ocrEvaluationQueue,
+  cleanupStaleTemporaryFiles,
+  OCR_CATEGORIES
+} from './server/ocrService.mjs';
+import {
+  aiChallengeQueue,
+  generateChallengeEvaluationSpec,
+  buildChallengeSubmissionKey,
+  buildChallengeReferenceKey,
+  cleanupExpiredChallengeFiles,
+  AI_CHALLENGE_CATEGORIES
+} from './server/aiChallengeService.mjs';
+import { gradeTaskSubmission, TASK_CATEGORIES } from './server/hybridGradingService.mjs';
+import { generateEvaluationReportPdf } from './server/pdfReportService.mjs';
 import { getR2Config } from './server/r2Config.mjs';
 import { moderatePostContent } from './server/moderationService.mjs';
 import { generateArticleCoverImage, buildArticleImagePrompt } from './server/geminiImageService.mjs';
@@ -100,6 +119,28 @@ const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, 
 // Initialize server-side OpenAI client
 const openaiApiKey = cleanEnv(process.env.OPENAI_API_KEY);
 const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
+
+// Initialize AI OCR Worksheet Grader Engine
+ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
+
+// Background cleanup worker: purge stale temporary OCR files older than 1 hour
+if (serverSupabase) {
+  cleanupStaleTemporaryFiles(serverSupabase).catch(() => {});
+  setInterval(() => {
+    cleanupStaleTemporaryFiles(serverSupabase).catch(() => {});
+  }, 30 * 60 * 1000);
+}
+
+// Initialize AI Challenge Competition Queue Worker
+aiChallengeQueue.init({ serverSupabase, serverOpenAI });
+
+// Background cleanup worker: purge expired submission files (7-day retention)
+if (serverSupabase) {
+  cleanupExpiredChallengeFiles(serverSupabase).catch(() => {});
+  setInterval(() => {
+    cleanupExpiredChallengeFiles(serverSupabase).catch(() => {});
+  }, 60 * 60 * 1000);
+}
 
 // Server Initialization Diagnostics (logged once at startup)
 console.log('[Server Init] Environment diagnostics:');
@@ -1116,7 +1157,1381 @@ Provide:
   }
 });
 
-// POST /api/classes/ocr-grade - Perform AI OCR Evaluation on Student Worksheet
+// ============================================================================
+// AI OCR WORKSHEET GRADER ENDPOINTS
+// ============================================================================
+
+// POST /api/classes/ocr/presign-upload - Generate temporary R2 upload URL
+app.post('/api/classes/ocr/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required for OCR uploads.' });
+    }
+
+    const { evaluationId, filename = 'worksheet.jpg', contentType = 'image/jpeg', size } = req.body;
+
+    try {
+      validateOcrUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const targetEvalId = evaluationId || crypto.randomUUID();
+    const objectKey = buildTemporaryOcrKey({
+      evaluationId: targetEvalId,
+      filename,
+      contentType
+    });
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...presigned,
+        evaluationId: targetEvalId
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/ocr/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate temporary OCR upload URL' });
+  }
+});
+
+// POST /api/classes/ocr-jobs - Submit Asynchronous AI OCR Evaluation Job (Idempotent)
+app.post('/api/classes/ocr-jobs', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to submit OCR job.' });
+    }
+
+    const {
+      evaluationId,
+      classroomId,
+      studentId,
+      category,
+      maxMarks = 100,
+      title = '',
+      temporaryFileKey,
+      fileContentType = 'image/jpeg',
+      studentName: reqStudentName
+    } = req.body;
+
+    if (!classroomId || !studentId) {
+      return res.status(400).json({ success: false, error: 'classroomId and studentId are required.' });
+    }
+
+    if (!OCR_CATEGORIES.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid category. Must be one of: ${OCR_CATEGORIES.join(', ')}`
+      });
+    }
+
+    const marks = Number(maxMarks);
+    if (isNaN(marks) || marks <= 0) {
+      return res.status(400).json({ success: false, error: 'Maximum marks must be a positive number.' });
+    }
+
+    const targetEvalId = evaluationId || crypto.randomUUID();
+
+    // Idempotency check: verify if evaluation was already submitted/completed
+    if (serverSupabase) {
+      const { data: existingEval } = await serverSupabase
+        .from('ocr_evaluations')
+        .select('*')
+        .eq('id', targetEvalId)
+        .maybeSingle();
+
+      if (existingEval) {
+        if (existingEval.status === 'completed') {
+          return res.json({
+            success: true,
+            data: existingEval
+          });
+        } else if (existingEval.status === 'queued' || existingEval.status === 'processing') {
+          return res.json({
+            success: true,
+            data: {
+              jobId: targetEvalId,
+              evaluationId: targetEvalId,
+              status: existingEval.status
+            }
+          });
+        }
+      }
+    }
+
+    // Resolve student & teacher names and classroom title
+    let studentName = reqStudentName || 'Student';
+    let teacherName = authData.profile?.full_name || 'Teacher';
+    let classroomTitle = 'Classroom';
+
+    if (serverSupabase) {
+      const [{ data: studentProf }, { data: classroomData }] = await Promise.all([
+        serverSupabase.from('profiles').select('full_name, email').eq('id', studentId).maybeSingle(),
+        serverSupabase.from('classrooms').select('title').eq('id', classroomId).maybeSingle()
+      ]);
+
+      if (studentProf) {
+        studentName = studentProf.full_name || studentProf.email?.split('@')[0] || studentName;
+      }
+      if (classroomData) {
+        classroomTitle = classroomData.title || classroomTitle;
+      }
+    }
+
+    // Insert record with status = 'queued' in Supabase
+    if (serverSupabase) {
+      const { error: insertError } = await serverSupabase
+        .from('ocr_evaluations')
+        .upsert({
+          id: targetEvalId,
+          teacher_id: authData.user.id,
+          class_id: classroomId,
+          student_id: studentId,
+          category,
+          title: (title || '').trim(),
+          max_marks: marks,
+          status: 'queued',
+          temporary_file_key: temporaryFileKey || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      if (insertError) {
+        console.error('[OCR Job] Supabase insert error:', insertError);
+      }
+    }
+
+    // Enqueue job into background worker
+    ocrEvaluationQueue.enqueue({
+      evaluationId: targetEvalId,
+      classroomId,
+      teacherId: authData.user.id,
+      studentId,
+      studentName,
+      teacherName,
+      classroomTitle,
+      category,
+      maxMarks: marks,
+      title: (title || '').trim(),
+      temporaryFileKey,
+      fileContentType
+    });
+
+    res.json({
+      success: true,
+      data: {
+        jobId: targetEvalId,
+        evaluationId: targetEvalId,
+        status: 'queued'
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/ocr-jobs:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to submit OCR evaluation job' });
+  }
+});
+
+// GET /api/classes/ocr-jobs/:id - Poll AI OCR Job Status
+app.get('/api/classes/ocr-jobs/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: evaluation, error } = await serverSupabase
+      .from('ocr_evaluations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !evaluation) {
+      return res.status(404).json({ success: false, error: 'Evaluation job not found.' });
+    }
+
+    // Check authorization: teacher or student
+    if (evaluation.teacher_id !== authData.user.id && evaluation.student_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Unauthorized access to this evaluation.' });
+    }
+
+    res.json({
+      success: true,
+      data: evaluation
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/ocr-jobs/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch job status' });
+  }
+});
+
+// GET /api/classes/ocr-evaluations/:id/report-url - Get Signed URL for PDF Report
+app.get('/api/classes/ocr-evaluations/:id/report-url', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: evaluation, error } = await serverSupabase
+      .from('ocr_evaluations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !evaluation) {
+      return res.status(404).json({ success: false, error: 'Evaluation not found.' });
+    }
+
+    if (evaluation.teacher_id !== authData.user.id && evaluation.student_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Unauthorized access to this evaluation report.' });
+    }
+
+    if (!evaluation.report_file_key) {
+      return res.status(404).json({ success: false, error: 'Report has not been generated yet.' });
+    }
+
+    try {
+      const presigned = buildPresignedDownloadUrl({
+        objectKey: evaluation.report_file_key,
+        expiresInSeconds: 3600
+      });
+
+      res.json({
+        success: true,
+        data: {
+          reportUrl: presigned.downloadUrl,
+          publicUrl: presigned.publicUrl,
+          expiresInSeconds: 3600
+        }
+      });
+    } catch (r2Err) {
+      const fallbackPublicUrl = buildPublicUrl(evaluation.report_file_key);
+      res.json({
+        success: true,
+        data: {
+          reportUrl: fallbackPublicUrl,
+          publicUrl: fallbackPublicUrl
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error in /api/classes/ocr-evaluations/:id/report-url:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate report URL' });
+  }
+});
+
+// PATCH /api/classes/ocr-evaluations/:id - Teacher Score / Feedback Correction
+app.patch('/api/classes/ocr-evaluations/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    const { score, feedback } = req.body;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: evaluation, error: fetchErr } = await serverSupabase
+      .from('ocr_evaluations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !evaluation) {
+      return res.status(404).json({ success: false, error: 'Evaluation record not found.' });
+    }
+
+    if (evaluation.teacher_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Only the classroom teacher can adjust scores.' });
+    }
+
+    const updatePayload = {
+      is_teacher_adjusted: true,
+      updated_at: new Date().toISOString()
+    };
+
+    let newFinalScore = evaluation.final_score;
+    if (typeof score === 'number' && !isNaN(score)) {
+      newFinalScore = Math.min(Number(evaluation.max_marks), Math.max(0, Math.round(score * 10) / 10));
+      updatePayload.final_score = newFinalScore;
+      updatePayload.score = newFinalScore;
+      updatePayload.percentage = Math.round((newFinalScore / Number(evaluation.max_marks)) * 100);
+
+      if (updatePayload.percentage >= 85) updatePayload.performance = 'Excellent';
+      else if (updatePayload.percentage >= 70) updatePayload.performance = 'Good';
+      else if (updatePayload.percentage >= 50) updatePayload.performance = 'Satisfactory';
+      else updatePayload.performance = 'Needs Improvement';
+    }
+
+    if (typeof feedback === 'string') {
+      let cleanFb = feedback.trim();
+      const words = cleanFb.split(/\s+/);
+      if (words.length > 50) {
+        cleanFb = words.slice(0, 50).join(' ') + '.';
+      }
+      updatePayload.feedback = cleanFb;
+    }
+
+    const { data: updatedEval, error: updateErr } = await serverSupabase
+      .from('ocr_evaluations')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) {
+      throw updateErr;
+    }
+
+    // Re-generate updated PDF report in R2
+    if (updatedEval.report_file_key) {
+      try {
+        const [{ data: studentProf }, { data: classroomData }] = await Promise.all([
+          serverSupabase.from('profiles').select('full_name').eq('id', updatedEval.student_id).maybeSingle(),
+          serverSupabase.from('classrooms').select('title').eq('id', updatedEval.class_id).maybeSingle()
+        ]);
+
+        const pdfBuffer = generateEvaluationReportPdf({
+          evaluationId: updatedEval.id,
+          studentName: studentProf?.full_name || 'Student',
+          teacherName: authData.profile?.full_name || 'Teacher',
+          classroomTitle: classroomData?.title || 'Classroom',
+          category: updatedEval.category,
+          title: updatedEval.title || '',
+          maxMarks: updatedEval.max_marks,
+          score: updatedEval.final_score,
+          percentage: updatedEval.percentage,
+          performance: updatedEval.performance,
+          breakdown: updatedEval.breakdown_json,
+          feedback: updatedEval.feedback,
+          isTeacherAdjusted: true,
+          completedAt: updatedEval.completed_at || updatedEval.created_at
+        });
+
+        await putBinaryContent(updatedEval.report_file_key, pdfBuffer, 'application/pdf');
+      } catch (pdfErr) {
+        console.warn('[OCR Engine] Re-generating adjusted PDF report notice:', pdfErr.message);
+      }
+    }
+
+    // Update classroom points if points were recorded
+    try {
+      await serverSupabase
+        .from('classroom_points')
+        .update({ points: Math.round(newFinalScore) })
+        .eq('source_id', id);
+    } catch (ptsErr) {
+      console.warn('[OCR Engine] Notice: Could not update classroom points on adjustment:', ptsErr.message);
+    }
+
+    res.json({
+      success: true,
+      data: updatedEval
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/ocr-evaluations/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update evaluation' });
+  }
+});
+
+// GET /api/classes/:classroomId/ocr-evaluations - List Evaluations for Classroom or Student
+app.get('/api/classes/:classroomId/ocr-evaluations', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    const { studentId } = req.query;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    let query = serverSupabase
+      .from('ocr_evaluations')
+      .select(`
+        *,
+        student:profiles!student_id (id, full_name, email, avatar_url)
+      `)
+      .eq('class_id', classroomId)
+      .order('created_at', { ascending: false });
+
+    if (studentId) {
+      query = query.eq('student_id', studentId);
+    }
+
+    const { data: evaluations, error } = await query;
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: evaluations || []
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/:classroomId/ocr-evaluations:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch OCR evaluations' });
+  }
+});
+
+// ============================================================================
+// AI CHALLENGE COMPETITION API ROUTES
+// ============================================================================
+
+// POST /api/classes/challenges/presign-upload - Presigned URL for Reference / Student Upload
+app.post('/api/classes/challenges/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { filename, contentType, challengeId, type = 'submission' } = req.body;
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'filename is required.' });
+    }
+
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'docx', 'txt', 'html'];
+    if (!allowedExts.includes(ext)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid file format .${ext}. Allowed formats: ${allowedExts.join(', ')}`
+      });
+    }
+
+    const targetChallengeId = challengeId || crypto.randomUUID();
+    let objectKey = '';
+    const submissionId = crypto.randomUUID();
+
+    if (type === 'reference') {
+      objectKey = buildChallengeReferenceKey({ challengeId: targetChallengeId, extension: ext });
+    } else {
+      objectKey = buildChallengeSubmissionKey({
+        challengeId: targetChallengeId,
+        submissionId,
+        extension: ext
+      });
+    }
+
+    // Determine upload URL
+    const r2Config = getR2Config();
+    let uploadUrl = '';
+
+    if (r2Config && r2Config.s3Client && r2Config.bucketName) {
+      try {
+        const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+        const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+
+        const putCommand = new PutObjectCommand({
+          Bucket: r2Config.bucketName,
+          Key: objectKey,
+          ContentType: contentType || 'application/octet-stream'
+        });
+
+        uploadUrl = await getSignedUrl(r2Config.s3Client, putCommand, { expiresIn: 3600 });
+      } catch (presignErr) {
+        console.warn('[AI Challenge] Presign warning, falling back to direct upload proxy:', presignErr.message);
+        uploadUrl = `/api/classes/challenges/upload-proxy?key=${encodeURIComponent(objectKey)}`;
+      }
+    } else {
+      uploadUrl = `/api/classes/challenges/upload-proxy?key=${encodeURIComponent(objectKey)}`;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        uploadUrl,
+        objectKey,
+        fileKey: objectKey,
+        submissionId,
+        challengeId: targetChallengeId
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate upload URL' });
+  }
+});
+
+// POST /api/classes/challenges - Create AI Challenge
+app.post('/api/classes/challenges', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const {
+      classroomId,
+      title,
+      instructions,
+      category = 'Creative Writing',
+      maxMarks = 100,
+      allowTextSubmission = true,
+      allowFileUpload = true,
+      referenceFileKey,
+      referenceFileName,
+      deadlineAt
+    } = req.body;
+
+    if (!classroomId || !title?.trim() || !instructions?.trim()) {
+      return res.status(400).json({ success: false, error: 'Classroom ID, title, and instructions are required.' });
+    }
+
+    if (!allowTextSubmission && !allowFileUpload) {
+      return res.status(400).json({ success: false, error: 'At least one submission method must be enabled.' });
+    }
+
+    const marks = Number(maxMarks) || 100;
+
+    // Generate compact, fixed evaluation specification
+    const evaluationSpec = generateChallengeEvaluationSpec({
+      title: title.trim(),
+      instructions: instructions.trim(),
+      category,
+      maxMarks: marks,
+      referenceFileName
+    });
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: challenge, error } = await serverSupabase
+      .from('ai_challenges')
+      .insert({
+        classroom_id: classroomId,
+        created_by: authData.user.id,
+        title: title.trim(),
+        instructions: instructions.trim(),
+        reference_file_key: referenceFileKey || null,
+        reference_file_name: referenceFileName || null,
+        category,
+        max_marks: marks,
+        allow_text_submission: Boolean(allowTextSubmission),
+        allow_file_upload: Boolean(allowFileUpload),
+        required_word_count: evaluationSpec.required_word_count,
+        word_count_rule: evaluationSpec.word_count_rule,
+        evaluation_spec_json: evaluationSpec,
+        status: 'published',
+        deadline_at: deadlineAt || null
+      })
+      .select(`
+        *,
+        creator:profiles!created_by (id, full_name, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: challenge
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create challenge' });
+  }
+});
+
+// GET /api/classes/:classroomId/challenges - List Challenges for Classroom
+app.get('/api/classes/:classroomId/challenges', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const [{ data: challenges, error: cErr }, { data: students, error: sErr }] = await Promise.all([
+      serverSupabase
+        .from('ai_challenges')
+        .select(`
+          *,
+          creator:profiles!created_by (id, full_name, avatar_url),
+          submissions:ai_challenge_submissions (id, student_id, status, final_score, submitted_at)
+        `)
+        .eq('classroom_id', classroomId)
+        .order('created_at', { ascending: false }),
+      serverSupabase
+        .from('classroom_students')
+        .select('student_id')
+        .eq('classroom_id', classroomId)
+    ]);
+
+    if (cErr) throw cErr;
+
+    const totalStudents = students ? students.length : 0;
+
+    const formatted = (challenges || []).map((ch) => {
+      const subs = ch.submissions || [];
+      const submittedCount = subs.length;
+      const completedCount = subs.filter((s) => s.status === 'completed').length;
+      const processingCount = subs.filter((s) => s.status === 'processing' || s.status === 'queued').length;
+
+      // Find current user's submission if student
+      const mySubmission = subs.find((s) => s.student_id === authData.user.id) || null;
+
+      return {
+        ...ch,
+        total_participants: Math.max(totalStudents, submittedCount),
+        submitted_count: submittedCount,
+        completed_count: completedCount,
+        processing_count: processingCount,
+        my_submission: mySubmission
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formatted
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/:classroomId/challenges:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch challenges' });
+  }
+});
+
+// GET /api/classes/challenges/:id - Get Challenge Details
+app.get('/api/classes/challenges/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: challenge, error } = await serverSupabase
+      .from('ai_challenges')
+      .select(`
+        *,
+        creator:profiles!created_by (id, full_name, avatar_url),
+        classroom:classrooms!classroom_id (id, title, subject)
+      `)
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !challenge) {
+      return res.status(404).json({ success: false, error: 'Challenge not found.' });
+    }
+
+    res.json({
+      success: true,
+      data: challenge
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch challenge' });
+  }
+});
+
+// POST /api/classes/challenges/:id/submit - Student Submits Work (Asynchronous Queue)
+app.post('/api/classes/challenges/:id/submit', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to submit work.' });
+    }
+
+    const { id: challengeId } = req.params;
+    const {
+      submissionType = 'text',
+      contentText,
+      fileKey,
+      fileName,
+      fileType,
+      fileSize,
+      submissionId: clientSubId
+    } = req.body;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    // Verify challenge exists and is open
+    const { data: challenge, error: cErr } = await serverSupabase
+      .from('ai_challenges')
+      .select('*')
+      .eq('id', challengeId)
+      .single();
+
+    if (cErr || !challenge) {
+      return res.status(404).json({ success: false, error: 'Challenge not found.' });
+    }
+
+    // Server-authoritative deadline check
+    if (challenge.deadline_at && new Date() > new Date(challenge.deadline_at)) {
+      return res.status(400).json({
+        success: false,
+        error: 'The submission deadline for this challenge has passed.'
+      });
+    }
+
+    // Validate submission content
+    if (submissionType === 'text') {
+      if (!contentText || !contentText.trim()) {
+        return res.status(400).json({ success: false, error: 'Response text cannot be empty.' });
+      }
+    } else if (submissionType === 'file') {
+      if (!fileKey) {
+        return res.status(400).json({ success: false, error: 'Uploaded file key is required.' });
+      }
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid submission type.' });
+    }
+
+    const targetSubId = clientSubId || crypto.randomUUID();
+    const wordCount = submissionType === 'text' ? (contentText.trim().split(/\s+/).filter(Boolean).length) : null;
+
+    // Idempotent upsert into database with status = 'queued'
+    const { data: submission, error: subErr } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .upsert(
+        {
+          id: targetSubId,
+          challenge_id: challengeId,
+          student_id: authData.user.id,
+          submission_type: submissionType,
+          content_text: submissionType === 'text' ? contentText.trim() : null,
+          file_key: submissionType === 'file' ? fileKey : null,
+          file_name: fileName || null,
+          file_type: fileType || null,
+          file_size: fileSize || null,
+          word_count: wordCount,
+          status: 'queued',
+          submitted_at: new Date().toISOString(),
+          queued_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'challenge_id,student_id' }
+      )
+      .select()
+      .single();
+
+    if (subErr) {
+      throw subErr;
+    }
+
+    // Enqueue job into controlled background worker
+    aiChallengeQueue.enqueue({
+      submissionId: submission.id,
+      challengeId,
+      studentId: authData.user.id,
+      submissionType,
+      contentText: submission.content_text,
+      fileKey: submission.file_key,
+      fileType: submission.file_type,
+      challenge
+    });
+
+    // Return immediate success
+    res.json({
+      success: true,
+      data: {
+        submissionId: submission.id,
+        challengeId,
+        status: 'queued',
+        message: 'Your submission has been received and queued for AI evaluation.'
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/:id/submit:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to submit work' });
+  }
+});
+
+// GET /api/classes/challenges/:id/submissions - Teacher View All Submissions
+app.get('/api/classes/challenges/:id/submissions', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: challengeId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submissions, error } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select(`
+        *,
+        student:profiles!student_id (id, full_name, email, avatar_url)
+      `)
+      .eq('challenge_id', challengeId)
+      .order('submitted_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: submissions || []
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/:id/submissions:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch submissions' });
+  }
+});
+
+// GET /api/classes/challenges/:id/my-submission - Student View Own Submission
+app.get('/api/classes/challenges/:id/my-submission', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: challengeId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submission, error } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select('*')
+      .eq('challenge_id', challengeId)
+      .eq('student_id', authData.user.id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: submission || null
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/:id/my-submission:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch submission' });
+  }
+});
+
+// POST /api/classes/challenges/submissions/:id/override-score - Teacher Score Override
+app.post('/api/classes/challenges/submissions/:id/override-score', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: submissionId } = req.params;
+    const { finalScore, reason } = req.body;
+
+    const numScore = Number(finalScore);
+    if (isNaN(numScore) || numScore < 0) {
+      return res.status(400).json({ success: false, error: 'Valid positive score is required.' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submission, error: fetchErr } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select(`
+        *,
+        challenge:ai_challenges!challenge_id (max_marks, classroom_id, created_by)
+      `)
+      .eq('id', submissionId)
+      .single();
+
+    if (fetchErr || !submission) {
+      return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+
+    const maxMarks = submission.challenge?.max_marks || 100;
+    const boundedScore = Math.min(maxMarks, numScore);
+    const percentage = Math.round((boundedScore / maxMarks) * 100);
+
+    const { data: updated, error: updateErr } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .update({
+        final_score: boundedScore,
+        percentage,
+        teacher_adjusted: true,
+        teacher_adjustment_reason: (reason || 'Adjusted by teacher').trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', submissionId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    res.json({
+      success: true,
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in override-score:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to override score' });
+  }
+});
+
+// GET /api/classes/challenges/:id/leaderboard - Leaderboard (Ranked by final_score DESC, submitted_at ASC)
+app.get('/api/classes/challenges/:id/leaderboard', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: challengeId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submissions, error } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select(`
+        id,
+        student_id,
+        final_score,
+        ai_score,
+        percentage,
+        status,
+        submitted_at,
+        teacher_adjusted,
+        student:profiles!student_id (id, full_name, avatar_url)
+      `)
+      .eq('challenge_id', challengeId)
+      .eq('status', 'completed')
+      .order('final_score', { ascending: false })
+      .order('submitted_at', { ascending: true });
+
+    if (error) throw error;
+
+    const ranked = (submissions || []).map((sub, idx) => ({
+      rank: idx + 1,
+      ...sub
+    }));
+
+    res.json({
+      success: true,
+      data: ranked
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/challenges/:id/leaderboard:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch leaderboard' });
+  }
+});
+
+// POST /api/classes/challenges/cleanup-expired - Trigger 7-Day Storage Cleanup
+app.post('/api/classes/challenges/cleanup-expired', async (req, res) => {
+  try {
+    const result = await cleanupExpiredChallengeFiles(serverSupabase);
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// ASSIGN YOUR STUDENTS — 5 TASK CATEGORIES & HYBRID AUTO-GRADING API
+// ============================================================================
+
+// POST /api/classes/tasks - Create Task (Assignment, Lesson, Practice, Activity, Resource)
+app.post('/api/classes/tasks', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const {
+      classroomId,
+      title,
+      subtitle,
+      instructions,
+      category = 'assignment',
+      points = 100,
+      dueDate,
+      contentBlocks = [],
+      questions = [],
+      attachmentUrls = [],
+      settings = {}
+    } = req.body;
+
+    if (!classroomId || !title?.trim()) {
+      return res.status(400).json({ success: false, error: 'Classroom ID and Title are required.' });
+    }
+
+    const validCategory = TASK_CATEGORIES.includes(category) ? category : 'assignment';
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: task, error } = await serverSupabase
+      .from('assignments')
+      .insert({
+        classroom_id: classroomId,
+        created_by: authData.user.id,
+        title: title.trim(),
+        subtitle: subtitle?.trim() || null,
+        instructions: (instructions || '').trim(),
+        category: validCategory,
+        assignment_type: validCategory === 'assignment' ? 'task' : validCategory,
+        points: Number(points) || 100,
+        due_date: dueDate || null,
+        content_blocks: contentBlocks,
+        questions: questions,
+        attachment_urls: attachmentUrls,
+        settings: {
+          show_result_immediately: settings.show_result_immediately ?? true,
+          show_correct_answers: settings.show_correct_answers ?? true,
+          allow_retry: settings.allow_retry ?? false,
+          enable_ai_feedback: settings.enable_ai_feedback ?? true
+        },
+        status: 'published'
+      })
+      .select(`
+        *,
+        creator:profiles!created_by (id, full_name, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: task
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/tasks:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create task' });
+  }
+});
+
+// GET /api/classes/:classroomId/tasks - List Tasks for Classroom with Stats
+app.get('/api/classes/:classroomId/tasks', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    const { category } = req.query;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    let query = serverSupabase
+      .from('assignments')
+      .select(`
+        *,
+        creator:profiles!created_by (id, full_name, avatar_url),
+        submissions:assignment_submissions (id, student_id, status, points_awarded, final_score, submitted_at, completed_at)
+      `)
+      .eq('classroom_id', classroomId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false });
+
+    if (category && category !== 'all') {
+      query = query.eq('category', category);
+    }
+
+    const [{ data: tasks, error: tErr }, { data: students, error: sErr }] = await Promise.all([
+      query,
+      serverSupabase
+        .from('classroom_students')
+        .select('student_id')
+        .eq('classroom_id', classroomId)
+    ]);
+
+    if (tErr) throw tErr;
+
+    const totalStudents = students ? students.length : 0;
+
+    const formatted = (tasks || []).map((t) => {
+      const subs = t.submissions || [];
+      const submittedCount = subs.length;
+      const completedCount = subs.filter((s) => s.status === 'graded' || s.completed_at != null).length;
+      const mySub = subs.find((s) => s.student_id === authData.user.id) || null;
+
+      return {
+        ...t,
+        total_assigned: Math.max(totalStudents, submittedCount),
+        submitted_count: submittedCount,
+        completed_count: completedCount,
+        my_submission: mySub
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formatted
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/:classroomId/tasks:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch tasks' });
+  }
+});
+
+// GET /api/classes/tasks/:id - Single Task Details for Preview / Student Work
+app.get('/api/classes/tasks/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: task, error } = await serverSupabase
+      .from('assignments')
+      .select(`
+        *,
+        creator:profiles!created_by (id, full_name, avatar_url),
+        classroom:classrooms!classroom_id (id, title, subject, grade)
+      `)
+      .eq('id', id)
+      .eq('is_deleted', false)
+      .single();
+
+    if (error || !task) {
+      return res.status(404).json({ success: false, error: 'Task not found.' });
+    }
+
+    // Check if user has an existing submission
+    const { data: mySub } = await serverSupabase
+      .from('assignment_submissions')
+      .select('*')
+      .eq('assignment_id', id)
+      .eq('student_id', authData.user.id)
+      .maybeSingle();
+
+    res.json({
+      success: true,
+      data: {
+        ...task,
+        my_submission: mySub || null
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/tasks/:id:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch task' });
+  }
+});
+
+// POST /api/classes/tasks/:id/submit - Student Submits Task (Hybrid Auto-Grading)
+app.post('/api/classes/tasks/:id/submit', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: taskId } = req.params;
+    const {
+      studentAnswers = [],
+      textResponse = '',
+      fileUrls = []
+    } = req.body;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    // Retrieve authoritative task record
+    const { data: task, error: tErr } = await serverSupabase
+      .from('assignments')
+      .select('*')
+      .eq('id', taskId)
+      .eq('is_deleted', false)
+      .single();
+
+    if (tErr || !task) {
+      return res.status(404).json({ success: false, error: 'Task not found.' });
+    }
+
+    // Execute server-authoritative hybrid auto-grading pipeline
+    const gradingResult = await gradeTaskSubmission(task, studentAnswers, serverOpenAI);
+
+    const isGraded = gradingResult.final_score != null;
+    const submissionStatus = isGraded ? 'graded' : 'submitted';
+
+    // Upsert into assignment_submissions
+    const { data: submission, error: subErr } = await serverSupabase
+      .from('assignment_submissions')
+      .upsert(
+        {
+          assignment_id: taskId,
+          classroom_id: task.classroom_id,
+          student_id: authData.user.id,
+          status: submissionStatus,
+          text_response: textResponse || '',
+          file_urls: fileUrls || [],
+          question_answers: gradingResult.question_answers,
+          points_awarded: isGraded ? Math.round(gradingResult.final_score) : null,
+          final_score: gradingResult.final_score,
+          ai_score: gradingResult.ai_score,
+          percentage: gradingResult.percentage,
+          is_ai_graded: gradingResult.is_ai_graded,
+          task_version: task.version || 1,
+          completed_at: isGraded ? new Date().toISOString() : null,
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'assignment_id,student_id' }
+      )
+      .select()
+      .single();
+
+    if (subErr) throw subErr;
+
+    res.json({
+      success: true,
+      data: submission
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/tasks/:id/submit:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to submit task' });
+  }
+});
+
+// GET /api/classes/tasks/:id/submissions - Teacher Views Submissions
+app.get('/api/classes/tasks/:id/submissions', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: taskId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submissions, error } = await serverSupabase
+      .from('assignment_submissions')
+      .select(`
+        *,
+        student:profiles!student_id (id, full_name, email, avatar_url)
+      `)
+      .eq('assignment_id', taskId)
+      .order('submitted_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: submissions || []
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/tasks/:id/submissions:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch submissions' });
+  }
+});
+
+// POST /api/classes/tasks/submissions/:id/override - Teacher Adjusts Score
+app.post('/api/classes/tasks/submissions/:id/override', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id: submissionId } = req.params;
+    const { finalScore, reason, teacherFeedback } = req.body;
+
+    const numScore = Number(finalScore);
+    if (isNaN(numScore) || numScore < 0) {
+      return res.status(400).json({ success: false, error: 'Valid positive score is required.' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    const { data: submission, error: fetchErr } = await serverSupabase
+      .from('assignment_submissions')
+      .select(`
+        *,
+        assignment:assignments!assignment_id (points)
+      `)
+      .eq('id', submissionId)
+      .single();
+
+    if (fetchErr || !submission) {
+      return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+
+    const maxPoints = submission.assignment?.points || 100;
+    const percentage = Math.round((Math.min(maxPoints, numScore) / maxPoints) * 100);
+
+    const { data: updated, error: updateErr } = await serverSupabase
+      .from('assignment_submissions')
+      .update({
+        final_score: numScore,
+        points_awarded: Math.round(numScore),
+        percentage,
+        status: 'graded',
+        teacher_feedback: teacherFeedback || submission.teacher_feedback,
+        teacher_adjusted: true,
+        teacher_adjustment_reason: (reason || 'Adjusted by teacher').trim(),
+        graded_by: authData.user.id,
+        graded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', submissionId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    res.json({
+      success: true,
+      data: updated
+    });
+  } catch (error) {
+    console.error('Error in override task score:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to override score' });
+  }
+});
+
+// POST /api/classes/ocr-grade - Backwards Compatible Direct Route
 app.post('/api/classes/ocr-grade', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -1124,21 +2539,23 @@ app.post('/api/classes/ocr-grade', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
 
-    const { studentName, assignmentTitle, rubric, maxPoints = 100, textResponse, fileUrl } = req.body;
+    const { studentName, assignmentTitle, rubric, maxPoints = 100, textResponse, fileUrl, category = 'Other' } = req.body;
 
     let evaluation = {
       score: Math.round(Number(maxPoints) * 0.88),
-      feedback: 'Good comprehension of key concepts. Structure is clear, with minor areas for expansion in analytical detail.',
-      strengths: ['Clear terminology usage', 'Direct response to question requirements'],
-      improvements: ['Elaborate further with real-world examples']
+      feedback: 'Good comprehension of key concepts. Structure is clear with thoughtful presentation.',
+      performance: 'Good',
+      breakdown: [
+        { criterion: 'Content and Relevance', score: Math.round(Number(maxPoints) * 0.88), max: Number(maxPoints) }
+      ]
     };
 
     if (serverOpenAI && (textResponse || fileUrl)) {
       try {
-        const prompt = `You are an AI assessment grader for EdTechra. Evaluate this student submission against the rubric:
-
+        const prompt = `You are an AI assessment grader for EdTechra. Evaluate this student submission:
 Student: ${studentName || 'Student'}
 Assignment: ${assignmentTitle || 'Class Assignment'}
+Category: ${category}
 Maximum Points: ${maxPoints}
 Rubric / Criteria: ${rubric || 'Accuracy, clarity, and completeness'}
 Student Response: ${textResponse || 'Worksheet submission with attached image'}
@@ -1146,25 +2563,28 @@ Student Response: ${textResponse || 'Worksheet submission with attached image'}
 Return a JSON object strictly matching this format:
 {
   "score": <number between 0 and ${maxPoints}>,
-  "feedback": "<2-3 sentence personalized feedback>",
-  "strengths": ["<strength 1>", "<strength 2>"],
-  "improvements": ["<improvement 1>"]
+  "percentage": <number between 0 and 100>,
+  "performance": "Good",
+  "breakdown": [{"criterion": "Main Criterion", "score": <number>, "max": ${maxPoints}}],
+  "feedback": "<concise feedback, 50 words maximum>"
 }`;
 
         const completion = await serverOpenAI.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' },
-          temperature: 0.3
+          temperature: 0.2,
+          max_tokens: 400
         });
 
         const parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}');
         if (parsed && typeof parsed.score === 'number') {
           evaluation = {
             score: Math.min(Number(maxPoints), Math.max(0, parsed.score)),
-            feedback: parsed.feedback || evaluation.feedback,
-            strengths: parsed.strengths || evaluation.strengths,
-            improvements: parsed.improvements || evaluation.improvements
+            percentage: parsed.percentage || Math.round((parsed.score / Number(maxPoints)) * 100),
+            performance: parsed.performance || 'Good',
+            breakdown: parsed.breakdown || evaluation.breakdown,
+            feedback: parsed.feedback || evaluation.feedback
           };
         }
       } catch (aiErr) {

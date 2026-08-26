@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Users, Search, Trash2, Trophy } from 'lucide-react';
+import { Users, Search, Trash2, Trophy, FileText } from 'lucide-react';
 import { ClassroomMember } from '@/types/classroom';
 import { classroomService } from '@/services/classroomService';
+import { StudentAssessmentHistoryModal } from './StudentAssessmentHistoryModal';
 
 interface StudentRosterProps {
   classroomId: string;
@@ -18,6 +19,7 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [selectedStudentHistory, setSelectedStudentHistory] = useState<ClassroomMember | null>(null);
 
   const filteredMembers = members.filter((m) => {
     const name = m.display_name || m.profile?.full_name || m.profile?.email || '';
@@ -79,6 +81,7 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
                 <th className="pb-3 px-3">Student</th>
                 <th className="pb-3 px-3">Status</th>
                 <th className="pb-3 px-3">Class Points</th>
+                <th className="pb-3 px-3">Assessments</th>
                 <th className="pb-3 px-3">Joined Date</th>
                 {isTeacher && <th className="pb-3 px-3 text-right">Actions</th>}
               </tr>
@@ -119,6 +122,17 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
                         <span>{member.points ?? 0} pts</span>
                       </div>
                     </td>
+                    <td className="py-3 px-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStudentHistory(member)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-black transition-colors cursor-pointer border border-indigo-200"
+                        title="View student evaluation history"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>History & Reports</span>
+                      </button>
+                    </td>
                     <td className="py-3 px-3 text-slate-500 font-medium">
                       {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>
@@ -141,6 +155,16 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Student Assessment History Modal */}
+      {selectedStudentHistory && (
+        <StudentAssessmentHistoryModal
+          isOpen={Boolean(selectedStudentHistory)}
+          classroomId={classroomId}
+          student={selectedStudentHistory}
+          onClose={() => setSelectedStudentHistory(null)}
+        />
       )}
     </div>
   );
