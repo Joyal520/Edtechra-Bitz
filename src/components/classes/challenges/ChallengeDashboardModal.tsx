@@ -19,12 +19,13 @@ import {
   AiChallengeLeaderboardEntry
 } from '@/types/aiChallenge';
 import { aiChallengeService } from '@/services/aiChallengeService';
-import { useAuth } from '@/context/AuthContext';
+import { useClassroomAuth } from '@/hooks/useClassroomAuth';
 
 interface ChallengeDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   challenge: AiChallenge;
+  isTeacher?: boolean;
   onOpenStudentSubmit?: () => void;
 }
 
@@ -32,10 +33,11 @@ export const ChallengeDashboardModal: React.FC<ChallengeDashboardModalProps> = (
   isOpen,
   onClose,
   challenge,
+  isTeacher: isTeacherProp,
   onOpenStudentSubmit
 }) => {
-  const { user } = useAuth();
-  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const classroomAuth = useClassroomAuth(challenge.classroom_id);
+  const isTeacher = isTeacherProp ?? classroomAuth.isTeacher;
 
   const [activeTab, setActiveTab] = useState<'leaderboard' | 'submissions'>('leaderboard');
   const [submissions, setSubmissions] = useState<AiChallengeSubmission[]>([]);

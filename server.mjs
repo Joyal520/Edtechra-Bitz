@@ -205,6 +205,54 @@ async function verifyAuthUser(req) {
   }
 }
 
+// Helper: Authoritative server-side teacher authorization check
+async function isTeacherAuthorized(authData, classroomId) {
+  if (!authData || !authData.user) return false;
+
+  // 1. Admin account has full access
+  if (
+    authData.profile?.role === 'admin' ||
+    authData.user.email === 'roshanjoyal520@gmail.com'
+  ) {
+    return true;
+  }
+
+  // 2. Global teacher role
+  if (authData.profile?.role === 'teacher') {
+    return true;
+  }
+
+  // 3. Classroom-level teacher ownership or membership
+  if (classroomId && serverSupabase) {
+    try {
+      const { data: classroom } = await serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      if (classroom && classroom.teacher_id === authData.user.id) {
+        return true;
+      }
+
+      const { data: member } = await serverSupabase
+        .from('classroom_members')
+        .select('role')
+        .eq('classroom_id', classroomId)
+        .eq('profile_id', authData.user.id)
+        .maybeSingle();
+
+      if (member && (member.role === 'teacher' || member.role === 'co-teacher')) {
+        return true;
+      }
+    } catch (err) {
+      console.warn('[isTeacherAuthorized] DB check notice:', err.message);
+    }
+  }
+
+  return false;
+}
+
 // In-memory / file-based student posts store for resilient persistence
 const POSTS_FILE = path.resolve(__dirname, 'server/data/posts_cache.json');
 const LIKES_FILE = path.resolve(__dirname, 'server/data/likes_cache.json');
@@ -1703,6 +1751,12 @@ app.post('/api/classes/challenges', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Classroom ID, title, and instructions are required.' });
     }
 
+    // Authoritative teacher authorization check
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to create challenges.' });
+    }
+
     if (!allowTextSubmission && !allowFileUpload) {
       return res.status(400).json({ success: false, error: 'At least one submission method must be enabled.' });
     }
@@ -1986,6 +2040,22 @@ app.get('/api/classes/challenges/:id/submissions', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
+    // Verify user is teacher of the challenge's classroom
+    const { data: challenge } = await serverSupabase
+      .from('ai_challenges')
+      .select('classroom_id')
+      .eq('id', challengeId)
+      .maybeSingle();
+
+    if (!challenge) {
+      return res.status(404).json({ success: false, error: 'Challenge not found.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, challenge.classroom_id);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to view all submissions.' });
+    }
+
     const { data: submissions, error } = await serverSupabase
       .from('ai_challenge_submissions')
       .select(`
@@ -2070,6 +2140,11 @@ app.post('/api/classes/challenges/submissions/:id/override-score', async (req, r
 
     if (fetchErr || !submission) {
       return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, submission.challenge?.classroom_id);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to adjust scores.' });
     }
 
     const maxMarks = submission.challenge?.max_marks || 100;
@@ -2190,6 +2265,12 @@ app.post('/api/classes/tasks', async (req, res) => {
 
     if (!classroomId || !title?.trim()) {
       return res.status(400).json({ success: false, error: 'Classroom ID and Title are required.' });
+    }
+
+    // Authoritative teacher authorization check
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to create tasks.' });
     }
 
     const validCategory = TASK_CATEGORIES.includes(category) ? category : 'assignment';
@@ -2444,6 +2525,22 @@ app.get('/api/classes/tasks/:id/submissions', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
+    // Verify user is teacher of the task's classroom
+    const { data: task } = await serverSupabase
+      .from('assignments')
+      .select('classroom_id')
+      .eq('id', taskId)
+      .maybeSingle();
+
+    if (!task) {
+      return res.status(404).json({ success: false, error: 'Task not found.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, task.classroom_id);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to view all submissions.' });
+    }
+
     const { data: submissions, error } = await serverSupabase
       .from('assignment_submissions')
       .select(`
@@ -2496,6 +2593,11 @@ app.post('/api/classes/tasks/submissions/:id/override', async (req, res) => {
 
     if (fetchErr || !submission) {
       return res.status(404).json({ success: false, error: 'Submission not found.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, submission.classroom_id);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to adjust scores.' });
     }
 
     const maxPoints = submission.assignment?.points || 100;

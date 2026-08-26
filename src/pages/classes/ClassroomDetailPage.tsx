@@ -1176,6 +1176,7 @@ export const ClassroomDetailPage: React.FC = () => {
       <ChallengeListModal
         isOpen={challengeListModalOpen}
         classroomId={classroom.id}
+        isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
       />
 

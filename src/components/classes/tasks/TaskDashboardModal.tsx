@@ -17,7 +17,7 @@ import {
   TaskSubmission
 } from '@/types/classroomTask';
 import { classroomTaskService } from '@/services/classroomTaskService';
-import { useAuth } from '@/context/AuthContext';
+import { useClassroomAuth } from '@/hooks/useClassroomAuth';
 import { CreateTaskModal } from './CreateTaskModal';
 import { StudentTaskModal } from './StudentTaskModal';
 
@@ -25,15 +25,18 @@ interface TaskDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   classroomId: string;
+  isTeacher?: boolean;
 }
 
 export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   isOpen,
   onClose,
-  classroomId
+  classroomId,
+  isTeacher: isTeacherProp
 }) => {
-  const { user } = useAuth();
-  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const classroomAuth = useClassroomAuth(classroomId);
+  const isTeacher = isTeacherProp ?? classroomAuth.isTeacher;
+  const isRoleResolving = classroomAuth.isLoading && !isTeacher;
 
   const [selectedCategory, setSelectedCategory] = useState<TaskCategory | 'all'>('all');
   const [tasks, setTasks] = useState<ClassroomTask[]>([]);
@@ -196,7 +199,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
         {/* Task Cards List */}
         <div className="p-6 overflow-y-auto flex-1 space-y-3">
-          {loading ? (
+          {(loading || isRoleResolving) && tasks.length === 0 ? (
             <div className="py-20 text-center space-y-3">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
               <p className="text-xs text-slate-500 font-bold">Loading tasks...</p>
