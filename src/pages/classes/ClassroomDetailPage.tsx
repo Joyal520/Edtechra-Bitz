@@ -60,6 +60,7 @@ import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedba
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
+import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
@@ -95,6 +96,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [activeSubmitAssignment, setActiveSubmitAssignment] = useState<Assignment | null>(null);
   const [activeReviewAssignment, setActiveReviewAssignment] = useState<Assignment | null>(null);
   const [activityHubOpen, setActivityHubOpen] = useState(false);
+  const [taskDashboardOpen, setTaskDashboardOpen] = useState(false);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClassroomExam | null>(null);
@@ -502,15 +504,26 @@ export const ClassroomDetailPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActivityHubOpen(true);
-                }}
-                className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
-              >
-                Get Started
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivityHubOpen(true);
+                  }}
+                  className="flex-1 py-2.5 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+                >
+                  Create Task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTaskDashboardOpen(true);
+                  }}
+                  className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition-all cursor-pointer"
+                >
+                  Dashboard
+                </button>
+              </div>
             </div>
 
             {/* Card 2: Live Quiz */}
@@ -1178,6 +1191,13 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
+      />
+
+      <TaskDashboardModal
+        isOpen={taskDashboardOpen}
+        classroomId={classroom.id}
+        isTeacher={isTeacher}
+        onClose={() => setTaskDashboardOpen(false)}
       />
 
     </div>
