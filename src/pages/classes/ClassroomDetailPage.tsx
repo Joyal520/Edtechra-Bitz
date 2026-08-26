@@ -61,6 +61,7 @@ import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankMo
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
 import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
+import { StudentAssessmentHistoryModal } from '@/components/classes/StudentAssessmentHistoryModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'live-quiz';
@@ -101,6 +102,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClassroomExam | null>(null);
   const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
+  const [studentAssessmentHistoryOpen, setStudentAssessmentHistoryOpen] = useState(false);
 
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
@@ -199,12 +201,14 @@ export const ClassroomDetailPage: React.FC = () => {
     authIsTeacher
   );
 
-  const teacherDisplayName =
+  const myMemberRecord = members.find((m) => m.profile_id === user?.id) || null;
+
+  const displayName =
     profile?.full_name?.trim() ||
     profile?.name?.trim() ||
     classroom?.teacher?.full_name?.trim() ||
     user?.user_metadata?.full_name?.trim() ||
-    'Mr. Joy';
+    (isTeacher ? 'Teacher' : 'Student');
 
   const handleSelectTab = (tab: TabType) => {
     setActiveTab(tab);
@@ -308,29 +312,33 @@ export const ClassroomDetailPage: React.FC = () => {
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setAiReportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-3.5 py-1.5 rounded-full transition-all shadow-xs active:scale-95 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>AI Classroom Report</span>
-            </button>
-          </div>
+          {isTeacher && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setAiReportModalOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 px-3.5 py-1.5 rounded-full transition-all shadow-xs active:scale-95 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>AI Classroom Report</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* GREETING HERO HEADER */}
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-            Welcome back, {teacherDisplayName}! 👋
+            Welcome back, {displayName}! 👋
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 font-semibold">
-            Manage your class, engage students and track progress.
+            {isTeacher
+              ? 'Manage your class, engage students and track progress.'
+              : 'View your tasks, track your progress and learn with your class.'}
           </p>
         </div>
 
           {/* ========================================================================= */}
-          {/* LAYER 1: FIVE EXISTING CLASSROOM MANAGEMENT CARDS                          */}
+          {/* LAYER 1: FIVE CLASSROOM NAVIGATION CARDS                                  */}
           {/* ========================================================================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
             
@@ -361,7 +369,7 @@ export const ClassroomDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 2: Task */}
+            {/* Card 2: Tasks / My Tasks */}
             <div
               onClick={() => handleSelectTab('assignments')}
               className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
@@ -375,9 +383,13 @@ export const ClassroomDetailPage: React.FC = () => {
                   <TaskIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-left">
-                  <h3 className="text-base font-black text-slate-900">Task</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'Tasks' : 'My Tasks'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Create, manage and review assignments.
+                    {isTeacher
+                      ? 'Create, manage and review assignments.'
+                      : 'View assigned tasks, due dates and submit work.'}
                   </p>
                 </div>
               </div>
@@ -388,7 +400,7 @@ export const ClassroomDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 3: Students */}
+            {/* Card 3: Students / Classmates */}
             <div
               onClick={() => handleSelectTab('roster')}
               className={`rounded-3xl p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
@@ -402,9 +414,13 @@ export const ClassroomDetailPage: React.FC = () => {
                   <StudentsIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-left">
-                  <h3 className="text-base font-black text-slate-900">Students</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'Students' : 'Classmates'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    View students, progress and engagement.
+                    {isTeacher
+                      ? 'View students, progress and engagement.'
+                      : 'View classmates and classroom leaderboard.'}
                   </p>
                 </div>
               </div>
@@ -458,7 +474,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 <div className="space-y-1 text-left">
                   <h3 className="text-base font-black text-slate-900">Resources</h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Access teaching materials, files and links.
+                    Access learning materials, files and links.
                   </p>
                 </div>
               </div>
@@ -472,14 +488,14 @@ export const ClassroomDetailPage: React.FC = () => {
           </div>
 
           {/* ========================================================================= */}
-          {/* SECTION DIVIDER: ASSIGN YOUR STUDENTS                                     */}
+          {/* SECTION DIVIDER                                                           */}
           {/* ========================================================================= */}
           <div className="flex items-center gap-4 py-3">
             <div className="flex-1 h-[2px] bg-slate-200 flex items-center justify-end">
               <div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
             </div>
             <h2 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 tracking-wider uppercase px-2 text-center select-none">
-              ASSIGN YOUR STUDENTS
+              {isTeacher ? 'ASSIGN YOUR STUDENTS' : 'CLASSROOM ACTIVITIES & LEARNING'}
             </h2>
             <div className="flex-1 h-[2px] bg-slate-200 flex items-center justify-start">
               <div className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
@@ -491,39 +507,55 @@ export const ClassroomDetailPage: React.FC = () => {
           {/* ========================================================================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
             
-            {/* Card 1: Assign Your Students */}
+            {/* Card 1: Assign Your Students (Teacher) / My Tasks (Student) */}
             <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
                   <AssignStudentsIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-base font-black text-slate-900">Assign Your Students</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'Assign Your Students' : 'My Tasks'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Assign tasks, lessons or activities to selected students or groups.
+                    {isTeacher
+                      ? 'Assign tasks, lessons or activities to selected students or groups.'
+                      : 'Complete lessons, practice exercises, and submit homework assignments.'}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivityHubOpen(true);
-                  }}
-                  className="flex-1 py-2.5 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
-                >
-                  Create Task
-                </button>
+              {isTeacher ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivityHubOpen(true);
+                    }}
+                    className="flex-1 py-2.5 px-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+                  >
+                    Create Task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskDashboardOpen(true);
+                    }}
+                    className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition-all cursor-pointer"
+                  >
+                    Dashboard
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => {
                     setTaskDashboardOpen(true);
                   }}
-                  className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-black transition-all cursor-pointer"
+                  className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
                 >
-                  Dashboard
+                  Open Tasks
                 </button>
-              </div>
+              )}
             </div>
 
             {/* Card 2: Live Quiz */}
@@ -535,7 +567,9 @@ export const ClassroomDetailPage: React.FC = () => {
                 <div className="space-y-1 text-center">
                   <h3 className="text-base font-black text-slate-900">Live Quiz</h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Conduct live quizzes, engage students in real time and view results instantly.
+                    {isTeacher
+                      ? 'Conduct live quizzes, engage students in real time and view results instantly.'
+                      : 'Join real-time classroom quizzes with a game PIN and compete with classmates.'}
                   </p>
                 </div>
               </div>
@@ -550,67 +584,89 @@ export const ClassroomDetailPage: React.FC = () => {
                 }}
                 className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
-                Start Quiz
+                {isTeacher ? 'Host Live Quiz' : 'Join Quiz'}
               </button>
             </div>
 
-            {/* Card 3: Exam */}
+            {/* Card 3: Exam (Teacher) / Exams (Student) */}
             <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
                   <ExamIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-base font-black text-slate-900">Exam</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'Exam' : 'Exams'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Create exams, set time limits and evaluate student performance.
+                    {isTeacher
+                      ? 'Create exams, set time limits and evaluate student performance.'
+                      : 'Take scheduled timed assessments and review your exam results.'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedExam(null);
-                  setExamModalOpen(true);
+                  if (isTeacher) {
+                    setSelectedExam(null);
+                    setExamModalOpen(true);
+                  } else {
+                    handleSelectTab('exams');
+                  }
                 }}
                 className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
-                Create Exam
+                {isTeacher ? 'Create Exam' : 'View Exams'}
               </button>
             </div>
 
-            {/* Card 4: OCR Assessment */}
+            {/* Card 4: OCR Assessment (Teacher) / My Assessments (Student) */}
             <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
                   <OCRIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-base font-black text-slate-900">OCR Assessment</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'OCR Assessment' : 'My Assessments'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Upload handwritten papers and get AI evaluation with smart feedback.
+                    {isTeacher
+                      ? 'Upload handwritten papers and get AI evaluation with smart feedback.'
+                      : 'View your graded worksheet feedback and official AI evaluation reports.'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setOcrModalOpen(true)}
+                onClick={() => {
+                  if (isTeacher) {
+                    setOcrModalOpen(true);
+                  } else {
+                    setStudentAssessmentHistoryOpen(true);
+                  }
+                }}
                 className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
-                Start OCR
+                {isTeacher ? 'Grade Worksheets' : 'View Evaluations'}
               </button>
             </div>
 
-            {/* Card 5: Competition */}
+            {/* Card 5: Competition (Teacher) / Challenges (Student) */}
             <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all flex flex-col justify-between space-y-4 group">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
                   <CompetitionIllustration className="w-28 h-24 transition-transform group-hover:scale-105" />
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-base font-black text-slate-900">Competition</h3>
+                  <h3 className="text-base font-black text-slate-900">
+                    {isTeacher ? 'Competition' : 'Challenges'}
+                  </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    Create challenges, collect student work and let AI evaluate submissions automatically.
+                    {isTeacher
+                      ? 'Create challenges, collect student work and let AI evaluate submissions automatically.'
+                      : 'Participate in creative writing & problem-solving challenges evaluated by AI.'}
                   </p>
                 </div>
               </div>
@@ -619,7 +675,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 onClick={() => setChallengeListModalOpen(true)}
                 className="w-full py-2.5 px-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer"
               >
-                Create Competition
+                {isTeacher ? 'Challenge Dashboard' : 'Open Challenges'}
               </button>
             </div>
 
@@ -671,13 +727,15 @@ export const ClassroomDetailPage: React.FC = () => {
                   <span>{copiedInvite ? 'Copied!' : 'Copy Code & Link'}</span>
                 </button>
 
-                <button
-                  onClick={handleWhatsAppShare}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <MessageSquareShare className="w-3.5 h-3.5" />
-                  <span>Share via WhatsApp</span>
-                </button>
+                {isTeacher && (
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <MessageSquareShare className="w-3.5 h-3.5" />
+                    <span>Share via WhatsApp</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -702,7 +760,7 @@ export const ClassroomDetailPage: React.FC = () => {
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  Tasks ({assignments.length})
+                  {isTeacher ? 'Tasks' : 'My Tasks'} ({assignments.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('roster')}
@@ -712,7 +770,7 @@ export const ClassroomDetailPage: React.FC = () => {
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  Students ({members.length})
+                  {isTeacher ? 'Students' : 'Classmates'} ({members.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('stream')}
@@ -866,23 +924,25 @@ export const ClassroomDetailPage: React.FC = () => {
 
                 {/* Right Column: Leaderboard & AI Feedback hub */}
                 <div className="space-y-6">
-                  {/* AI Report Card */}
-                  <div className="bg-gradient-to-br from-[#6366f1] to-[#7c3aed] text-white rounded-3xl p-6 shadow-md space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-indigo-200" />
-                      <h3 className="text-sm font-black text-white">AI Classroom Insights</h3>
+                  {/* AI Report Card (Teacher Only) */}
+                  {isTeacher && (
+                    <div className="bg-gradient-to-br from-[#6366f1] to-[#7c3aed] text-white rounded-3xl p-6 shadow-md space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-indigo-200" />
+                        <h3 className="text-sm font-black text-white">AI Classroom Insights</h3>
+                      </div>
+                      <p className="text-xs text-indigo-100 font-medium leading-relaxed">
+                        Analyze student submissions, comprehension trends, and generate personalized feedback summaries.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setAiReportModalOpen(true)}
+                        className="w-full py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                      >
+                        Generate AI Report
+                      </button>
                     </div>
-                    <p className="text-xs text-indigo-100 font-medium leading-relaxed">
-                      Analyze student submissions, comprehension trends, and generate personalized feedback summaries.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setAiReportModalOpen(true)}
-                      className="w-full py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
-                    >
-                      Generate AI Report
-                    </button>
-                  </div>
+                  )}
 
                   {/* Leaderboard Card */}
                   <ClassroomLeaderboard
@@ -984,6 +1044,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 classroomId={classroom.id}
                 members={members}
                 isTeacher={isTeacher}
+                currentUserId={user?.id}
                 onMemberRemoved={loadAllClassroomData}
               />
             )}
@@ -1198,6 +1259,22 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         onClose={() => setTaskDashboardOpen(false)}
+      />
+
+      <StudentAssessmentHistoryModal
+        isOpen={studentAssessmentHistoryOpen}
+        classroomId={classroom.id}
+        student={myMemberRecord || (user ? {
+          id: user.id,
+          classroom_id: classroom.id,
+          profile_id: user.id,
+          role: 'student',
+          points: 0,
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          profile: profile as any
+        } : null)}
+        onClose={() => setStudentAssessmentHistoryOpen(false)}
       />
 
     </div>

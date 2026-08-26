@@ -8,6 +8,7 @@ interface StudentRosterProps {
   classroomId: string;
   members: ClassroomMember[];
   isTeacher: boolean;
+  currentUserId?: string;
   onMemberRemoved: () => void;
 }
 
@@ -15,6 +16,7 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
   classroomId,
   members,
   isTeacher,
+  currentUserId,
   onMemberRemoved
 }) => {
   const [search, setSearch] = useState('');
@@ -50,8 +52,12 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
             <Users className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-black text-slate-900">Enrolled Students</h2>
-            <p className="text-xs text-slate-500 font-semibold">{members.length} active students</p>
+            <h2 className="text-base font-black text-slate-900">
+              {isTeacher ? 'Enrolled Students' : 'Classmates'}
+            </h2>
+            <p className="text-xs text-slate-500 font-semibold">
+              {isTeacher ? `${members.length} active students` : `${members.length} members learning together`}
+            </p>
           </div>
         </div>
 
@@ -61,7 +67,7 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search students..."
+            placeholder={isTeacher ? 'Search students...' : 'Search classmates...'}
             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3]"
           />
         </div>
@@ -70,15 +76,19 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
       {/* Roster Table */}
       {filteredMembers.length === 0 ? (
         <div className="text-center py-10 space-y-2">
-          <p className="text-xs font-bold text-slate-500">No students enrolled yet.</p>
-          <p className="text-[11px] text-slate-400">Share your class invite code with students to join.</p>
+          <p className="text-xs font-bold text-slate-500">
+            {isTeacher ? 'No students enrolled yet.' : 'No other classmates found.'}
+          </p>
+          <p className="text-[11px] text-slate-400">
+            {isTeacher ? 'Share your class invite code with students to join.' : 'Your classmates will appear here once they join.'}
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
-                <th className="pb-3 px-3">Student</th>
+                <th className="pb-3 px-3">{isTeacher ? 'Student' : 'Classmate'}</th>
                 <th className="pb-3 px-3">Status</th>
                 <th className="pb-3 px-3">Class Points</th>
                 <th className="pb-3 px-3">Assessments</th>
@@ -91,6 +101,7 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
                 const name = member.display_name || member.profile?.full_name || member.profile?.email?.split('@')[0] || 'Student';
                 const avatar = member.profile?.avatar_url;
                 const initials = name.slice(0, 2).toUpperCase();
+                const isCurrent = member.profile_id === currentUserId;
 
                 return (
                   <tr key={member.id} className="hover:bg-slate-50/70 transition-colors">
@@ -106,8 +117,17 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
                           )}
                         </div>
                         <div>
-                          <div className="font-extrabold text-slate-900">{name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">{member.profile?.email}</div>
+                          <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                            <span>{name}</span>
+                            {isCurrent && (
+                              <span className="text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded-md">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          {isTeacher && (
+                            <div className="text-[10px] text-slate-400 font-mono">{member.profile?.email}</div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -123,15 +143,19 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
                       </div>
                     </td>
                     <td className="py-3 px-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedStudentHistory(member)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-black transition-colors cursor-pointer border border-indigo-200"
-                        title="View student evaluation history"
-                      >
-                        <FileText className="w-3 h-3" />
-                        <span>History & Reports</span>
-                      </button>
+                      {isTeacher || isCurrent ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudentHistory(member)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-black transition-colors cursor-pointer border border-indigo-200"
+                          title="View evaluation history"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>{isCurrent && !isTeacher ? 'My Reports' : 'History & Reports'}</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 font-medium text-[11px] select-none">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-slate-500 font-medium">
                       {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
