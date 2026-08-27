@@ -43,8 +43,26 @@ import {
   buildTemporaryOcrKey,
   validateOcrUpload,
   buildPresignedDownloadUrl,
-  buildOcrReportKey
+  buildOcrReportKey,
+  buildExamSourceObjectKey,
+  buildExamAttachmentObjectKey,
+  buildExamSubmissionObjectKey,
+  buildExamReportObjectKey,
+  buildTeachingReportObjectKey
 } from './server/r2Service.mjs';
+import {
+  getClassroomTeachingIntelligence,
+  createThirtyDayReport,
+  computeClassroomMetrics
+} from './server/teachingIntelligenceService.mjs';
+import {
+  generateExam,
+  validateGenerationPayload,
+  gradeExamAttempt,
+  processScoreAnalysisAndUploadToR2,
+  getTeacherExamsFromSupabase,
+  saveExamToSupabase
+} from './server/exam2Service.mjs';
 import {
   ocrEvaluationQueue,
   cleanupStaleTemporaryFiles,
@@ -1147,7 +1165,129 @@ app.post('/api/classes/presign-upload', async (req, res) => {
   }
 });
 
-// POST /api/classes/ai-feedback - Generate AI Executive Classroom Summary Report
+// ============================================================================
+// AI TEACHING INTELLIGENCE & 30-DAY REPORTS API
+// ============================================================================
+
+// GET /api/classes/:id/teaching-intelligence - Retrieve cached or fresh classroom intelligence
+app.get('/api/classes/:id/teaching-intelligence', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const forceRefresh = req.query.refresh === 'true';
+
+    const result = await getClassroomTeachingIntelligence({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      forceRefresh,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-intelligence:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve teaching intelligence' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/refresh - Explicit teacher trigger for fresh AI analysis
+app.post('/api/classes/:id/teaching-intelligence/refresh', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+
+    const result = await getClassroomTeachingIntelligence({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      forceRefresh: true,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/refresh:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to refresh teaching intelligence' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/generate-report - Generate 30-Day PDF report to Cloudflare R2
+app.post('/api/classes/:id/teaching-intelligence/generate-report', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const period = req.body?.period || 'Last 30 Days';
+
+    const result = await createThirtyDayReport({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      period,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/generate-report:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate 30-day report' });
+  }
+});
+
+// GET /api/classes/:id/teaching-intelligence/reports - List previous 30-Day reports with R2 links
+app.get('/api/classes/:id/teaching-intelligence/reports', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+
+    if (!serverSupabase) {
+      return res.json({ success: true, reports: [] });
+    }
+
+    const { data: reports, error } = await serverSupabase
+      .from('ai_classroom_reports')
+      .select('*')
+      .eq('classroom_id', classroomId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const enriched = (reports || []).map(r => {
+      const signed = buildPresignedDownloadUrl({
+        objectKey: r.storage_key,
+        expiresInSeconds: 3600
+      });
+      return {
+        ...r,
+        download_url: signed.downloadUrl,
+        public_url: buildPublicUrl(r.storage_key)
+      };
+    });
+
+    res.json({ success: true, reports: enriched, count: enriched.length });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-intelligence/reports:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to list reports' });
+  }
+});
+
+// POST /api/classes/ai-feedback - Backwards-compatible endpoint for executive summary
 app.post('/api/classes/ai-feedback', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -1155,48 +1295,20 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
 
-    const { classroomId, classroomTitle, subject, studentCount, assignmentCount, averageScore, recentActivity } = req.body;
-
-    let summary = '';
-
-    if (serverOpenAI) {
-      try {
-        const prompt = `You are an expert pedagogical AI advisor for EdTechra Digital Classroom. 
-Analyze the following classroom performance metrics and generate a concise, encouraging, and actionable 3-paragraph executive summary for the teacher:
-
-Classroom: ${classroomTitle || 'General'} (${subject || 'General'})
-Enrolled Students: ${studentCount || 0}
-Total Assignments: ${assignmentCount || 0}
-Class Average Score: ${averageScore || 0}%
-Recent Activities: ${recentActivity || 'Standard weekly coursework'}
-
-Provide:
-1. An overall pulse check and progress assessment.
-2. Specific praise for high-engagement areas and identified focus points for improvement.
-3. 2-3 concrete pedagogical recommendations for next week's assignments.`;
-
-        const completion = await serverOpenAI.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 600
-        });
-
-        summary = completion.choices?.[0]?.message?.content || '';
-      } catch (aiErr) {
-        console.warn('[AI Classroom Report] OpenAI API fallback notice:', aiErr.message);
-      }
-    }
-
-    if (!summary) {
-      summary = `**Classroom Pulse Check & Overview**\n\nOverall class performance for **${classroomTitle || 'your classroom'}** is demonstrating positive engagement across **${studentCount || 0} enrolled students**. With an average score of **${averageScore || 85}%**, students are responding well to the structured curriculum and weekly learning tasks.\n\n**Actionable Recommendations**\n\n1. Introduce short interactive Quiz Bits to reinforce core terminology before the next major task.\n2. Consider creating a multi-step Learning Spree combining video Shorts and reading reflections for differentiated practice.\n3. Celebrate top learners on the Classroom Leaderboard to boost peer motivation.`;
-    }
+    const { classroomId } = req.body;
+    const intel = await getClassroomTeachingIntelligence({
+      serverSupabase,
+      classroomId: classroomId || 'general',
+      teacherId: authData.user.id,
+      forceRefresh: false,
+      serverOpenAI
+    });
 
     res.json({
       success: true,
       data: {
-        summary,
-        generatedAt: new Date().toISOString()
+        summary: intel.intelligence?.summary || 'Classroom intelligence active.',
+        generatedAt: intel.updated_at
       }
     });
   } catch (error) {
@@ -10625,6 +10737,383 @@ app.get('/api/live-quiz/storage-status', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// EXAM 2.0 DIGITAL CLASSROOM INTEGRATION API & STATIC MOUNT
+// ============================================================================
+
+// 1. Static asset serving for Exam 2.0 SPA
+app.use('/exam2', express.static(path.join(__dirname, 'Digital_classroom', 'Digital Classroom', 'Exam 2.0', 'public')));
+
+/**
+ * Main Exam 2.0 Dispatcher Endpoint
+ * Handles: list-teacher-exams, list-student-exams, get-exam, get-student-exam,
+ * generate-exam, save-exam, publish-exam, grade-attempt, submit-student-exam,
+ * score-analysis, get-report-url, delete-exam.
+ */
+app.all('/api/exam-engine', async (req, res) => {
+  const action = req.query.action || req.body?.action || '';
+  const authContext = await verifyAuthUser(req);
+  const user = authContext?.user;
+
+  try {
+    // Action 1: List Previous Exams for Authenticated Teacher
+    if (action === 'list-teacher-exams') {
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'Teacher authentication required.' });
+      }
+      const exams = await getTeacherExamsFromSupabase(serverSupabase, user.id);
+      return res.json({ success: true, exams, count: exams.length });
+    }
+
+    // Action 2: List Assigned Exams for Classroom Student
+    if (action === 'list-student-exams') {
+      const classroomId = req.query.classroomId || req.body?.classroomId;
+      if (!classroomId) {
+        return res.status(400).json({ success: false, error: 'classroomId is required.' });
+      }
+
+      if (!serverSupabase) {
+        return res.json({ success: true, exams: [] });
+      }
+
+      const { data: exams, error } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .in('status', ['published', 'scheduled', 'active', 'closed'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const examList = exams || [];
+      let resultsMap = {};
+
+      if (user && examList.length > 0) {
+        const { data: results } = await serverSupabase
+          .from('classroom_exam_results')
+          .select('*')
+          .in('exam_id', examList.map(e => e.id))
+          .eq('student_id', user.id);
+
+        (results || []).forEach(r => {
+          resultsMap[r.exam_id] = r;
+        });
+      }
+
+      const enriched = examList.map(exam => {
+        const myResult = resultsMap[exam.id] || null;
+        const now = new Date();
+        const start = exam.starts_at ? new Date(exam.starts_at) : null;
+        const end = exam.ends_at ? new Date(exam.ends_at) : null;
+        const isStarted = !start || now >= start;
+        const isEnded = end && now > end;
+        const canStart = !myResult && exam.status === 'published' && isStarted && !isEnded;
+
+        return {
+          ...exam,
+          latest_result: myResult,
+          can_start: canStart
+        };
+      });
+
+      return res.json({ success: true, exams: enriched, count: enriched.length });
+    }
+
+    // Action 3: Get Exam by ID
+    if (action === 'get-exam' || action === 'get-student-exam') {
+      const examId = req.query.examId || req.body?.examId;
+      if (!examId) return res.status(400).json({ success: false, error: 'examId is required.' });
+
+      if (!serverSupabase) {
+        return res.status(500).json({ success: false, error: 'Database not available.' });
+      }
+
+      const { data: exam, error } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      if (error || !exam) {
+        return res.status(404).json({ success: false, error: 'Exam not found.' });
+      }
+
+      let myResult = null;
+      if (user) {
+        const { data: resData } = await serverSupabase
+          .from('classroom_exam_results')
+          .select('*')
+          .eq('exam_id', examId)
+          .eq('student_id', user.id)
+          .maybeSingle();
+        myResult = resData;
+      }
+
+      const canStart = !myResult && (exam.status === 'published' || exam.status === 'active');
+
+      // If student has not submitted yet, strip correct answers and explanations for exam integrity
+      let sanitizedExam = { ...exam };
+      if (!myResult && action === 'get-student-exam') {
+        const rawSections = Array.isArray(exam.questions_json) && exam.questions_json.length > 0
+          ? exam.questions_json
+          : Array.isArray(exam.questions) ? [{ questions: exam.questions }] : [];
+
+        const sanitizedSections = rawSections.map(s => ({
+          ...s,
+          questions: (s.questions || []).map(q => ({
+            ...q,
+            correctAnswer: undefined,
+            correct_answer: undefined,
+            explanation: undefined
+          }))
+        }));
+        sanitizedExam.questions_json = sanitizedSections;
+      }
+
+      return res.json({
+        success: true,
+        exam: sanitizedExam,
+        latest_result: myResult,
+        can_start: canStart
+      });
+    }
+
+    // Action 4: AI Generate Exam
+    if (action === 'generate-exam') {
+      const payload = req.body;
+      const validation = validateGenerationPayload(payload);
+      if (validation) return res.status(400).json({ success: false, error: validation });
+
+      const exam = await generateExam({
+        payload,
+        openaiApiKey,
+        serverOpenAI
+      });
+      return res.json(exam);
+    }
+
+    // Action 5: Save Exam Draft
+    if (action === 'save-exam') {
+      const payload = req.body;
+      const teacherId = user?.id || '00000000-0000-0000-0000-000000000001';
+      const saved = await saveExamToSupabase(serverSupabase, payload, teacherId);
+      return res.json({ success: true, examId: saved.id, status: saved.status, savedAt: saved.created_at });
+    }
+
+    // Action 6: Publish Exam
+    if (action === 'publish-exam') {
+      const payload = req.body;
+      if (!payload.approved) {
+        return res.status(403).json({ success: false, error: 'Teacher approval is required before publishing.' });
+      }
+      const teacherId = user?.id || '00000000-0000-0000-0000-000000000001';
+      const published = await saveExamToSupabase(serverSupabase, { ...payload, status: 'published' }, teacherId);
+      return res.json({ success: true, examId: published.id, status: 'published', publishedAt: published.published_at });
+    }
+
+    // Action 7: Grade & Submit Student Exam Attempt
+    if (action === 'grade-attempt' || action === 'submit-student-exam') {
+      const payload = req.body;
+      const examData = payload.exam || payload;
+      const answers = payload.answers || {};
+
+      const gradingResult = gradeExamAttempt(examData, answers);
+
+      // If persistent submission with user session
+      if (serverSupabase && user && (payload.examId || examData.id)) {
+        const examId = payload.examId || examData.id;
+        const classroomId = payload.classroomId || examData.classroom_id;
+
+        try {
+          const { data: record, error: insErr } = await serverSupabase
+            .from('classroom_exam_results')
+            .upsert({
+              exam_id: examId,
+              classroom_id: classroomId,
+              student_id: user.id,
+              score: gradingResult.totalScore,
+              total_marks: gradingResult.maxScore,
+              percentage: gradingResult.percentage,
+              grade: gradingResult.grade,
+              passed: gradingResult.passed,
+              answers: answers,
+              breakdown_json: gradingResult.breakdown,
+              feedback_json: {
+                strengths: gradingResult.strengths,
+                weaknesses: gradingResult.weaknesses,
+                feedback: gradingResult.feedback
+              },
+              feedback: gradingResult.feedback,
+              storage_provider: 'cloudflare_r2',
+              submitted_at: new Date().toISOString()
+            }, { onConflict: 'exam_id,student_id' })
+            .select()
+            .single();
+
+          if (!insErr && record) {
+            gradingResult.savedRecordId = record.id;
+          }
+        } catch (dbErr) {
+          console.warn('[Exam2Service] Non-critical submission save error:', dbErr.message);
+        }
+      }
+
+      return res.json({ success: true, ...gradingResult });
+    }
+
+    // Action 8: Score Analysis & Cloudflare R2 PDF Report Generation
+    if (action === 'score-analysis') {
+      const payload = req.body;
+      const examId = payload.exam_id || payload.examId || 'exam';
+      const classroomId = payload.class_id || payload.classroomId || 'classroom';
+
+      const analysisResult = await processScoreAnalysisAndUploadToR2({
+        examId,
+        classroomId,
+        examName: payload.exam_name || 'Classroom Assessment',
+        totalMarks: payload.total_marks || 100,
+        students: payload.students || [],
+        questions: payload.questions || []
+      });
+
+      // Update exam record with R2 file pointer in Supabase
+      if (serverSupabase && examId && examId.length === 36) {
+        await serverSupabase
+          .from('classroom_exams')
+          .update({
+            r2_file_key: analysisResult.report_r2_key,
+            r2_storage_provider: 'cloudflare_r2',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', examId)
+          .catch(() => {});
+      }
+
+      return res.json({ success: true, ...analysisResult });
+    }
+
+    // Action 9: Secure Signed R2 Download URL for Reports
+    if (action === 'get-report-url') {
+      const objectKey = req.query.objectKey || req.body?.objectKey;
+      const examId = req.query.examId || req.body?.examId;
+
+      let targetKey = objectKey;
+      if (!targetKey && examId && serverSupabase) {
+        const { data: ex } = await serverSupabase
+          .from('classroom_exams')
+          .select('r2_file_key')
+          .eq('id', examId)
+          .maybeSingle();
+        targetKey = ex?.r2_file_key;
+      }
+
+      if (!targetKey) {
+        return res.status(404).json({ success: false, error: 'No R2 report found for this exam.' });
+      }
+
+      const signed = buildPresignedDownloadUrl({
+        objectKey: targetKey,
+        expiresInSeconds: 3600 // 1 hour validity
+      });
+
+      return res.json({
+        success: true,
+        downloadUrl: signed.downloadUrl,
+        publicUrl: buildPublicUrl(targetKey),
+        storage_provider: 'cloudflare_r2',
+        objectKey: targetKey
+      });
+    }
+
+    // Action 10: Delete Exam
+    if (action === 'delete-exam') {
+      if (!user) return res.status(401).json({ success: false, error: 'Authentication required.' });
+      const examId = req.query.examId || req.body?.examId;
+      if (!examId) return res.status(400).json({ success: false, error: 'examId is required.' });
+
+      if (serverSupabase) {
+        const { error: delErr } = await serverSupabase
+          .from('classroom_exams')
+          .delete()
+          .eq('id', examId)
+          .or(`teacher_id.eq.${user.id},created_by.eq.${user.id}`);
+
+        if (delErr) throw delErr;
+      }
+
+      return res.json({ success: true, message: 'Exam deleted successfully.' });
+    }
+
+    return res.status(400).json({ success: false, error: `Unknown action: ${action}` });
+  } catch (err) {
+    console.error('[ExamEngine API Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal exam server error.' });
+  }
+});
+
+// Standalone Direct Endpoints for 100% Exam 2.0 Compatibility
+app.post('/api/generate-exam', async (req, res) => {
+  try {
+    const payload = req.body;
+    const validation = validateGenerationPayload(payload);
+    if (validation) return res.status(400).json({ error: validation });
+    const exam = await generateExam({ payload, openaiApiKey, serverOpenAI });
+    return res.json(exam);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/grade-attempt', async (req, res) => {
+  try {
+    const payload = req.body;
+    const result = gradeExamAttempt(payload.exam, payload.answers);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/save-exam', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const teacherId = authContext?.user?.id || '00000000-0000-0000-0000-000000000001';
+    const saved = await saveExamToSupabase(serverSupabase, req.body, teacherId);
+    return res.json({ success: true, examId: saved.id, status: saved.status, savedAt: saved.created_at });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/publish-exam', async (req, res) => {
+  try {
+    if (!req.body.approved) return res.status(403).json({ error: 'Teacher approval is required before publishing.' });
+    const authContext = await verifyAuthUser(req);
+    const teacherId = authContext?.user?.id || '00000000-0000-0000-0000-000000000001';
+    const saved = await saveExamToSupabase(serverSupabase, { ...req.body, status: 'published' }, teacherId);
+    return res.json({ success: true, examId: saved.id, status: 'published' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/score-analysis', async (req, res) => {
+  try {
+    const payload = req.body;
+    const result = await processScoreAnalysisAndUploadToR2({
+      examId: payload.exam_id || 'EXAM',
+      classroomId: payload.class_id || 'CLASS',
+      examName: payload.exam_name || 'Mid Term Exam',
+      totalMarks: payload.total_marks || 100,
+      students: payload.students || [],
+      questions: payload.questions || []
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

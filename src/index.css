@@ -249,3 +249,35 @@
 .animate-shake {
   animation: subtleShake 0.45s ease-in-out;
 }
+
+@keyframes correctBounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+  75% { transform: scale(0.98); }
+  100% { transform: scale(1.02); }
+}
+
+@keyframes errorPulseShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.animate-correct-bounce {
+  animation: correctBounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.animate-error-shake {
+  animation: errorPulseShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-correct-bounce,
+  .animate-error-shake,
+  .animate-shake {
+    animation: none !important;
+  }
+}
+

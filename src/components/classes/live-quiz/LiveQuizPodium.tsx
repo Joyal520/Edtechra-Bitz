@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Sparkles, ArrowRight } from 'lucide-react';
 import { LiveQuizResult } from '@/types/liveQuiz';
+import { quizAudioService } from '@/services/quizAudioService';
+import { ConfettiCelebration } from './ConfettiCelebration';
 
 interface LiveQuizPodiumProps {
   results: LiveQuizResult[];
@@ -15,11 +17,16 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   onExit
 }) => {
   const navigate = useNavigate();
+  const [showConfetti, setShowConfetti] = useState(true);
 
   const sorted = [...results].sort((a, b) => b.score - a.score);
   const first = sorted[0];
   const second = sorted[1];
   const third = sorted[2];
+
+  useEffect(() => {
+    quizAudioService.playCorrect();
+  }, []);
 
   const handleReturn = () => {
     if (onExit) {
@@ -30,7 +37,10 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   };
 
   return (
-    <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-6 sm:p-10 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-8 animate-in fade-in duration-300">
+    <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-6 sm:p-10 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-8 animate-in fade-in duration-300 relative">
+      {showConfetti && (
+        <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={2000} />
+      )}
       
       {/* Header */}
       <div className="text-center space-y-2">

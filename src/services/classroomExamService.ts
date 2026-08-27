@@ -249,6 +249,217 @@ class ClassroomExamService {
       return [];
     }
   }
+
+  /**
+   * Retrieves all exams created by the authenticated teacher across classrooms
+   */
+  async getTeacherPreviousExams(): Promise<any[]> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch('/api/exam-engine?action=list-teacher-exams', {
+        headers
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return data.exams || [];
+      }
+    } catch (e) {
+      console.warn('[ClassroomExamService] getTeacherPreviousExams fallback to Supabase:', e);
+    }
+
+    if (!supabase) return [];
+    const userId = await this.getUserId();
+    if (!userId) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('classroom_exams')
+        .select(`
+          *,
+          classroom:classrooms!classroom_id (id, title, subject, grade)
+        `)
+        .or(`teacher_id.eq.${userId},created_by.eq.${userId}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('[ClassroomExamService] getTeacherPreviousExams error:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Generates AI structured exam from teacher notes/context
+   */
+  async generateAIExam(payload: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=generate-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to generate AI exam.');
+    }
+    return data;
+  }
+
+  /**
+   * Saves exam draft to database
+   */
+  async saveExamDraft(payload: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=save-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to save exam draft.');
+    }
+    return data;
+  }
+
+  /**
+   * Publishes exam to classroom
+   */
+  async publishExam2(payload: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=publish-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to publish exam.');
+    }
+    return data;
+  }
+
+  /**
+   * Submits Exam 2.0 attempt and executes hybrid grading
+   */
+  async submitExam2(payload: {
+    examId: string;
+    classroomId: string;
+    exam: any;
+    answers: Record<string, any>;
+  }): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=submit-student-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to submit exam.');
+    }
+
+    // Award student points
+    if (data.totalScore > 0 && payload.classroomId) {
+      const userId = await this.getUserId();
+      if (userId) {
+        await classroomPointsService.awardPoints({
+          classroom_id: payload.classroomId,
+          student_id: userId,
+          points: data.totalScore,
+          reason: `Exam: ${payload.exam?.metadata?.title || 'Classroom Assessment'}`,
+          source_type: 'exam',
+          source_id: payload.examId
+        }).catch(() => {});
+      }
+    }
+
+    return data;
+  }
+
+  /**
+   * Runs score analysis, statistical computation, and uploads PDF report to Cloudflare R2
+   */
+  async getScoreAnalysis(payload: any): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=score-analysis', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Score analysis failed.');
+    }
+    return data;
+  }
+
+  /**
+   * Gets a secure time-limited presigned download URL for an exam report on Cloudflare R2
+   */
+  async getExamReportUrl(examId: string, objectKey?: string): Promise<string> {
+    const headers = await this.getAuthHeaders();
+    const query = objectKey
+      ? `action=get-report-url&objectKey=${encodeURIComponent(objectKey)}`
+      : `action=get-report-url&examId=${encodeURIComponent(examId)}`;
+
+    const res = await fetch(`/api/exam-engine?${query}`, {
+      headers
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.downloadUrl) {
+      throw new Error(data.error || 'Could not retrieve report download link.');
+    }
+    return data.downloadUrl;
+  }
+
+  /**
+   * Deletes an exam
+   */
+  async deleteExam(examId: string): Promise<void> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=delete-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify({ examId })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to delete exam.');
+    }
+  }
+
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    if (!supabase) return {};
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  }
 }
 
 export const classroomExamService = new ClassroomExamService();

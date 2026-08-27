@@ -742,3 +742,52 @@ export async function getBinaryContent(objectKey) {
   return null;
 }
 
+// ============================================================================
+// EXAM 2.0 CLOUDFLARE R2 OBJECT KEY BUILDERS
+// Standard hierarchy:
+// exams/{exam_id}/source/...
+// exams/{exam_id}/attachments/...
+// submissions/{exam_id}/{student_id}/...
+// reports/{exam_id}/{student_or_class_id}/...
+// ============================================================================
+
+export function buildExamSourceObjectKey({ examId, filename = 'source_notes.txt' }) {
+  const cleanExamId = sanitizeSegment(examId) || 'draft';
+  const timestamp = Date.now();
+  const rawExt = filename.split('.').pop() || 'txt';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'txt';
+  const cleanName = sanitizeSegment(filename.replace(/\.[^/.]+$/, '')) || 'source';
+  return `exams/${cleanExamId}/source/${timestamp}_${cleanName}.${cleanExt}`;
+}
+
+export function buildExamAttachmentObjectKey({ examId, filename = 'attachment.pdf' }) {
+  const cleanExamId = sanitizeSegment(examId) || 'exam';
+  const timestamp = Date.now();
+  const rawExt = filename.split('.').pop() || 'pdf';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'pdf';
+  return `exams/${cleanExamId}/attachments/${timestamp}.${cleanExt}`;
+}
+
+export function buildExamSubmissionObjectKey({ examId, studentId, filename = 'answer.pdf' }) {
+  const cleanExamId = sanitizeSegment(examId) || 'exam';
+  const cleanStudentId = sanitizeSegment(studentId) || 'student';
+  const timestamp = Date.now();
+  const rawExt = filename.split('.').pop() || 'bin';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'bin';
+  return `submissions/${cleanExamId}/${cleanStudentId}/${timestamp}.${cleanExt}`;
+}
+
+export function buildExamReportObjectKey({ examId, classOrStudentId = 'class_report' }) {
+  const cleanExamId = sanitizeSegment(examId) || 'exam';
+  const cleanTarget = sanitizeSegment(classOrStudentId) || 'class';
+  const timestamp = Date.now();
+  return `reports/${cleanExamId}/${cleanTarget}_${timestamp}.pdf`;
+}
+
+export function buildTeachingReportObjectKey({ classroomId, period = 'current', timestamp = Date.now() }) {
+  const cleanClassId = sanitizeSegment(classroomId) || 'classroom';
+  const cleanPeriod = sanitizeSegment(period) || 'current';
+  return `ai-reports/classrooms/${cleanClassId}/${cleanPeriod}/classroom-report-${timestamp}.pdf`;
+}
+
+

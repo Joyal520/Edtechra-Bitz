@@ -1,15 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock,
   CheckCircle2,
   XCircle,
   Sparkles,
   Lock,
-  Hourglass
+  Hourglass,
+  Volume2,
+  VolumeX,
+  Check
 } from 'lucide-react';
 import { LiveQuizSession } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
+import { quizAudioService } from '@/services/quizAudioService';
+import { ConfettiCelebration } from './ConfettiCelebration';
 
 interface LiveQuizStudentPlayProps {
   session: LiveQuizSession;
@@ -49,6 +54,11 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const [totalScore, setTotalScore] = useState(0);
   const [questionTimeLeft, setQuestionTimeLeft] = useState(20);
 
+  // Audio and Visual Celebration Feedback State
+  const [soundEnabled, setSoundEnabled] = useState(() => quizAudioService.isSoundEnabled());
+  const [showConfetti, setShowConfetti] = useState(false);
+  const hasTriggeredFeedbackRef = useRef<number | null>(null);
+
   // Total Quiz Timer State
   const isTotalTimed = Boolean(session.quiz?.timer_enabled || session.expires_at);
   const totalDurationSec = session.quiz?.timer_seconds || 60;
@@ -75,11 +85,14 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         setSelectedIndex(null);
         setIsLocked(false);
         setRevealData(null);
+        setShowConfetti(false);
+        hasTriggeredFeedbackRef.current = null;
         setPointsEarned(0);
         setQuestionTimeLeft(data.durationSec || 20);
       })
       .on('broadcast', { event: 'question_reveal' }, (payload: any) => {
-        setRevealData(payload.payload);
+        const rData = payload.payload;
+        setRevealData(rData);
       })
       .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
         if (onQuizFinished) {
@@ -92,6 +105,24 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       channel.unsubscribe();
     };
   }, [session.pin, onQuizFinished]);
+
+  // Trigger Local Answer Audio and Visual Feedback upon Reveal (Guarded against duplicates)
+  useEffect(() => {
+    if (!revealData || !questionData) return;
+
+    // Check if feedback already fired for this question index
+    if (hasTriggeredFeedbackRef.current === questionData.qIndex) return;
+    hasTriggeredFeedbackRef.current = questionData.qIndex;
+
+    const isAnswerCorrect = selectedIndex !== null && selectedIndex === revealData.correctIndex;
+
+    if (isAnswerCorrect) {
+      quizAudioService.playCorrect();
+      setShowConfetti(true);
+    } else {
+      quizAudioService.playIncorrect();
+    }
+  }, [revealData, questionData, selectedIndex]);
 
   // Question synchronized countdown
   useEffect(() => {
@@ -141,6 +172,9 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const handleSelectOption = async (index: number) => {
     if (isLocked || revealData || !questionData || isTotalTimeExpired) return;
 
+    // Safely unlock Web Audio API on first student interaction
+    quizAudioService.unlockAudio();
+
     setSelectedIndex(index);
     setIsLocked(true);
 
@@ -177,6 +211,12 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     }
   };
 
+  const handleToggleSound = () => {
+    quizAudioService.unlockAudio();
+    const next = quizAudioService.toggleSound();
+    setSoundEnabled(next);
+  };
+
   const formatTotalTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -192,21 +232,43 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
           The teacher will start the next question shortly. Fast answers earn up to +1000 points!
         </p>
 
-        {isTotalTimed && (
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full border border-white/20 text-xs font-black">
-            <Hourglass className="w-3.5 h-3.5 text-amber-400" />
-            <span>Quiz Timer: {formatTotalTime(totalTimeLeft)}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3 pt-2">
+          {isTotalTimed && (
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full border border-white/20 text-xs font-black">
+              <Hourglass className="w-3.5 h-3.5 text-amber-400" />
+              <span>Quiz Timer: {formatTotalTime(totalTimeLeft)}</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleToggleSound}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
+              soundEnabled
+                ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
+                : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+            }`}
+            title={soundEnabled ? 'Mute Sound' : 'Unmute Sound'}
+          >
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-rose-300" />}
+            <span>Sound {soundEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
       </div>
     );
   }
 
-  const isCorrect = revealData && selectedIndex === revealData.correctIndex;
+  const isSelectedCorrect = revealData && selectedIndex !== null && selectedIndex === revealData.correctIndex;
+  const isSelectedIncorrect = revealData && selectedIndex !== null && selectedIndex !== revealData.correctIndex;
 
   return (
     <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6 relative">
       
+      {/* Confetti Celebration Particle Layer (Auto disappears after 1.5s) */}
+      {showConfetti && (
+        <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={1500} />
+      )}
+
       {/* Total Time Expired Modal / Overlay */}
       {isTotalTimeExpired && (
         <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center text-center p-6 space-y-3 animate-in fade-in duration-200">
@@ -227,6 +289,21 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         </span>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Sound Toggle Control */}
+          <button
+            type="button"
+            onClick={handleToggleSound}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black border transition-all cursor-pointer ${
+              soundEnabled
+                ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
+                : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+            }`}
+            title={soundEnabled ? 'Mute Sound Effects' : 'Unmute Sound Effects'}
+          >
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{soundEnabled ? 'Sound' : 'Muted'}</span>
+          </button>
+
           {/* Total Quiz Timer (if enabled) */}
           {isTotalTimed && (
             <div
@@ -273,25 +350,61 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       {/* Reveal Feedback Banner if active */}
       {revealData && (
         <div className={`p-4 rounded-2xl text-center font-black animate-in zoom-in-95 duration-200 ${
-          isCorrect ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-300' : 'bg-rose-500/20 border border-rose-400 text-rose-300'
+          isSelectedCorrect
+            ? 'bg-emerald-500/25 border-2 border-emerald-400 text-emerald-300 shadow-xl shadow-emerald-500/20 animate-correct-bounce'
+            : isSelectedIncorrect
+            ? 'bg-rose-500/25 border-2 border-rose-400 text-rose-300 shadow-xl shadow-rose-500/20 animate-error-shake'
+            : 'bg-slate-800/60 border border-slate-600 text-slate-300'
         }`}>
           <div className="flex items-center justify-center gap-2 text-base">
-            {isCorrect ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-            <span>{isCorrect ? `Correct! +${pointsEarned} Points` : 'Incorrect'}</span>
+            {isSelectedCorrect ? (
+              <>
+                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                <span className="text-emerald-200">Excellent! Correct Answer • +{pointsEarned} Points</span>
+              </>
+            ) : isSelectedIncorrect ? (
+              <>
+                <XCircle className="w-6 h-6 text-rose-400" />
+                <span className="text-rose-200">Incorrect</span>
+              </>
+            ) : (
+              <span>Time's Up — No Answer Selected</span>
+            )}
           </div>
           {revealData.explanation && (
-            <p className="text-xs font-medium text-slate-200 mt-1">{revealData.explanation}</p>
+            <p className="text-xs font-medium text-slate-200 mt-1.5 leading-relaxed">{revealData.explanation}</p>
           )}
         </div>
       )}
 
-      {/* 4 Interactive Option Cards */}
+      {/* 4 Interactive Option Cards with Polished Feedback */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-4xl mx-auto w-full">
         {questionData.options.map((opt, idx) => {
           const theme = OPTION_THEMES[idx] || OPTION_THEMES[0];
           const isSelected = selectedIndex === idx;
           const isRevealed = Boolean(revealData);
-          const isOptionCorrect = revealData && idx === revealData.correctIndex;
+          const isThisOptionCorrect = revealData && idx === revealData.correctIndex;
+          const isThisOptionIncorrectSelection = isRevealed && isSelected && !isThisOptionCorrect;
+
+          let cardStyling = `${theme.bg}`;
+
+          if (isRevealed) {
+            if (isSelected && isThisOptionCorrect) {
+              // Student selected correct answer
+              cardStyling = 'bg-emerald-600 ring-4 ring-emerald-300 text-white shadow-2xl shadow-emerald-500/40 scale-[1.02] animate-correct-bounce brightness-110';
+            } else if (isThisOptionIncorrectSelection) {
+              // Student selected incorrect answer
+              cardStyling = 'bg-rose-600 ring-4 ring-rose-400 text-white shadow-xl shadow-rose-600/40 animate-error-shake brightness-100';
+            } else if (isThisOptionCorrect) {
+              // Highlight the correct answer if student chose wrong or missed
+              cardStyling = 'bg-emerald-700/90 ring-4 ring-emerald-400 text-white shadow-md brightness-105';
+            } else {
+              // Non-selected wrong options
+              cardStyling = 'opacity-35 grayscale-[50%] bg-slate-800 text-slate-400';
+            }
+          } else if (isSelected) {
+            cardStyling = `${theme.bg} ring-4 ring-white scale-[1.02] shadow-2xl brightness-110`;
+          }
 
           return (
             <button
@@ -299,29 +412,38 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
               type="button"
               disabled={isLocked || isRevealed || isTotalTimeExpired}
               onClick={() => handleSelectOption(idx)}
-              className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${theme.bg} ${
-                isSelected
-                  ? 'ring-4 ring-white scale-[1.02] shadow-2xl brightness-110'
-                  : ''
-              } ${
-                isRevealed && isOptionCorrect
-                  ? 'ring-4 ring-emerald-400 brightness-110'
-                  : isRevealed && !isOptionCorrect
-                  ? 'opacity-40 grayscale-[40%]'
-                  : ''
-              }`}
+              className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
             >
               <div className="flex items-center gap-3.5">
-                <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center font-black text-base text-white shrink-0">
-                  {theme.label}
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-base text-white shrink-0 ${
+                  isRevealed && isThisOptionCorrect
+                    ? 'bg-emerald-400 text-emerald-950 shadow-xs'
+                    : isRevealed && isThisOptionIncorrectSelection
+                    ? 'bg-rose-400 text-rose-950 shadow-xs'
+                    : 'bg-white/20'
+                }`}>
+                  {isRevealed && isThisOptionCorrect ? (
+                    <Check className="w-5 h-5 stroke-[3]" />
+                  ) : isRevealed && isThisOptionIncorrectSelection ? (
+                    <XCircle className="w-5 h-5" />
+                  ) : (
+                    theme.label
+                  )}
                 </div>
                 <span className="text-sm sm:text-base text-white">{opt}</span>
               </div>
 
-              {isSelected && (
+              {isSelected && !isRevealed && (
                 <span className="text-[11px] font-black bg-white/30 text-white px-2.5 py-1 rounded-xl flex items-center gap-1">
                   <Lock className="w-3 h-3" />
                   <span>Locked</span>
+                </span>
+              )}
+
+              {isRevealed && isThisOptionCorrect && (
+                <span className="text-[11px] font-black bg-white/20 text-emerald-100 px-2.5 py-1 rounded-xl flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Correct</span>
                 </span>
               )}
             </button>
@@ -333,10 +455,14 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       <div className="text-center text-xs text-slate-400 font-bold">
         {isLocked && !revealData ? (
           <span className="text-sky-300 font-black animate-pulse">
-            ✓ Answer submitted. Waiting for other players...
+            ✓ Answer submitted. Waiting for teacher reveal...
           </span>
-        ) : (
+        ) : !revealData ? (
           <span>Select an answer card above before the timer expires</span>
+        ) : (
+          <span className="text-slate-300">
+            {isSelectedCorrect ? '🎉 Great job! Points recorded.' : isSelectedIncorrect ? 'Review the explanation above.' : 'Question complete.'}
+          </span>
         )}
       </div>
 

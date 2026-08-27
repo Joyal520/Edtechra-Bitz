@@ -1,0 +1,189 @@
+{
+  "examId": "EXAM20240614SP01",
+  "status": "published",
+  "approved": true,
+  "savedAt": "2026-06-09T14:16:28.936Z",
+  "metadata": {
+    "examId": "EXAM20240614SP01",
+    "title": "Unit Test on The Simple Past",
+    "examType": "Unit Test",
+    "difficulty": "Mixed",
+    "duration": "60 Minutes",
+    "totalMarks": 20,
+    "gradingMode": "Hybrid Grading",
+    "status": "draft",
+    "generatedAt": "2026-06-09T14:09:40.587Z",
+    "approvalRequired": true,
+    "generatorNote": "Exam based on 'The simple past'. Includes matching and true/false."
+  },
+  "exam": {
+    "metadata": {
+      "examId": "EXAM20240614SP01",
+      "title": "Unit Test on The Simple Past",
+      "examType": "Unit Test",
+      "difficulty": "Mixed",
+      "duration": "60 Minutes",
+      "totalMarks": 20,
+      "gradingMode": "Hybrid Grading",
+      "status": "draft",
+      "generatedAt": "2026-06-09T14:09:40.587Z",
+      "approvalRequired": true,
+      "generatorNote": "Exam based on 'The simple past'. Includes matching and true/false."
+    },
+    "sections": [
+      {
+        "sectionId": "s1",
+        "title": "Matching Questions",
+        "questionType": "Matching Questions",
+        "instruction": "Match the items in Column A with Column B for the 5 questions.",
+        "marksPerQuestion": 2,
+        "totalMarks": 10,
+        "questions": [
+          {
+            "questionId": "Q1",
+            "questionType": "Matching Questions",
+            "questionText": "go",
+            "options": [],
+            "correctAnswer": "went",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": ""
+          },
+          {
+            "questionId": "Q2",
+            "questionType": "Matching Questions",
+            "questionText": "eat",
+            "options": [],
+            "correctAnswer": "ate",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": ""
+          },
+          {
+            "questionId": "Q3",
+            "questionType": "Matching Questions",
+            "questionText": "see",
+            "options": [],
+            "correctAnswer": "saw",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": ""
+          },
+          {
+            "questionId": "Q4",
+            "questionType": "Matching Questions",
+            "questionText": "write",
+            "options": [],
+            "correctAnswer": "wrote",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": ""
+          },
+          {
+            "questionId": "Q5",
+            "questionType": "Matching Questions",
+            "questionText": "come",
+            "options": [],
+            "correctAnswer": "came",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": ""
+          }
+        ],
+        "passage": ""
+      },
+      {
+        "sectionId": "s2",
+        "title": "True or False Questions",
+        "questionType": "True or False Questions",
+        "instruction": "Identify whether the statements are True or False for the 5 questions.",
+        "marksPerQuestion": 2,
+        "totalMarks": 10,
+        "questions": [
+          {
+            "questionId": "S2Q1",
+            "questionType": "True or False Questions",
+            "questionText": "Regular verbs add -ed in the simple past.",
+            "options": [
+              "True",
+              "False"
+            ],
+            "correctAnswer": "True",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": "Regular verbs form the past by adding -ed."
+          },
+          {
+            "questionId": "S2Q2",
+            "questionType": "True or False Questions",
+            "questionText": "The simple past tense uses 'will' for future actions.",
+            "options": [
+              "True",
+              "False"
+            ],
+            "correctAnswer": "False",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": "'Will' indicates future, not past."
+          },
+          {
+            "questionId": "S2Q3",
+            "questionType": "True or False Questions",
+            "questionText": "The simple past tense describes an action happening now.",
+            "options": [
+              "True",
+              "False"
+            ],
+            "correctAnswer": "False",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": "Simple past refers to completed actions in the past."
+          },
+          {
+            "questionId": "S2Q4",
+            "questionType": "True or False Questions",
+            "questionText": "'Went' is the past tense of 'go'.",
+            "options": [
+              "True",
+              "False"
+            ],
+            "correctAnswer": "True",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": "'Went' is the past tense of 'go'."
+          },
+          {
+            "questionId": "S2Q5",
+            "questionType": "True or False Questions",
+            "questionText": "The past form of 'run' is 'ran'.",
+            "options": [
+              "True",
+              "False"
+            ],
+            "correctAnswer": "True",
+            "marks": 2,
+            "difficulty": "Mixed",
+            "explanation": "'Ran' is the simple past form of 'run'."
+          }
+        ],
+        "passage": ""
+      }
+    ]
+  },
+  "settings": {},
+  "publishing": {
+    "classroom": "Grade 8 English",
+    "startDate": "",
+    "startTime": "",
+    "endDate": "",
+    "endTime": "",
+    "late": true,
+    "marksImmediately": true,
+    "answersAfterExam": true,
+    "leaderboard": true,
+    "randomizeQuestions": true,
+    "randomizeOptions": true,
+    "maxAttempts": 1,
+    "password": ""
+  }
+}

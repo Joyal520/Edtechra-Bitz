@@ -56,7 +56,7 @@ import { SubmissionListModal } from '@/components/classes/SubmissionListModal';
 import { ActivityHubModal } from '@/components/classes/ActivityHubModal';
 import { OCRGradingModal } from '@/components/classes/OCRGradingModal';
 import { ClassroomExamModal } from '@/components/classes/ClassroomExamModal';
-import { ClassroomAIFeedbackModal } from '@/components/classes/ClassroomAIFeedbackModal';
+import { AITeachingIntelligenceModal } from '@/components/classes/AITeachingIntelligenceModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
@@ -926,20 +926,20 @@ export const ClassroomDetailPage: React.FC = () => {
                 <div className="space-y-6">
                   {/* AI Report Card (Teacher Only) */}
                   {isTeacher && (
-                    <div className="bg-gradient-to-br from-[#6366f1] to-[#7c3aed] text-white rounded-3xl p-6 shadow-md space-y-3">
+                    <div className="bg-gradient-to-br from-[#6366f1] via-indigo-700 to-[#7c3aed] text-white rounded-3xl p-6 shadow-md space-y-3">
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-indigo-200" />
-                        <h3 className="text-sm font-black text-white">AI Classroom Insights</h3>
+                        <h3 className="text-sm font-black text-white">AI Teaching Intelligence</h3>
                       </div>
                       <p className="text-xs text-indigo-100 font-medium leading-relaxed">
-                        Analyze student submissions, comprehension trends, and generate personalized feedback summaries.
+                        Understand your classroom. Know what to teach next.
                       </p>
                       <button
                         type="button"
                         onClick={() => setAiReportModalOpen(true)}
                         className="w-full py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
                       >
-                        Generate AI Report
+                        Open Teaching Intelligence
                       </button>
                     </div>
                   )}
@@ -1216,7 +1216,7 @@ export const ClassroomDetailPage: React.FC = () => {
       <ClassroomExamModal
         isOpen={examModalOpen}
         classroomId={classroom.id}
-        isTeacher={isTeacher && !selectedExam}
+        isTeacher={isTeacher}
         activeExam={selectedExam}
         onClose={() => {
           setExamModalOpen(false);
@@ -1225,10 +1225,9 @@ export const ClassroomDetailPage: React.FC = () => {
         onSuccess={loadAllClassroomData}
       />
 
-      <ClassroomAIFeedbackModal
+      <AITeachingIntelligenceModal
         isOpen={aiReportModalOpen}
         classroom={classroom}
-        stats={stats}
         onClose={() => setAiReportModalOpen(false)}
       />
 
