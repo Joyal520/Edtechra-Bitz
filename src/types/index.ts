@@ -84,15 +84,23 @@ export interface Category {
   color?: string;
 }
 
-export interface CategoryProgress {
+export interface ActivityLearningProgress {
   category: string;
   displayTitle: string;
-  totalLessons: number;
-  completedLessons: number;
+  totalActivities: number;
+  completedActivities: number;
   progressPercent: number;
   color: string;
   order?: number;
+  iconName?: string;
+  isTrackingAvailable?: boolean;
+  trackingStatusMessage?: string;
+  // Aliases for backward compatibility
+  totalLessons?: number;
+  completedLessons?: number;
 }
+
+export type CategoryProgress = ActivityLearningProgress;
 
 export interface UserProfile {
   id: string;

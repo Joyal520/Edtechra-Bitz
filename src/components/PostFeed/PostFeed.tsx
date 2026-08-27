@@ -177,7 +177,7 @@ export const PostFeed: React.FC = () => {
   const loadMediaPool = useCallback(async () => {
     try {
       const token = session?.access_token || null;
-      const [quizData, shortsData, readingData, pollData, reorderData, scrambleData, flipData, wordsData] = await Promise.all([
+      const results = await Promise.allSettled([
         quizService.getFeedQuizzes(token),
         youtubeShortsService.getFeedShorts(token),
         readingService.getFeedReadings(token),
@@ -187,14 +187,16 @@ export const PostFeed: React.FC = () => {
         spellingFlipCardService.getFeedCards(undefined, token),
         wordOfTheDayService.getFeedWords(token)
       ]);
-      setQuizzes(quizData || []);
-      setShorts(shortsData || []);
-      setReadings(readingData || []);
-      setPolls(pollData || []);
-      setReorders(reorderData || []);
-      setScrambles(scrambleData || []);
-      setFlipCards(flipData || []);
-      setWordsOfDay(wordsData || []);
+
+      const [qRes, sRes, rRes, pRes, roRes, scRes, fRes, wRes] = results;
+      if (qRes.status === 'fulfilled' && Array.isArray(qRes.value)) setQuizzes(qRes.value);
+      if (sRes.status === 'fulfilled' && Array.isArray(sRes.value)) setShorts(sRes.value);
+      if (rRes.status === 'fulfilled' && Array.isArray(rRes.value)) setReadings(rRes.value);
+      if (pRes.status === 'fulfilled' && Array.isArray(pRes.value)) setPolls(pRes.value);
+      if (roRes.status === 'fulfilled' && Array.isArray(roRes.value)) setReorders(roRes.value);
+      if (scRes.status === 'fulfilled' && Array.isArray(scRes.value)) setScrambles(scRes.value);
+      if (fRes.status === 'fulfilled' && Array.isArray(fRes.value)) setFlipCards(fRes.value);
+      if (wRes.status === 'fulfilled' && Array.isArray(wRes.value)) setWordsOfDay(wRes.value);
     } catch (err) {
       console.warn('[PostFeed] Failed to load media pools:', err);
     }

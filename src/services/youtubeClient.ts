@@ -516,7 +516,7 @@ export const youtubeClient = {
     }
   },
 
-  // 7. Get Dynamic Category/Topic Progress Calculated from Real Student Activity Across Feed
+  // 7. Get Dynamic Learning Progress Calculated from Real Student Activity Across Feed
   async getCategoryProgress(userId = 'guest-user'): Promise<CategoryProgress[]> {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -529,8 +529,8 @@ export const youtubeClient = {
         } catch {}
       }
 
-      // 1. Fetch from authoritative server topic progress endpoint
-      const res = await fetch(`/api/user/topic-progress/${encodeURIComponent(userId)}`, { headers });
+      // 1. Fetch from authoritative server learning progress endpoint
+      const res = await fetch(`/api/user/learning-progress/${encodeURIComponent(userId)}`, { headers });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -538,132 +538,135 @@ export const youtubeClient = {
         }
       }
     } catch (e) {
-      console.warn('[YouTube Client] Error fetching from topic-progress API, using fallback:', e);
+      console.warn('[YouTube Client] Error fetching from learning-progress API, using fallback:', e);
     }
 
     try {
-      let videos: Array<{ id: string; youtube_video_id: string; category?: string; status?: string }> = [];
+      // Fallback calculation using local caches & state
+      let totalShorts = 15;
+      let completedShorts = 0;
+      let completedRelaxation = 0;
+      let completedMemory = 0;
+      let completedReading = 0;
+      let completedQuizzes = 0;
 
-      // Fallback: Fetch lightweight curriculum list
-      if (supabase) {
-        const { data: dbVideos, error: dbErr } = await supabase
-          .from('youtube_videos')
-          .select('id, youtube_video_id, category, status');
+      if (typeof window !== 'undefined') {
+        try {
+          // Shorts local progress
+          const localMap = this.getLocalProgressMap();
+          completedShorts = Object.values(localMap).filter(r => r.completed).length;
 
-        if (!dbErr && dbVideos && dbVideos.length > 0) {
-          videos = dbVideos;
-        }
+          // Relaxation (Bubble pop highest unlocked or completed count)
+          const bubbleRaw = localStorage.getItem('edtechra_bubble_pop_progress');
+          if (bubbleRaw) {
+            const bData = JSON.parse(bubbleRaw);
+            completedRelaxation = Math.max(0, (bData.highestUnlockedLevel || 1) - 1);
+          }
+
+          // Reading completions local check
+          let readCount = 0;
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('edtechra_reading_session_completed_')) readCount++;
+          }
+          completedReading = readCount;
+
+          // Quiz completions local check
+          let quizCount = 0;
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('edtechra_completed_quiz_')) quizCount++;
+          }
+          completedQuizzes = quizCount;
+
+          // Memory completions local check
+          let flipCount = 0;
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('edtechra_completed_flip_') || k?.startsWith('edtechra_completed_scramble_')) flipCount++;
+          }
+          completedMemory = flipCount;
+        } catch {}
       }
 
-      // Fallback if Supabase query returned 0
-      if (videos.length === 0) {
-        const fallbackShorts = await this.getShorts();
-        videos = fallbackShorts.map(s => ({
-          id: s.id,
-          youtube_video_id: s.youtube_video_id,
-          category: s.category,
-          status: s.status
-        }));
-      }
-
-      // Fetch authenticated student completion records
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const completedSet = new Set<string>();
-
-      if (supabase && userId && isUuid.test(userId)) {
-        const { data: progressRows, error: pErr } = await supabase
-          .from('youtube_learning_progress')
-          .select('youtube_video_id, completed')
-          .eq('user_id', userId);
-
-        if (!pErr && progressRows) {
-          progressRows.forEach(r => {
-            if (r.completed) {
-              completedSet.add(r.youtube_video_id);
-            }
-          });
-        }
-      }
-
-      // Merge local progress map for offline/guest resilience
-      const localMap = this.getLocalProgressMap();
-      Object.values(localMap).forEach(row => {
-        if (row.completed && row.youtube_video_id) {
-          completedSet.add(row.youtube_video_id);
-        }
-      });
-
-      // Aggregate real lessons count and completed count per category
-      const categoryMap: Record<string, { total: number; completed: number }> = {};
-
-      videos.forEach(v => {
-        if (v.status === 'archived' || v.status === 'draft') return;
-
-        const cat = (v.category || 'General').trim();
-        if (!categoryMap[cat]) {
-          categoryMap[cat] = { total: 0, completed: 0 };
-        }
-        categoryMap[cat].total += 1;
-
-        if (completedSet.has(v.youtube_video_id) || completedSet.has(v.id)) {
-          categoryMap[cat].completed += 1;
-        }
-      });
-
-      // Transform into CategoryProgress objects with display formatting
-      let results: CategoryProgress[] = Object.entries(categoryMap)
-        .filter(([_, data]) => data.total > 0)
-        .map(([cat, data]) => {
-          const cfg = CATEGORY_DISPLAY_CONFIG[cat] || {
-            displayTitle: `${cat} Discoveries`,
-            color: 'bg-slate-500',
-            order: 99
-          };
-
-          const progressPercent = data.total > 0
-            ? Math.min(100, Math.max(0, Math.round((data.completed / data.total) * 100)))
-            : 0;
-
-          return {
-            category: cat,
-            displayTitle: cfg.displayTitle,
-            totalLessons: data.total,
-            completedLessons: data.completed,
-            progressPercent,
-            color: cfg.color,
-            order: cfg.order
-          };
-        })
-        .sort((a, b) => (a.order || 99) - (b.order || 99));
-
-      if (results.length === 0) {
-        results = [
-          { category: 'Psychology', displayTitle: 'Psychology & Habit Formation', totalLessons: 24, completedLessons: 0, progressPercent: 0, color: 'bg-brand-500', order: 1 },
-          { category: 'English', displayTitle: 'English Vocabulary & Grammar Rules', totalLessons: 5, completedLessons: 0, progressPercent: 0, color: 'bg-purple-500', order: 2 },
-          { category: 'Science', displayTitle: 'Science & Physics Discoveries', totalLessons: 50, completedLessons: 0, progressPercent: 0, color: 'bg-emerald-500', order: 3 },
-          { category: 'Life Skills', displayTitle: 'Life Skills & Health Habits', totalLessons: 7, completedLessons: 0, progressPercent: 0, color: 'bg-amber-500', order: 4 },
-          { category: 'Nature', displayTitle: 'Nature & Wildlife Secrets', totalLessons: 48, completedLessons: 0, progressPercent: 0, color: 'bg-teal-500', order: 5 },
-          { category: 'Space', displayTitle: 'Space & Astronomy Discoveries', totalLessons: 9, completedLessons: 0, progressPercent: 0, color: 'bg-indigo-500', order: 6 },
-          { category: 'History', displayTitle: 'History & World Civilizations', totalLessons: 28, completedLessons: 0, progressPercent: 0, color: 'bg-orange-500', order: 7 },
-          { category: 'Technology', displayTitle: 'Technology & Digital Innovation', totalLessons: 6, completedLessons: 0, progressPercent: 0, color: 'bg-cyan-500', order: 8 },
-          { category: 'Mysteries', displayTitle: 'Mysteries & Critical Thinking', totalLessons: 21, completedLessons: 0, progressPercent: 0, color: 'bg-rose-500', order: 9 }
-        ];
-      }
-
-      return results;
-    } catch (error) {
-      console.error('[YouTube Client] Error calculating category progress:', error);
       return [
-        { category: 'Psychology', displayTitle: 'Psychology & Habit Formation', totalLessons: 24, completedLessons: 0, progressPercent: 0, color: 'bg-brand-500', order: 1 },
-        { category: 'English', displayTitle: 'English Vocabulary & Grammar Rules', totalLessons: 5, completedLessons: 0, progressPercent: 0, color: 'bg-purple-500', order: 2 },
-        { category: 'Science', displayTitle: 'Science & Physics Discoveries', totalLessons: 50, completedLessons: 0, progressPercent: 0, color: 'bg-emerald-500', order: 3 },
-        { category: 'Life Skills', displayTitle: 'Life Skills & Health Habits', totalLessons: 7, completedLessons: 0, progressPercent: 0, color: 'bg-amber-500', order: 4 },
-        { category: 'Nature', displayTitle: 'Nature & Wildlife Secrets', totalLessons: 48, completedLessons: 0, progressPercent: 0, color: 'bg-teal-500', order: 5 },
-        { category: 'Space', displayTitle: 'Space & Astronomy Discoveries', totalLessons: 9, completedLessons: 0, progressPercent: 0, color: 'bg-indigo-500', order: 6 },
-        { category: 'History', displayTitle: 'History & World Civilizations', totalLessons: 28, completedLessons: 0, progressPercent: 0, color: 'bg-orange-500', order: 7 },
-        { category: 'Technology', displayTitle: 'Technology & Digital Innovation', totalLessons: 6, completedLessons: 0, progressPercent: 0, color: 'bg-cyan-500', order: 8 },
-        { category: 'Mysteries', displayTitle: 'Mysteries & Critical Thinking', totalLessons: 21, completedLessons: 0, progressPercent: 0, color: 'bg-rose-500', order: 9 }
+        {
+          category: 'shorts',
+          displayTitle: 'Shorts',
+          completedActivities: completedShorts,
+          totalActivities: totalShorts,
+          completedLessons: completedShorts,
+          totalLessons: totalShorts,
+          progressPercent: totalShorts > 0 ? Math.min(100, Math.round((completedShorts / totalShorts) * 100)) : 0,
+          color: 'bg-rose-500',
+          order: 1,
+          isTrackingAvailable: true
+        },
+        {
+          category: 'relaxation_games',
+          displayTitle: 'Relaxation Games',
+          completedActivities: completedRelaxation,
+          totalActivities: 100,
+          completedLessons: completedRelaxation,
+          totalLessons: 100,
+          progressPercent: Math.min(100, Math.round((completedRelaxation / 100) * 100)),
+          color: 'bg-cyan-500',
+          order: 2,
+          isTrackingAvailable: true
+        },
+        {
+          category: 'memory_games',
+          displayTitle: 'Memory Games',
+          completedActivities: completedMemory,
+          totalActivities: 25,
+          completedLessons: completedMemory,
+          totalLessons: 25,
+          progressPercent: Math.min(100, Math.round((completedMemory / 25) * 100)),
+          color: 'bg-purple-500',
+          order: 3,
+          isTrackingAvailable: true
+        },
+        {
+          category: 'reading',
+          displayTitle: 'Reading',
+          completedActivities: completedReading,
+          totalActivities: 20,
+          completedLessons: completedReading,
+          totalLessons: 20,
+          progressPercent: Math.min(100, Math.round((completedReading / 20) * 100)),
+          color: 'bg-emerald-500',
+          order: 4,
+          isTrackingAvailable: true
+        },
+        {
+          category: 'quizzes',
+          displayTitle: 'Quizzes',
+          completedActivities: completedQuizzes,
+          totalActivities: 30,
+          completedLessons: completedQuizzes,
+          totalLessons: 30,
+          progressPercent: Math.min(100, Math.round((completedQuizzes / 30) * 100)),
+          color: 'bg-blue-500',
+          order: 5,
+          isTrackingAvailable: true
+        },
+        {
+          category: 'word_of_the_day',
+          displayTitle: 'Word of the Day',
+          completedActivities: 0,
+          totalActivities: 50,
+          completedLessons: 0,
+          totalLessons: 50,
+          progressPercent: 0,
+          color: 'bg-amber-500',
+          order: 6,
+          isTrackingAvailable: false,
+          trackingStatusMessage: 'Completion tracking not currently available.'
+        }
       ];
+    } catch (fallbackErr) {
+      console.warn('[YouTube Client] Fallback progress error:', fallbackErr);
+      return [];
     }
   },
 

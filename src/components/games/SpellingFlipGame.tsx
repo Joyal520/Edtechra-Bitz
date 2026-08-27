@@ -12,8 +12,7 @@ import {
   ArrowRight,
   Trophy,
   Volume2,
-  VolumeX,
-  RotateCcw
+  VolumeX
 } from 'lucide-react';
 import {
   SpellingFlipCardItem,
@@ -38,9 +37,7 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
   cards: initialCards,
   level: initialLevel = 'easy',
   onClose,
-  onSessionCompleted,
-  onNextLevel,
-  hasNextLevel
+  onSessionCompleted
 }) => {
   const [selectedLevel] = useState<SpellingFlipLevel>(initialLevel);
   const [cardPool, setCardPool] = useState<SpellingFlipCardItem[]>(initialCards || []);
@@ -579,42 +576,14 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="w-full pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+            <div className="w-full pt-2 flex items-center justify-center">
               <button
                 type="button"
-                onClick={() => {
-                  setCurrentIndex(0);
-                  setSessionResults([]);
-                  setTypedAnswer('');
-                  setFeedbackResult(null);
-                  if (cardPool.length > 0) {
-                    startRound(cardPool[0]);
-                  }
-                }}
-                className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+                onClick={onClose}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
               >
-                <RotateCcw className="w-4 h-4 text-cyan-400" />
-                <span>PLAY AGAIN</span>
+                <span>CONTINUE LEARNING (BACK TO FEED)</span>
               </button>
-
-              {hasNextLevel && onNextLevel ? (
-                <button
-                  type="button"
-                  onClick={onNextLevel}
-                  className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-                >
-                  <span>NEXT LEVEL</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full sm:flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px]"
-                >
-                  <span>CLOSE</span>
-                </button>
-              )}
             </div>
           </div>
         )}

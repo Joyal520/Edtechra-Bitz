@@ -309,23 +309,23 @@ export const DashboardPage: React.FC = () => {
       {/* 🏆 Top 10 Learners Leaderboard */}
       <TopLearnersLeaderboard />
 
-      {/* Mastery by Topic Category */}
+      {/* Real Feed Learning Activity Progress */}
       <section className="bg-white border border-stone-200/80 rounded-3xl p-5 sm:p-7 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-base sm:text-lg font-extrabold text-[#0f233a] flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-[#026fc3]" />
-            Topic Mastery & Progress
+            Learning Progress
           </h2>
-          <span className="text-xs font-bold text-slate-400">Adaptive Progress</span>
+          <span className="text-xs font-bold text-slate-400">Feed Learning Activities</span>
         </div>
 
         {categoriesLoading ? (
           <div className="space-y-3.5 pt-1 animate-pulse">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="space-y-1.5">
                 <div className="flex justify-between text-xs font-bold">
-                  <div className="h-3.5 bg-slate-200 rounded-md w-44"></div>
-                  <div className="h-3.5 bg-slate-200 rounded-md w-8"></div>
+                  <div className="h-3.5 bg-slate-200 rounded-md w-36"></div>
+                  <div className="h-3.5 bg-slate-200 rounded-md w-16"></div>
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-slate-200 rounded-full w-1/4"></div>
@@ -335,7 +335,7 @@ export const DashboardPage: React.FC = () => {
           </div>
         ) : categoriesError ? (
           <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-xs text-rose-700 font-medium flex items-center justify-between">
-            <span>Unable to load topic progress records.</span>
+            <span>Unable to load learning progress records.</span>
             <button
               onClick={() => {
                 setCategoriesLoading(true);
@@ -358,29 +358,56 @@ export const DashboardPage: React.FC = () => {
           </div>
         ) : categoryProgress.length === 0 ? (
           <div className="p-4 text-center text-xs text-slate-400 font-medium">
-            No curriculum topics found.
+            No learning activities recorded yet. Start exploring the Feed!
           </div>
         ) : (
-          <div className="space-y-3.5 pt-1">
-            {categoryProgress.map((item) => (
-              <div key={item.category} className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold text-slate-700">
-                  <span className="flex items-center gap-1.5">
-                    <span>{item.displayTitle}</span>
-                    <span className="text-[10px] font-semibold text-slate-400">
-                      ({item.completedLessons}/{item.totalLessons})
+          <div className="space-y-4 pt-1">
+            {categoryProgress.map((item) => {
+              const completed = item.completedActivities ?? item.completedLessons ?? 0;
+              const total = item.totalActivities ?? item.totalLessons ?? 0;
+              const percent = Math.min(100, Math.max(0, item.progressPercent ?? 0));
+              const isTracking = item.isTrackingAvailable !== false;
+
+              return (
+                <div key={item.category} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span className="flex items-center gap-2">
+                      <span className="text-slate-900 font-extrabold">{item.displayTitle}</span>
+                      {isTracking ? (
+                        <span className="text-[11px] font-mono font-semibold text-slate-400">
+                          {completed} / {total}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-mono font-semibold text-slate-400">
+                          Available: {total}
+                        </span>
+                      )}
                     </span>
-                  </span>
-                  <span className="text-slate-500 font-mono font-bold">{item.progressPercent}%</span>
+
+                    {isTracking ? (
+                      <span className="text-slate-600 font-mono font-bold text-xs">
+                        {percent}%
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60">
+                        {item.trackingStatusMessage || 'Tracking not currently available'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    {isTracking ? (
+                      <div
+                        className={`h-full ${item.color || 'bg-[#026fc3]'} rounded-full transition-all duration-500 ease-out`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    ) : (
+                      <div className="h-full bg-slate-200/50 rounded-full w-full" />
+                    )}
+                  </div>
                 </div>
-                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                    style={{ width: `${item.progressPercent}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

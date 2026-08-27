@@ -135,45 +135,37 @@ export const SpellingFlipCardCard: React.FC<SpellingFlipCardCardProps> = ({
             <div className="relative z-10 flex items-center justify-between">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>✓ Challenge Complete</span>
+                <span>✓ Level Completed</span>
               </div>
 
               <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[11px] font-black flex items-center gap-1 shadow-2xs">
                 <Zap className="w-3.5 h-3.5 fill-slate-950" />
-                <span>+{lastResult.totalXp} XP</span>
+                <span>+{lastResult.totalXp} XP Earned</span>
               </span>
             </div>
 
             {/* Title & Level Info */}
             <div className="relative z-10 space-y-1">
               <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                <span>🃏 Spelling Memory Test: <span className="text-cyan-400 capitalize">{activeCard.level}</span></span>
+                <span>🃏 Spelling Memory: <span className="text-cyan-400 capitalize">{activeCard.level}</span></span>
               </h3>
-              <p className="text-xs sm:text-sm text-slate-300 font-medium">
-                {lastResult.correct >= lastResult.total
-                  ? 'Perfect recall! Excellent memory and spelling accuracy.'
-                  : 'Well done! Practice again or advance to the next level.'}
+              <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed">
+                You&apos;ve completed this level.
               </p>
             </div>
 
             {/* Score Metrics Grid */}
-            <div className="relative z-10 grid grid-cols-3 gap-2 p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center text-xs">
+            <div className="relative z-10 grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center text-xs">
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase">Score</div>
                 <div className="text-base sm:text-lg font-black text-emerald-400">
                   {lastResult.correct} / {lastResult.total}
                 </div>
               </div>
-              <div className="border-x border-white/10">
-                <div className="text-[10px] font-bold text-slate-400 uppercase">Earned XP</div>
+              <div className="border-l border-white/10">
+                <div className="text-[10px] font-bold text-slate-400 uppercase">XP Earned</div>
                 <div className="text-base sm:text-lg font-black text-amber-400">
                   +{lastResult.totalXp} XP
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase">Best Score</div>
-                <div className="text-base sm:text-lg font-black text-cyan-300">
-                  {lastResult.bestScore || `${lastResult.correct}/${lastResult.total}`}
                 </div>
               </div>
             </div>

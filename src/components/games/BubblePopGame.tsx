@@ -47,6 +47,7 @@ export function saveBubblePopProgress(state: BubblePopProgress) {
 interface BubblePopGameProps {
   onClose?: () => void;
   onAwardXP?: (xp: number) => void;
+  onLevelCompleted?: (details: { level: number; score: number; targetScore: number; durationSeconds: number; xp: number }) => void;
   initialLevel?: number;
 }
 
@@ -55,6 +56,7 @@ type GameStatus = 'WELCOME' | 'READY' | 'PLAYING' | 'SUCCESS' | 'FAILURE';
 export const BubblePopGame: React.FC<BubblePopGameProps> = ({
   onClose,
   onAwardXP,
+  onLevelCompleted,
   initialLevel
 }) => {
   const [progress, setProgress] = useState<BubblePopProgress>(loadBubblePopProgress);
@@ -218,6 +220,20 @@ export const BubblePopGame: React.FC<BubblePopGameProps> = ({
     triggerHaptic('success');
     awardXP(10);
 
+    const finalScore = scoreRef.current;
+    const finalTarget = targetScoreRef.current;
+    const levelNum = currentLevelRef.current;
+
+    if (onLevelCompleted) {
+      onLevelCompleted({
+        level: levelNum,
+        score: finalScore,
+        targetScore: finalTarget,
+        durationSeconds: selectedDuration,
+        xp: 10
+      });
+    }
+
     setProgress((prev) => {
       let nextHighest = prev.highestUnlockedLevel;
       if (currentLevelRef.current === prev.highestUnlockedLevel && currentLevelRef.current < 100) {
@@ -227,7 +243,7 @@ export const BubblePopGame: React.FC<BubblePopGameProps> = ({
       saveBubblePopProgress(updated);
       return updated;
     });
-  }, [awardXP, playSound, triggerHaptic]);
+  }, [awardXP, playSound, triggerHaptic, onLevelCompleted, selectedDuration]);
 
   const handleFailure = useCallback(() => {
     setStatus('FAILURE');

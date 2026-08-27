@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   XCircle,
@@ -7,10 +7,7 @@ import {
   BookOpen,
   Check,
   X,
-  Loader2,
-  RotateCcw,
-  ArrowRight,
-  Trophy
+  Loader2
 } from 'lucide-react';
 import { QuizBit, QuizAttemptResult } from '@/types';
 import { quizService } from '@/services/quizService';
@@ -28,7 +25,6 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
 
 export const QuizBitCard: React.FC<QuizBitCardProps> = ({
   quiz: initialQuiz,
-  allQuizzes = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
@@ -41,16 +37,6 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
       setActiveQuiz(initialQuiz);
     }
   }, [initialQuiz]);
-
-  // Next quiz in pool
-  const nextQuiz = useMemo(() => {
-    if (!allQuizzes || allQuizzes.length === 0) return null;
-    const currentIndex = allQuizzes.findIndex(q => q.id === activeQuiz.id);
-    if (currentIndex >= 0 && currentIndex < allQuizzes.length - 1) {
-      return allQuizzes[currentIndex + 1];
-    }
-    return null;
-  }, [allQuizzes, activeQuiz]);
 
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -131,19 +117,6 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
       setSelectedOption(null);
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handlePlayAgain = () => {
-    setSelectedOption(null);
-    setResult(null);
-    setError(null);
-    asmrAudio.playAsmrPop();
-  };
-
-  const handleNextQuiz = () => {
-    if (nextQuiz) {
-      setActiveQuiz(nextQuiz);
     }
   };
 
@@ -350,34 +323,6 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
               </p>
             </div>
           )}
-
-          {/* Action Buttons: Play Again & Next Quiz */}
-          <div className="mt-3.5 pt-3 border-t border-stone-200/80 flex flex-col sm:flex-row items-center gap-2.5">
-            <button
-              type="button"
-              onClick={handlePlayAgain}
-              className="w-full sm:flex-1 py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-black border border-slate-200 shadow-2xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-[#026fc3]" />
-              <span>PLAY AGAIN</span>
-            </button>
-
-            {nextQuiz ? (
-              <button
-                type="button"
-                onClick={handleNextQuiz}
-                className="w-full sm:flex-1 py-2.5 px-4 bg-gradient-to-r from-[#026fc3] via-[#0e8ce4] to-teal-500 hover:from-[#025ea6] hover:to-teal-600 text-white text-xs sm:text-sm font-black rounded-2xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
-              >
-                <span>NEXT QUIZ</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <div className="w-full sm:flex-1 py-2.5 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-500 flex items-center justify-center gap-1.5 min-h-[42px]">
-                <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                <span>All Quizzes Completed!</span>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </article>

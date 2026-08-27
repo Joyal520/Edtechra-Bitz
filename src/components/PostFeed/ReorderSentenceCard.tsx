@@ -6,9 +6,7 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Zap,
-  ArrowRight,
-  Trophy
+  Zap
 } from 'lucide-react';
 import { ReorderActivity, WordTile, ReorderAttemptResult } from '@/types/reorder';
 import { reorderService } from '@/services/reorderService';
@@ -25,7 +23,6 @@ interface ReorderSentenceCardProps {
 
 export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
   reorder: initialReorder,
-  allReorders = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
@@ -38,16 +35,6 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
       setActiveReorder(initialReorder);
     }
   }, [initialReorder]);
-
-  // Next reorder detection from pool
-  const nextReorder = useMemo(() => {
-    if (!allReorders || allReorders.length === 0) return null;
-    const currentIndex = allReorders.findIndex(r => r.id === activeReorder.id);
-    if (currentIndex >= 0 && currentIndex < allReorders.length - 1) {
-      return allReorders[currentIndex + 1];
-    }
-    return null;
-  }, [allReorders, activeReorder]);
 
   // Initialize word tiles using unbiased Fisher–Yates shuffle with non-identity guarantee
   const generateWordTiles = useCallback((item: ReorderActivity): WordTile[] => {
@@ -290,28 +277,6 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
     }
   };
 
-  /**
-   * Play Again: Restarts this sentence with a fresh randomized shuffle
-   */
-  const handlePlayAgain = () => {
-    const freshTiles = generateWordTiles(activeReorder);
-    setAvailableTiles(freshTiles);
-    setPlacedTiles([]);
-    setUsedHint(false);
-    setResult(null);
-    setErrorNotice(null);
-    reorderAudio.playTileClick();
-  };
-
-  /**
-   * Next Level / Sentence: Advances to next sentence in pool without scrolling
-   */
-  const handleNextLevel = () => {
-    if (nextReorder) {
-      setActiveReorder(nextReorder);
-    }
-  };
-
   const isCompleted = Boolean(result?.is_correct);
   const earnedXP = result?.xp_awarded ?? (usedHint ? Math.max(5, (activeReorder.xp || 10) - 2) : (activeReorder.xp || 10));
 
@@ -458,37 +423,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
           </div>
         )}
 
-        {/* 6. POST-GAME ACTION BUTTONS (PLAY AGAIN & NEXT LEVEL) */}
-        {isCompleted && (
-          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5 animate-in fade-in">
-            <button
-              type="button"
-              onClick={handlePlayAgain}
-              className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-            >
-              <RotateCcw className="w-4 h-4 text-cyan-400" />
-              <span>PLAY AGAIN</span>
-            </button>
-
-            {nextReorder ? (
-              <button
-                type="button"
-                onClick={handleNextLevel}
-                className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-              >
-                <span>NEXT SENTENCE ({nextReorder.level || 'Next'})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
-                <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                <span>All Sentences Completed!</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 7. IN-GAME ACTION CONTROLS (Undo, Reset, Hint) */}
+        {/* 6. IN-GAME ACTION CONTROLS (Undo, Reset, Hint) */}
         {!isCompleted && (
           <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 sm:gap-2">
