@@ -99,6 +99,7 @@ export const PostFeed: React.FC = () => {
   const [wordsOfDay, setWordsOfDay] = useState<WordOfTheDay[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
@@ -204,8 +205,12 @@ export const PostFeed: React.FC = () => {
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
-      if (targetPage === 1) setLoading(true);
-      else setLoadingMore(true);
+      if (targetPage === 1) {
+        setLoading(true);
+        setFeedError(null);
+      } else {
+        setLoadingMore(true);
+      }
 
       try {
         const token = session?.access_token || null;
@@ -217,24 +222,28 @@ export const PostFeed: React.FC = () => {
         if (append) {
           setPosts((prev) => {
             const seen = new Set(prev.map((p) => p.id));
-            const freshPosts = postsData.posts.filter((p) => !seen.has(p.id));
+            const freshPosts = (postsData?.posts || []).filter((p) => !seen.has(p.id));
             return [...prev, ...freshPosts];
           });
         } else {
-          setPosts(postsData.posts);
+          setPosts(postsData?.posts || []);
         }
 
-        setHasMore(postsData.hasMore);
+        setHasMore(Boolean(postsData?.hasMore));
         setPage(targetPage);
-      } catch (err) {
+        setFeedError(null);
+      } catch (err: any) {
         console.error('[PostFeed] Error loading posts:', err);
+        if (targetPage === 1 && posts.length === 0) {
+          setFeedError(err?.message || 'Unable to connect to the feed. Please check your connection.');
+        }
       } finally {
         setLoading(false);
         setLoadingMore(false);
         isFetchingRef.current = false;
       }
     },
-    [session, sortBy, loadMediaPool]
+    [session, sortBy, loadMediaPool, posts.length]
   );
 
   useEffect(() => {
@@ -677,6 +686,25 @@ export const PostFeed: React.FC = () => {
               <div className="w-full aspect-square bg-slate-200 rounded-none sm:rounded-2xl"></div>
             </div>
           ))}
+        </div>
+      ) : feedError ? (
+        <div className="mx-3 sm:mx-0 bg-white border border-rose-200 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-xs">
+            <BookOpen className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-[#0f233a]">Unable to Load Student Posts</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              {feedError}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => fetchPosts(1, false)}
+            className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-2xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer min-h-[44px]"
+          >
+            <span>Try Again</span>
+          </button>
         </div>
       ) : feedItems.length === 0 ? (
         <div className="mx-3 sm:mx-0 bg-white border border-dashed border-slate-300 rounded-3xl p-8 sm:p-12 text-center space-y-4">

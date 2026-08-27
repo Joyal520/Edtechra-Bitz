@@ -3474,16 +3474,42 @@ app.get('/api/posts', async (req, res) => {
     // If Supabase is available, attempt to query latest records
     if (serverSupabase) {
       try {
-        const { data: dbPosts, error: dbErr } = await serverSupabase
-          .from('student_posts')
-          .select('*, profiles(id, full_name, email, avatar_url, role)')
-          .eq('status', 'approved')
-          .order('created_at', { ascending: false });
+        // Primary query: attempt join with profiles for author data
+        let dbPosts = null;
+        let dbErr = null;
 
-        if (dbErr) {
-          console.warn('[Supabase GET student_posts error]:', dbErr.message);
-        } else if (Array.isArray(dbPosts)) {
-          allPosts = dbPosts.map(p => ({
+        try {
+          const result = await serverSupabase
+            .from('student_posts')
+            .select('*, profiles(id, full_name, email, avatar_url, role)')
+            .eq('status', 'approved')
+            .order('created_at', { ascending: false });
+          dbPosts = result.data;
+          dbErr = result.error;
+        } catch (joinEx) {
+          console.warn('[Supabase GET student_posts] Profiles join failed, trying without join:', joinEx.message);
+        }
+
+        // Fallback: if profiles join failed, query without the join
+        if (dbErr || !dbPosts) {
+          console.warn('[Supabase GET student_posts] Falling back to query without profiles join. Error:', dbErr?.message || 'join exception');
+          try {
+            const fallbackResult = await serverSupabase
+              .from('student_posts')
+              .select('*')
+              .eq('status', 'approved')
+              .order('created_at', { ascending: false });
+            if (!fallbackResult.error && Array.isArray(fallbackResult.data)) {
+              dbPosts = fallbackResult.data;
+              dbErr = null;
+            }
+          } catch (fallbackEx) {
+            console.error('[Supabase GET student_posts fallback exception]:', fallbackEx.message);
+          }
+        }
+
+        if (!dbErr && Array.isArray(dbPosts)) {
+          const mappedPosts = dbPosts.map(p => ({
             ...p,
             author: p.profiles || {
               id: p.user_id,
@@ -3492,7 +3518,15 @@ app.get('/api/posts', async (req, res) => {
               role: 'student'
             }
           }));
-          savePostsCache(allPosts);
+
+          // SAFETY: Only overwrite cache if DB returned results, or if cache is empty.
+          // This prevents a successful-but-empty DB query from wiping existing cached posts.
+          if (mappedPosts.length > 0 || allPosts.length === 0) {
+            allPosts = mappedPosts;
+            savePostsCache(allPosts);
+          } else {
+            console.warn(`[Supabase GET student_posts] DB returned 0 approved posts but cache has ${allPosts.length}. Keeping cache.`);
+          }
         }
       } catch (e) {
         console.error('[Supabase GET student_posts exception]:', e);

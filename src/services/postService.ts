@@ -226,7 +226,7 @@ class PostService {
   }
 
   /**
-   * Fetches paginated posts from the backend feed
+   * Fetches paginated posts from the backend feed with automatic Supabase fallback
    */
   async getPosts(
     params: { page?: number; limit?: number; sort?: 'newest' | 'popular' } = {},
@@ -239,17 +239,77 @@ class PostService {
       sort
     });
 
-    const headers = await this.getAuthHeaders(token);
-    const res = await fetch(`/api/posts?${query.toString()}`, {
-      headers
-    });
+    // 1. Primary: Server API
+    try {
+      const headers = await this.getAuthHeaders(token);
+      const res = await fetch(`/api/posts?${query.toString()}`, {
+        headers
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to fetch student post feed.');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.posts) && data.posts.length > 0) {
+          return data;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn('[PostService] Primary /api/posts fetch notice, trying direct Supabase fallback:', fetchErr);
     }
 
-    return await res.json();
+    // 2. Direct Supabase Client Fallback
+    if (supabase) {
+      try {
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        let queryBuilder = supabase
+          .from('student_posts')
+          .select('*, profiles(id, full_name, email, avatar_url, role)', { count: 'exact' })
+          .eq('status', 'approved');
+
+        if (sort === 'popular') {
+          queryBuilder = queryBuilder.order('likes_count', { ascending: false });
+        } else {
+          queryBuilder = queryBuilder.order('created_at', { ascending: false });
+        }
+
+        const { data, count, error } = await queryBuilder.range(from, to);
+
+        if (!error && Array.isArray(data)) {
+          const total = count || data.length;
+          const formattedPosts = data.map(p => ({
+            ...p,
+            author: p.profiles || {
+              id: p.user_id,
+              full_name: 'Student',
+              email: '',
+              role: 'student'
+            }
+          }));
+
+          return {
+            success: true,
+            posts: formattedPosts,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: from + limit < total
+          };
+        }
+      } catch (sbErr) {
+        console.warn('[PostService] Direct Supabase fallback notice:', sbErr);
+      }
+    }
+
+    return {
+      success: true,
+      posts: [],
+      total: 0,
+      page,
+      limit,
+      totalPages: 0,
+      hasMore: false
+    };
   }
 
   /**
