@@ -245,7 +245,11 @@ export const PostFeed: React.FC = () => {
         isFetchingRef.current = false;
       }
     },
-    [session, sortBy, loadMediaPool, posts.length]
+    // NOTE: posts.length intentionally excluded — including it causes fetchPosts to be
+    // recreated on every append, which triggers the useEffect that resets to page 1,
+    // creating an infinite page-1-reset loop that prevents pagination from working.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, sortBy, loadMediaPool]
   );
 
   useEffect(() => {
