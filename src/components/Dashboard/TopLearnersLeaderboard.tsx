@@ -341,9 +341,19 @@ export const TopLearnersLeaderboard: React.FC = () => {
 
       {/* Empty State */}
       {!loading && top10.length === 0 && (
-        <div className="py-12 text-center space-y-2">
+        <div className="py-12 text-center space-y-3 bg-slate-900/40 rounded-3xl p-6 border border-slate-800/80">
           <p className="text-base font-black text-white">No activity recorded for this period yet.</p>
           <p className="text-xs text-slate-400">Be the first to complete a quiz or lesson and claim #1 rank!</p>
+          {period !== 'all_time' && (
+            <button
+              type="button"
+              onClick={() => handleSelectPeriod('all_time')}
+              className="mt-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-600 hover:to-yellow-500 text-slate-950 text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <Trophy className="w-3.5 h-3.5 fill-slate-950" />
+              <span>View All-Time Champions</span>
+            </button>
+          )}
         </div>
       )}
 
