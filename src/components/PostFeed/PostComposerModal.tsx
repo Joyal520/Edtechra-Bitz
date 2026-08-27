@@ -220,9 +220,12 @@ export const PostComposerModal: React.FC<PostComposerModalProps> = ({
       setUploadPercent(100);
 
       if (result.moderationStatus === 'approved') {
-        setStatusMessage('Uploaded!');
+        setStatusMessage('Uploaded! (+10 XP)');
         setStage('success');
         onPostCreated(result.post);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('edtechra:post_created', { detail: { ...result.post, xp_awarded: 10 } }));
+        }
         setTimeout(() => {
           handleClose();
         }, 1200);

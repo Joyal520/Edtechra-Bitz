@@ -61,7 +61,8 @@ import {
   gradeExamAttempt,
   processScoreAnalysisAndUploadToR2,
   getTeacherExamsFromSupabase,
-  saveExamToSupabase
+  saveExamToSupabase,
+  republishExamToClassrooms
 } from './server/exam2Service.mjs';
 import {
   ocrEvaluationQueue,
@@ -534,6 +535,27 @@ function saveReadingCompletionsCache(completions) {
     fs.writeFileSync(READING_COMPLETIONS_FILE, JSON.stringify(completions, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving reading completions cache:', e);
+  }
+}
+
+const READING_SESSIONS_FILE = path.resolve(__dirname, 'server/data/reading_sessions_cache.json');
+
+function loadReadingSessionsCache() {
+  try {
+    if (fs.existsSync(READING_SESSIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(READING_SESSIONS_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.error('Error reading reading sessions cache:', e);
+  }
+  return [];
+}
+
+function saveReadingSessionsCache(sessions) {
+  try {
+    fs.writeFileSync(READING_SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving reading sessions cache:', e);
   }
 }
 
@@ -1123,9 +1145,393 @@ app.post('/api/profile/presign-avatar', async (req, res) => {
   }
 });
 
+// POST /api/profile - Authoritative profile update (full_name, avatar_url, text_size)
+app.post('/api/profile', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to update profile.' });
+    }
+
+    const { full_name, avatar_url, text_size } = req.body;
+    const userId = authData.user.id;
+    const updatePayload = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (full_name !== undefined) {
+      const trimmed = String(full_name).trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, error: 'Full name cannot be empty.' });
+      }
+      updatePayload.full_name = trimmed;
+    }
+
+    if (avatar_url !== undefined) {
+      updatePayload.avatar_url = avatar_url || null;
+    }
+
+    if (text_size !== undefined) {
+      updatePayload.text_size = text_size;
+    }
+
+    let updatedProfile = {
+      ...authData.profile,
+      ...updatePayload
+    };
+
+    // 1. Authoritative persistence in Supabase profiles table
+    if (serverSupabase) {
+      try {
+        const { data: dbProfile, error: dbErr } = await serverSupabase
+          .from('profiles')
+          .upsert(
+            {
+              id: userId,
+              email: authData.user.email,
+              ...updatePayload
+            },
+            { onConflict: 'id' }
+          )
+          .select()
+          .maybeSingle();
+
+        if (!dbErr && dbProfile) {
+          updatedProfile = dbProfile;
+        } else if (dbErr) {
+          console.warn('[Server Profile Upsert Notice]:', dbErr.message);
+        }
+      } catch (sbErr) {
+        console.warn('[Server Profile Upsert Exception]:', sbErr.message);
+      }
+
+      // 2. Update Supabase Auth user metadata
+      try {
+        const metaUpdates = {};
+        if (updatePayload.full_name) {
+          metaUpdates.full_name = updatePayload.full_name;
+          metaUpdates.name = updatePayload.full_name;
+        }
+        if (avatar_url !== undefined) {
+          metaUpdates.avatar_url = avatar_url;
+          metaUpdates.picture = avatar_url;
+        }
+        if (updatePayload.text_size) {
+          metaUpdates.text_size = updatePayload.text_size;
+        }
+
+        if (Object.keys(metaUpdates).length > 0 && serverSupabase.auth?.admin) {
+          await serverSupabase.auth.admin.updateUserById(userId, { user_metadata: metaUpdates });
+        }
+      } catch (metaErr) {
+        console.warn('[Server Profile Metadata Update Notice]:', metaErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: updatedProfile
+    });
+  } catch (error) {
+    console.error('Error in POST /api/profile:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update profile.' });
+  }
+});
+
+// GET /api/profile/me - Retrieve current authenticated profile
+app.get('/api/profile/me', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    res.json({
+      success: true,
+      data: authData.profile
+    });
+  } catch (error) {
+    console.error('Error in GET /api/profile/me:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve profile.' });
+  }
 // ============================================================================
-// DIGITAL CLASSROOM & CLASSES ENDPOINTS
+// TOPIC MASTERY & PROGRESS ENDPOINTS
 // ============================================================================
+
+const CURRICULUM_CATEGORIES = [
+  { key: 'Psychology', displayTitle: 'Psychology & Habit Formation', color: 'bg-brand-500', order: 1 },
+  { key: 'English', displayTitle: 'English Vocabulary & Grammar Rules', color: 'bg-purple-500', order: 2 },
+  { key: 'Science', displayTitle: 'Science & Physics Discoveries', color: 'bg-emerald-500', order: 3 },
+  { key: 'Life Skills', displayTitle: 'Life Skills & Health Habits', color: 'bg-amber-500', order: 4 },
+  { key: 'Nature', displayTitle: 'Nature & Wildlife Secrets', color: 'bg-teal-500', order: 5 },
+  { key: 'Space', displayTitle: 'Space & Astronomy Discoveries', color: 'bg-indigo-500', order: 6 },
+  { key: 'History', displayTitle: 'History & World Civilizations', color: 'bg-orange-500', order: 7 },
+  { key: 'Technology', displayTitle: 'Technology & Digital Innovation', color: 'bg-cyan-500', order: 8 },
+  { key: 'Mysteries', displayTitle: 'Mysteries & Critical Thinking', color: 'bg-rose-500', order: 9 }
+];
+
+function normalizeCurriculumCategory(raw) {
+  if (!raw || typeof raw !== 'string') return 'English';
+  const clean = raw.trim().toLowerCase();
+  if (clean.includes('psych') || clean.includes('habit') || clean.includes('mind') || clean.includes('emotion') || clean.includes('brain') || clean.includes('mental')) {
+    return 'Psychology';
+  }
+  if (clean.includes('english') || clean.includes('vocab') || clean.includes('grammar') || clean.includes('spelling') || clean.includes('word') || clean.includes('language') || clean.includes('sentence')) {
+    return 'English';
+  }
+  if (clean.includes('science') || clean.includes('physic') || clean.includes('chem') || clean.includes('biology')) {
+    return 'Science';
+  }
+  if (clean.includes('life') || clean.includes('health') || clean.includes('food') || clean.includes('everyday') || clean.includes('skill')) {
+    return 'Life Skills';
+  }
+  if (clean.includes('nature') || clean.includes('wildlife') || clean.includes('animal') || clean.includes('plant') || clean.includes('environment')) {
+    return 'Nature';
+  }
+  if (clean.includes('space') || clean.includes('astronomy') || clean.includes('planet') || clean.includes('cosmos') || clean.includes('galaxy') || clean.includes('universe')) {
+    return 'Space';
+  }
+  if (clean.includes('history') || clean.includes('civiliz') || clean.includes('ancient') || clean.includes('war') || clean.includes('culture')) {
+    return 'History';
+  }
+  if (clean.includes('tech') || clean.includes('digital') || clean.includes('comput') || clean.includes('code') || clean.includes('ai') || clean.includes('robot')) {
+    return 'Technology';
+  }
+  if (clean.includes('myster') || clean.includes('critical') || clean.includes('riddle') || clean.includes('logic') || clean.includes('detective') || clean.includes('puzzle')) {
+    return 'Mysteries';
+  }
+
+  const match = CURRICULUM_CATEGORIES.find(c => c.key.toLowerCase() === clean);
+  return match ? match.key : 'English';
+}
+
+async function calculateTopicMastery(userId) {
+  const categoryAvailable = {};
+  CURRICULUM_CATEGORIES.forEach(c => {
+    categoryAvailable[c.key] = new Set();
+  });
+
+  // A. Readings (is_published = true)
+  let readings = loadReadingsCache();
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('readings').select('id, category, is_published');
+      if (data && data.length > 0) readings = data;
+    } catch {}
+  }
+  readings.filter(r => r.is_published !== false).forEach(r => {
+    const cat = normalizeCurriculumCategory(r.category);
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`reading_${r.id}`);
+  });
+
+  // B. Quizzes (is_published = true)
+  let quizzes = loadQuizCache();
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('quiz_bits').select('id, category, is_published');
+      if (data && data.length > 0) quizzes = data;
+    } catch {}
+  }
+  quizzes.filter(q => q.is_published !== false).forEach(q => {
+    const cat = normalizeCurriculumCategory(q.category);
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`quiz_${q.id}`);
+  });
+
+  // C. Reorders (is_published = true)
+  let reorders = loadReordersCache();
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('reorder_activities').select('id, category, is_published');
+      if (data && data.length > 0) reorders = data;
+    } catch {}
+  }
+  reorders.filter(r => r.is_published !== false).forEach(r => {
+    const cat = normalizeCurriculumCategory(r.category);
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`reorder_${r.id}`);
+  });
+
+  // D. Spelling Scrambles (is_published = true)
+  let scrambles = loadSpellingScramblesCache();
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('spelling_scrambles').select('id, category, is_published');
+      if (data && data.length > 0) scrambles = data;
+    } catch {}
+  }
+  scrambles.filter(s => s.is_published !== false).forEach(s => {
+    const cat = normalizeCurriculumCategory(s.category);
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`scramble_${s.id}`);
+  });
+
+  // E. Spelling Flip Cards (is_published = true)
+  let flipCards = loadSpellingFlipCardsCache();
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('spelling_flip_cards').select('id, category, is_published');
+      if (data && data.length > 0) flipCards = data;
+    } catch {}
+  }
+  flipCards.filter(f => f.is_published !== false).forEach(f => {
+    const cat = normalizeCurriculumCategory(f.category);
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`flip_${f.id}`);
+  });
+
+  // F. YouTube Learning Videos (status = 'active' or published)
+  let videos = [];
+  if (serverSupabase) {
+    try {
+      const { data } = await serverSupabase.from('youtube_videos').select('id, youtube_video_id, category, status');
+      if (data && data.length > 0) videos = data;
+    } catch {}
+  }
+  videos.filter(v => v.status !== 'draft' && v.status !== 'archived').forEach(v => {
+    const cat = normalizeCurriculumCategory(v.category);
+    const idKey = v.youtube_video_id || v.id;
+    if (categoryAvailable[cat]) categoryAvailable[cat].add(`video_${idKey}`);
+  });
+
+  // 2. Gather user legitimate completions
+  const userCompletedActivityKeys = new Set();
+
+  if (userId && userId !== 'guest_user') {
+    // Readings completions
+    const readingCompletions = loadReadingCompletionsCache();
+    readingCompletions.filter(c => c.user_id === userId).forEach(c => userCompletedActivityKeys.add(`reading_${c.reading_id}`));
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('reading_completions').select('reading_id').eq('user_id', userId);
+        if (data) data.forEach(c => userCompletedActivityKeys.add(`reading_${c.reading_id}`));
+      } catch {}
+    }
+
+    // Quiz attempts (is_correct = true)
+    const quizAttempts = loadQuizAttemptsCache();
+    quizAttempts.filter(a => a.user_id === userId && a.is_correct).forEach(a => userCompletedActivityKeys.add(`quiz_${a.quiz_id}`));
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('quiz_attempts').select('quiz_id').eq('user_id', userId).eq('is_correct', true);
+        if (data) data.forEach(a => userCompletedActivityKeys.add(`quiz_${a.quiz_id}`));
+      } catch {}
+    }
+
+    // Reorders (is_correct = true)
+    const reorderCompletions = loadReorderCompletionsCache();
+    reorderCompletions.filter(c => c.user_id === userId && c.is_correct).forEach(c => userCompletedActivityKeys.add(`reorder_${c.activity_id}`));
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('reorder_completions').select('activity_id').eq('user_id', userId).eq('is_correct', true);
+        if (data) data.forEach(c => userCompletedActivityKeys.add(`reorder_${c.activity_id}`));
+      } catch {}
+    }
+
+    // Spelling Scrambles (is_correct = true)
+    const scrambleCompletions = loadSpellingCompletionsCache();
+    scrambleCompletions.filter(c => c.user_id === userId && c.is_correct).forEach(c => userCompletedActivityKeys.add(`scramble_${c.scramble_id}`));
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('spelling_scramble_completions').select('scramble_id').eq('user_id', userId).eq('is_correct', true);
+        if (data) data.forEach(c => userCompletedActivityKeys.add(`scramble_${c.scramble_id}`));
+      } catch {}
+    }
+
+    // Spelling Flip (is_correct = true)
+    const flipCompletions = loadSpellingFlipCompletionsCache();
+    flipCompletions.filter(c => c.user_id === userId && c.is_correct).forEach(c => userCompletedActivityKeys.add(`flip_${c.card_id}`));
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('spelling_flip_completions').select('card_id').eq('user_id', userId).eq('is_correct', true);
+        if (data) data.forEach(c => userCompletedActivityKeys.add(`flip_${c.card_id}`));
+      } catch {}
+    }
+
+    // YouTube Learning (completed = true)
+    if (serverSupabase) {
+      try {
+        const { data } = await serverSupabase.from('youtube_learning_progress').select('youtube_video_id, completed').eq('user_id', userId);
+        if (data) data.filter(r => r.completed).forEach(r => userCompletedActivityKeys.add(`video_${r.youtube_video_id}`));
+      } catch {}
+    }
+
+    // User interactions unified table
+    const interactions = loadInteractionsCache();
+    interactions.filter(i => i.user_id === userId && i.interaction_type === 'completed').forEach(i => {
+      if (i.activity_type === 'reading') userCompletedActivityKeys.add(`reading_${i.activity_id}`);
+      if (i.activity_type === 'quiz') userCompletedActivityKeys.add(`quiz_${i.activity_id}`);
+      if (i.activity_type === 'reorder') userCompletedActivityKeys.add(`reorder_${i.activity_id}`);
+      if (i.activity_type === 'spelling_scramble') userCompletedActivityKeys.add(`scramble_${i.activity_id}`);
+      if (i.activity_type === 'spelling_flip') userCompletedActivityKeys.add(`flip_${i.activity_id}`);
+      if (i.activity_type === 'youtube_short' || i.activity_type === 'lesson') userCompletedActivityKeys.add(`video_${i.activity_id}`);
+    });
+  }
+
+  // 3. Construct category progress array
+  return CURRICULUM_CATEGORIES.map(cat => {
+    const availableSet = categoryAvailable[cat.key] || new Set();
+    const totalActivities = availableSet.size;
+    let completedActivities = 0;
+
+    availableSet.forEach(actKey => {
+      if (userCompletedActivityKeys.has(actKey)) {
+        completedActivities += 1;
+      }
+    });
+
+    const progressPercent = totalActivities > 0
+      ? Math.min(100, Math.round((completedActivities / totalActivities) * 100))
+      : 0;
+
+    return {
+      category: cat.key,
+      displayTitle: cat.displayTitle,
+      totalLessons: totalActivities,
+      completedLessons: completedActivities,
+      totalActivities,
+      completedActivities,
+      progressPercent,
+      color: cat.color,
+      order: cat.order
+    };
+  }).sort((a, b) => a.order - b.order);
+}
+
+// GET /api/user/topic-progress - Authoritative Topic Progress for authenticated student
+app.get('/api/user/topic-progress', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+    const progress = await calculateTopicMastery(userId);
+
+    res.json({
+      success: true,
+      data: progress
+    });
+  } catch (error) {
+    console.error('Error in GET /api/user/topic-progress:', error);
+    res.status(500).json({ success: false, error: 'Failed to calculate topic mastery.' });
+  }
+});
+
+// GET /api/user/topic-progress/:userId - Topic Progress with authorization validation
+app.get('/api/user/topic-progress/:userId', async (req, res) => {
+  try {
+    const requestedUserId = req.params.userId;
+    const authData = await verifyAuthUser(req);
+    const currentUserId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+
+    // If authenticated, allow user to query own progress or admin to query any
+    const targetUserId = (authData?.profile?.role === 'admin' || !authData) ? requestedUserId : currentUserId;
+    const progress = await calculateTopicMastery(targetUserId);
+
+    res.json({
+      success: true,
+      data: progress
+    });
+  } catch (error) {
+    console.error('Error in GET /api/user/topic-progress/:userId:', error);
+    res.status(500).json({ success: false, error: 'Failed to calculate topic mastery.' });
+  }
+});
 
 // POST /api/classes/presign-upload - Generate presigned R2 upload URL for classroom files
 app.post('/api/classes/presign-upload', async (req, res) => {
@@ -2857,6 +3263,7 @@ app.post('/api/posts', async (req, res) => {
       moderated_at: null,
       likes_count: 0,
       comments_count: 0,
+      xp_awarded: 10,
       image_width: image_width ? Number(image_width) : null,
       image_height: image_height ? Number(image_height) : null,
       image_size_bytes: image_size_bytes ? Number(image_size_bytes) : null,
@@ -2949,11 +3356,12 @@ app.post('/api/posts', async (req, res) => {
       });
     }
 
-    // Case 3: AI Approved -> Mark approved and publish to public feed
+    // Case 3: AI Approved -> Mark approved, award +10 XP, and publish to public feed
     newPost.status = 'approved';
     newPost.moderation_status = 'approved';
     newPost.moderation_reason = moderation.reason;
     newPost.moderated_at = new Date().toISOString();
+    newPost.xp_awarded = 10;
 
     // Save to resilient local posts cache
     const postsCache = loadPostsCache();
@@ -2967,7 +3375,7 @@ app.post('/api/posts', async (req, res) => {
         if (sbErr) {
           console.error('[Supabase student_posts insert error]:', sbErr.message, sbErr.code);
         } else {
-          console.log('[Supabase student_posts] Post created in database successfully:', newPost.id);
+          console.log('[Supabase student_posts] Post created in database successfully (+10 XP):', newPost.id);
         }
       } catch (sbErr) {
         console.error('[Supabase student_posts insert exception]:', sbErr.message);
@@ -2978,6 +3386,7 @@ app.post('/api/posts', async (req, res) => {
       success: true,
       data: {
         ...newPost,
+        xp_awarded: 10,
         author: authData.profile
       },
       moderation: {
@@ -2987,6 +3396,62 @@ app.post('/api/posts', async (req, res) => {
   } catch (error) {
     console.error('Error in POST /api/posts:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to create student post' });
+  }
+});
+
+// GET /api/posts/user-stats/:userId - User posts count, total likes received, and post XP
+app.get('/api/posts/user-stats/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId || userId === 'guest-user') {
+      return res.json({ success: true, data: { postsCount: 0, likesReceived: 0, totalPostXp: 0 } });
+    }
+
+    let postsCount = 0;
+    let likesReceived = 0;
+
+    if (serverSupabase) {
+      try {
+        const { data: dbPosts, error } = await serverSupabase
+          .from('student_posts')
+          .select('id, likes_count, status')
+          .eq('user_id', userId)
+          .eq('status', 'approved');
+
+        if (!error && Array.isArray(dbPosts)) {
+          postsCount = dbPosts.length;
+          likesReceived = dbPosts.reduce((sum, p) => sum + (Number(p.likes_count) || 0), 0);
+          return res.json({
+            success: true,
+            data: {
+              postsCount,
+              likesReceived,
+              totalPostXp: postsCount * 10
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[Supabase user-stats notice]:', err.message);
+      }
+    }
+
+    // Fallback to in-memory posts cache
+    const postsCache = loadPostsCache();
+    const userPosts = postsCache.filter(p => p.user_id === userId && p.status === 'approved');
+    postsCount = userPosts.length;
+    likesReceived = userPosts.reduce((sum, p) => sum + (Number(p.likes_count) || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        postsCount,
+        likesReceived,
+        totalPostXp: postsCount * 10
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/posts/user-stats/:userId:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve post stats' });
   }
 });
 
@@ -3238,6 +3703,29 @@ app.post('/api/posts/:id/like', async (req, res) => {
     if (pIdx >= 0) {
       postsCache[pIdx].likes_count = likesMap[id].length;
       savePostsCache(postsCache);
+    }
+
+    // Persist to Supabase
+    if (serverSupabase) {
+      try {
+        if (liked) {
+          await serverSupabase
+            .from('post_likes')
+            .upsert({ post_id: id, user_id: userId }, { onConflict: 'post_id,user_id' });
+        } else {
+          await serverSupabase
+            .from('post_likes')
+            .delete()
+            .eq('post_id', id)
+            .eq('user_id', userId);
+        }
+        await serverSupabase
+          .from('student_posts')
+          .update({ likes_count: likesMap[id].length })
+          .eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Supabase like notice]:', sbErr.message);
+      }
     }
 
     res.json({
@@ -4524,7 +5012,7 @@ app.get('/api/leaderboard', async (req, res) => {
       }
     }
 
-    // Fetch all profiles (filtering out teachers from student ranking)
+    // Fetch all profiles (strictly filter for student learners only; exclude admins and teachers)
     let profiles = [];
     if (serverSupabase) {
       const { data: sbProfiles } = await serverSupabase
@@ -4533,8 +5021,8 @@ app.get('/api/leaderboard', async (req, res) => {
       if (sbProfiles) profiles = sbProfiles;
     }
 
-    // Filter learners strictly (exclude teachers from learner leaderboard)
-    const learnerProfiles = profiles.filter((p) => p.role !== 'teacher');
+    // Filter learners strictly (exclude admins, super admins, and teachers from learner leaderboard)
+    const learnerProfiles = profiles.filter((p) => p.role !== 'admin' && p.role !== 'super_admin' && p.role !== 'teacher' && p.role === 'student');
 
     // Compute user XP map
     const userXpMap = new Map();
@@ -4600,6 +5088,27 @@ app.get('/api/leaderboard', async (req, res) => {
         if (!sinceDate || !vDate || new Date(vDate) >= new Date(sinceDate)) {
           const cur = userXpMap.get(v.user_id) || 0;
           userXpMap.set(v.user_id, cur + 40);
+        }
+      });
+
+      // 6. Student Posts XP (+10 XP per approved post)
+      const { data: spCompletions } = await serverSupabase
+        .from('student_posts')
+        .select('user_id, created_at')
+        .eq('status', 'approved');
+      (spCompletions || []).forEach(p => {
+        if (!sinceDate || !p.created_at || new Date(p.created_at) >= new Date(sinceDate)) {
+          const cur = userXpMap.get(p.user_id) || 0;
+          userXpMap.set(p.user_id, cur + 10);
+        }
+      });
+    } else {
+      // In-memory cache fallback for posts XP
+      const postsCache = loadPostsCache();
+      postsCache.filter(p => p.status === 'approved').forEach(p => {
+        if (!sinceDate || !p.created_at || new Date(p.created_at) >= new Date(sinceDate)) {
+          const cur = userXpMap.get(p.user_id) || 0;
+          userXpMap.set(p.user_id, cur + 10);
         }
       });
     }
@@ -6583,7 +7092,118 @@ app.post('/api/admin/readings/retry-failed-images', async (req, res) => {
   }
 });
 
-// 11. POST /api/readings/complete - Record student reading completion
+// 10b. POST /api/readings/start-session - Start or resume server-authoritative reading timer
+app.post('/api/readings/start-session', async (req, res) => {
+  try {
+    const { readingId } = req.body;
+    if (!readingId) {
+      return res.status(400).json({ success: false, error: 'readingId is required.' });
+    }
+
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+    const now = new Date();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // 1. Try Supabase RPC if authenticated with UUID
+    if (serverSupabase && isUuid.test(userId) && isUuid.test(readingId)) {
+      try {
+        const { data: rpcRes, error: rpcErr } = await serverSupabase.rpc('start_or_resume_reading_session', {
+          p_reading_id: readingId,
+          p_user_id: userId
+        });
+        if (!rpcErr && rpcRes && rpcRes.success) {
+          return res.json(rpcRes);
+        }
+      } catch (e) {
+        console.warn('[Supabase start reading session notice]:', e.message);
+      }
+    }
+
+    // 2. Server Cache Session Management
+    const sessions = loadReadingSessionsCache();
+    const existingIndex = sessions.findIndex(s => s.reading_id === readingId && s.user_id === userId);
+
+    if (existingIndex >= 0) {
+      const existing = sessions[existingIndex];
+      // If completed previously
+      if (existing.completed_at) {
+        return res.json({
+          success: true,
+          reading_id: readingId,
+          started_at: existing.started_at,
+          completed_at: existing.completed_at,
+          elapsed_seconds: 60,
+          required_seconds: 60,
+          is_completed: true
+        });
+      }
+
+      // Check if session started within a reasonable window (e.g. 2 hours)
+      const startedAt = new Date(existing.started_at);
+      const diffMs = now.getTime() - startedAt.getTime();
+      const elapsedSeconds = Math.max(0, Math.floor(diffMs / 1000));
+
+      if (diffMs < 2 * 60 * 60 * 1000) { // under 2 hours, resume timer!
+        existing.last_active_at = now.toISOString();
+        sessions[existingIndex] = existing;
+        saveReadingSessionsCache(sessions);
+
+        return res.json({
+          success: true,
+          reading_id: readingId,
+          started_at: existing.started_at,
+          elapsed_seconds: elapsedSeconds,
+          required_seconds: 60,
+          is_resumed: true
+        });
+      }
+    }
+
+    // Fresh session
+    const newSession = {
+      id: crypto.randomUUID(),
+      reading_id: readingId,
+      user_id: userId,
+      started_at: now.toISOString(),
+      last_active_at: now.toISOString(),
+      completed_at: null
+    };
+
+    if (existingIndex >= 0) {
+      sessions[existingIndex] = newSession;
+    } else {
+      sessions.push(newSession);
+    }
+    saveReadingSessionsCache(sessions);
+
+    if (serverSupabase && isUuid.test(userId) && isUuid.test(readingId)) {
+      try {
+        await serverSupabase.from('reading_sessions').upsert({
+          user_id: userId,
+          reading_id: readingId,
+          started_at: newSession.started_at,
+          last_active_at: newSession.last_active_at
+        }, { onConflict: 'user_id,reading_id' });
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      reading_id: readingId,
+      started_at: newSession.started_at,
+      elapsed_seconds: 0,
+      required_seconds: 60,
+      is_resumed: false
+    });
+  } catch (error) {
+    console.error('Error in POST /api/readings/start-session:', error);
+    res.status(500).json({ success: false, error: 'Failed to start reading session.' });
+  }
+});
+
+// 11. POST /api/readings/complete - Record student reading completion with strict 60s validation
 app.post('/api/readings/complete', async (req, res) => {
   try {
     const { readingId } = req.body;
@@ -6593,34 +7213,112 @@ app.post('/api/readings/complete', async (req, res) => {
 
     const authData = await verifyAuthUser(req);
     const userId = authData?.user?.id || req.headers['x-guest-id'] || 'guest_user';
+    const now = new Date();
 
-    const completions = loadReadingCompletionsCache();
-    const alreadyCompleted = completions.some(c => c.reading_id === readingId && c.user_id === userId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    if (!alreadyCompleted) {
-      const record = {
-        id: crypto.randomUUID(),
-        reading_id: readingId,
-        user_id: userId,
-        completed_at: new Date().toISOString()
-      };
-      completions.push(record);
-      saveReadingCompletionsCache(completions);
-
-      if (serverSupabase && userId !== 'guest_user') {
-        try {
-          await serverSupabase.from('reading_completions').insert([record]);
-        } catch (e) {
-          // Ignore duplicate
+    // 1. Try Supabase RPC for atomic server-side validation
+    if (serverSupabase && isUuid.test(userId) && isUuid.test(readingId)) {
+      try {
+        const { data: rpcRes, error: rpcErr } = await serverSupabase.rpc('validate_and_complete_reading', {
+          p_reading_id: readingId,
+          p_user_id: userId
+        });
+        if (!rpcErr && rpcRes) {
+          if (!rpcRes.success) {
+            return res.status(400).json(rpcRes);
+          }
+          return res.json(rpcRes);
         }
-      }
-
-      if (userId && userId !== 'guest_user') {
-        await recordUserActivityInteraction(userId, readingId, 'reading', 'completed');
+      } catch (e) {
+        console.warn('[Supabase validate_and_complete_reading notice]:', e.message);
       }
     }
 
-    res.json({ success: true, readingId, completed: true });
+    // 2. Check if already completed in cache
+    const completions = loadReadingCompletionsCache();
+    const alreadyCompleted = completions.some(c => c.reading_id === readingId && c.user_id === userId);
+    if (alreadyCompleted) {
+      return res.json({
+        success: true,
+        completed: true,
+        already_completed: true,
+        xp_awarded: 0,
+        readingId,
+        message: 'Reading was already completed previously.'
+      });
+    }
+
+    // 3. Find active session
+    const sessions = loadReadingSessionsCache();
+    const session = sessions.find(s => s.reading_id === readingId && s.user_id === userId);
+
+    if (!session || !session.started_at) {
+      return res.status(400).json({
+        success: false,
+        error: 'Reading session not found. Please start reading before submitting completion.',
+        elapsedSeconds: 0,
+        requiredSeconds: 60,
+        remainingSeconds: 60
+      });
+    }
+
+    const startedAt = new Date(session.started_at);
+    const elapsedSeconds = Math.floor((now.getTime() - startedAt.getTime()) / 1000);
+
+    // 4. Strict 60s Server-Side Validation
+    if (elapsedSeconds < 60) {
+      return res.status(400).json({
+        success: false,
+        error: 'Keep reading for a little longer. This reading requires at least 60 seconds.',
+        elapsedSeconds: Math.max(0, elapsedSeconds),
+        requiredSeconds: 60,
+        remainingSeconds: Math.max(1, 60 - elapsedSeconds)
+      });
+    }
+
+    // 5. Valid completion
+    const xpAwarded = 15;
+    const record = {
+      id: crypto.randomUUID(),
+      reading_id: readingId,
+      user_id: userId,
+      completed_at: now.toISOString(),
+      xp_awarded: xpAwarded,
+      time_spent_seconds: elapsedSeconds
+    };
+    completions.push(record);
+    saveReadingCompletionsCache(completions);
+
+    // Update session completed_at
+    session.completed_at = now.toISOString();
+    saveReadingSessionsCache(sessions);
+
+    if (serverSupabase && isUuid.test(userId)) {
+      try {
+        await serverSupabase.from('reading_completions').insert([record]);
+      } catch (e) {}
+
+      // Award XP to profiles
+      try {
+        const { data: prof } = await serverSupabase.from('profiles').select('xp').eq('id', userId).maybeSingle();
+        if (prof) {
+          await serverSupabase.from('profiles').update({ xp: (prof.xp || 0) + xpAwarded, updated_at: now.toISOString() }).eq('id', userId);
+        }
+      } catch (e) {}
+    }
+
+    if (userId && userId !== 'guest_user') {
+      await recordUserActivityInteraction(userId, readingId, 'reading', 'completed');
+    }
+
+    res.json({
+      success: true,
+      completed: true,
+      already_completed: false,
+      xp_awarded: xpAwarded,
+      readingId
+    });
   } catch (error) {
     console.error('Error in POST /api/readings/complete:', error);
     res.status(500).json({ success: false, error: 'Failed to record completion.' });
@@ -8744,7 +9442,36 @@ app.get('/api/spelling-flip-cards/feed', async (req, res) => {
       }
     }
 
-    const shuffled = shuffleArray(cards);
+    // Deduplicate: Exclude completed spelling flip cards for this authenticated user
+    let candidatePool = cards;
+    if (userId) {
+      const completedCardIds = await getUserInteractedIds(userId, 'spelling_flip');
+
+      if (completedCardIds.size === 0 && serverSupabase) {
+        try {
+          const { data } = await serverSupabase
+            .from('spelling_flip_completions')
+            .select('card_id')
+            .eq('user_id', userId)
+            .eq('is_correct', true);
+          if (data) {
+            data.forEach(c => completedCardIds.add(String(c.card_id)));
+          }
+        } catch {}
+      }
+
+      const completions = loadSpellingFlipCompletionsCache();
+      completions
+        .filter(c => c.user_id === userId && c.is_correct)
+        .forEach(c => completedCardIds.add(String(c.card_id)));
+
+      candidatePool = cards.filter(c => !completedCardIds.has(String(c.id)));
+      if (candidatePool.length === 0) {
+        candidatePool = cards;
+      }
+    }
+
+    const shuffled = shuffleArray(candidatePool);
     const feedPool = shuffled.slice(0, 15);
 
     res.json({ success: true, data: feedPool });
@@ -9121,13 +9848,36 @@ app.post('/api/spelling-flip-cards/complete', async (req, res) => {
     const cleanTargetWord = card.word.trim().toUpperCase().replace(/[^A-Z]/g, '');
     const isCorrect = cleanUserWord === cleanTargetWord;
 
+    // Check if already completed by this user
+    let alreadyCompleted = false;
+    const completions = loadSpellingFlipCompletionsCache();
+    if (userId && userId !== 'guest_user') {
+      alreadyCompleted = completions.some(c => c.user_id === userId && c.card_id === cardId && c.is_correct);
+      if (!alreadyCompleted && serverSupabase) {
+        try {
+          const { data: dbCompletions } = await serverSupabase
+            .from('spelling_flip_completions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('card_id', cardId)
+            .eq('is_correct', true);
+          if (dbCompletions && dbCompletions.length > 0) {
+            alreadyCompleted = true;
+          }
+        } catch {}
+      }
+    }
+
     let xpAwarded = 0;
     if (isCorrect) {
-      xpAwarded = card.xp || 10;
+      if (alreadyCompleted) {
+        xpAwarded = 0;
+      } else {
+        xpAwarded = card.xp || 10;
+      }
     }
 
     // Record completion in cache
-    const completions = loadSpellingFlipCompletionsCache();
     const newCompletion = {
       id: `completion_flip_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       user_id: userId,
@@ -9140,6 +9890,11 @@ app.post('/api/spelling-flip-cards/complete', async (req, res) => {
     };
     completions.push(newCompletion);
     saveSpellingFlipCompletionsCache(completions);
+
+    // Record to user activity interactions
+    if (userId && isCorrect && userId !== 'guest_user') {
+      await recordUserActivityInteraction(userId, cardId, 'spelling_flip', 'completed');
+    }
 
     // If authenticated user, award XP in profile
     if (userId && xpAwarded > 0 && serverSupabase) {
@@ -9168,7 +9923,7 @@ app.post('/api/spelling-flip-cards/complete', async (req, res) => {
         is_correct: isCorrect,
         correct_word: card.word,
         xp_awarded: xpAwarded,
-        already_completed: false,
+        already_completed: alreadyCompleted,
         level: card.level,
         time_taken_seconds: timeTakenSeconds
       }
@@ -11138,7 +11893,82 @@ app.all('/api/exam-engine', async (req, res) => {
       });
     }
 
-    // Action 10: Delete Exam
+    // Action 10: Republish Exam to One or Multiple Classrooms
+    if (action === 'republish-exam') {
+      if (!user) return res.status(401).json({ success: false, error: 'Teacher authentication required.' });
+      const payload = req.body || {};
+      const examId = payload.examId;
+      const classroomIds = payload.classroomIds || (payload.classroomId ? [payload.classroomId] : []);
+      const publishSettings = payload.publishSettings || {};
+
+      if (!examId) return res.status(400).json({ success: false, error: 'Source examId is required.' });
+      if (!classroomIds.length) return res.status(400).json({ success: false, error: 'At least one classroom must be selected.' });
+
+      const republishRes = await republishExamToClassrooms(serverSupabase, {
+        examId,
+        classroomIds,
+        publishSettings,
+        teacherId: user.id
+      });
+
+      return res.json(republishRes);
+    }
+
+    // Action 11: Get Exam Results with optional Classroom Filtering
+    if (action === 'get-exam-results') {
+      if (!user) return res.status(401).json({ success: false, error: 'Teacher authentication required.' });
+      const examId = req.query.examId || req.body?.examId;
+      const classroomId = req.query.classroomId || req.body?.classroomId;
+      if (!examId) return res.status(400).json({ success: false, error: 'examId is required.' });
+
+      if (!serverSupabase) {
+        return res.json({ success: true, results: [] });
+      }
+
+      // Find all sibling publications if examId is a root or child
+      const { data: examRecord } = await serverSupabase
+        .from('classroom_exams')
+        .select('id, parent_exam_id, classroom_id, title, total_marks')
+        .eq('id', examId)
+        .maybeSingle();
+
+      const rootId = examRecord?.parent_exam_id || examId;
+      const { data: relatedExams } = await serverSupabase
+        .from('classroom_exams')
+        .select('id, classroom_id')
+        .or(`id.eq.${rootId},parent_exam_id.eq.${rootId}`);
+
+      const relatedExamIds = (relatedExams || []).map(e => e.id);
+      if (!relatedExamIds.includes(examId)) relatedExamIds.push(examId);
+
+      let query = serverSupabase
+        .from('classroom_exam_results')
+        .select(`
+          *,
+          classroom:classrooms!classroom_id (id, title, grade, subject),
+          student:profiles!student_id (id, full_name, email, avatar_url)
+        `)
+        .in('exam_id', relatedExamIds)
+        .order('score', { ascending: false });
+
+      if (classroomId && classroomId !== 'all') {
+        query = query.eq('classroom_id', classroomId);
+      }
+
+      const { data: results, error: resErr } = await query;
+      if (resErr) throw resErr;
+
+      return res.json({
+        success: true,
+        examId,
+        rootId,
+        totalMarks: examRecord?.total_marks || 100,
+        results: results || [],
+        count: (results || []).length
+      });
+    }
+
+    // Action 12: Delete Exam
     if (action === 'delete-exam') {
       if (!user) return res.status(401).json({ success: false, error: 'Authentication required.' });
       const examId = req.query.examId || req.body?.examId;

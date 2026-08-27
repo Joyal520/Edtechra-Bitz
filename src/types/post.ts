@@ -19,6 +19,7 @@ export interface StudentPost {
   moderated_at?: string;
   likes_count: number;
   comments_count: number;
+  xp_awarded?: number;
   is_liked_by_me?: boolean;
   is_saved_by_me?: boolean;
   image_width?: number;
@@ -28,6 +29,12 @@ export interface StudentPost {
   created_at: string;
   updated_at: string;
   author: PostAuthor;
+}
+
+export interface PostUserStats {
+  postsCount: number;
+  likesReceived: number;
+  totalPostXp: number;
 }
 
 export interface CreatePostPayload {

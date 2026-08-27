@@ -200,7 +200,10 @@ export interface ClassroomExamQuestion {
 
 export interface ClassroomExam {
   id: string;
-  classroom_id: string;
+  classroom_id?: string | null;
+  parent_exam_id?: string | null;
+  is_template?: boolean;
+  version?: number;
   title: string;
   description?: string;
   instructions?: string;
@@ -221,6 +224,14 @@ export interface ClassroomExam {
   created_by: string;
   created_at: string;
   updated_at: string;
+  published_at?: string | null;
+
+  // Multi-classroom & aggregation metadata
+  classes?: { id: string; title: string; grade?: string; subject?: string }[];
+  submission_count?: number;
+  question_count?: number;
+  average_score?: number;
+  pass_rate?: number;
 
   // Student specific
   latest_result?: ClassroomExamResult | null;

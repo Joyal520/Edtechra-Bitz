@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Award,
@@ -16,10 +16,16 @@ import {
   ArrowRight,
   Upload,
   Search,
-  Filter
+  Filter,
+  Share2,
+  Plus,
+  AlertCircle,
+  Users,
+  Edit3
 } from 'lucide-react';
 import { ClassroomExam } from '@/types/classroom';
 import { classroomExamService } from '@/services/classroomExamService';
+import { classroomService } from '@/services/classroomService';
 
 interface ClassroomExamModalProps {
   isOpen: boolean;
@@ -53,6 +59,140 @@ const EXAM_TYPES = [
 
 const DIFFICULTIES = ["Easy", "Medium", "Hard", "Mixed"];
 
+/**
+ * Intelligent Constrained Integer Auto-Balance Solver
+ * Preserves teacher question counts and finds the optimal integer mark distribution.
+ */
+function solveAutoBalance(
+  currentSections: { id?: string; type: string; count: number; marks: number; instruction?: string; difficulty?: string }[],
+  targetTotal: number
+): { success: boolean; proposedSections: typeof currentSections; message?: string } {
+  if (!currentSections.length) {
+    return { success: false, proposedSections: currentSections, message: "No sections available to balance." };
+  }
+
+  const counts = currentSections.map(s => Math.max(1, Number(s.count) || 1));
+  const numSections = currentSections.length;
+
+  // Type complexity weights (MCQ/TF=1, Blanks=1.5, Matching/Reorder/ShortAns=2, Comprehension=2.5, Essay=4)
+  const getTypeWeight = (type = '') => {
+    const t = String(type).toLowerCase();
+    if (t.includes('essay')) return 4;
+    if (t.includes('comprehension')) return 2.5;
+    if (t.includes('short answer') || t.includes('matching') || t.includes('reorder')) return 2;
+    if (t.includes('blanks') || t.includes('cloze')) return 1.5;
+    return 1;
+  };
+
+  const weights = currentSections.map(s => getTypeWeight(s.type));
+
+  // Single section case
+  if (numSections === 1) {
+    const c = counts[0];
+    if (targetTotal % c === 0 && targetTotal / c >= 1) {
+      const newMarks = targetTotal / c;
+      return {
+        success: true,
+        proposedSections: [{ ...currentSections[0], marks: newMarks }]
+      };
+    } else {
+      return {
+        success: false,
+        proposedSections: currentSections,
+        message: `Cannot evenly distribute ${targetTotal} marks across ${c} questions (${(targetTotal / c).toFixed(2)} marks/question). Please adjust question count or target.`
+      };
+    }
+  }
+
+  const validSolutions: { marks: number[]; penalty: number }[] = [];
+
+  function search(idx: number, remainingTotal: number, currentMarks: number[]) {
+    if (idx === numSections - 1) {
+      const lastCount = counts[idx];
+      if (remainingTotal > 0 && remainingTotal % lastCount === 0) {
+        const lastMark = remainingTotal / lastCount;
+        if (lastMark >= 1) {
+          const solution = [...currentMarks, lastMark];
+          let penalty = 0;
+
+          // 1. Nice round educational numbers bonus (25, 50, 10, 20, 15, 5, 2)
+          solution.forEach((m) => {
+            if (m === 25 || m === 50 || m === 10 || m === 20) penalty -= 60;
+            else if (m % 10 === 0) penalty -= 40;
+            else if (m % 5 === 0) penalty -= 30;
+            else if (m % 2 === 0) penalty -= 5;
+            else penalty += 50;
+
+            if (m > 10 && m % 5 !== 0) penalty += 80;
+          });
+
+          // 2. Question type order penalty (higher complexity sections should receive >= marks/question)
+          for (let i = 0; i < numSections; i++) {
+            for (let j = i + 1; j < numSections; j++) {
+              if (weights[i] < weights[j] && solution[i] > solution[j]) {
+                penalty += 150;
+              }
+              if (weights[i] > weights[j] && solution[i] < solution[j]) {
+                penalty += 150;
+              }
+            }
+          }
+
+          // 3. Proportionality relative to weights
+          const baseUnit = targetTotal / (counts.reduce((sum, c, i) => sum + c * weights[i], 0) || 1);
+          solution.forEach((m, i) => {
+            const ideal = Math.max(1, Math.round(weights[i] * baseUnit));
+            penalty += Math.abs(m - ideal) * 10;
+          });
+
+          validSolutions.push({ marks: solution, penalty });
+        }
+      }
+      return;
+    }
+
+    const c = counts[idx];
+    const maxMarkForSection = Math.floor((remainingTotal - (numSections - 1 - idx)) / c);
+
+    for (let m = 1; m <= maxMarkForSection; m++) {
+      search(idx + 1, remainingTotal - (c * m), [...currentMarks, m]);
+    }
+  }
+
+  search(0, targetTotal, []);
+
+  if (validSolutions.length === 0) {
+    const countsStr = currentSections.map((s, i) => `Section ${i + 1} (${s.count} Qs)`).join(', ');
+    return {
+      success: false,
+      proposedSections: currentSections,
+      message: `Cannot balance to exactly ${targetTotal} marks with current question counts: ${countsStr}. Please adjust question counts or enter marks manually.`
+    };
+  }
+
+  validSolutions.sort((a, b) => a.penalty - b.penalty);
+  const best = validSolutions[0];
+
+  const proposedSections = currentSections.map((s, i) => ({
+    ...s,
+    marks: best.marks[i]
+  }));
+
+  return {
+    success: true,
+    proposedSections
+  };
+}
+
+/**
+ * Sanitizes numeric string to avoid leading zeros and invalid values
+ */
+function sanitizeNumericInput(raw: string, fallback = 1, min = 1): number {
+  const clean = raw.replace(/^0+(?=\d)/, '');
+  const parsed = parseInt(clean, 10);
+  return isNaN(parsed) ? fallback : Math.max(min, parsed);
+}
+
 export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   isOpen,
   classroomId,
@@ -63,7 +203,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 }) => {
   // Navigation tabs for Teacher
   const [activeTab, setActiveTab] = useState<'my-exams' | 'creator' | 'results'>('my-exams');
-  const [creatorStage, setCreatorStage] = useState<'setup' | 'structure' | 'review' | 'publish' | 'results'>('setup');
+  const [creatorStage, setCreatorStage] = useState<'setup' | 'structure' | 'review' | 'publish'>('setup');
 
   // Teacher Previous Exams state
   const [previousExams, setPreviousExams] = useState<any[]>([]);
@@ -101,6 +241,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     }
   ]);
 
+  // Auto-Balance Confirmation Modal State
+  const [autoBalanceProposal, setAutoBalanceProposal] = useState<{
+    sections: any[];
+    target: number;
+    diff: number;
+  } | null>(null);
+  const [autoBalanceError, setAutoBalanceError] = useState<string | null>(null);
+
   // Stage 3: AI Review State
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedExam, setGeneratedExam] = useState<any | null>(null);
@@ -123,10 +271,33 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
+  // Republishing Feature State
+  const [republishModalOpen, setRepublishModalOpen] = useState(false);
+  const [examToRepublish, setExamToRepublish] = useState<any | null>(null);
+  const [teacherClassrooms, setTeacherClassrooms] = useState<any[]>([]);
+  const [selectedClassroomIds, setSelectedClassroomIds] = useState<string[]>([]);
+  const [isRepublishing, setIsRepublishing] = useState(false);
+  const [republishSettings, setRepublishSettings] = useState({
+    startDate: '',
+    startTime: '',
+    endDate: '',
+    endTime: '',
+    duration: '60 Minutes',
+    maxAttempts: 1,
+    password: '',
+    randomizeQuestions: true,
+    randomizeOptions: true,
+    showMarksImmediately: true,
+    showAnswersAfterExam: true,
+    allowLateSubmission: false
+  });
+
   // Stage 5: Results & Analytics State
   const [selectedExamForResults, setSelectedExamForResults] = useState<any | null>(null);
+  const [resultsClassroomFilter, setResultsClassroomFilter] = useState<string>('all');
   const [analyticsData, setAnalyticsData] = useState<any | null>(null);
   const [reportDownloadUrl, setReportDownloadUrl] = useState('');
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
 
   // Student Taking Exam State
   const [studentTakingExam, setStudentTakingExam] = useState<any | null>(null);
@@ -135,16 +306,27 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
   const [studentResult, setStudentResult] = useState<any | null>(null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showStudentBreakdown, setShowStudentBreakdown] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Authoritative dynamic calculation of Section and Exam Total Marks
+  const currentTotalMarks = useMemo(() => {
+    return sections.reduce(
+      (sum, s) => sum + (Number(s.count) || 0) * (Number(s.marks) || 0),
+      0
+    );
+  }, [sections]);
+
+  const marksDifference = requiredTotal - currentTotalMarks;
 
   // Initial load
   useEffect(() => {
     if (isOpen) {
       if (isTeacher) {
         loadTeacherExams();
+        loadTeacherClassrooms();
         if (activeExam) {
-          // If specific exam passed for teacher review/results
           setSelectedExamForResults(activeExam);
           loadExamAnalytics(activeExam);
           setActiveTab('results');
@@ -152,7 +334,6 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
           setActiveTab('my-exams');
         }
       } else {
-        // Student Mode
         if (activeExam) {
           initStudentExam(activeExam);
         }
@@ -190,7 +371,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     }
   };
 
-  const [showStudentBreakdown, setShowStudentBreakdown] = useState(false);
+  const loadTeacherClassrooms = async () => {
+    try {
+      const classes = await classroomService.getClassrooms('teacher');
+      setTeacherClassrooms(classes || []);
+    } catch (err) {
+      console.error('[ExamModal] loadTeacherClassrooms error:', err);
+    }
+  };
 
   const initStudentExam = async (exam: any) => {
     setStudentTakingExam(exam);
@@ -199,13 +387,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     const durMins = Number(exam.duration_minutes || 60);
     setStudentTimeRemaining(durMins * 60);
 
-    // 1. Fast check from passed exam object
     if (exam.latest_result) {
       setStudentResult(classroomExamService.normalizeExamResult(exam.latest_result));
       return;
     }
 
-    // 2. Authoritative check from Supabase database
     if (exam.id) {
       try {
         const existing = await classroomExamService.getStudentExamResult(exam.id);
@@ -220,12 +406,6 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
     setStudentResult(null);
   };
-
-  // Calculate Structure Total
-  const currentTotalMarks = sections.reduce(
-    (sum, s) => sum + (Number(s.count) || 0) * (Number(s.marks) || 0),
-    0
-  );
 
   const handleAddSection = () => {
     const nextIdx = sections.length + 1;
@@ -247,15 +427,28 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     setSections((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleAutoBalance = () => {
-    if (sections.length === 0) return;
-    const base = sections[0];
-    const others = sections.slice(1).reduce((sum, s) => sum + (s.count * s.marks), 0);
-    const needed = Math.max(1, Math.floor((requiredTotal - others) / (base.marks || 10)));
-    setSections((prev) => [
-      { ...prev[0], count: needed },
-      ...prev.slice(1)
-    ]);
+  const handleTriggerAutoBalance = () => {
+    setAutoBalanceError(null);
+    const result = solveAutoBalance(sections, requiredTotal);
+    if (result.success) {
+      setAutoBalanceProposal({
+        sections: result.proposedSections,
+        target: requiredTotal,
+        diff: marksDifference
+      });
+    } else {
+      setAutoBalanceError(result.message || 'Could not auto-balance with current structure.');
+    }
+  };
+
+  const handleApplyAutoBalance = () => {
+    if (autoBalanceProposal) {
+      setSections(autoBalanceProposal.sections);
+      setAutoBalanceProposal(null);
+      setAutoBalanceError(null);
+      setSaveSuccessMsg('Marks balanced successfully!');
+      setTimeout(() => setSaveSuccessMsg(''), 3000);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,7 +472,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
       return;
     }
     if (currentTotalMarks !== requiredTotal) {
-      alert(`Total marks in structure (${currentTotalMarks}) must equal required total (${requiredTotal}).`);
+      alert(`Your exam currently totals ${currentTotalMarks} marks, but the target is ${requiredTotal} marks. Please balance the marks before proceeding.`);
       return;
     }
 
@@ -292,8 +485,9 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         difficulty,
         duration: { value: durationValue, unit: durationUnit },
         gradingMode,
-        requiredTotal,
-        sections: sections.map(s => ({
+        requiredTotal: currentTotalMarks,
+        sections: sections.map((s, idx) => ({
+          id: s.id || `s${idx + 1}`,
           type: s.type,
           count: Number(s.count),
           marks: Number(s.marks),
@@ -344,6 +538,16 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
       return;
     }
 
+    const actualExamTotal = (generatedExam.sections || []).reduce(
+      (sum: number, s: any) => sum + (Number(s.totalMarks) || (s.questions || []).reduce((qSum: number, q: any) => qSum + Number(q.marks || 0), 0)),
+      0
+    ) || currentTotalMarks;
+
+    if (actualExamTotal !== requiredTotal) {
+      const proceed = confirm(`Exam total (${actualExamTotal} marks) does not equal target (${requiredTotal} marks). Publish with ${actualExamTotal} marks?`);
+      if (!proceed) return;
+    }
+
     setIsSaving(true);
     try {
       await classroomExamService.publishExam2({
@@ -351,6 +555,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         classroom_id: classroomId,
         approved: true,
         status: 'published',
+        total_marks: actualExamTotal,
         publishing: {
           ...publishSettings,
           classroomId,
@@ -371,28 +576,91 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     }
   };
 
-  const loadExamAnalytics = async (exam: any) => {
-    setSelectedExamForResults(exam);
+  // Open Republish Modal
+  const handleOpenRepublish = (exam: any) => {
+    setExamToRepublish(exam);
+    // Pre-select current classroom if not already assigned
+    const existingClassIds = (exam.classes || []).map((c: any) => c.id);
+    const availableNotAssigned = teacherClassrooms
+      .filter((c: any) => !existingClassIds.includes(c.id))
+      .map((c: any) => c.id);
+    setSelectedClassroomIds(availableNotAssigned.length ? [availableNotAssigned[0]] : []);
+    setRepublishSettings({
+      startDate: '',
+      startTime: '',
+      endDate: '',
+      endTime: '',
+      duration: `${exam.duration_minutes || 60} Minutes`,
+      maxAttempts: exam.max_attempts || 1,
+      password: exam.password || '',
+      randomizeQuestions: true,
+      randomizeOptions: true,
+      showMarksImmediately: exam.show_marks_immediately !== undefined ? exam.show_marks_immediately : true,
+      showAnswersAfterExam: exam.show_correct_answers !== undefined ? exam.show_correct_answers : true,
+      allowLateSubmission: exam.allow_late_submission || false
+    });
+    setRepublishModalOpen(true);
+  };
+
+  // Execute Republish
+  const handleExecuteRepublish = async () => {
+    if (!examToRepublish || selectedClassroomIds.length === 0) {
+      alert('Please select at least one class to publish to.');
+      return;
+    }
+
+    setIsRepublishing(true);
     try {
-      const results = exam.results || (exam.id ? await classroomExamService.getExamResults(exam.id) : []);
+      await classroomExamService.republishExam({
+        examId: examToRepublish.id,
+        classroomIds: selectedClassroomIds,
+        publishSettings: republishSettings
+      });
+      setSaveSuccessMsg(`Exam republished to ${selectedClassroomIds.length} class(es)!`);
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+      setRepublishModalOpen(false);
+      setExamToRepublish(null);
+      loadTeacherExams();
+      onSuccess();
+    } catch (err: any) {
+      alert(err.message || 'Failed to republish exam.');
+    } finally {
+      setIsRepublishing(false);
+    }
+  };
+
+  const loadExamAnalytics = async (exam: any, filterClassId = 'all') => {
+    setSelectedExamForResults(exam);
+    setResultsClassroomFilter(filterClassId);
+    setIsLoadingResults(true);
+
+    try {
+      const results = await classroomExamService.getExamResults(exam.id, filterClassId);
+
+      const authoritativeTotal = Number(exam.total_marks || 100);
 
       const studentsList = (results.length > 0 ? results : [
-        { student_id: 's1', name: 'Nethmi Silva', score: Math.round((exam.total_marks || 100) * 0.94), time_taken_minutes: 36, answers: {} },
-        { student_id: 's2', name: 'Ayaan Perera', score: Math.round((exam.total_marks || 100) * 0.88), time_taken_minutes: 42, answers: {} },
-        { student_id: 's3', name: 'Sofia Khan', score: Math.round((exam.total_marks || 100) * 0.82), time_taken_minutes: 45, answers: {} },
-        { student_id: 's4', name: 'John Doe', score: Math.round((exam.total_marks || 100) * 0.75), time_taken_minutes: 50, answers: {} },
-        { student_id: 's5', name: 'Jane Smith', score: Math.round((exam.total_marks || 100) * 0.91), time_taken_minutes: 38, answers: {} }
-      ]).map((r: any, idx: number) => ({
-        student_id: r.student_id || r.student?.id || `s_${idx}`,
-        name: r.student?.full_name || r.name || r.student?.email?.split('@')[0] || `Student ${idx + 1}`,
-        email: r.student?.email || '',
-        score: Number(r.score || 0),
-        time_taken_minutes: r.time_taken_minutes || 40,
-        percentage: Number(r.percentage || ((exam.total_marks || 100) > 0 ? Number(((Number(r.score || 0) / (exam.total_marks || 100)) * 100).toFixed(1)) : 0)),
-        passed: r.passed !== undefined ? Boolean(r.passed) : (Number(r.score || 0) >= ((exam.total_marks || 100) * 0.4)),
-        submitted_at: r.submitted_at || null,
-        answers: r.answers || {}
-      }));
+        { student_id: 's1', name: 'Nethmi Silva', score: Math.round(authoritativeTotal * 0.94), time_taken_minutes: 36, answers: {}, classroom_title: exam.classroom?.title || 'Class 6A' },
+        { student_id: 's2', name: 'Ayaan Perera', score: Math.round(authoritativeTotal * 0.88), time_taken_minutes: 42, answers: {}, classroom_title: exam.classroom?.title || 'Class 6A' },
+        { student_id: 's3', name: 'Sofia Khan', score: Math.round(authoritativeTotal * 0.82), time_taken_minutes: 45, answers: {}, classroom_title: exam.classroom?.title || 'Class 6B' },
+        { student_id: 's4', name: 'John Doe', score: Math.round(authoritativeTotal * 0.75), time_taken_minutes: 50, answers: {}, classroom_title: exam.classroom?.title || 'Class 6B' },
+        { student_id: 's5', name: 'Jane Smith', score: Math.round(authoritativeTotal * 0.91), time_taken_minutes: 38, answers: {}, classroom_title: exam.classroom?.title || 'Class 7A' }
+      ]).map((r: any, idx: number) => {
+        const scoreVal = Number(r.score || 0);
+        const pct = authoritativeTotal > 0 ? Number(((scoreVal / authoritativeTotal) * 100).toFixed(1)) : 0;
+        return {
+          student_id: r.student_id || r.student?.id || `s_${idx}`,
+          name: r.student?.full_name || r.name || r.student?.email?.split('@')[0] || `Student ${idx + 1}`,
+          email: r.student?.email || '',
+          score: scoreVal,
+          classroom_title: r.classroom_title || r.classroom?.title || 'Assigned Class',
+          time_taken_minutes: r.time_taken_minutes || 40,
+          percentage: pct,
+          passed: r.passed !== undefined ? Boolean(r.passed) : scoreVal >= (authoritativeTotal * 0.4),
+          submitted_at: r.submitted_at || null,
+          answers: r.answers || {}
+        };
+      });
 
       const questionsList = (exam.questions_json || []).flatMap((s: any) => s.questions || []).map((q: any, idx: number) => ({
         question_id: q.questionId || `Q${idx + 1}`,
@@ -405,17 +673,22 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
       const stats = await classroomExamService.getScoreAnalysis({
         exam_id: exam.id || 'EXAM',
-        class_id: classroomId,
+        class_id: filterClassId === 'all' ? classroomId : filterClassId,
         exam_name: exam.title || 'Classroom Assessment',
-        total_marks: exam.total_marks || 100,
+        total_marks: authoritativeTotal,
         students: studentsList,
         questions: questionsList
       });
 
-      setAnalyticsData(stats.analytics || stats);
+      setAnalyticsData({
+        ...(stats.analytics || stats),
+        students: studentsList
+      });
       setReportDownloadUrl(stats.download_url || stats.report_pdf_url || '');
     } catch (err: any) {
       console.error('[ExamModal] loadExamAnalytics error:', err);
+    } finally {
+      setIsLoadingResults(false);
     }
   };
 
@@ -482,12 +755,12 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   {isTeacher ? 'EdTechra AI Exam Engine 2.0' : studentTakingExam?.title || 'Classroom Examination'}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                  Cloudflare R2 Storage
+                  Authoritative Marks Engine
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
                 {isTeacher
-                  ? 'Create, review, publish, and evaluate structured exams with automated AI reports.'
+                  ? 'Create reusable exam templates, republish across classes, and view isolated performance analytics.'
                   : 'Complete your assigned assessment within the allotted time.'}
               </p>
             </div>
@@ -582,7 +855,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           
           {/* --------------------------------------------------------------- */}
-          {/* TEACHER VIEW: 1. MY PREVIOUS EXAMS DASHBOARD                    */}
+          {/* TEACHER VIEW: 1. MY PREVIOUS EXAMS (TEMPLATES & PUBLICATIONS)   */}
           {/* --------------------------------------------------------------- */}
           {isTeacher && activeTab === 'my-exams' && (
             <div className="space-y-6">
@@ -666,6 +939,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     .map((exam) => {
                       const isDraft = exam.status === 'draft';
                       const totalSubs = exam.submission_count || 0;
+                      const classesList = exam.classes || (exam.classroom ? [exam.classroom] : []);
 
                       return (
                         <div
@@ -691,9 +965,16 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               <h4 className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
                                 {exam.title || 'Untitled Exam'}
                               </h4>
-                              <p className="text-xs text-slate-500 font-medium line-clamp-1">
-                                {exam.classroom?.title || exam.exam_type || 'Classroom Assessment'}
-                              </p>
+                              
+                              {/* Assigned Classes Badge */}
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <Users className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="text-xs text-slate-500 font-medium line-clamp-1">
+                                  {classesList.length > 0
+                                    ? `Classes: ${classesList.map((c: any) => c.title).join(', ')}`
+                                    : 'Reusable Template (Not yet published)'}
+                                </span>
+                              </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 text-center">
@@ -712,18 +993,57 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                loadExamAnalytics(exam);
-                                setActiveTab('results');
-                              }}
-                              className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <BarChart3 className="w-3.5 h-3.5" />
-                              <span>Analytics</span>
-                            </button>
+                          {/* Action Buttons */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {!isDraft ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRepublish(exam)}
+                                  className="flex-1 py-2 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                  title="Republish to other classes"
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                  <span>Republish</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    loadExamAnalytics(exam);
+                                    setActiveTab('results');
+                                  }}
+                                  className="flex-1 py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Results</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGeneratedExam({
+                                    metadata: {
+                                      title: exam.title,
+                                      totalMarks: exam.total_marks,
+                                      duration: `${exam.duration_minutes} Minutes`,
+                                      examType: exam.exam_type,
+                                      difficulty: exam.difficulty,
+                                      gradingMode: exam.grading_mode
+                                    },
+                                    sections: exam.questions_json || exam.questions || []
+                                  });
+                                  setRequiredTotal(exam.total_marks || 100);
+                                  setCreatorStage('review');
+                                  setActiveTab('creator');
+                                }}
+                                className="flex-1 py-2 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Continue Editing</span>
+                              </button>
+                            )}
 
                             {exam.r2_file_key && (
                               <button
@@ -760,7 +1080,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
           )}
 
           {/* --------------------------------------------------------------- */}
-          {/* TEACHER VIEW: 2. EXAM 2.0 CREATOR PIPELINE                     */}
+          {/* TEACHER VIEW: 2. EXAM CREATOR PIPELINE                          */}
           {/* --------------------------------------------------------------- */}
           {isTeacher && activeTab === 'creator' && (
             <div className="space-y-6">
@@ -866,7 +1186,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                           type="number"
                           min={5}
                           value={durationValue}
-                          onChange={(e) => setDurationValue(Number(e.target.value))}
+                          onChange={(e) => setDurationValue(sanitizeNumericInput(e.target.value, 60, 5))}
                           className="w-20 p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
                         />
                         <select
@@ -886,7 +1206,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         type="number"
                         min={10}
                         value={requiredTotal}
-                        onChange={(e) => setRequiredTotal(Number(e.target.value))}
+                        onChange={(e) => setRequiredTotal(sanitizeNumericInput(e.target.value, 100, 10))}
                         className="w-full p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
                       />
                     </div>
@@ -908,17 +1228,38 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* STAGE 2: QUESTION STRUCTURE */}
               {creatorStage === 'structure' && (
                 <div className="space-y-5">
-                  <div className="flex items-center justify-between p-4 bg-indigo-50/80 border border-indigo-100 rounded-2xl">
+                  
+                  {/* Mark Calculation Banner */}
+                  <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border ${
+                    currentTotalMarks === requiredTotal
+                      ? 'bg-emerald-50/90 border-emerald-200'
+                      : 'bg-indigo-50/90 border-indigo-200'
+                  }`}>
                     <div className="flex items-center gap-3">
-                      <Layers className="w-5 h-5 text-indigo-600" />
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        currentTotalMarks === requiredTotal
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-indigo-600 text-white'
+                      }`}>
+                        <Layers className="w-5 h-5" />
+                      </div>
                       <div>
-                        <span className="text-xs font-black text-slate-800">
-                          Total Marks: {currentTotalMarks} / {requiredTotal}
-                        </span>
-                        <p className="text-[11px] text-slate-500">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-900">
+                            Current Marks: {currentTotalMarks} / {requiredTotal}
+                          </span>
+                          {currentTotalMarks === requiredTotal && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                              Balanced
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-600 mt-0.5">
                           {currentTotalMarks === requiredTotal
                             ? '✓ Perfect mark balance achieved.'
-                            : `Difference: ${requiredTotal - currentTotalMarks} marks needed.`}
+                            : marksDifference > 0
+                            ? `Difference: ${marksDifference} marks needed`
+                            : `Difference: ${Math.abs(marksDifference)} marks over target`}
                         </p>
                       </div>
                     </div>
@@ -926,84 +1267,106 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleAutoBalance}
-                        className="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold hover:bg-indigo-50 cursor-pointer"
+                        onClick={handleTriggerAutoBalance}
+                        className="px-3.5 py-2 bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                       >
-                        Auto Balance Marks
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Auto Balance Marks</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleAddSection}
-                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer"
+                        className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition-all cursor-pointer flex items-center gap-1"
                       >
-                        + Add Section
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Section</span>
                       </button>
                     </div>
                   </div>
 
+                  {autoBalanceError && (
+                    <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{autoBalanceError}</span>
+                    </div>
+                  )}
+
                   {/* Section Cards */}
                   <div className="space-y-3">
-                    {sections.map((section, idx) => (
-                      <div
-                        key={section.id || idx}
-                        className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-xs"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800">Section {idx + 1}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSection(idx)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                    {sections.map((section, idx) => {
+                      const countVal = Number(section.count) || 0;
+                      const marksVal = Number(section.marks) || 0;
+                      const sectionSubtotal = countVal * marksVal;
+
+                      return (
+                        <div
+                          key={section.id || idx}
+                          className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-slate-900">Section {idx + 1}</span>
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700">
+                                {countVal} Qs × {marksVal} Marks = {sectionSubtotal} Marks
+                              </span>
+                            </div>
+                            {sections.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSection(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Type</label>
+                              <select
+                                value={section.type}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setSections(prev => prev.map((s, i) => i === idx ? { ...s, type: val } : s));
+                                }}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                              >
+                                {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Count</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={section.count}
+                                onChange={(e) => {
+                                  const val = sanitizeNumericInput(e.target.value, 1, 1);
+                                  setSections(prev => prev.map((s, i) => i === idx ? { ...s, count: val } : s));
+                                }}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Marks per Question</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={section.marks}
+                                onChange={(e) => {
+                                  const val = sanitizeNumericInput(e.target.value, 10, 1);
+                                  setSections(prev => prev.map((s, i) => i === idx ? { ...s, marks: val } : s));
+                                }}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                              />
+                            </div>
+                          </div>
                         </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                          <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Type</label>
-                            <select
-                              value={section.type}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setSections(prev => prev.map((s, i) => i === idx ? { ...s, type: val } : s));
-                              }}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                            >
-                              {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Count</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={section.count}
-                              onChange={(e) => {
-                                const val = Number(e.target.value);
-                                setSections(prev => prev.map((s, i) => i === idx ? { ...s, count: val } : s));
-                              }}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-500 mb-1">Marks per Question</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={section.marks}
-                              onChange={(e) => {
-                                const val = Number(e.target.value);
-                                setSections(prev => prev.map((s, i) => i === idx ? { ...s, marks: val } : s));
-                              }}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="flex justify-between pt-4 border-t border-slate-100">
@@ -1048,8 +1411,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                         <div>
                           <h4 className="text-sm font-black text-slate-900">{generatedExam.metadata?.title}</h4>
-                          <p className="text-xs text-slate-500">
-                            {generatedExam.metadata?.totalMarks} Marks • {generatedExam.metadata?.duration} • {generatedExam.metadata?.gradingMode}
+                          <p className="text-xs text-slate-500 font-bold">
+                            {generatedExam.metadata?.totalMarks} Total Marks • {generatedExam.metadata?.duration} • {generatedExam.metadata?.gradingMode}
                           </p>
                         </div>
 
@@ -1068,14 +1431,20 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <div className="space-y-4">
                         {(generatedExam.sections || []).map((sec: any, sIdx: number) => (
                           <div key={sec.sectionId || sIdx} className="bg-white border border-slate-200 rounded-3xl p-5 space-y-4">
-                            <div className="border-b border-slate-100 pb-3">
-                              <h5 className="text-sm font-black text-slate-900">{sec.title || sec.questionType}</h5>
-                              {sec.passage && (
-                                <div className="mt-2 p-3 bg-amber-50/60 border border-amber-200/70 rounded-xl text-xs text-slate-700 leading-relaxed font-medium">
-                                  <strong>Reading Passage:</strong> {sec.passage}
-                                </div>
-                              )}
+                            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                              <div>
+                                <h5 className="text-sm font-black text-slate-900">{sec.title || sec.questionType}</h5>
+                                <span className="text-[11px] text-slate-500 font-bold">
+                                  {sec.questions?.length || 0} Questions • {sec.marksPerQuestion || sec.questions?.[0]?.marks || 10} Marks/Q • Subtotal: {sec.totalMarks || (sec.questions?.length * 10)} Marks
+                                </span>
+                              </div>
                             </div>
+
+                            {sec.passage && (
+                              <div className="p-3 bg-amber-50/60 border border-amber-200/70 rounded-xl text-xs text-slate-700 leading-relaxed font-medium">
+                                <strong>Reading Passage:</strong> {sec.passage}
+                              </div>
+                            )}
 
                             <div className="space-y-3">
                               {(sec.questions || []).map((q: any, qIdx: number) => (
@@ -1267,28 +1636,49 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
           {isTeacher && activeTab === 'results' && selectedExamForResults && (
             <div className="space-y-6">
               
-              {/* Header card */}
+              {/* Header card with Classroom Filter */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-indigo-900 text-white rounded-3xl shadow-lg">
                 <div className="space-y-1">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/20">
-                    Score Analysis Dashboard
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/20">
+                      Score Analysis Dashboard
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-800 text-indigo-200">
+                      {selectedExamForResults.total_marks || 100} Total Marks
+                    </span>
+                  </div>
                   <h3 className="text-lg font-black">{selectedExamForResults.title}</h3>
-                  <p className="text-xs text-indigo-200">
-                    {selectedExamForResults.classroom?.title || 'Classroom Assessment'} • {selectedExamForResults.total_marks || 100} Total Marks
-                  </p>
                 </div>
 
-                {reportDownloadUrl && (
-                  <button
-                    type="button"
-                    onClick={() => window.open(reportDownloadUrl, '_blank')}
-                    className="px-4 py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-2xl text-xs font-black flex items-center gap-2 shadow-sm cursor-pointer"
-                  >
-                    <Download className="w-4 h-4 text-indigo-600" />
-                    <span>Download Official PDF Report</span>
-                  </button>
-                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Classroom Selector Dropdown for Republished Multi-Class Exams */}
+                  {selectedExamForResults.classes && selectedExamForResults.classes.length > 1 && (
+                    <div className="flex items-center gap-1.5 bg-white/10 p-1.5 rounded-2xl">
+                      <span className="text-[11px] font-bold text-indigo-200 pl-2">Filter Class:</span>
+                      <select
+                        value={resultsClassroomFilter}
+                        onChange={(e) => loadExamAnalytics(selectedExamForResults, e.target.value)}
+                        className="p-2 bg-white text-indigo-900 rounded-xl text-xs font-black cursor-pointer border-0 outline-hidden"
+                      >
+                        <option value="all">All Assigned Classes ({selectedExamForResults.classes.length})</option>
+                        {selectedExamForResults.classes.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {reportDownloadUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(reportDownloadUrl, '_blank')}
+                      className="px-4 py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-2xl text-xs font-black flex items-center gap-2 shadow-sm cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-indigo-600" />
+                      <span>Download Official PDF Report</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Metrics row */}
@@ -1307,7 +1697,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <span className="block text-[11px] font-bold text-slate-500 mt-1">Highest Score</span>
                   </div>
                   <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center shadow-xs">
-                    <span className="text-2xl font-black text-purple-600">{analyticsData.total_students || 0}</span>
+                    <span className="text-2xl font-black text-purple-600">{analyticsData.total_students || (analyticsData.students?.length || 0)}</span>
                     <span className="block text-[11px] font-bold text-slate-500 mt-1">Submissions</span>
                   </div>
                 </div>
@@ -1315,45 +1705,62 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
               {/* Student leaderboard / results table */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4">
-                <h4 className="text-sm font-black text-slate-900">Student Performance Breakdown</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black text-slate-900">Student Performance Breakdown</h4>
+                  <span className="text-xs font-bold text-slate-400">
+                    {analyticsData?.students?.length || 0} Attempts Recorded
+                  </span>
+                </div>
                 
                 <div className="divide-y divide-slate-100">
-                  {((analyticsData?.students || selectedExamForResults.results) || []).map((s: any, idx: number) => {
-                    const studentScore = Number(s.score || 0);
-                    const totalMarks = Number(selectedExamForResults.total_marks || 100);
-                    const pct = Number(s.percentage ?? (totalMarks > 0 ? ((studentScore / totalMarks) * 100).toFixed(1) : 0));
-                    const isPassing = s.passed !== undefined ? Boolean(s.passed) : studentScore >= (totalMarks * 0.4);
+                  {isLoadingResults ? (
+                    <div className="py-12 text-center text-slate-400">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-600 mb-2" />
+                      <p className="text-xs font-bold">Loading submissions for class...</p>
+                    </div>
+                  ) : (analyticsData?.students || []).length === 0 ? (
+                    <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                      No student submissions found for this class yet.
+                    </div>
+                  ) : (
+                    (analyticsData?.students || []).map((s: any, idx: number) => {
+                      const studentScore = Number(s.score || 0);
+                      const totalMarks = Number(selectedExamForResults.total_marks || 100);
+                      const pct = Number(s.percentage ?? (totalMarks > 0 ? ((studentScore / totalMarks) * 100).toFixed(1) : 0));
+                      const isPassing = s.passed !== undefined ? Boolean(s.passed) : studentScore >= (totalMarks * 0.4);
 
-                    return (
-                      <div key={idx} className="py-3.5 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
-                            {idx + 1}
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-slate-800">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
-                              <span>{s.time_taken_minutes ? `${s.time_taken_minutes} mins` : 'Completed'}</span>
-                              <span className="font-bold text-indigo-600">• {pct}%</span>
-                              <span className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
-                                isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                              }`}>
-                                {isPassing ? 'Completed' : 'Needs Support'}
-                              </span>
+                      return (
+                        <div key={idx} className="py-3.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <p className="text-xs font-black text-slate-800">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
+                                <span className="text-indigo-600 font-semibold">{s.classroom_title}</span>
+                                <span>• {s.time_taken_minutes ? `${s.time_taken_minutes} mins` : 'Completed'}</span>
+                                <span className="font-bold text-slate-700">• {pct}%</span>
+                                <span className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
+                                  isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                                }`}>
+                                  {isPassing ? 'Completed' : 'Needs Support'}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                            isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                          }`}>
-                            {studentScore} / {totalMarks}
-                          </span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                              isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            }`}>
+                              {studentScore} / {totalMarks}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -1404,7 +1811,6 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Idempotent status confirmation */}
                     <div className="pt-2 flex flex-col items-center gap-1 text-xs font-bold text-slate-600">
                       <div className="flex items-center gap-1.5 text-emerald-600">
                         <Check className="w-3.5 h-3.5" />
@@ -1480,10 +1886,9 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   </button>
                 </div>
               ) : studentTakingExam ? (
-                /* Student Taking Exam View */
+                /* Student Taking Timed Exam */
                 <div className="space-y-6">
                   
-                  {/* Sections list */}
                   {((studentTakingExam.questions_json || [])).map((sec: any, secIdx: number) => (
                     <div key={secIdx} className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4">
                       <div className="border-b border-slate-100 pb-3">
@@ -1594,6 +1999,265 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
           )}
 
         </div>
+
+        {/* ================================================================= */}
+        {/* AUTO BALANCE REVIEW & CONFIRMATION MODAL                          */}
+        {/* ================================================================= */}
+        {autoBalanceProposal && (
+          <div className="absolute inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-slate-900">Review Balanced Marks Distribution</h4>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Question counts are preserved. The marks per question have been balanced to equal {autoBalanceProposal.target} marks.
+                  </p>
+                </div>
+              </div>
+
+              {/* Comparison Table */}
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden text-xs">
+                <div className="bg-slate-50 p-2.5 font-black text-slate-700 grid grid-cols-12 gap-2">
+                  <div className="col-span-5">Section & Type</div>
+                  <div className="col-span-3 text-center">Questions</div>
+                  <div className="col-span-4 text-right">Proposed Marks</div>
+                </div>
+
+                {autoBalanceProposal.sections.map((sec, sIdx) => {
+                  const origSec = sections[sIdx] || {};
+                  const count = Number(sec.count) || 1;
+                  const newMarks = Number(sec.marks) || 10;
+                  const origMarks = Number(origSec.marks) || 10;
+                  const newTotal = count * newMarks;
+                  const origTotal = count * origMarks;
+
+                  return (
+                    <div key={sIdx} className="p-3 grid grid-cols-12 gap-2 items-center bg-white">
+                      <div className="col-span-5">
+                        <span className="font-black text-slate-800 block">Section {sIdx + 1}</span>
+                        <span className="text-[11px] text-slate-500 font-medium line-clamp-1">{sec.type}</span>
+                      </div>
+                      <div className="col-span-3 text-center font-bold text-slate-700">
+                        {count} Qs (Unchanged)
+                      </div>
+                      <div className="col-span-4 text-right">
+                        <span className="font-black text-indigo-600 block">{newMarks} Marks/Q (= {newTotal})</span>
+                        <span className="text-[10px] text-slate-400">was {origMarks} M/Q (= {origTotal})</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="bg-indigo-50/70 p-3 flex items-center justify-between font-black text-slate-900">
+                  <span>Balanced Total:</span>
+                  <span className="text-sm text-indigo-700">{autoBalanceProposal.target} Marks (Target Achieved)</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAutoBalanceProposal(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyAutoBalance}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Apply Proposed Marks</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* REPUBLISH EXAM MODAL DIALOG                                       */}
+        {/* ================================================================= */}
+        {republishModalOpen && examToRepublish && (
+          <div className="absolute inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-xl w-full space-y-5 shadow-2xl border border-slate-100 max-h-[85vh] overflow-y-auto animate-in zoom-in-95">
+              
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-slate-900">Republish Exam to Classes</h4>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Assign "{examToRepublish.title}" to additional classrooms as a fresh assessment.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRepublishModalOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Exam Info Summary */}
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex items-center justify-between text-xs font-bold text-slate-800">
+                <div>
+                  <span className="font-black text-indigo-900">{examToRepublish.title}</span>
+                  <span className="block text-[11px] text-indigo-600 font-semibold">{examToRepublish.exam_type || 'Unit Test'} • {examToRepublish.total_marks} Marks</span>
+                </div>
+                <span className="px-2.5 py-1 bg-white rounded-xl text-indigo-700 shadow-2xs font-black">
+                  Version {examToRepublish.version || 1}
+                </span>
+              </div>
+
+              {/* Classroom Checkbox Selection */}
+              <div className="space-y-2">
+                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Select Target Classroom(s)
+                </label>
+
+                {teacherClassrooms.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Loading your classrooms...</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                    {teacherClassrooms.map((cls: any) => {
+                      const isAlreadyPublished = (examToRepublish.classes || []).some((c: any) => c.id === cls.id);
+                      const isChecked = selectedClassroomIds.includes(cls.id);
+
+                      return (
+                        <label
+                          key={cls.id}
+                          className={`p-3 rounded-2xl border text-xs flex items-center justify-between cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-indigo-50 border-indigo-300 font-black text-indigo-900'
+                              : 'bg-white border-slate-200 font-medium text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedClassroomIds(prev => [...prev, cls.id]);
+                                } else {
+                                  setSelectedClassroomIds(prev => prev.filter(id => id !== cls.id));
+                                }
+                              }}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <div>
+                              <span className="block font-bold text-slate-900">{cls.title}</span>
+                              <span className="text-[10px] text-slate-400">{cls.subject || 'All Subjects'} • {cls.grade || 'Standard'}</span>
+                            </div>
+                          </div>
+
+                          {isAlreadyPublished && (
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Assignment Custom Settings */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                <h5 className="text-xs font-black text-slate-800 uppercase tracking-wider">Schedule & Policies for this Publication</h5>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Start Date & Time (Optional)</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="date"
+                        value={republishSettings.startDate}
+                        onChange={(e) => setRepublishSettings(prev => ({ ...prev, startDate: e.target.value }))}
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                      />
+                      <input
+                        type="time"
+                        value={republishSettings.startTime}
+                        onChange={(e) => setRepublishSettings(prev => ({ ...prev, startTime: e.target.value }))}
+                        className="w-24 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">End Date & Time (Optional)</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="date"
+                        value={republishSettings.endDate}
+                        onChange={(e) => setRepublishSettings(prev => ({ ...prev, endDate: e.target.value }))}
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                      />
+                      <input
+                        type="time"
+                        value={republishSettings.endTime}
+                        onChange={(e) => setRepublishSettings(prev => ({ ...prev, endTime: e.target.value }))}
+                        className="w-24 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <label className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={republishSettings.showMarksImmediately}
+                      onChange={(e) => setRepublishSettings(prev => ({ ...prev, showMarksImmediately: e.target.checked }))}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Show Score Immediately</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={republishSettings.randomizeQuestions}
+                      onChange={(e) => setRepublishSettings(prev => ({ ...prev, randomizeQuestions: e.target.checked }))}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Randomize Questions</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setRepublishModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteRepublish}
+                  disabled={isRepublishing || selectedClassroomIds.length === 0}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>{isRepublishing ? 'Republishing...' : `Publish to ${selectedClassroomIds.length} Selected Class(es)`}</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* Confirmation Modal for Student Submission */}
         {showSubmitConfirm && (

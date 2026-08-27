@@ -1,4 +1,4 @@
-import { StudentPost, CreatePostPayload, PresignedUploadResponse, PostFeedResponse } from '@/types/post';
+import { StudentPost, CreatePostPayload, PresignedUploadResponse, PostFeedResponse, PostUserStats } from '@/types/post';
 import { supabase } from '@/lib/supabase';
 
 class PostService {
@@ -294,6 +294,52 @@ class PostService {
 
     const data = await res.json();
     return data.data;
+  }
+
+  /**
+   * Retrieves total user posts, likes received, and post XP for Dashboard
+   */
+  async getUserPostStats(userId: string, token?: string | null): Promise<PostUserStats> {
+    const defaultStats: PostUserStats = { postsCount: 0, likesReceived: 0, totalPostXp: 0 };
+    if (!userId || userId === 'guest-user') return defaultStats;
+
+    try {
+      const headers = await this.getAuthHeaders(token);
+      const res = await fetch(`/api/posts/user-stats/${encodeURIComponent(userId)}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          return json.data as PostUserStats;
+        }
+      }
+    } catch (e) {
+      console.warn('[PostService] API getUserPostStats notice, falling back to direct query:', e);
+    }
+
+    // Direct Supabase fallback
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('student_posts')
+          .select('id, likes_count, status')
+          .eq('user_id', userId)
+          .eq('status', 'approved');
+
+        if (!error && data) {
+          const postsCount = data.length;
+          const likesReceived = data.reduce((sum, p) => sum + (Number(p.likes_count) || 0), 0);
+          return {
+            postsCount,
+            likesReceived,
+            totalPostXp: postsCount * 10
+          };
+        }
+      } catch (err) {
+        console.warn('[PostService] Supabase fallback post stats error:', err);
+      }
+    }
+
+    return defaultStats;
   }
 }
 

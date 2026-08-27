@@ -4,7 +4,6 @@ import {
   Flame,
   Sparkles,
   CheckCircle2,
-  HelpCircle,
   Clock,
   ArrowRight,
   TrendingUp,
@@ -13,8 +12,9 @@ import {
   GraduationCap,
   Award,
   Trophy,
-  Zap,
-  Settings
+  Settings,
+  Heart,
+  FileImage
 } from 'lucide-react';
 import { youtubeClient, ProgressSummary } from '@/services/youtubeClient';
 import { useAuth } from '@/context/AuthContext';
@@ -22,6 +22,8 @@ import { getTimeBasedGreeting } from '@/utils/greeting';
 import { getAllLevels, getLevelStatus } from '@/utils/levelsData';
 import { UserLearningProgress, CategoryProgress } from '@/types';
 import { quizService } from '@/services/quizService';
+import { postService } from '@/services/postService';
+import { PostUserStats } from '@/types/post';
 import { UserSettingsModal } from '@/components/UserSettingsModal';
 import { TopLearnersLeaderboard } from '@/components/Dashboard/TopLearnersLeaderboard';
 
@@ -41,6 +43,11 @@ export const DashboardPage: React.FC = () => {
     totalXp: 0,
     completedCount: 0
   });
+  const [postStats, setPostStats] = useState<PostUserStats>({
+    postsCount: 0,
+    likesReceived: 0,
+    totalPostXp: 0
+  });
   const [progressMap, setProgressMap] = useState<{ [videoId: string]: UserLearningProgress }>({});
   const [categoryProgress, setCategoryProgress] = useState<CategoryProgress[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState<boolean>(true);
@@ -49,34 +56,59 @@ export const DashboardPage: React.FC = () => {
   const userId = user?.id || 'guest-user';
   const allLevels = getAllLevels();
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      try {
-        setCategoriesLoading(true);
-        setCategoriesError(null);
-        const token = session?.access_token || null;
-        const [statsData, pMap, catProg, qStats] = await Promise.all([
-          youtubeClient.getUserProgress(userId),
-          youtubeClient.getProgressMap(userId),
-          youtubeClient.getCategoryProgress(userId),
-          quizService.getUserQuizStats(userId, token)
-        ]);
-        if (!isMounted) return;
-        if (statsData) setStats(statsData);
-        if (pMap) setProgressMap(pMap);
-        if (catProg) setCategoryProgress(catProg);
-        if (qStats) setQuizStats(qStats);
-      } catch (err: any) {
-        console.error('Error loading dashboard stats:', err);
-        if (isMounted) setCategoriesError(err?.message || 'Failed to load progress');
-      } finally {
-        if (isMounted) setCategoriesLoading(false);
-      }
+  const loadData = async () => {
+    try {
+      setCategoriesLoading(true);
+      setCategoriesError(null);
+      const token = session?.access_token || null;
+      const [statsData, pMap, catProg, qStats, pStats] = await Promise.all([
+        youtubeClient.getUserProgress(userId),
+        youtubeClient.getProgressMap(userId),
+        youtubeClient.getCategoryProgress(userId),
+        quizService.getUserQuizStats(userId, token),
+        postService.getUserPostStats(userId, token)
+      ]);
+      if (statsData) setStats(statsData);
+      if (pMap) setProgressMap(pMap);
+      if (catProg) setCategoryProgress(catProg);
+      if (qStats) setQuizStats(qStats);
+      if (pStats) setPostStats(pStats);
+    } catch (err: any) {
+      console.error('Error loading dashboard stats:', err);
+      setCategoriesError(err?.message || 'Failed to load progress');
+    } finally {
+      setCategoriesLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
+  }, [userId, session]);
+
+  // Real-time Event Subscriptions for instant Dashboard stat updates
+  useEffect(() => {
+    const handleRefreshStats = () => {
+      const token = session?.access_token || null;
+      postService.getUserPostStats(userId, token).then(setPostStats).catch(() => {});
+      quizService.getUserQuizStats(userId, token).then(setQuizStats).catch(() => {});
+      youtubeClient.getCategoryProgress(userId).then(setCategoryProgress).catch(() => {});
+    };
+
+    const handleActivityCompleted = () => {
+      const token = session?.access_token || null;
+      youtubeClient.getCategoryProgress(userId).then(setCategoryProgress).catch(() => {});
+      quizService.getUserQuizStats(userId, token).then(setQuizStats).catch(() => {});
+      youtubeClient.getUserProgress(userId).then(setStats).catch(() => {});
+    };
+
+    window.addEventListener('edtechra:post_created', handleRefreshStats);
+    window.addEventListener('edtechra:profile_updated', handleRefreshStats);
+    window.addEventListener('edtechra:activity_completed', handleActivityCompleted);
+
     return () => {
-      isMounted = false;
+      window.removeEventListener('edtechra:post_created', handleRefreshStats);
+      window.removeEventListener('edtechra:profile_updated', handleRefreshStats);
+      window.removeEventListener('edtechra:activity_completed', handleActivityCompleted);
     };
   }, [userId, session]);
 
@@ -95,7 +127,7 @@ export const DashboardPage: React.FC = () => {
     return st === 'completed';
   }).length;
 
-  const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40) + (quizStats.totalXp || 0);
+  const totalXP = 100 + (completedLevelsCount * 40) + (stats.totalCompleted * 40) + (quizStats.totalXp || 0) + (postStats.totalPostXp || 0);
   const displayName = profile?.full_name?.trim() || profile?.name?.trim() || user?.user_metadata?.full_name?.trim() || user?.user_metadata?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'Learner');
   const avatarUrl = profile?.avatar_url || profile?.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
   const initials = (displayName || 'L').slice(0, 2).toUpperCase();
@@ -233,29 +265,29 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Curriculum Quizzes Passed */}
+        {/* Your Posts */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <HelpCircle className="w-5 h-5 text-emerald-600" />
+            <FileImage className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
             <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
-              {stats.quizzesCompleted > 0 ? `${stats.quizzesCompleted}` : `${completedLevelsCount}`}
+              {postStats.postsCount}
             </div>
-            <div className="text-[11px] text-slate-500 font-semibold mt-1">Video Quizzes</div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Your Posts</div>
           </div>
         </div>
 
-        {/* Quiz Bits Completed */}
+        {/* Likes Received on Posts */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-4 shadow-2xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-            <Zap className="w-5 h-5 fill-teal-500 text-teal-500" />
+          <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+            <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
           </div>
           <div>
             <div className="text-lg sm:text-xl font-black text-[#0f233a] leading-none">
-              {quizStats.completedCount}
+              {postStats.likesReceived}
             </div>
-            <div className="text-[11px] text-slate-500 font-semibold mt-1">Quiz Bits Done</div>
+            <div className="text-[11px] text-slate-500 font-semibold mt-1">Likes</div>
           </div>
         </div>
 

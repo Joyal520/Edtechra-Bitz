@@ -25,9 +25,22 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted })
   // If this specific card instance has been completed, show the completion state
   if (isCompleted) {
     const nextLevel = Math.min(100, completedLevel + 1);
+    const hasNext = nextLevel > completedLevel;
+
+    const handlePlayAgain = () => {
+      setIsCompleted(false);
+      setIsPlaying(true);
+    };
+
+    const handleNextLevel = () => {
+      setCompletedLevel(nextLevel);
+      setIsCompleted(false);
+      setIsPlaying(true);
+    };
+
     return (
       <div className="mx-3 sm:mx-0 bg-white border border-stone-200/90 rounded-3xl overflow-hidden shadow-xs">
-        <div className="relative p-5 sm:p-6 bg-gradient-to-br from-slate-900 via-[#0a1e36] to-slate-950 text-white flex flex-col gap-4 overflow-hidden">
+        <div className="relative p-5 sm:p-6 bg-gradient-to-br from-slate-900 via-[#0a1e36] to-slate-950 text-white flex flex-col gap-4 overflow-hidden animate-in fade-in duration-200">
           
           {/* Ambient Glows */}
           <div className="absolute -top-12 -left-12 w-48 h-48 rounded-full bg-emerald-500/20 blur-2xl pointer-events-none" />
@@ -37,7 +50,7 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted })
           <div className="relative z-10 flex items-center justify-between">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Break Completed</span>
+              <span>✓ Break Completed</span>
             </div>
 
             <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[11px] font-black flex items-center gap-1 shadow-2xs">
@@ -52,7 +65,7 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted })
               <span>🫧 Level {completedLevel} Cleared!</span>
             </h3>
             <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed">
-              Nice break! Your focus is refreshed. Keep exploring your educational feed below to unlock Level {nextLevel}.
+              Nice break! Your focus is refreshed. Play again or jump directly to Level {nextLevel}.
             </p>
           </div>
 
@@ -66,6 +79,33 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({ onGameCompleted })
               <span>Level {nextLevel} Unlocked</span>
               <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
             </div>
+          </div>
+
+          {/* Action Buttons: Play Again & Next Level */}
+          <div className="relative z-10 pt-1 flex flex-col sm:flex-row items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handlePlayAgain}
+              className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+            >
+              <span>PLAY AGAIN</span>
+            </button>
+
+            {hasNext ? (
+              <button
+                type="button"
+                onClick={handleNextLevel}
+                className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+              >
+                <span>NEXT LEVEL ({nextLevel})</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>All 100 Levels Cleared!</span>
+              </div>
+            )}
           </div>
 
         </div>

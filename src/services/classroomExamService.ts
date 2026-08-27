@@ -279,13 +279,30 @@ class ClassroomExamService {
   }
 
   /**
-   * Retrieves all results for an exam (Teacher view)
+   * Retrieves all results for an exam (Teacher view) with optional classroom filtering
    */
-  async getExamResults(examId: string): Promise<ClassroomExamResult[]> {
-    if (!supabase || !examId) return [];
+  async getExamResults(examId: string, classroomId?: string): Promise<any[]> {
+    if (!examId) return [];
 
     try {
-      const { data, error } = await supabase
+      const headers = await this.getAuthHeaders();
+      const query = classroomId
+        ? `action=get-exam-results&examId=${encodeURIComponent(examId)}&classroomId=${encodeURIComponent(classroomId)}`
+        : `action=get-exam-results&examId=${encodeURIComponent(examId)}`;
+
+      const res = await fetch(`/api/exam-engine?${query}`, { headers });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return data.results || [];
+      }
+    } catch (e) {
+      console.warn('[ClassroomExamService] getExamResults API fallback to Supabase:', e);
+    }
+
+    if (!supabase) return [];
+
+    try {
+      let query = supabase
         .from('classroom_exam_results')
         .select(`
           *,
@@ -294,6 +311,11 @@ class ClassroomExamService {
         .eq('exam_id', examId)
         .order('score', { ascending: false });
 
+      if (classroomId && classroomId !== 'all') {
+        query = query.eq('classroom_id', classroomId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     } catch (err) {
@@ -400,6 +422,31 @@ class ClassroomExamService {
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Failed to publish exam.');
+    }
+    return data;
+  }
+
+  /**
+   * Republishes an existing exam to one or multiple classrooms
+   */
+  async republishExam(payload: {
+    examId: string;
+    classroomIds: string[];
+    publishSettings?: any;
+  }): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch('/api/exam-engine?action=republish-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to republish exam.');
     }
     return data;
   }

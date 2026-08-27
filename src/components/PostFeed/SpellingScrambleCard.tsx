@@ -12,9 +12,11 @@ import {
   Play,
   Zap,
   Flame,
-  Check
+  Check,
+  ArrowRight,
+  Trophy
 } from 'lucide-react';
-import { SpellingScramble, LetterTile, SpellingScrambleAttemptResult } from '@/types/spellingScramble';
+import { SpellingScramble, LetterTile, SpellingScrambleAttemptResult, SpellingDifficulty } from '@/types/spellingScramble';
 import { spellingScrambleService } from '@/services/spellingScrambleService';
 import { reorderAudio } from '@/utils/reorderAudio';
 import { triggerConfetti } from '@/utils/confetti';
@@ -22,31 +24,66 @@ import { useAuth } from '@/context/AuthContext';
 
 interface SpellingScrambleCardProps {
   scramble: SpellingScramble;
+  allScrambles?: SpellingScramble[];
   onAttemptCompleted?: (activityId: string, result: SpellingScrambleAttemptResult) => void;
 }
 
 export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
-  scramble,
+  scramble: initialScramble,
+  allScrambles = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
   const cardRef = useRef<HTMLElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [activeScramble, setActiveScramble] = useState<SpellingScramble>(initialScramble);
+
+  useEffect(() => {
+    if (initialScramble && initialScramble.id !== activeScramble.id) {
+      setActiveScramble(initialScramble);
+    }
+  }, [initialScramble]);
+
+  // Next level / challenge detection
+  const nextScramble = useMemo(() => {
+    if (!allScrambles || allScrambles.length === 0) return null;
+    const currentIndex = allScrambles.findIndex(s => s.id === activeScramble.id);
+
+    // 1. Try finding a scramble with higher difficulty
+    const diffOrder: SpellingDifficulty[] = ['Easy', 'Medium', 'Hard'];
+    const currentDiffIdx = diffOrder.indexOf(activeScramble.difficulty);
+    if (currentDiffIdx >= 0 && currentDiffIdx < diffOrder.length - 1) {
+      const nextDiffName = diffOrder[currentDiffIdx + 1];
+      const nextByDiff = allScrambles.find(s => s.difficulty === nextDiffName && s.id !== activeScramble.id);
+      if (nextByDiff) return nextByDiff;
+    }
+
+    // 2. Next sequential scramble in pool
+    if (currentIndex >= 0 && currentIndex < allScrambles.length - 1) {
+      return allScrambles[currentIndex + 1];
+    }
+    return null;
+  }, [allScrambles, activeScramble]);
+
   // Initialize letter tiles with unique IDs to safely support duplicate letters
-  const initialTiles = useMemo<LetterTile[]>(() => {
-    const rawLetters = Array.isArray(scramble.scrambled_letters) && scramble.scrambled_letters.length > 0
-      ? scramble.scrambled_letters
-      : scramble.word.split('').sort(() => Math.random() - 0.5);
+  const generateShuffledTiles = useCallback((scrambleItem: SpellingScramble): LetterTile[] => {
+    const rawLetters = Array.isArray(scrambleItem.scrambled_letters) && scrambleItem.scrambled_letters.length > 0
+      ? [...scrambleItem.scrambled_letters].sort(() => Math.random() - 0.5)
+      : scrambleItem.word.split('').sort(() => Math.random() - 0.5);
 
     return rawLetters.map((letter, index) => ({
-      id: `letter-${scramble.id}-${index}`,
+      id: `letter-${scrambleItem.id}-${index}-${Date.now()}`,
       letter: String(letter).toUpperCase(),
       originalIndex: index
     }));
-  }, [scramble]);
+  }, []);
 
-  const targetWord = scramble.word.toUpperCase().trim();
+  const initialTiles = useMemo<LetterTile[]>(() => {
+    return generateShuffledTiles(activeScramble);
+  }, [activeScramble, generateShuffledTiles]);
+
+  const targetWord = activeScramble.word.toUpperCase().trim();
   const targetCount = targetWord.length;
 
   // Game Phases: 'idle' | 'playing' | 'completed' | 'time_up'
@@ -59,54 +96,65 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
   const [isShaking, setIsShaking] = useState<boolean>(false);
 
   // Timer State
-  const totalTimerSeconds = scramble.timer_seconds || (scramble.difficulty === 'Hard' ? 60 : scramble.difficulty === 'Medium' ? 45 : 30);
+  const totalTimerSeconds = activeScramble.timer_seconds || (activeScramble.difficulty === 'Hard' ? 60 : activeScramble.difficulty === 'Medium' ? 45 : 30);
   const [timeLeft, setTimeLeft] = useState<number>(totalTimerSeconds);
   const [startTime, setStartTime] = useState<number | null>(null);
 
   // Result & Submission State
-  const [result, setResult] = useState<SpellingScrambleAttemptResult | null>(null);
+  const [result, setResult] = useState<SpellingScrambleAttemptResult | null>(() => {
+    if (typeof window !== 'undefined' && activeScramble?.id) {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_scramble_${activeScramble.id}`);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [streak, setStreak] = useState<number>(1);
 
-  // Reset state when scramble prop changes
+  // Reset state when activeScramble changes
   useEffect(() => {
-    setAvailableTiles(initialTiles);
+    const tiles = generateShuffledTiles(activeScramble);
+    setAvailableTiles(tiles);
     setPlacedTiles([]);
     setTimeLeft(totalTimerSeconds);
     setStartTime(null);
-    setResult(null);
     setErrorNotice(null);
-    setGameState('idle');
+
+    // Read saved completion from localStorage or prop
+    let existingResult: SpellingScrambleAttemptResult | null = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_scramble_${activeScramble.id}`);
+        if (saved) existingResult = JSON.parse(saved);
+      } catch (e) {}
+    }
+
+    if (!existingResult && activeScramble.has_completed) {
+      existingResult = {
+        is_correct: true,
+        correct_word: activeScramble.word,
+        clue: activeScramble.clue,
+        xp_awarded: activeScramble.xp || (activeScramble.difficulty === 'Hard' ? 20 : activeScramble.difficulty === 'Medium' ? 15 : 10),
+        already_completed: true
+      };
+    }
+
+    if (existingResult) {
+      setResult(existingResult);
+      setGameState('completed');
+    } else {
+      setResult(null);
+      setGameState('idle');
+    }
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  }, [initialTiles, totalTimerSeconds]);
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
-
-  // Handle already completed state
-  useEffect(() => {
-    if (scramble.has_completed && !result) {
-      setResult({
-        is_correct: true,
-        correct_word: scramble.word,
-        clue: scramble.clue,
-        xp_awarded: scramble.xp || (scramble.difficulty === 'Hard' ? 20 : scramble.difficulty === 'Medium' ? 15 : 10),
-        already_completed: true
-      });
-      setGameState('completed');
-    }
-  }, [scramble.has_completed, scramble.word, scramble.clue, scramble.xp, scramble.difficulty, result]);
+  }, [activeScramble, totalTimerSeconds, generateShuffledTiles]);
 
   /**
    * Start the Round and Begin the Timer
@@ -197,6 +245,30 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
     setErrorNotice(null);
   };
 
+  const handlePlayAgain = () => {
+    setGameState('idle');
+    setResult(null);
+    setPlacedTiles([]);
+    setAvailableTiles(generateShuffledTiles(activeScramble));
+    setTimeLeft(totalTimerSeconds);
+    setStartTime(null);
+    setErrorNotice(null);
+  };
+
+  const handleNextLevel = () => {
+    if (nextScramble) {
+      setActiveScramble(nextScramble);
+      setGameState('idle');
+      setResult(null);
+      setPlacedTiles([]);
+      setAvailableTiles(generateShuffledTiles(nextScramble));
+      const nextTimer = nextScramble.timer_seconds || (nextScramble.difficulty === 'Hard' ? 60 : nextScramble.difficulty === 'Medium' ? 45 : 30);
+      setTimeLeft(nextTimer);
+      setStartTime(null);
+      setErrorNotice(null);
+    }
+  };
+
   /**
    * Check Answer: Evaluates placed letters against target word
    */
@@ -221,22 +293,22 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
       try {
         const token = session?.access_token || null;
         const attemptRes = await spellingScrambleService.submitCompletion(
-          scramble.id,
+          activeScramble.id,
           userWord,
           timeTaken,
           token
         );
         setResult(attemptRes);
         if (onAttemptCompleted) {
-          onAttemptCompleted(scramble.id, attemptRes);
+          onAttemptCompleted(activeScramble.id, attemptRes);
         }
       } catch (err) {
         console.error('[SpellingScrambleCard] Submit completion error:', err);
         setResult({
           is_correct: true,
-          correct_word: scramble.word,
-          clue: scramble.clue,
-          xp_awarded: scramble.xp || (scramble.difficulty === 'Hard' ? 20 : scramble.difficulty === 'Medium' ? 15 : 10),
+          correct_word: activeScramble.word,
+          clue: activeScramble.clue,
+          xp_awarded: activeScramble.xp || (activeScramble.difficulty === 'Hard' ? 20 : activeScramble.difficulty === 'Medium' ? 15 : 10),
           already_completed: false
         });
       } finally {
@@ -256,7 +328,7 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
 
   const isCompleted = gameState === 'completed';
   const isTimeUp = gameState === 'time_up';
-  const earnedXP = result?.xp_awarded ?? (scramble.xp || (scramble.difficulty === 'Hard' ? 20 : scramble.difficulty === 'Medium' ? 15 : 10));
+  const earnedXP = result?.xp_awarded ?? (activeScramble.xp || (activeScramble.difficulty === 'Hard' ? 20 : activeScramble.difficulty === 'Medium' ? 15 : 10));
 
   // Timer percentage for circular or horizontal progress
   const timerPercent = Math.max(0, Math.min(100, (timeLeft / totalTimerSeconds) * 100));
@@ -278,23 +350,23 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {scramble.category && (
+          {activeScramble.category && (
             <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs text-[10px] font-extrabold">
-              {scramble.category}
+              {activeScramble.category}
             </span>
           )}
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-            scramble.difficulty === 'Hard'
+            activeScramble.difficulty === 'Hard'
               ? 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
-              : scramble.difficulty === 'Medium'
+              : activeScramble.difficulty === 'Medium'
               ? 'bg-amber-950/80 text-amber-300 border border-amber-500/40'
               : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
           }`}>
-            {scramble.difficulty}
+            {activeScramble.difficulty}
           </span>
           <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black shadow-2xs flex items-center gap-1">
             <Zap className="w-3 h-3 fill-slate-950" />
-            +{scramble.xp || 10} XP
+            +{activeScramble.xp || 10} XP
           </span>
         </div>
       </div>
@@ -348,9 +420,17 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             <span>💡 Clue</span>
           </div>
           <p className="text-sm sm:text-base font-bold text-white leading-relaxed learning-content-text">
-            &ldquo;{scramble.clue}&rdquo;
+            &ldquo;{activeScramble.clue}&rdquo;
           </p>
         </div>
+
+        {/* Error Notice */}
+        {errorNotice && (
+          <div className="px-3.5 py-2 rounded-xl bg-rose-950/80 border border-rose-500/60 text-xs font-semibold text-rose-300 flex items-center gap-2 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{errorNotice}</span>
+          </div>
+        )}
 
         {/* 4. ANSWER SLOTS (Drop Zone) */}
         <div className="space-y-1.5">
@@ -372,6 +452,7 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             {placedTiles.map((tile, idx) => (
               <button
                 key={tile.id}
+                type="button"
                 onClick={() => {
                   if (!isCompleted && !isTimeUp && !isAnimating) {
                     reorderAudio.playUndoPop();
@@ -380,12 +461,8 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
                   }
                 }}
                 disabled={isCompleted || isTimeUp || isAnimating}
-                className={`w-10 h-11 sm:w-11 sm:h-12 rounded-xl text-lg sm:text-xl font-black shadow-md flex items-center justify-center transition-all select-none cursor-pointer ${
-                  isCompleted
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-emerald-900/30'
-                    : 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:scale-105 active:scale-95 shadow-cyan-900/30'
-                }`}
-                title="Tap to return letter to bank"
+                className="w-10 h-11 sm:w-11 sm:h-12 rounded-xl bg-gradient-to-b from-cyan-500 to-blue-600 border border-cyan-300 text-white font-black text-lg sm:text-xl shadow-md flex items-center justify-center select-none active:scale-95 transition-all cursor-pointer"
+                title="Tap to remove"
               >
                 {tile.letter}
               </button>
@@ -394,76 +471,53 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             {/* Empty Slots */}
             {!isCompleted &&
               !isTimeUp &&
-              Array.from({ length: Math.max(0, targetCount - placedTiles.length) }).map((_, placeholderIdx) => (
+              Array.from({ length: Math.max(0, targetCount - placedTiles.length) }).map((_, idx) => (
                 <div
-                  key={`placeholder-${placeholderIdx}`}
+                  key={`empty-${idx}`}
                   className="w-10 h-11 sm:w-11 sm:h-12 rounded-xl border-2 border-dashed border-slate-700/80 bg-slate-800/30 flex items-center justify-center text-sm font-black text-slate-500 select-none"
                 >
                   _
                 </div>
               ))}
-
-            {/* Time's Up Revealed Slots */}
-            {isTimeUp &&
-              targetWord.split('').map((letter, idx) => (
-                <div
-                  key={`revealed-${idx}`}
-                  className="w-10 h-11 sm:w-11 sm:h-12 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-black text-lg flex items-center justify-center select-none"
-                >
-                  {letter}
-                </div>
-              ))}
           </div>
         </div>
 
-        {/* Error / Alert Message */}
-        {errorNotice && (
-          <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-2 animate-in fade-in">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{errorNotice}</span>
-          </div>
-        )}
-
-        {/* 5. SCRAMBLED LETTERS BANK */}
+        {/* 5. SCRAMBLED LETTER BANK */}
         {!isCompleted && !isTimeUp && (
           <div className="space-y-2">
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Arrange The Letters</span>
-              {gameState === 'idle' && (
-                <span className="text-cyan-400 text-[10px] font-bold animate-pulse">
-                  Tap any letter to start timer
-                </span>
-              )}
+              <span>Scrambled Letters</span>
+              <span className="text-[10px] text-slate-500">Tap letters to spell</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-wrap gap-2.5 items-center justify-center min-h-[70px]">
-              {availableTiles.length === 0 ? (
-                <span className="text-xs text-slate-500 italic py-2">
-                  All letters placed. Click &ldquo;Check Answer&rdquo; below!
-                </span>
-              ) : (
-                availableTiles.map((tile) => (
-                  <button
-                    key={tile.id}
-                    onClick={() => handleSelectLetter(tile)}
-                    disabled={isAnimating}
-                    className="w-11 h-12 sm:w-12 sm:h-13 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-blue-900/60 hover:to-slate-800 border border-blue-400/30 hover:border-cyan-400 text-cyan-100 text-lg sm:text-xl font-black shadow-md hover:shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer select-none flex items-center justify-center"
-                  >
-                    {tile.letter}
-                  </button>
-                ))
+            <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex flex-wrap items-center justify-center gap-2">
+              {availableTiles.map((tile) => (
+                <button
+                  key={tile.id}
+                  type="button"
+                  onClick={() => handleSelectLetter(tile)}
+                  disabled={isAnimating || isSubmitting}
+                  className="w-10 h-11 sm:w-11 sm:h-12 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-black text-lg sm:text-xl shadow-xs flex items-center justify-center select-none active:scale-95 transition-all cursor-pointer hover:border-cyan-400 hover:text-cyan-300"
+                >
+                  {tile.letter}
+                </button>
+              ))}
+              {availableTiles.length === 0 && (
+                <div className="text-xs font-semibold text-slate-500 italic py-2">
+                  All letters placed! Check your answer below.
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* 6. SUCCESS CARD */}
+        {/* 6. SUCCESS / RESULTS CARD */}
         {isCompleted && (
           <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-teal-950/30 border border-emerald-500/40 space-y-3 animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400 font-black text-sm sm:text-base">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>✓ Correct Spelling!</span>
+                <span>✓ Challenge Complete!</span>
               </div>
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-xs font-black flex items-center gap-1 shadow-xs">
                 <Zap className="w-3.5 h-3.5 fill-slate-950" />
@@ -472,12 +526,18 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             </div>
 
             <div className="text-xl sm:text-2xl font-black text-white tracking-widest font-mono">
-              {scramble.word}
+              {activeScramble.word}
             </div>
 
             <p className="text-xs text-slate-300 font-medium leading-relaxed">
-              {scramble.clue}
+              {activeScramble.clue}
             </p>
+
+            <div className="pt-2 flex items-center justify-between text-xs text-slate-400 border-t border-emerald-500/20">
+              <span>Score: <strong className="text-emerald-400">1 / 1</strong></span>
+              <span>Level: <strong className="text-cyan-300">{activeScramble.difficulty}</strong></span>
+              <span>XP Earned: <strong className="text-amber-400">+{earnedXP} XP</strong></span>
+            </div>
           </div>
         )}
 
@@ -495,7 +555,7 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             </div>
 
             <div className="text-lg font-black text-white font-mono tracking-wider">
-              Correct Word: <span className="text-cyan-300">{scramble.word}</span>
+              Correct Word: <span className="text-cyan-300">{activeScramble.word}</span>
             </div>
 
             <p className="text-xs text-slate-400 font-medium">
@@ -504,7 +564,37 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
           </div>
         )}
 
-        {/* 8. ACTION CONTROLS */}
+        {/* 8. POST-GAME ACTION BUTTONS (PLAY AGAIN & NEXT LEVEL) */}
+        {(isCompleted || isTimeUp) && (
+          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5 animate-in fade-in">
+            <button
+              type="button"
+              onClick={handlePlayAgain}
+              className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+            >
+              <RotateCcw className="w-4 h-4 text-cyan-400" />
+              <span>PLAY AGAIN</span>
+            </button>
+
+            {nextScramble ? (
+              <button
+                type="button"
+                onClick={handleNextLevel}
+                className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+              >
+                <span>NEXT LEVEL ({nextScramble.difficulty || 'Next'})</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>All Levels Mastered!</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 9. IN-GAME ACTION CONTROLS */}
         {!isCompleted && !isTimeUp && (
           <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">

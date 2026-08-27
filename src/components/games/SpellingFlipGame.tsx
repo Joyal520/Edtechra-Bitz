@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Trophy,
   Volume2,
-  VolumeX
+  VolumeX,
+  RotateCcw
 } from 'lucide-react';
 import {
   SpellingFlipCardItem,
@@ -27,6 +28,8 @@ interface SpellingFlipGameProps {
   level?: SpellingFlipLevel;
   onClose?: () => void;
   onSessionCompleted?: (stats: { correct: number; total: number; totalXp: number }) => void;
+  onNextLevel?: () => void;
+  hasNextLevel?: boolean;
 }
 
 type GamePhase = 'MEMORIZE' | 'RECALL' | 'FEEDBACK' | 'SUMMARY';
@@ -35,7 +38,9 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
   cards: initialCards,
   level: initialLevel = 'easy',
   onClose,
-  onSessionCompleted
+  onSessionCompleted,
+  onNextLevel,
+  hasNextLevel
 }) => {
   const [selectedLevel] = useState<SpellingFlipLevel>(initialLevel);
   const [cardPool, setCardPool] = useState<SpellingFlipCardItem[]>(initialCards || []);
@@ -574,14 +579,42 @@ export const SpellingFlipGame: React.FC<SpellingFlipGameProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="w-full pt-2">
+            <div className="w-full pt-2 flex flex-col sm:flex-row items-center gap-2.5">
               <button
                 type="button"
-                onClick={onClose || (() => setPhase('MEMORIZE'))}
-                className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => {
+                  setCurrentIndex(0);
+                  setSessionResults([]);
+                  setTypedAnswer('');
+                  setFeedbackResult(null);
+                  if (cardPool.length > 0) {
+                    startRound(cardPool[0]);
+                  }
+                }}
+                className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
               >
-                <span>BACK TO FEED</span>
+                <RotateCcw className="w-4 h-4 text-cyan-400" />
+                <span>PLAY AGAIN</span>
               </button>
+
+              {hasNextLevel && onNextLevel ? (
+                <button
+                  type="button"
+                  onClick={onNextLevel}
+                  className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+                >
+                  <span>NEXT LEVEL</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full sm:flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px]"
+                >
+                  <span>CLOSE</span>
+                </button>
+              )}
             </div>
           </div>
         )}

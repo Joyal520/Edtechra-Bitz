@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   RotateCcw,
   Undo2,
@@ -6,7 +6,9 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Zap
+  Zap,
+  ArrowRight,
+  Trophy
 } from 'lucide-react';
 import { ReorderActivity, WordTile, ReorderAttemptResult } from '@/types/reorder';
 import { reorderService } from '@/services/reorderService';
@@ -17,41 +19,64 @@ import { shuffleSentenceWords } from '@/utils/reorderValidation';
 
 interface ReorderSentenceCardProps {
   reorder: ReorderActivity;
+  allReorders?: ReorderActivity[];
   onAttemptCompleted?: (activityId: string, result: ReorderAttemptResult) => void;
 }
 
 export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
-  reorder,
+  reorder: initialReorder,
+  allReorders = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
   const cardRef = useRef<HTMLElement>(null);
 
+  const [activeReorder, setActiveReorder] = useState<ReorderActivity>(initialReorder);
+
+  useEffect(() => {
+    if (initialReorder && initialReorder.id !== activeReorder.id) {
+      setActiveReorder(initialReorder);
+    }
+  }, [initialReorder]);
+
+  // Next reorder detection from pool
+  const nextReorder = useMemo(() => {
+    if (!allReorders || allReorders.length === 0) return null;
+    const currentIndex = allReorders.findIndex(r => r.id === activeReorder.id);
+    if (currentIndex >= 0 && currentIndex < allReorders.length - 1) {
+      return allReorders[currentIndex + 1];
+    }
+    return null;
+  }, [allReorders, activeReorder]);
+
   // Initialize word tiles using unbiased Fisher–Yates shuffle with non-identity guarantee
-  const initialTiles = useMemo<WordTile[]>(() => {
-    const correctWords = Array.isArray(reorder.correct_order) && reorder.correct_order.length > 0
-      ? reorder.correct_order
-      : reorder.sentence.split(/\s+/).filter(Boolean);
+  const generateWordTiles = useCallback((item: ReorderActivity): WordTile[] => {
+    const correctWords = Array.isArray(item.correct_order) && item.correct_order.length > 0
+      ? item.correct_order
+      : item.sentence.split(/\s+/).filter(Boolean);
 
     let wordsToScramble: string[] = [];
-    if (Array.isArray(reorder.scrambled_words) && reorder.scrambled_words.length === correctWords.length) {
-      // Check if pre-stored scrambled words already differ from correct order
-      const isIdentical = reorder.scrambled_words.every((w, idx) => w === correctWords[idx]);
+    if (Array.isArray(item.scrambled_words) && item.scrambled_words.length === correctWords.length) {
+      const isIdentical = item.scrambled_words.every((w, idx) => w === correctWords[idx]);
       wordsToScramble = isIdentical
         ? shuffleSentenceWords(correctWords)
-        : reorder.scrambled_words;
+        : item.scrambled_words;
     } else {
       wordsToScramble = shuffleSentenceWords(correctWords);
     }
 
     return wordsToScramble.map((word, index) => ({
-      id: `tile-${reorder.id}-${index}-${word}`,
+      id: `tile-${item.id}-${index}-${word}-${Date.now()}`,
       word,
       originalIndex: index
     }));
-  }, [reorder]);
+  }, []);
 
-  const targetCount = reorder.correct_order?.length || reorder.sentence.split(/\s+/).length;
+  const initialTiles = useMemo<WordTile[]>(() => {
+    return generateWordTiles(activeReorder);
+  }, [activeReorder, generateWordTiles]);
+
+  const targetCount = activeReorder.correct_order?.length || activeReorder.sentence.split(/\s+/).length;
 
   // Interaction & Game State
   const [availableTiles, setAvailableTiles] = useState<WordTile[]>(initialTiles);
@@ -59,31 +84,46 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [isShaking, setIsShaking] = useState<boolean>(false);
   const [usedHint, setUsedHint] = useState<boolean>(false);
-  const [result, setResult] = useState<ReorderAttemptResult | null>(null);
+  const [result, setResult] = useState<ReorderAttemptResult | null>(() => {
+    if (typeof window !== 'undefined' && activeReorder?.id) {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_reorder_${activeReorder.id}`);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
-  // Reset state if activity prop changes
+  // Reset state if activeReorder changes
   useEffect(() => {
-    setAvailableTiles(initialTiles);
+    const tiles = generateWordTiles(activeReorder);
+    setAvailableTiles(tiles);
     setPlacedTiles([]);
     setUsedHint(false);
-    setResult(null);
     setErrorNotice(null);
-  }, [initialTiles]);
 
-  // If already completed in previous session
-  useEffect(() => {
-    if (reorder.has_completed && !result) {
-      setResult({
-        is_correct: true,
-        correct_sentence: reorder.sentence,
-        explanation: reorder.explanation || undefined,
-        xp_awarded: reorder.xp || 10,
-        already_completed: true
-      });
+    let existingResult: ReorderAttemptResult | null = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_reorder_${activeReorder.id}`);
+        if (saved) existingResult = JSON.parse(saved);
+      } catch (e) {}
     }
-  }, [reorder.has_completed, reorder.sentence, reorder.explanation, reorder.xp, result]);
+
+    if (!existingResult && activeReorder.has_completed) {
+      existingResult = {
+        is_correct: true,
+        correct_sentence: activeReorder.sentence,
+        explanation: activeReorder.explanation || undefined,
+        xp_awarded: activeReorder.xp || 10,
+        already_completed: true
+      };
+    }
+
+    setResult(existingResult);
+  }, [activeReorder, generateWordTiles]);
 
   /**
    * Render-Time First Word Capitalization
@@ -160,7 +200,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
     if (isAnimating || usedHint || result?.is_correct || placedTiles.length >= targetCount) return;
 
     const nextIndex = placedTiles.length;
-    const expectedWord = reorder.correct_order[nextIndex];
+    const expectedWord = activeReorder.correct_order[nextIndex];
     if (!expectedWord) return;
 
     // Find matching available tile (case-insensitive)
@@ -193,7 +233,7 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
    */
   const checkCompletedSentence = async (tiles: WordTile[]) => {
     const userWords = tiles.map((t) => t.word.trim().toLowerCase());
-    const expectedWords = reorder.correct_order.map((w) => w.trim().toLowerCase());
+    const expectedWords = activeReorder.correct_order.map((w: string) => w.trim().toLowerCase());
 
     const isMatch =
       userWords.length === expectedWords.length &&
@@ -203,29 +243,39 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
       // Correct!
       reorderAudio.playCorrectChime();
       triggerConfetti(cardRef.current);
-
       setIsSubmitting(true);
       try {
         const token = session?.access_token || null;
         const attemptRes = await reorderService.submitCompletion(
-          reorder.id,
+          activeReorder.id,
           tiles.map((t) => t.word),
           usedHint,
           token
         );
         setResult(attemptRes);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`edtechra_completed_reorder_${activeReorder.id}`, JSON.stringify(attemptRes));
+          } catch (e) {}
+        }
         if (onAttemptCompleted) {
-          onAttemptCompleted(reorder.id, attemptRes);
+          onAttemptCompleted(activeReorder.id, attemptRes);
         }
       } catch (err: any) {
         console.error('[ReorderSentenceCard] Submit completion error:', err);
-        setResult({
+        const fallbackRes = {
           is_correct: true,
-          correct_sentence: reorder.sentence,
-          explanation: reorder.explanation || undefined,
-          xp_awarded: usedHint ? Math.max(5, (reorder.xp || 10) - 2) : (reorder.xp || 10),
+          correct_sentence: activeReorder.sentence,
+          explanation: activeReorder.explanation || undefined,
+          xp_awarded: usedHint ? Math.max(5, (activeReorder.xp || 10) - 2) : (activeReorder.xp || 10),
           already_completed: false
-        });
+        };
+        setResult(fallbackRes);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`edtechra_completed_reorder_${activeReorder.id}`, JSON.stringify(fallbackRes));
+          } catch (e) {}
+        }
       } finally {
         setIsSubmitting(false);
       }
@@ -240,8 +290,30 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
     }
   };
 
+  /**
+   * Play Again: Restarts this sentence with a fresh randomized shuffle
+   */
+  const handlePlayAgain = () => {
+    const freshTiles = generateWordTiles(activeReorder);
+    setAvailableTiles(freshTiles);
+    setPlacedTiles([]);
+    setUsedHint(false);
+    setResult(null);
+    setErrorNotice(null);
+    reorderAudio.playTileClick();
+  };
+
+  /**
+   * Next Level / Sentence: Advances to next sentence in pool without scrolling
+   */
+  const handleNextLevel = () => {
+    if (nextReorder) {
+      setActiveReorder(nextReorder);
+    }
+  };
+
   const isCompleted = Boolean(result?.is_correct);
-  const earnedXP = result?.xp_awarded ?? (usedHint ? Math.max(5, (reorder.xp || 10) - 2) : (reorder.xp || 10));
+  const earnedXP = result?.xp_awarded ?? (usedHint ? Math.max(5, (activeReorder.xp || 10) - 2) : (activeReorder.xp || 10));
 
   return (
     <article
@@ -260,17 +332,17 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {reorder.category && (
+          {activeReorder.category && (
             <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs text-[10px] font-extrabold">
-              {reorder.category}
+              {activeReorder.category}
             </span>
           )}
           <span className="px-2 py-0.5 rounded-full bg-black/30 text-[10px] font-extrabold text-cyan-200">
-            Level {reorder.level || 'A1'}
+            Level {activeReorder.level || 'A1'}
           </span>
           <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black shadow-2xs flex items-center gap-1">
             <Zap className="w-3 h-3 fill-slate-950" />
-            +{reorder.xp || 10} XP
+            +{activeReorder.xp || 10} XP
           </span>
         </div>
       </div>
@@ -298,65 +370,44 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
               : 'border-blue-500/30 shadow-inner'
           }`}
         >
-          {placedTiles.map((tile, idx) => (
-            <button
-              key={tile.id}
-              onClick={() => {
-                // Clicking placed tile returns it to bank
-                if (!isCompleted && !isAnimating) {
-                  reorderAudio.playUndoPop();
-                  setPlacedTiles((prev) => prev.filter((_, i) => i !== idx));
-                  setAvailableTiles((prev) => [...prev, tile]);
-                }
-              }}
-              disabled={isCompleted || isAnimating}
-              className={`min-h-[38px] sm:min-h-[42px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm md:text-base font-bold shadow-md transition-all cursor-pointer select-none max-w-full truncate ${
-                isCompleted
-                  ? 'bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-emerald-900/30'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:scale-103 active:scale-95 shadow-cyan-900/30'
-              }`}
-              title="Tap to return word to bank"
-            >
-              {formatWordDisplay(tile.word, idx)}
-            </button>
-          ))}
-
-          {/* Empty Placeholder Slots */}
-          {!isCompleted &&
-            Array.from({ length: Math.max(0, targetCount - placedTiles.length) }).map((_, placeholderIdx) => (
-              <div
-                key={`placeholder-${placeholderIdx}`}
-                className="h-9 sm:h-10 min-w-[42px] sm:min-w-[48px] px-2.5 sm:px-3 rounded-xl border-2 border-dashed border-slate-700/80 bg-slate-800/30 flex items-center justify-center text-xs text-slate-500 select-none"
+          {placedTiles.length === 0 && !isCompleted ? (
+            <span className="text-xs sm:text-sm text-slate-500 font-medium italic pl-1 select-none">
+              Select words below to construct your sentence…
+            </span>
+          ) : (
+            placedTiles.map((tile, index) => (
+              <button
+                key={tile.id}
+                onClick={handleUndo}
+                disabled={isCompleted || isAnimating}
+                className="min-h-[38px] sm:min-h-[44px] px-3 sm:px-4 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-1.5 select-none active:scale-95 transition-all cursor-pointer border border-cyan-400/40"
+                title="Tap to remove"
               >
-                _
-              </div>
-            ))}
+                <span>{formatWordDisplay(tile.word, index)}</span>
+              </button>
+            ))
+          )}
         </div>
 
-        {/* Error Feedback Message (Gentle & Actionable) */}
-        {errorNotice && !isCompleted && (
-          <div className="p-2.5 sm:p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-2 animate-in fade-in">
+        {/* Error / Alert Message */}
+        {errorNotice && (
+          <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-2 animate-in fade-in">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span className="learning-content-text">{errorNotice}</span>
+            <span>{errorNotice}</span>
           </div>
         )}
 
-        {/* 4. SCRAMBLED WORD BANK (Interactive Tiles) — Responsive Auto-Wrap, Touch Targets >= 44px */}
+        {/* 4. SCRAMBLED WORD TILES BANK */}
         {!isCompleted && (
-          <div className="space-y-1.5 sm:space-y-2">
-            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
               <span>Word Bank</span>
-              {reorder.hint && !usedHint && (
-                <span className="text-amber-400 text-[10px] lowercase italic font-normal">
-                  💡 hint available
-                </span>
-              )}
             </div>
 
-            <div className="p-3 sm:p-4 rounded-2xl bg-slate-900/50 border border-slate-800/80 flex flex-wrap gap-2 sm:gap-2.5 items-center justify-center min-h-[56px] sm:min-h-[64px]">
+            <div className="p-3 sm:p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex flex-wrap gap-2 items-center justify-center min-h-[60px]">
               {availableTiles.length === 0 ? (
-                <span className="text-xs text-slate-500 italic py-2">
-                  All words placed. Evaluating sentence...
+                <span className="text-xs text-slate-500 italic py-1">
+                  All words placed!
                 </span>
               ) : (
                 availableTiles.map((tile) => (
@@ -389,19 +440,55 @@ export const ReorderSentenceCard: React.FC<ReorderSentenceCardProps> = ({
             </div>
 
             <div className="text-sm sm:text-base md:text-lg font-black text-white leading-relaxed tracking-wide">
-              &ldquo;{reorder.sentence}&rdquo;
+              &ldquo;{activeReorder.sentence}&rdquo;
             </div>
 
-            {reorder.explanation && (
+            {activeReorder.explanation && (
               <div className="p-2.5 sm:p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 text-slate-300 leading-relaxed font-medium learning-content-text">
                 <span className="font-bold text-cyan-300 mr-1">Explanation:</span>
-                {reorder.explanation}
+                {activeReorder.explanation}
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-between text-xs text-slate-400 border-t border-emerald-500/20">
+              <span>Score: <strong className="text-emerald-400">1 / 1</strong></span>
+              <span>Level: <strong className="text-cyan-300">{activeReorder.level || 'A1'}</strong></span>
+              <span>XP Earned: <strong className="text-amber-400">+{earnedXP} XP</strong></span>
+            </div>
+          </div>
+        )}
+
+        {/* 6. POST-GAME ACTION BUTTONS (PLAY AGAIN & NEXT LEVEL) */}
+        {isCompleted && (
+          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5 animate-in fade-in">
+            <button
+              type="button"
+              onClick={handlePlayAgain}
+              className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+            >
+              <RotateCcw className="w-4 h-4 text-cyan-400" />
+              <span>PLAY AGAIN</span>
+            </button>
+
+            {nextReorder ? (
+              <button
+                type="button"
+                onClick={handleNextLevel}
+                className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
+              >
+                <span>NEXT SENTENCE ({nextReorder.level || 'Next'})</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>All Sentences Completed!</span>
               </div>
             )}
           </div>
         )}
 
-        {/* 6. ACTION CONTROLS (Undo, Reset, Hint) — Mobile Touch-Friendly */}
+        {/* 7. IN-GAME ACTION CONTROLS (Undo, Reset, Hint) */}
         {!isCompleted && (
           <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 sm:gap-2">

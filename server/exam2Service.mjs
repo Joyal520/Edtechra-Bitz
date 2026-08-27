@@ -321,7 +321,6 @@ function sampleTrueFalseQuestion(qIdx) {
 }
 
 export function normalizeExam(exam, payload) {
-  const totalMarks = payload.sections.reduce((sum, section) => sum + section.count * section.marks, 0);
   const normalized = {
     ...exam,
     metadata: {
@@ -329,9 +328,9 @@ export function normalizeExam(exam, payload) {
       examId: exam.metadata?.examId || cryptoId("exam"),
       examType: payload.examType,
       difficulty: payload.difficulty,
-      duration: `${payload.duration.value} ${payload.duration.unit}`,
-      totalMarks,
-      gradingMode: payload.gradingMode,
+      duration: `${payload.duration?.value || 60} ${payload.duration?.unit || 'Minutes'}`,
+      totalMarks: Number(payload.requiredTotal || 100),
+      gradingMode: payload.gradingMode || 'Hybrid Grading',
       status: "draft",
       generatedAt: new Date().toISOString(),
       approvalRequired: true,
@@ -340,8 +339,9 @@ export function normalizeExam(exam, payload) {
   };
 
   normalized.sections = (normalized.sections || []).map((section, sectionIndex) => {
-    const payloadSection = payload.sections[sectionIndex] || {};
+    const payloadSection = payload.sections?.[sectionIndex] || {};
     const sectionType = payloadSection.type || section.questionType || "Short Answer Questions";
+    const marksPerQ = Number(payloadSection.marks || section.marksPerQuestion || 10);
 
     const mappedQuestions = (section.questions || []).map((question, questionIndex) => {
       let options = Array.isArray(question.options) ? question.options.filter(Boolean) : [];
@@ -382,7 +382,8 @@ export function normalizeExam(exam, payload) {
         questionType: sectionType,
         questionText,
         correctAnswer,
-        options
+        options,
+        marks: marksPerQ
       };
     });
 
@@ -400,7 +401,8 @@ export function normalizeExam(exam, payload) {
         ...q,
         questionText: (q.questionText || "").split(/\s+/).slice(0, 3).join(" "),
         correctAnswer: (q.correctAnswer || "").split(/\s+/).slice(0, 3).join(" "),
-        options: []
+        options: [],
+        marks: marksPerQ
       }));
     }
 
@@ -409,17 +411,23 @@ export function normalizeExam(exam, payload) {
       sectionPassage = payload.content ? payload.content.slice(0, 400) : "Reading passage context.";
     }
 
+    const sectionTotal = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
+
     return {
       ...section,
       sectionId: section.sectionId || cryptoId("sec"),
       questionType: sectionType,
       title: section.title || sectionType,
       instruction: section.instruction || payloadSection.instruction || "",
-      totalMarks: questions.reduce((sum, q) => sum + Number(q.marks || 0), 0),
+      marksPerQuestion: marksPerQ,
+      totalMarks: sectionTotal,
       questions,
       passage: sectionPassage
     };
   });
+
+  const calculatedTotalMarks = normalized.sections.reduce((sum, s) => sum + Number(s.totalMarks || 0), 0);
+  normalized.metadata.totalMarks = calculatedTotalMarks;
 
   return normalized;
 }
@@ -430,7 +438,13 @@ export function normalizeExam(exam, payload) {
 
 export function gradeExamAttempt(examPayload, answers = {}) {
   const sections = examPayload?.sections || examPayload?.questions_json || [];
-  const questions = sections.flatMap((section) => section.questions || []);
+  const questions = sections.flatMap((section) => {
+    const sType = section.questionType || section.title || section.type || '';
+    return (section.questions || []).map(q => ({
+      ...q,
+      questionType: q.questionType || q.type || sType
+    }));
+  });
 
   const breakdown = questions.map((question) => {
     const submitted = answers[question.questionId] !== undefined ? answers[question.questionId] : answers[question.id];
@@ -453,7 +467,7 @@ export function gradeExamAttempt(examPayload, answers = {}) {
     }
 
     const marks = Number(question.marks || 10);
-    const score = isExact ? marks : hybrid ? Math.round(marks * 0.7) : 0;
+    const score = isExact ? marks : (hybrid && cleanSubmitted.length > 0) ? Math.round(marks * 0.7) : 0;
 
     return {
       questionId: question.questionId || question.id,
@@ -464,7 +478,7 @@ export function gradeExamAttempt(examPayload, answers = {}) {
       maxScore: marks,
       isCorrect: isExact,
       isHybrid: hybrid,
-      feedback: isExact ? "Correct answer." : hybrid ? "Provisional rubric score assigned." : "Incorrect. Review topic."
+      feedback: isExact ? "Correct answer." : (hybrid && cleanSubmitted.length > 0) ? "Provisional rubric score assigned." : "Incorrect or unattempted. Review topic."
     };
   });
 
@@ -604,7 +618,7 @@ export async function getTeacherExamsFromSupabase(serverSupabase, teacherId) {
   if (!serverSupabase || !teacherId) return [];
 
   try {
-    // 1. Fetch exams created by this teacher (try with teacher_id or fallback to created_by)
+    // 1. Fetch all exams created by this teacher (master templates + publications)
     let exams = null;
     const queryRes = await serverSupabase
       .from('classroom_exams')
@@ -612,25 +626,35 @@ export async function getTeacherExamsFromSupabase(serverSupabase, teacherId) {
         *,
         classroom:classrooms!classroom_id (id, title, subject, grade)
       `)
-      .eq('created_by', teacherId)
+      .or(`created_by.eq.${teacherId},teacher_id.eq.${teacherId}`)
       .order('created_at', { ascending: false });
 
     if (queryRes.error) {
       console.error('[Exam2Service] getTeacherExams error:', queryRes.error.message);
       return [];
     }
-    exams = queryRes.data;
+    exams = queryRes.data || [];
+    if (exams.length === 0) return [];
 
-    const examList = exams || [];
-    if (examList.length === 0) return [];
+    const allExamIds = exams.map(e => e.id);
 
-    const examIds = examList.map(e => e.id);
-
-    // 2. Fetch submission aggregates for these exams
+    // 2. Fetch submission aggregates for all these exams
     const { data: results } = await serverSupabase
       .from('classroom_exam_results')
-      .select('id, exam_id, score, total_marks, percentage, passed, student_id, submitted_at, report_r2_key')
-      .in('exam_id', examIds);
+      .select(`
+        id,
+        exam_id,
+        classroom_id,
+        score,
+        total_marks,
+        percentage,
+        passed,
+        student_id,
+        submitted_at,
+        report_r2_key,
+        student:profiles!student_id (id, full_name, email, avatar_url)
+      `)
+      .in('exam_id', allExamIds);
 
     const resultsByExam = {};
     (results || []).forEach(r => {
@@ -638,30 +662,97 @@ export async function getTeacherExamsFromSupabase(serverSupabase, teacherId) {
       resultsByExam[r.exam_id].push(r);
     });
 
-    // 3. Enrich exams with analytics and R2 report pointers
-    return examList.map(exam => {
-      const examResults = resultsByExam[exam.id] || [];
-      const totalSubs = examResults.length;
-      const scores = examResults.map(r => Number(r.score || 0));
+    // 3. Group by root / master exam (group children with parent_exam_id to parent)
+    const masterExamsMap = new Map();
+    const childPublicationsMap = new Map();
+
+    exams.forEach(exam => {
+      if (exam.parent_exam_id) {
+        if (!childPublicationsMap.has(exam.parent_exam_id)) {
+          childPublicationsMap.set(exam.parent_exam_id, []);
+        }
+        childPublicationsMap.get(exam.parent_exam_id).push(exam);
+      } else {
+        masterExamsMap.set(exam.id, exam);
+      }
+    });
+
+    // For any orphaned child publications whose parent was not returned, treat as top-level
+    exams.forEach(exam => {
+      if (exam.parent_exam_id && !masterExamsMap.has(exam.parent_exam_id)) {
+        masterExamsMap.set(exam.id, exam);
+      }
+    });
+
+    // 4. Build enriched response with assigned classes list and aggregate results
+    const enrichedList = [];
+    for (const [masterId, masterExam] of masterExamsMap.entries()) {
+      const children = childPublicationsMap.get(masterId) || [];
+      const allInstances = [masterExam, ...children];
+
+      // Collect all assigned classrooms
+      const classMap = new Map();
+      allInstances.forEach(inst => {
+        if (inst.classroom && inst.classroom.id) {
+          classMap.set(inst.classroom.id, {
+            id: inst.classroom.id,
+            title: inst.classroom.title,
+            grade: inst.classroom.grade,
+            subject: inst.classroom.subject,
+            publication_id: inst.id,
+            published_at: inst.published_at || inst.created_at,
+            status: inst.status
+          });
+        }
+      });
+      const classesList = Array.from(classMap.values());
+
+      // Collect all submissions across all publications of this exam
+      const allResults = [];
+      allInstances.forEach(inst => {
+        const instResults = resultsByExam[inst.id] || [];
+        instResults.forEach(r => {
+          allResults.push({
+            ...r,
+            classroom_title: inst.classroom?.title || 'Classroom'
+          });
+        });
+      });
+
+      const totalSubs = allResults.length;
+      const scores = allResults.map(r => Number(r.score || 0));
+      const totalMarks = Number(masterExam.total_marks || 100);
       const avgScore = totalSubs > 0 ? Number((scores.reduce((a, b) => a + b, 0) / totalSubs).toFixed(1)) : 0;
-      const passCount = examResults.filter(r => r.passed).length;
+      const passCount = allResults.filter(r => r.passed).length;
       const passRate = totalSubs > 0 ? Number(((passCount / totalSubs) * 100).toFixed(1)) : 0;
 
       // Extract question count
-      const questionsArray = Array.isArray(exam.questions_json) && exam.questions_json.length > 0
-        ? exam.questions_json.flatMap(s => s.questions || [])
-        : Array.isArray(exam.questions) ? exam.questions : [];
+      const questionsArray = Array.isArray(masterExam.questions_json) && masterExam.questions_json.length > 0
+        ? masterExam.questions_json.flatMap(s => s.questions || [])
+        : Array.isArray(masterExam.questions) ? masterExam.questions : [];
 
-      return {
-        ...exam,
+      enrichedList.push({
+        ...masterExam,
+        classes: classesList,
+        classes_count: classesList.length,
         question_count: questionsArray.length || 10,
         submission_count: totalSubs,
         average_score: avgScore,
         pass_rate: passRate,
-        results: examResults,
-        has_r2_report: Boolean(exam.r2_file_key || examResults.some(r => r.report_r2_key))
-      };
-    });
+        results: allResults,
+        publications: children.map(c => ({
+          id: c.id,
+          classroom_id: c.classroom_id,
+          classroom_title: c.classroom?.title || 'Classroom',
+          status: c.status,
+          published_at: c.published_at || c.created_at,
+          submissions_count: (resultsByExam[c.id] || []).length
+        })),
+        has_r2_report: Boolean(masterExam.r2_file_key || allResults.some(r => r.report_r2_key))
+      });
+    }
+
+    return enrichedList;
   } catch (err) {
     console.error('[Exam2Service] getTeacherExamsFromSupabase exception:', err);
     return [];
@@ -682,14 +773,21 @@ export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
   const title = metadata.title || payload.title || 'Classroom Exam';
   const durationStr = metadata.duration || publishing.duration || '60 Minutes';
   const durationMinutes = Number(parseInt(durationStr, 10)) || 60;
-  const totalMarks = Number(metadata.totalMarks || payload.total_marks || 100);
+
+  // Authoritative total marks: sum of all questions across sections
+  const questionsCount = sections.flatMap(s => s.questions || []).length;
+  const calculatedTotal = sections.flatMap(s => s.questions || []).reduce((sum, q) => sum + Number(q.marks || 0), 0)
+    || sections.reduce((sum, s) => sum + (Number(s.count || 0) * Number(s.marks || 0)), 0)
+    || Number(metadata.totalMarks || payload.total_marks || 100);
+
+  const totalMarks = calculatedTotal;
   const examType = metadata.examType || payload.exam_type || 'Unit Test';
   const difficulty = metadata.difficulty || payload.difficulty || 'Mixed';
   const gradingMode = metadata.gradingMode || payload.grading_mode || 'Hybrid Grading';
   const status = payload.status || (payload.approved ? 'published' : 'draft');
   const classroomId = payload.classroom_id || publishing.classroomId || null;
-
-  const questionsCount = sections.flatMap(s => s.questions || []).length;
+  const parentExamId = payload.parent_exam_id || null;
+  const version = Number(payload.version || 1);
 
   const insertRecord = {
     title,
@@ -712,6 +810,8 @@ export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
     },
     teacher_id: teacherId,
     created_by: teacherId,
+    parent_exam_id: parentExamId,
+    version,
     source: 'exam2',
     updated_at: new Date().toISOString()
   };
@@ -779,4 +879,147 @@ export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
   }
 
   return data;
+}
+
+/**
+ * Multi-Classroom Republishing Engine
+ * Creates separate publication records for each target classroom referencing the parent template exam.
+ * Keeps student attempts, submissions, and leaderboards strictly isolated.
+ */
+export async function republishExamToClassrooms(serverSupabase, {
+  examId,
+  classroomIds = [],
+  publishSettings = {},
+  teacherId
+}) {
+  if (!serverSupabase) throw new Error('Database client not configured.');
+  if (!examId) throw new Error('Source exam ID is required.');
+  if (!Array.isArray(classroomIds) || classroomIds.length === 0) {
+    throw new Error('At least one target classroom must be selected.');
+  }
+
+  // 1. Fetch the master / source exam template
+  const { data: sourceExam, error: fetchErr } = await serverSupabase
+    .from('classroom_exams')
+    .select('*')
+    .eq('id', examId)
+    .maybeSingle();
+
+  if (fetchErr || !sourceExam) {
+    throw new Error('Source exam not found or access denied.');
+  }
+
+  // 2. Fetch classroom details for metadata
+  const { data: classrooms } = await serverSupabase
+    .from('classrooms')
+    .select('id, title, grade, subject, teacher_id')
+    .in('id', classroomIds);
+
+  const classroomMap = new Map((classrooms || []).map(c => [c.id, c]));
+
+  const durationStr = publishSettings.duration || `${sourceExam.duration_minutes || 60} Minutes`;
+  const durationMinutes = Number(parseInt(durationStr, 10)) || sourceExam.duration_minutes || 60;
+  const startsAt = publishSettings.startDate ? new Date(`${publishSettings.startDate}T${publishSettings.startTime || '00:00:00'}`).toISOString() : null;
+  const endsAt = publishSettings.endDate ? new Date(`${publishSettings.endDate}T${publishSettings.endTime || '23:59:59'}`).toISOString() : null;
+
+  const rootParentId = sourceExam.parent_exam_id || sourceExam.id;
+  const publications = [];
+
+  for (const classId of classroomIds) {
+    const classInfo = classroomMap.get(classId);
+    const pubRecord = {
+      classroom_id: classId,
+      parent_exam_id: rootParentId,
+      teacher_id: teacherId || sourceExam.teacher_id || sourceExam.created_by,
+      created_by: teacherId || sourceExam.created_by,
+      title: sourceExam.title,
+      description: sourceExam.description || '',
+      instructions: sourceExam.instructions || '',
+      duration_minutes: durationMinutes,
+      total_marks: sourceExam.total_marks,
+      pass_marks: sourceExam.pass_marks || Math.round(sourceExam.total_marks * 0.4),
+      exam_type: sourceExam.exam_type || 'Unit Test',
+      difficulty: sourceExam.difficulty || 'Mixed',
+      grading_mode: sourceExam.grading_mode || 'Hybrid Grading',
+      max_attempts: Number(publishSettings.maxAttempts) || 1,
+      show_marks_immediately: publishSettings.showMarksImmediately !== undefined ? Boolean(publishSettings.showMarksImmediately) : true,
+      show_correct_answers: publishSettings.showAnswersAfterExam !== undefined ? Boolean(publishSettings.showAnswersAfterExam) : true,
+      allow_late_submission: Boolean(publishSettings.allowLateSubmission),
+      password: publishSettings.password || null,
+      status: 'published',
+      starts_at: startsAt,
+      ends_at: endsAt,
+      questions: sourceExam.questions,
+      questions_json: sourceExam.questions_json,
+      exam_config_json: {
+        ...(sourceExam.exam_config_json || {}),
+        publishing: {
+          ...publishSettings,
+          classroomId: classId,
+          classroomTitle: classInfo?.title || 'Classroom'
+        }
+      },
+      version: sourceExam.version || 1,
+      source: 'exam2',
+      published_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    let inserted = null;
+    const { data: pubData, error: pubErr } = await serverSupabase
+      .from('classroom_exams')
+      .insert(pubRecord)
+      .select()
+      .single();
+
+    if (pubErr) {
+      // Schema cache fallback with base columns
+      console.warn('[Exam2Service] Retrying publication with base schema:', pubErr.message);
+      const basePub = {
+        classroom_id: classId,
+        created_by: pubRecord.created_by,
+        title: pubRecord.title,
+        description: pubRecord.description,
+        instructions: pubRecord.instructions,
+        duration_minutes: pubRecord.duration_minutes,
+        total_marks: pubRecord.total_marks,
+        pass_marks: pubRecord.pass_marks,
+        status: 'published',
+        questions: pubRecord.questions,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        updated_at: new Date().toISOString()
+      };
+      const retryRes = await serverSupabase
+        .from('classroom_exams')
+        .insert(basePub)
+        .select()
+        .single();
+
+      if (!retryRes.error && retryRes.data) {
+        inserted = retryRes.data;
+      } else {
+        console.error('[Exam2Service] Failed to publish to classroom:', classId, retryRes.error?.message);
+      }
+    } else {
+      inserted = pubData;
+    }
+
+    if (inserted) {
+      publications.push({
+        publication_id: inserted.id,
+        classroom_id: classId,
+        classroom_title: classInfo?.title || 'Classroom',
+        published_at: inserted.published_at || inserted.created_at
+      });
+    }
+  }
+
+  return {
+    success: true,
+    publishedCount: publications.length,
+    publications,
+    parentExamId: rootParentId,
+    examTitle: sourceExam.title
+  };
 }

@@ -320,7 +320,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         document.documentElement.setAttribute('data-text-size', payload.text_size);
       }
 
-      // Upsert into Supabase profiles table
+      // 1. Upsert into Supabase profiles table
       const { error: dbError } = await supabase
         .from('profiles')
         .upsert(
@@ -336,7 +336,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Database profile update notice:', dbError.message);
       }
 
-      // Update Supabase Auth user metadata
+      // 2. Authoritative backend profile endpoint call
+      try {
+        const token = session?.access_token || (await supabase.auth.getSession()).data.session?.access_token;
+        if (token) {
+          await fetch('/api/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+      } catch (apiErr) {
+        console.warn('[AuthContext] /api/profile endpoint notice:', apiErr);
+      }
+
+      // 3. Update Supabase Auth user metadata
       try {
         const metaUpdates: Record<string, any> = {};
         if (payload.full_name !== undefined) {
@@ -355,19 +372,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[AuthContext] Auth metadata update notice:', metaErr);
       }
 
-      // Update local profile state immediately
-      setProfile((prev) => ({
+      // 4. Update local profile state immediately
+      const updatedProfile: UserProfile = {
         id: user.id,
         email: user.email || '',
-        full_name: payload.full_name !== undefined ? payload.full_name.trim() : (prev?.full_name || ''),
-        name: payload.full_name !== undefined ? payload.full_name.trim() : (prev?.name || ''),
-        avatar_url: payload.avatar_url !== undefined ? payload.avatar_url : (prev?.avatar_url || ''),
-        avatarUrl: payload.avatar_url !== undefined ? (payload.avatar_url || '') : (prev?.avatarUrl || ''),
-        text_size: payload.text_size !== undefined ? payload.text_size : (prev?.text_size || 'medium'),
-        role: user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : (prev?.role || 'student'),
-        created_at: prev?.created_at || user.created_at || new Date().toISOString(),
+        full_name: payload.full_name !== undefined ? payload.full_name.trim() : (profile?.full_name || ''),
+        name: payload.full_name !== undefined ? payload.full_name.trim() : (profile?.name || ''),
+        avatar_url: payload.avatar_url !== undefined ? (payload.avatar_url || '') : (profile?.avatar_url || ''),
+        avatarUrl: payload.avatar_url !== undefined ? (payload.avatar_url || '') : (profile?.avatarUrl || ''),
+        text_size: payload.text_size !== undefined ? payload.text_size : (profile?.text_size || 'medium'),
+        role: user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com' ? 'admin' : (profile?.role || 'student'),
+        created_at: profile?.created_at || user.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }));
+      };
+
+      setProfile(updatedProfile);
+
+      // 5. Notify all listeners across components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('edtechra:profile_updated', { detail: updatedProfile }));
+      }
 
       return {};
     } catch (err: any) {

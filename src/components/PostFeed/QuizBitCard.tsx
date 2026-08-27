@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   XCircle,
@@ -7,7 +7,10 @@ import {
   BookOpen,
   Check,
   X,
-  Loader2
+  Loader2,
+  RotateCcw,
+  ArrowRight,
+  Trophy
 } from 'lucide-react';
 import { QuizBit, QuizAttemptResult } from '@/types';
 import { quizService } from '@/services/quizService';
@@ -17,22 +20,76 @@ import { asmrAudio } from '@/utils/reorderAudio';
 
 interface QuizBitCardProps {
   quiz: QuizBit;
+  allQuizzes?: QuizBit[];
   onAttemptCompleted?: (quizId: string, result: QuizAttemptResult) => void;
 }
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D'];
 
 export const QuizBitCard: React.FC<QuizBitCardProps> = ({
-  quiz,
+  quiz: initialQuiz,
+  allQuizzes = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
   const cardRef = useRef<HTMLElement>(null);
 
+  const [activeQuiz, setActiveQuiz] = useState<QuizBit>(initialQuiz);
+
+  useEffect(() => {
+    if (initialQuiz && initialQuiz.id !== activeQuiz.id) {
+      setActiveQuiz(initialQuiz);
+    }
+  }, [initialQuiz]);
+
+  // Next quiz in pool
+  const nextQuiz = useMemo(() => {
+    if (!allQuizzes || allQuizzes.length === 0) return null;
+    const currentIndex = allQuizzes.findIndex(q => q.id === activeQuiz.id);
+    if (currentIndex >= 0 && currentIndex < allQuizzes.length - 1) {
+      return allQuizzes[currentIndex + 1];
+    }
+    return null;
+  }, [allQuizzes, activeQuiz]);
+
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [result, setResult] = useState<QuizAttemptResult | null>(null);
+  const [result, setResult] = useState<QuizAttemptResult | null>(() => {
+    if (typeof window !== 'undefined' && activeQuiz?.id) {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_quiz_${activeQuiz.id}`);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state when activeQuiz changes
+  useEffect(() => {
+    setSelectedOption(null);
+    setError(null);
+
+    let existingResult: QuizAttemptResult | null = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(`edtechra_completed_quiz_${activeQuiz.id}`);
+        if (saved) existingResult = JSON.parse(saved);
+      } catch (e) {}
+    }
+
+    if (!existingResult && activeQuiz.has_completed) {
+      existingResult = {
+        is_correct: true,
+        correct_answer: activeQuiz.correct_answer || (activeQuiz as any).correct_option || '',
+        explanation: activeQuiz.explanation,
+        xp_awarded: activeQuiz.xp || 10,
+        already_attempted: true
+      };
+    }
+
+    setResult(existingResult);
+  }, [activeQuiz]);
 
   const handleSelectOption = async (option: string) => {
     if (submitting || result) return;
@@ -46,8 +103,14 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
 
     try {
       const token = session?.access_token || null;
-      const attemptResult = await quizService.submitAttempt(quiz.id, option, token);
+      const attemptResult = await quizService.submitAttempt(activeQuiz.id, option, token);
       setResult(attemptResult);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`edtechra_completed_quiz_${activeQuiz.id}`, JSON.stringify(attemptResult));
+        } catch (e) {}
+      }
 
       if (attemptResult.is_correct) {
         // ASMR celebratory double-pop + harmonic sparkle chime
@@ -60,7 +123,7 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
       }
 
       if (onAttemptCompleted) {
-        onAttemptCompleted(quiz.id, attemptResult);
+        onAttemptCompleted(activeQuiz.id, attemptResult);
       }
     } catch (err: any) {
       console.error('[QuizBitCard] Submit attempt error:', err);
@@ -71,11 +134,24 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
     }
   };
 
+  const handlePlayAgain = () => {
+    setSelectedOption(null);
+    setResult(null);
+    setError(null);
+    asmrAudio.playAsmrPop();
+  };
+
+  const handleNextQuiz = () => {
+    if (nextQuiz) {
+      setActiveQuiz(nextQuiz);
+    }
+  };
+
   const isAnswered = Boolean(result);
   const isCorrect = result?.is_correct ?? false;
-  const correctAnswer = result?.correct_answer;
-  const explanation = result?.explanation || quiz.explanation;
-  const xpEarned = result?.xp_awarded ?? (quiz.xp || 10);
+  const correctAnswer = result?.correct_answer || activeQuiz.correct_answer || (activeQuiz as any).correct_option;
+  const explanation = result?.explanation || activeQuiz.explanation;
+  const xpEarned = result?.xp_awarded ?? (activeQuiz.xp || 10);
 
   return (
     <article
@@ -94,14 +170,14 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {quiz.category && (
+          {activeQuiz.category && (
             <span className="px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs text-[10px] font-extrabold text-white">
-              {quiz.category}
+              {activeQuiz.category}
             </span>
           )}
           <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[10px] font-black shadow-2xs flex items-center gap-1">
             <Zap className="w-3 h-3 fill-slate-900" />
-            +{quiz.xp || 10} XP
+            +{activeQuiz.xp || 10} XP
           </span>
         </div>
       </div>
@@ -115,24 +191,24 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
             <span>Interactive Knowledge Check</span>
           </span>
           <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
-            quiz.difficulty?.toLowerCase() === 'hard'
+            activeQuiz.difficulty?.toLowerCase() === 'hard'
               ? 'bg-rose-50 text-rose-700 border border-rose-200'
-              : quiz.difficulty?.toLowerCase() === 'medium'
+              : activeQuiz.difficulty?.toLowerCase() === 'medium'
               ? 'bg-amber-50 text-amber-700 border border-amber-200'
               : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
           }`}>
-            {quiz.difficulty || 'Easy'}
+            {activeQuiz.difficulty || 'Easy'}
           </span>
         </div>
 
         {/* Question text */}
         <h3 className="font-black text-[#0f233a] leading-snug learning-question-text">
-          {quiz.question}
+          {activeQuiz.question}
         </h3>
 
         {/* 3. Four Large Touch-Friendly Options */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-          {quiz.options.map((option, index) => {
+          {activeQuiz.options.map((option, index) => {
             const letter = OPTION_LETTERS[index] || String(index + 1);
             const isSelected = selectedOption === option;
 
@@ -274,6 +350,34 @@ export const QuizBitCard: React.FC<QuizBitCardProps> = ({
               </p>
             </div>
           )}
+
+          {/* Action Buttons: Play Again & Next Quiz */}
+          <div className="mt-3.5 pt-3 border-t border-stone-200/80 flex flex-col sm:flex-row items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handlePlayAgain}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-black border border-slate-200 shadow-2xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-[#026fc3]" />
+              <span>PLAY AGAIN</span>
+            </button>
+
+            {nextQuiz ? (
+              <button
+                type="button"
+                onClick={handleNextQuiz}
+                className="w-full sm:flex-1 py-2.5 px-4 bg-gradient-to-r from-[#026fc3] via-[#0e8ce4] to-teal-500 hover:from-[#025ea6] hover:to-teal-600 text-white text-xs sm:text-sm font-black rounded-2xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[42px]"
+              >
+                <span>NEXT QUIZ</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <div className="w-full sm:flex-1 py-2.5 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-500 flex items-center justify-center gap-1.5 min-h-[42px]">
+                <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                <span>All Quizzes Completed!</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </article>

@@ -345,19 +345,71 @@ class ReadingService {
   }
 
   /**
-   * Records student reading completion
+   * Starts or resumes a server-authoritative reading timer session
    */
-  async completeReading(readingId: string, token?: string | null): Promise<void> {
+  async startReadingSession(
+    readingId: string,
+    token?: string | null
+  ): Promise<{
+    success: boolean;
+    started_at: string;
+    elapsed_seconds: number;
+    required_seconds: number;
+    is_resumed?: boolean;
+    is_completed?: boolean;
+  }> {
     try {
       const headers = await this.getAuthHeaders(token);
-      await fetch('/api/readings/complete', {
+      const res = await fetch('/api/readings/start-session', {
         method: 'POST',
         headers,
         body: JSON.stringify({ readingId })
       });
-    } catch {
-      // Non-critical
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to start reading session.');
+      }
+
+      return json;
+    } catch (err: any) {
+      console.warn('[ReadingService] startReadingSession fallback:', err.message);
+      return {
+        success: true,
+        started_at: new Date().toISOString(),
+        elapsed_seconds: 0,
+        required_seconds: 60,
+        is_resumed: false
+      };
     }
+  }
+
+  /**
+   * Submits student reading completion for server-side 60s validation and +15 XP awarding
+   */
+  async completeReading(
+    readingId: string,
+    token?: string | null
+  ): Promise<{
+    success: boolean;
+    completed: boolean;
+    xp_awarded: number;
+    already_completed?: boolean;
+    readingId?: string;
+  }> {
+    const headers = await this.getAuthHeaders(token);
+    const res = await fetch('/api/readings/complete', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ readingId })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || 'Keep reading for a little longer. This reading requires at least 60 seconds.');
+    }
+
+    return json;
   }
 
   /**

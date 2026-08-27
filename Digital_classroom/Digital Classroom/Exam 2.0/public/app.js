@@ -1639,10 +1639,104 @@ function findQuestion(id) {
 
 function balanceSections() {
   if (!state.sections.length) return;
-  const base = state.sections[0];
-  const others = state.sections.slice(1).reduce((sum, section) => sum + section.count * section.marks, 0);
-  base.count = Math.max(1, Math.floor((state.requiredTotal - others) / base.marks));
-  toast("Adjusted the first section toward the required total.");
+
+  const currentSections = state.sections;
+  const targetTotal = state.requiredTotal;
+  const counts = currentSections.map(s => Math.max(1, Number(s.count) || 1));
+  const numSections = currentSections.length;
+
+  const getTypeWeight = (type = '') => {
+    const t = String(type).toLowerCase();
+    if (t.includes('essay')) return 4;
+    if (t.includes('comprehension')) return 2.5;
+    if (t.includes('short answer') || t.includes('matching') || t.includes('reorder')) return 2;
+    if (t.includes('blanks') || t.includes('cloze')) return 1.5;
+    return 1;
+  };
+
+  const weights = currentSections.map(s => getTypeWeight(s.type));
+
+  if (numSections === 1) {
+    const c = counts[0];
+    if (targetTotal % c === 0 && targetTotal / c >= 1) {
+      currentSections[0].marks = targetTotal / c;
+      toast(`Balanced Section 1 marks to ${targetTotal / c} per question.`);
+      render();
+      return;
+    } else {
+      toast(`Cannot evenly distribute ${targetTotal} marks across ${c} questions. Please adjust question count or target.`);
+      return;
+    }
+  }
+
+  const validSolutions = [];
+
+  function search(idx, remainingTotal, currentMarks) {
+    if (idx === numSections - 1) {
+      const lastCount = counts[idx];
+      if (remainingTotal > 0 && remainingTotal % lastCount === 0) {
+        const lastMark = remainingTotal / lastCount;
+        if (lastMark >= 1) {
+          const solution = [...currentMarks, lastMark];
+          let penalty = 0;
+
+          solution.forEach((m) => {
+            if (m === 25 || m === 50 || m === 10 || m === 20) penalty -= 60;
+            else if (m % 10 === 0) penalty -= 40;
+            else if (m % 5 === 0) penalty -= 30;
+            else if (m % 2 === 0) penalty -= 5;
+            else penalty += 50;
+
+            if (m > 10 && m % 5 !== 0) penalty += 80;
+          });
+
+          for (let i = 0; i < numSections; i++) {
+            for (let j = i + 1; j < numSections; j++) {
+              if (weights[i] < weights[j] && solution[i] > solution[j]) {
+                penalty += 150;
+              }
+              if (weights[i] > weights[j] && solution[i] < solution[j]) {
+                penalty += 150;
+              }
+            }
+          }
+
+          const baseUnit = targetTotal / (counts.reduce((sum, c, i) => sum + c * weights[i], 0) || 1);
+          solution.forEach((m, i) => {
+            const ideal = Math.max(1, Math.round(weights[i] * baseUnit));
+            penalty += Math.abs(m - ideal) * 10;
+          });
+
+          validSolutions.push({ marks: solution, penalty });
+        }
+      }
+      return;
+    }
+
+    const c = counts[idx];
+    const maxMarkForSection = Math.floor((remainingTotal - (numSections - 1 - idx)) / c);
+
+    for (let m = 1; m <= maxMarkForSection; m++) {
+      search(idx + 1, remainingTotal - (c * m), [...currentMarks, m]);
+    }
+  }
+
+  search(0, targetTotal, []);
+
+  if (validSolutions.length === 0) {
+    toast(`Cannot balance to exactly ${targetTotal} marks with current question counts. Please adjust counts or target.`);
+    return;
+  }
+
+  validSolutions.sort((a, b) => a.penalty - b.penalty);
+  const best = validSolutions[0];
+
+  currentSections.forEach((s, i) => {
+    s.marks = best.marks[i];
+  });
+
+  toast(`Balanced ${numSections} sections to total exactly ${targetTotal} marks.`);
+  render();
 }
 
 function getTotalMarks() {

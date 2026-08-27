@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpen,
   Clock,
@@ -8,7 +8,8 @@ import {
   Volume2,
   CheckCircle2,
   HelpCircle,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { ReadingBit, ReadingVocabulary } from '@/types';
 import { readingService } from '@/services/readingService';
@@ -30,25 +31,82 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
   const [completed, setCompleted] = useState<boolean>(Boolean(reading.has_completed));
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizSubmitted, setQuizSubmitted] = useState<Record<number, boolean>>({});
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [readingError, setReadingError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const hasImage = Boolean(reading.cover_image_url && reading.cover_image_url.trim());
   const firstParagraph = reading.paragraphs?.[0]?.text || '';
   const excerpt = firstParagraph.length > 160 ? `${firstParagraph.slice(0, 160)}…` : firstParagraph;
 
+  // Start or resume server-authoritative reading timer when modal opens
+  useEffect(() => {
+    if (!modalOpen || completed) return;
+    let active = true;
+    const token = session?.access_token || null;
+
+    readingService.startReadingSession(reading.id, token)
+      .then(res => {
+        if (!active) return;
+        if (typeof res.elapsed_seconds === 'number') {
+          setElapsedSeconds(res.elapsed_seconds);
+        }
+        if (res.is_completed) {
+          setCompleted(true);
+        }
+      })
+      .catch(() => {});
+
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [modalOpen, reading.id, completed, session?.access_token]);
+
   const handleOpenReader = () => {
     setModalOpen(true);
+    setReadingError(null);
   };
 
   const handleMarkComplete = async () => {
-    if (completed) return;
-    setCompleted(true);
-    triggerConfetti();
+    if (completed || isSubmitting) return;
+
+    if (elapsedSeconds < 60) {
+      setReadingError(`Keep reading for a little longer. This reading requires at least 60 seconds (${60 - elapsedSeconds}s remaining).`);
+      setTimeout(() => setReadingError(null), 5000);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setReadingError(null);
+
     try {
       const token = session?.access_token || null;
-      await readingService.completeReading(reading.id, token);
+      const result = await readingService.completeReading(reading.id, token);
+      setCompleted(true);
+      triggerConfetti();
+
+      // Dispatch authoritative activity completed event so Dashboard & Feed react
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('edtechra:activity_completed', {
+          detail: {
+            type: 'reading',
+            id: reading.id,
+            category: reading.category || 'English',
+            xp: result.xp_awarded || 15
+          }
+        }));
+      }
+
       if (onCompleted) onCompleted(reading.id);
-    } catch (e) {
-      console.warn('Failed to record reading completion:', e);
+    } catch (err: any) {
+      setReadingError(err.message || 'Keep reading for a little longer. This reading requires at least 60 seconds.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -253,6 +311,24 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
               </button>
             </div>
 
+            {/* Authoritative Reading Timer Bar */}
+            <div className="bg-slate-900 text-white px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 shrink-0 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-xs font-black">
+                <Clock className={`w-4 h-4 ${elapsedSeconds >= 60 ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
+                <span className="font-mono">
+                  {elapsedSeconds >= 60 ? '✓ 60s Target Reached' : `Reading Timer: ${elapsedSeconds}s / 60s`}
+                </span>
+              </div>
+              <div className="w-28 sm:w-44 h-2 bg-slate-800 rounded-full overflow-hidden shrink-0 border border-slate-700/60">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    elapsedSeconds >= 60 ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.round((elapsedSeconds / 60) * 100))}%` }}
+                />
+              </div>
+            </div>
+
             {/* Modal Scrollable Article Body */}
             <div className="p-5 sm:p-8 overflow-y-auto space-y-6 flex-1 bg-[#fcfcf9]">
               
@@ -398,27 +474,44 @@ export const OneMinuteReadingCard: React.FC<OneMinuteReadingCardProps> = ({
 
             </div>
 
+            {/* Reading Error / Feedback Notice */}
+            {readingError && (
+              <div className="px-5 py-2.5 bg-amber-50 border-t border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{readingError}</span>
+              </div>
+            )}
+
             {/* Modal Footer Actions */}
             <div className="p-4 sm:p-5 bg-white border-t border-stone-200 flex items-center justify-between shrink-0">
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors"
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
               >
                 Close
               </button>
 
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleMarkComplete}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer ${
+                className={`px-5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer min-h-[42px] ${
                   completed
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    : 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-none'
+                    : elapsedSeconds < 60
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-emerald-500/20'
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{completed ? 'Completed ✨' : 'Mark as Read (+10 XP)'}</span>
+                <CheckCircle2 className={`w-4 h-4 ${completed ? 'text-emerald-700' : elapsedSeconds < 60 ? 'text-amber-600' : 'text-white'}`} />
+                <span>
+                  {completed
+                    ? 'Completed ✨ (+15 XP)'
+                    : elapsedSeconds < 60
+                    ? `Read for ${60 - elapsedSeconds}s more (+15 XP)`
+                    : 'Mark as Completed (+15 XP) ✨'}
+                </span>
               </button>
             </div>
 

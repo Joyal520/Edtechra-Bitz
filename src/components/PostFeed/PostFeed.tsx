@@ -146,6 +146,32 @@ export const PostFeed: React.FC = () => {
     };
   }, []);
 
+  // Listen for activity completions to exclude completed learning items from feed in real-time
+  useEffect(() => {
+    const handleActivityCompleted = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type?: string; id?: string }>;
+      const { type, id } = customEvent.detail || {};
+      if (!id || !type) return;
+
+      if (type === 'reading') {
+        setReadings(prev => prev.filter(r => String(r.id) !== String(id)));
+      } else if (type === 'quiz') {
+        setQuizzes(prev => prev.filter(q => String(q.id) !== String(id)));
+      } else if (type === 'reorder') {
+        setReorders(prev => prev.filter(r => String(r.id) !== String(id)));
+      } else if (type === 'spelling_scramble') {
+        setScrambles(prev => prev.filter(s => String(s.id) !== String(id)));
+      } else if (type === 'spelling_flip') {
+        setFlipCards(prev => prev.filter(f => String(f.id) !== String(id)));
+      }
+    };
+
+    window.addEventListener('edtechra:activity_completed', handleActivityCompleted);
+    return () => {
+      window.removeEventListener('edtechra:activity_completed', handleActivityCompleted);
+    };
+  }, []);
+
   // Load feed quizzes, shorts, readings, polls, sentence reorders, spelling scrambles, flip cards, and words of the day pool
   const loadMediaPool = useCallback(async () => {
     try {
@@ -690,6 +716,7 @@ export const PostFeed: React.FC = () => {
                 <div key={item.key} className="px-3 sm:px-0">
                   <QuizBitCard
                     quiz={item.quiz}
+                    allQuizzes={quizzes}
                     onAttemptCompleted={handleQuizAttemptCompleted}
                   />
                 </div>
@@ -723,7 +750,10 @@ export const PostFeed: React.FC = () => {
             if (item.type === 'reorder') {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
-                  <ReorderSentenceCard reorder={item.reorder} />
+                  <ReorderSentenceCard
+                    reorder={item.reorder}
+                    allReorders={reorders}
+                  />
                 </div>
               );
             }
@@ -731,7 +761,10 @@ export const PostFeed: React.FC = () => {
             if (item.type === 'spelling_scramble') {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
-                  <SpellingScrambleCard scramble={item.scramble} />
+                  <SpellingScrambleCard
+                    scramble={item.scramble}
+                    allScrambles={scrambles}
+                  />
                 </div>
               );
             }
@@ -739,7 +772,10 @@ export const PostFeed: React.FC = () => {
             if (item.type === 'spelling_flip') {
               return (
                 <div key={item.key} className="px-3 sm:px-0">
-                  <SpellingFlipCardCard card={item.flipCard} />
+                  <SpellingFlipCardCard
+                    card={item.flipCard}
+                    allCards={flipCards}
+                  />
                 </div>
               );
             }
