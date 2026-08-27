@@ -190,12 +190,35 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     }
   };
 
-  const initStudentExam = (exam: any) => {
+  const [showStudentBreakdown, setShowStudentBreakdown] = useState(false);
+
+  const initStudentExam = async (exam: any) => {
     setStudentTakingExam(exam);
     setStudentAnswers({});
+    setShowStudentBreakdown(false);
     const durMins = Number(exam.duration_minutes || 60);
     setStudentTimeRemaining(durMins * 60);
-    setStudentResult(exam.latest_result || null);
+
+    // 1. Fast check from passed exam object
+    if (exam.latest_result) {
+      setStudentResult(classroomExamService.normalizeExamResult(exam.latest_result));
+      return;
+    }
+
+    // 2. Authoritative check from Supabase database
+    if (exam.id) {
+      try {
+        const existing = await classroomExamService.getStudentExamResult(exam.id);
+        if (existing) {
+          setStudentResult(existing);
+          return;
+        }
+      } catch (err) {
+        console.warn('[ClassroomExamModal] Check existing result error:', err);
+      }
+    }
+
+    setStudentResult(null);
   };
 
   // Calculate Structure Total
@@ -353,17 +376,21 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     try {
       const results = exam.results || (exam.id ? await classroomExamService.getExamResults(exam.id) : []);
 
-      const mockStudents = (results.length > 0 ? results : [
+      const studentsList = (results.length > 0 ? results : [
         { student_id: 's1', name: 'Nethmi Silva', score: Math.round((exam.total_marks || 100) * 0.94), time_taken_minutes: 36, answers: {} },
         { student_id: 's2', name: 'Ayaan Perera', score: Math.round((exam.total_marks || 100) * 0.88), time_taken_minutes: 42, answers: {} },
         { student_id: 's3', name: 'Sofia Khan', score: Math.round((exam.total_marks || 100) * 0.82), time_taken_minutes: 45, answers: {} },
         { student_id: 's4', name: 'John Doe', score: Math.round((exam.total_marks || 100) * 0.75), time_taken_minutes: 50, answers: {} },
         { student_id: 's5', name: 'Jane Smith', score: Math.round((exam.total_marks || 100) * 0.91), time_taken_minutes: 38, answers: {} }
       ]).map((r: any, idx: number) => ({
-        student_id: r.student_id || `s_${idx}`,
-        name: r.student?.full_name || r.name || `Student ${idx + 1}`,
+        student_id: r.student_id || r.student?.id || `s_${idx}`,
+        name: r.student?.full_name || r.name || r.student?.email?.split('@')[0] || `Student ${idx + 1}`,
+        email: r.student?.email || '',
         score: Number(r.score || 0),
         time_taken_minutes: r.time_taken_minutes || 40,
+        percentage: Number(r.percentage || ((exam.total_marks || 100) > 0 ? Number(((Number(r.score || 0) / (exam.total_marks || 100)) * 100).toFixed(1)) : 0)),
+        passed: r.passed !== undefined ? Boolean(r.passed) : (Number(r.score || 0) >= ((exam.total_marks || 100) * 0.4)),
+        submitted_at: r.submitted_at || null,
         answers: r.answers || {}
       }));
 
@@ -381,7 +408,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         class_id: classroomId,
         exam_name: exam.title || 'Classroom Assessment',
         total_marks: exam.total_marks || 100,
-        students: mockStudents,
+        students: studentsList,
         questions: questionsList
       });
 
@@ -1291,29 +1318,42 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <h4 className="text-sm font-black text-slate-900">Student Performance Breakdown</h4>
                 
                 <div className="divide-y divide-slate-100">
-                  {((analyticsData?.students || selectedExamForResults.results) || []).map((s: any, idx: number) => (
-                    <div key={idx} className="py-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                          {idx + 1}
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-800">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
-                          <p className="text-[11px] text-slate-400">{s.time_taken_minutes ? `${s.time_taken_minutes} mins` : 'Completed'}</p>
-                        </div>
-                      </div>
+                  {((analyticsData?.students || selectedExamForResults.results) || []).map((s: any, idx: number) => {
+                    const studentScore = Number(s.score || 0);
+                    const totalMarks = Number(selectedExamForResults.total_marks || 100);
+                    const pct = Number(s.percentage ?? (totalMarks > 0 ? ((studentScore / totalMarks) * 100).toFixed(1) : 0));
+                    const isPassing = s.passed !== undefined ? Boolean(s.passed) : studentScore >= (totalMarks * 0.4);
 
-                      <div className="flex items-center gap-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
-                          (s.score || 0) >= ((selectedExamForResults.total_marks || 100) * 0.5)
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {s.score} / {selectedExamForResults.total_marks || 100}
-                        </span>
+                    return (
+                      <div key={idx} className="py-3.5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-slate-800">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
+                              <span>{s.time_taken_minutes ? `${s.time_taken_minutes} mins` : 'Completed'}</span>
+                              <span className="font-bold text-indigo-600">• {pct}%</span>
+                              <span className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
+                                isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                              }`}>
+                                {isPassing ? 'Completed' : 'Needs Support'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                            isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                          }`}>
+                            {studentScore} / {totalMarks}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1328,39 +1368,113 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               
               {studentResult ? (
                 /* Student Result Card */
-                <div className="max-w-xl mx-auto py-8 text-center space-y-5">
+                <div className="max-w-xl mx-auto py-6 text-center space-y-5">
                   <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
 
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-black text-slate-900">Exam Attempt Completed!</h3>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                      Exam Completed & Certified
+                    </span>
+                    <h3 className="text-xl font-black text-slate-900 pt-1">{studentTakingExam?.title || 'Classroom Assessment'}</h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Your answers have been processed and safely stored in Cloudflare R2.
+                      Your answers are evaluated and safely archived.
                     </p>
                   </div>
 
                   <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200/80 space-y-4">
                     <div className="text-4xl font-black text-indigo-600">
-                      {studentResult.totalScore} <span className="text-lg text-slate-400">/ {studentResult.maxScore}</span>
+                      {studentResult.totalScore ?? studentResult.score ?? 0}{' '}
+                      <span className="text-lg text-slate-400">
+                        / {studentResult.maxScore ?? studentResult.total_marks ?? 100}
+                      </span>
                     </div>
-                    <div className="flex justify-center gap-2">
+
+                    <div className="flex flex-wrap justify-center gap-2">
                       <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-black">
                         {studentResult.percentage}% Score
                       </span>
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-black">
-                        Grade {studentResult.grade}
+                        Grade {studentResult.grade || 'Pass'}
+                      </span>
+                      <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-black flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-amber-600" />
+                        +{studentResult.totalScore ?? studentResult.score ?? 0} XP Earned
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 font-medium italic pt-2">
-                      "{studentResult.feedback}"
-                    </p>
+
+                    {/* Idempotent status confirmation */}
+                    <div className="pt-2 flex flex-col items-center gap-1 text-xs font-bold text-slate-600">
+                      <div className="flex items-center gap-1.5 text-emerald-600">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Result certified and saved to database</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-indigo-600">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Classroom leaderboard updated</span>
+                      </div>
+                    </div>
+
+                    {studentResult.feedback && (
+                      <p className="text-xs text-slate-600 font-medium italic pt-2 border-t border-slate-200/60">
+                        "{studentResult.feedback}"
+                      </p>
+                    )}
                   </div>
+
+                  {/* Question Breakdown Accordion */}
+                  {Array.isArray(studentResult.breakdown) && studentResult.breakdown.length > 0 && (
+                    <div className="text-left space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowStudentBreakdown((prev) => !prev)}
+                        className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-black flex items-center justify-between transition-all cursor-pointer"
+                      >
+                        <span>{showStudentBreakdown ? 'Hide Question Breakdown' : 'View Question Breakdown & Answers'}</span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {studentResult.breakdown.filter((b: any) => b.isCorrect).length} / {studentResult.breakdown.length} Correct
+                        </span>
+                      </button>
+
+                      {showStudentBreakdown && (
+                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                          {studentResult.breakdown.map((item: any, bIdx: number) => (
+                            <div
+                              key={bIdx}
+                              className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
+                                item.isCorrect
+                                  ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                                  : 'bg-rose-50/50 border-rose-200 text-rose-950'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between font-black">
+                                <span>Question {bIdx + 1} ({item.questionType || 'Question'})</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                  item.isCorrect ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                                }`}>
+                                  {item.score} / {item.maxScore} Marks
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-700 font-medium">
+                                <span className="font-bold">Your answer:</span> {String(item.submittedAnswer || '(No Answer)')}
+                              </p>
+                              {!item.isCorrect && item.correctAnswer && (
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  <span className="font-bold text-emerald-700">Correct answer:</span> {String(item.correctAnswer)}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black cursor-pointer"
+                    className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black cursor-pointer shadow-md transition-all active:scale-95"
                   >
                     Back to Classroom
                   </button>

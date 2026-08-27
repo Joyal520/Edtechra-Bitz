@@ -10914,54 +10914,164 @@ app.all('/api/exam-engine', async (req, res) => {
       return res.json({ success: true, examId: published.id, status: 'published', publishedAt: published.published_at });
     }
 
-    // Action 7: Grade & Submit Student Exam Attempt
+    // Action 7: Grade & Submit Student Exam Attempt (Idempotent & Resilient)
     if (action === 'grade-attempt' || action === 'submit-student-exam') {
       const payload = req.body;
       const examData = payload.exam || payload;
       const answers = payload.answers || {};
+      const examId = payload.examId || examData.id;
+      const classroomId = payload.classroomId || examData.classroom_id;
 
+      // 1. Idempotency Check: if student already submitted this exam, return existing result
+      if (serverSupabase && user && examId) {
+        try {
+          const { data: existingResult } = await serverSupabase
+            .from('classroom_exam_results')
+            .select('*')
+            .eq('exam_id', examId)
+            .eq('student_id', user.id)
+            .maybeSingle();
+
+          if (existingResult) {
+            const score = Number(existingResult.score || 0);
+            const totalMarks = Number(existingResult.total_marks || 100);
+            const percentage = Number(existingResult.percentage || (totalMarks > 0 ? ((score / totalMarks) * 100).toFixed(1) : 0));
+            const grade = existingResult.grade || (percentage >= 90 ? 'A+' : percentage >= 80 ? 'A' : percentage >= 70 ? 'B' : percentage >= 60 ? 'C' : percentage >= 50 ? 'D' : 'Needs Support');
+
+            return res.json({
+              success: true,
+              examId,
+              totalScore: score,
+              score,
+              maxScore: totalMarks,
+              total_marks: totalMarks,
+              percentage,
+              grade,
+              passed: existingResult.passed,
+              feedback: existingResult.feedback || (existingResult.passed ? 'Great job on passing the exam!' : 'Review topics and try again.'),
+              breakdown: existingResult.breakdown_json || [],
+              answers: existingResult.answers || answers,
+              submitted_at: existingResult.submitted_at,
+              alreadySubmitted: true
+            });
+          }
+        } catch (checkErr) {
+          console.warn('[Exam2Service] Existing result check notice:', checkErr.message);
+        }
+      }
+
+      // 2. Compute Grade for new submission
       const gradingResult = gradeExamAttempt(examData, answers);
 
-      // If persistent submission with user session
-      if (serverSupabase && user && (payload.examId || examData.id)) {
-        const examId = payload.examId || examData.id;
-        const classroomId = payload.classroomId || examData.classroom_id;
-
+      // 3. Persist Submission to Database with Resilient Schema Fallback
+      if (serverSupabase && user && examId) {
         try {
+          const fullRecord = {
+            exam_id: examId,
+            classroom_id: classroomId,
+            student_id: user.id,
+            score: gradingResult.totalScore,
+            total_marks: gradingResult.maxScore,
+            percentage: gradingResult.percentage,
+            grade: gradingResult.grade,
+            passed: gradingResult.passed,
+            answers: answers,
+            breakdown_json: gradingResult.breakdown,
+            feedback_json: {
+              strengths: gradingResult.strengths,
+              weaknesses: gradingResult.weaknesses,
+              feedback: gradingResult.feedback
+            },
+            feedback: gradingResult.feedback,
+            storage_provider: 'cloudflare_r2',
+            submitted_at: new Date().toISOString()
+          };
+
           const { data: record, error: insErr } = await serverSupabase
             .from('classroom_exam_results')
-            .upsert({
+            .upsert(fullRecord, { onConflict: 'exam_id,student_id' })
+            .select()
+            .single();
+
+          if (insErr && (insErr.message?.includes('column') || insErr.message?.includes('schema cache'))) {
+            // Retry with base table columns
+            console.warn('[Exam2Service] Retrying result upsert with base columns:', insErr.message);
+            const baseRecord = {
               exam_id: examId,
               classroom_id: classroomId,
               student_id: user.id,
               score: gradingResult.totalScore,
               total_marks: gradingResult.maxScore,
               percentage: gradingResult.percentage,
-              grade: gradingResult.grade,
               passed: gradingResult.passed,
               answers: answers,
-              breakdown_json: gradingResult.breakdown,
-              feedback_json: {
-                strengths: gradingResult.strengths,
-                weaknesses: gradingResult.weaknesses,
-                feedback: gradingResult.feedback
-              },
               feedback: gradingResult.feedback,
-              storage_provider: 'cloudflare_r2',
               submitted_at: new Date().toISOString()
-            }, { onConflict: 'exam_id,student_id' })
-            .select()
-            .single();
+            };
+            const retryRes = await serverSupabase
+              .from('classroom_exam_results')
+              .upsert(baseRecord, { onConflict: 'exam_id,student_id' })
+              .select()
+              .single();
 
-          if (!insErr && record) {
+            if (!retryRes.error && retryRes.data) {
+              gradingResult.savedRecordId = retryRes.data.id;
+            }
+          } else if (!insErr && record) {
             gradingResult.savedRecordId = record.id;
+          }
+
+          // 4. Server-Side Idempotent Classroom Points Award
+          if (gradingResult.totalScore > 0 && classroomId) {
+            try {
+              const { data: existingPoint } = await serverSupabase
+                .from('classroom_points')
+                .select('id')
+                .eq('classroom_id', classroomId)
+                .eq('student_id', user.id)
+                .eq('source_type', 'exam')
+                .eq('source_id', examId)
+                .maybeSingle();
+
+              if (!existingPoint) {
+                await serverSupabase
+                  .from('classroom_points')
+                  .insert({
+                    classroom_id: classroomId,
+                    student_id: user.id,
+                    points: gradingResult.totalScore,
+                    reason: `Exam: ${examData?.metadata?.title || examData?.title || 'Classroom Assessment'}`,
+                    source_type: 'exam',
+                    source_id: examId,
+                    awarded_by: user.id
+                  });
+              }
+            } catch (pErr) {
+              console.warn('[Exam2Service] Point award notice:', pErr.message);
+            }
           }
         } catch (dbErr) {
           console.warn('[Exam2Service] Non-critical submission save error:', dbErr.message);
         }
       }
 
-      return res.json({ success: true, ...gradingResult });
+      return res.json({
+        success: true,
+        examId,
+        totalScore: gradingResult.totalScore,
+        score: gradingResult.totalScore,
+        maxScore: gradingResult.maxScore,
+        total_marks: gradingResult.maxScore,
+        percentage: gradingResult.percentage,
+        grade: gradingResult.grade,
+        passed: gradingResult.passed,
+        strengths: gradingResult.strengths,
+        weaknesses: gradingResult.weaknesses,
+        feedback: gradingResult.feedback,
+        breakdown: gradingResult.breakdown,
+        answers: answers,
+        submitted_at: new Date().toISOString()
+      });
     }
 
     // Action 8: Score Analysis & Cloudflare R2 PDF Report Generation

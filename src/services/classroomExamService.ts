@@ -18,6 +18,58 @@ class ClassroomExamService {
   }
 
   /**
+   * Normalizes exam results from Supabase DB or API response into a standard format
+   */
+  normalizeExamResult(r: any): any {
+    if (!r) return null;
+    const score = Number(r.score ?? r.totalScore ?? 0);
+    const totalMarks = Number(r.total_marks ?? r.maxScore ?? 100);
+    const percentage = Number(r.percentage ?? (totalMarks > 0 ? Number(((score / totalMarks) * 100).toFixed(1)) : 0));
+    const grade = r.grade || (percentage >= 90 ? 'A+' : percentage >= 80 ? 'A' : percentage >= 70 ? 'B' : percentage >= 60 ? 'C' : percentage >= 50 ? 'D' : 'Needs Support');
+    const passed = r.passed !== undefined ? Boolean(r.passed) : score >= Math.round(totalMarks * 0.4);
+
+    return {
+      ...r,
+      id: r.id || r.savedRecordId,
+      score,
+      totalScore: score,
+      total_marks: totalMarks,
+      maxScore: totalMarks,
+      percentage,
+      grade,
+      passed,
+      feedback: r.feedback || (passed ? 'Great job on passing the exam!' : 'Review the topics and try again.'),
+      breakdown: r.breakdown || r.breakdown_json || [],
+      answers: r.answers || {},
+      submitted_at: r.submitted_at || new Date().toISOString()
+    };
+  }
+
+  /**
+   * Retrieves a student's existing result for an exam if already submitted
+   */
+  async getStudentExamResult(examId: string): Promise<any | null> {
+    if (!supabase || !examId) return null;
+    const userId = await this.getUserId();
+    if (!userId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('classroom_exam_results')
+        .select('*')
+        .eq('exam_id', examId)
+        .eq('student_id', userId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return this.normalizeExamResult(data);
+    } catch (err) {
+      console.error('[ClassroomExamService] getStudentExamResult error:', err);
+      return null;
+    }
+  }
+
+  /**
    * Retrieves all exams for a classroom
    */
   async getExamsByClassroom(classroomId: string): Promise<ClassroomExam[]> {
@@ -47,7 +99,7 @@ class ClassroomExamService {
           .eq('student_id', userId);
 
         (results || []).forEach((r: any) => {
-          resultsMap[r.exam_id] = r;
+          resultsMap[r.exam_id] = this.normalizeExamResult(r);
         });
       }
 
@@ -97,7 +149,7 @@ class ClassroomExamService {
           .eq('exam_id', examId)
           .eq('student_id', userId)
           .maybeSingle();
-        myResult = res;
+        myResult = this.normalizeExamResult(res);
       }
 
       return {
@@ -352,6 +404,8 @@ class ClassroomExamService {
     return data;
   }
 
+  private inFlightSubmissions = new Set<string>();
+
   /**
    * Submits Exam 2.0 attempt and executes hybrid grading
    */
@@ -361,37 +415,62 @@ class ClassroomExamService {
     exam: any;
     answers: Record<string, any>;
   }): Promise<any> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch('/api/exam-engine?action=submit-student-exam', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to submit exam.');
+    if (!payload.examId) {
+      throw new Error('Exam ID is required.');
     }
 
-    // Award student points
-    if (data.totalScore > 0 && payload.classroomId) {
-      const userId = await this.getUserId();
-      if (userId) {
-        await classroomPointsService.awardPoints({
-          classroom_id: payload.classroomId,
-          student_id: userId,
-          points: data.totalScore,
-          reason: `Exam: ${payload.exam?.metadata?.title || 'Classroom Assessment'}`,
-          source_type: 'exam',
-          source_id: payload.examId
-        }).catch(() => {});
+    // 1. Guard against concurrent duplicate submissions
+    if (this.inFlightSubmissions.has(payload.examId)) {
+      console.warn('[ClassroomExamService] Submission already in flight for exam:', payload.examId);
+      const existing = await this.getStudentExamResult(payload.examId);
+      if (existing) return existing;
+    }
+
+    // 2. Idempotency Check: if already submitted, return existing result
+    const existing = await this.getStudentExamResult(payload.examId);
+    if (existing) {
+      return existing;
+    }
+
+    this.inFlightSubmissions.add(payload.examId);
+
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch('/api/exam-engine?action=submit-student-exam', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit exam.');
       }
-    }
 
-    return data;
+      const normalized = this.normalizeExamResult(data);
+
+      // Award student points idempotently
+      if (normalized.totalScore > 0 && payload.classroomId) {
+        const userId = await this.getUserId();
+        if (userId) {
+          await classroomPointsService.awardPoints({
+            classroom_id: payload.classroomId,
+            student_id: userId,
+            points: normalized.totalScore,
+            reason: `Exam: ${payload.exam?.metadata?.title || payload.exam?.title || 'Classroom Assessment'}`,
+            source_type: 'exam',
+            source_id: payload.examId
+          }).catch((err) => console.warn('[ClassroomExamService] Point award notice:', err));
+        }
+      }
+
+      return normalized;
+    } finally {
+      this.inFlightSubmissions.delete(payload.examId);
+    }
   }
 
   /**

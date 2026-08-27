@@ -1130,7 +1130,11 @@ export const ClassroomDetailPage: React.FC = () => {
                             </span>
                           ) : (
                             <span className="text-xs font-semibold text-slate-400">
-                              {exam.questions.length} questions
+                              {(Array.isArray(exam.questions_json) && exam.questions_json.length > 0
+                                ? exam.questions_json.flatMap((s: any) => s.questions || []).length
+                                : Array.isArray(exam.questions)
+                                ? exam.questions.length
+                                : 0)} questions
                             </span>
                           )}
 

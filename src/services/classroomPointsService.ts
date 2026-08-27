@@ -27,6 +27,22 @@ class ClassroomPointsService {
     const userId = await this.getUserId();
 
     try {
+      // Idempotency check: if source_id is provided, check if points already awarded
+      if (payload.source_id && payload.source_type) {
+        const { data: existing } = await supabase
+          .from('classroom_points')
+          .select('*')
+          .eq('classroom_id', payload.classroom_id)
+          .eq('student_id', payload.student_id)
+          .eq('source_type', payload.source_type)
+          .eq('source_id', payload.source_id)
+          .maybeSingle();
+
+        if (existing) {
+          return { data: existing };
+        }
+      }
+
       const { data, error } = await supabase
         .from('classroom_points')
         .insert({

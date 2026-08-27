@@ -211,6 +211,13 @@ export interface ClassroomExam {
   ends_at?: string | null;
   status: ExamStatus;
   questions: ClassroomExamQuestion[];
+  questions_json?: any[];
+  exam_type?: string;
+  difficulty?: string;
+  grading_mode?: string;
+  source?: string;
+  teacher_id?: string;
+  r2_file_key?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -227,10 +234,19 @@ export interface ClassroomExamResult {
   student_id: string;
   score: number;
   total_marks: number;
+  totalScore?: number;
+  maxScore?: number;
   percentage: number;
   passed: boolean;
-  answers: Record<string, string>; // questionId -> selectedOptionId
+  grade?: string;
+  answers: Record<string, any>;
+  breakdown_json?: any[];
+  breakdown?: any[];
+  feedback_json?: any;
   feedback?: string | null;
+  storage_provider?: string;
+  report_r2_key?: string;
+  time_taken_minutes?: number;
   started_at?: string;
   submitted_at: string;
 
