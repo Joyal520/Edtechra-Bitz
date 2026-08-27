@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sparkles, Play, Zap, X, RotateCcw, ArrowRight, CheckCircle2, Trophy } from 'lucide-react';
+import { Sparkles, Play, Zap, X, CheckCircle2 } from 'lucide-react';
 import { SpellingFlipCardItem, SpellingFlipLevel } from '@/types/spellingFlipCard';
 import { SpellingFlipGame } from '@/components/games/SpellingFlipGame';
 import { INITIAL_SEED_CARDS } from '@/services/spellingFlipCardService';
@@ -84,10 +84,6 @@ export const SpellingFlipCardCard: React.FC<SpellingFlipCardCardProps> = ({
     }
     return null;
   }, [allCards, activeCard, level]);
-
-  const handlePlayAgain = () => {
-    setIsPlaying(true);
-  };
 
   const handleNextLevel = () => {
     if (nextLevelCard) {
@@ -180,34 +176,6 @@ export const SpellingFlipCardCard: React.FC<SpellingFlipCardCardProps> = ({
                   {lastResult.bestScore || `${lastResult.correct}/${lastResult.total}`}
                 </div>
               </div>
-            </div>
-
-            {/* Action Buttons: Play Again & Next Level */}
-            <div className="relative z-10 pt-1 flex flex-col sm:flex-row items-center gap-2.5">
-              <button
-                type="button"
-                onClick={handlePlayAgain}
-                className="w-full sm:flex-1 py-3 sm:py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-              >
-                <RotateCcw className="w-4 h-4 text-cyan-400" />
-                <span>PLAY AGAIN</span>
-              </button>
-
-              {nextLevelCard ? (
-                <button
-                  type="button"
-                  onClick={handleNextLevel}
-                  className="w-full sm:flex-1 py-3 sm:py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-                >
-                  <span>NEXT LEVEL ({nextLevelCard.level})</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
-                  <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>All Levels Mastered!</span>
-                </div>
-              )}
             </div>
           </div>
         ) : (

@@ -12,11 +12,9 @@ import {
   Play,
   Zap,
   Flame,
-  Check,
-  ArrowRight,
-  Trophy
+  Check
 } from 'lucide-react';
-import { SpellingScramble, LetterTile, SpellingScrambleAttemptResult, SpellingDifficulty } from '@/types/spellingScramble';
+import { SpellingScramble, LetterTile, SpellingScrambleAttemptResult } from '@/types/spellingScramble';
 import { spellingScrambleService } from '@/services/spellingScrambleService';
 import { reorderAudio } from '@/utils/reorderAudio';
 import { triggerConfetti } from '@/utils/confetti';
@@ -30,7 +28,6 @@ interface SpellingScrambleCardProps {
 
 export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
   scramble: initialScramble,
-  allScrambles = [],
   onAttemptCompleted
 }) => {
   const { session } = useAuth();
@@ -44,27 +41,6 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
       setActiveScramble(initialScramble);
     }
   }, [initialScramble]);
-
-  // Next level / challenge detection
-  const nextScramble = useMemo(() => {
-    if (!allScrambles || allScrambles.length === 0) return null;
-    const currentIndex = allScrambles.findIndex(s => s.id === activeScramble.id);
-
-    // 1. Try finding a scramble with higher difficulty
-    const diffOrder: SpellingDifficulty[] = ['Easy', 'Medium', 'Hard'];
-    const currentDiffIdx = diffOrder.indexOf(activeScramble.difficulty);
-    if (currentDiffIdx >= 0 && currentDiffIdx < diffOrder.length - 1) {
-      const nextDiffName = diffOrder[currentDiffIdx + 1];
-      const nextByDiff = allScrambles.find(s => s.difficulty === nextDiffName && s.id !== activeScramble.id);
-      if (nextByDiff) return nextByDiff;
-    }
-
-    // 2. Next sequential scramble in pool
-    if (currentIndex >= 0 && currentIndex < allScrambles.length - 1) {
-      return allScrambles[currentIndex + 1];
-    }
-    return null;
-  }, [allScrambles, activeScramble]);
 
   // Initialize letter tiles with unique IDs to safely support duplicate letters
   const generateShuffledTiles = useCallback((scrambleItem: SpellingScramble): LetterTile[] => {
@@ -243,30 +219,6 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
     setAvailableTiles(initialTiles);
     setPlacedTiles([]);
     setErrorNotice(null);
-  };
-
-  const handlePlayAgain = () => {
-    setGameState('idle');
-    setResult(null);
-    setPlacedTiles([]);
-    setAvailableTiles(generateShuffledTiles(activeScramble));
-    setTimeLeft(totalTimerSeconds);
-    setStartTime(null);
-    setErrorNotice(null);
-  };
-
-  const handleNextLevel = () => {
-    if (nextScramble) {
-      setActiveScramble(nextScramble);
-      setGameState('idle');
-      setResult(null);
-      setPlacedTiles([]);
-      setAvailableTiles(generateShuffledTiles(nextScramble));
-      const nextTimer = nextScramble.timer_seconds || (nextScramble.difficulty === 'Hard' ? 60 : nextScramble.difficulty === 'Medium' ? 45 : 30);
-      setTimeLeft(nextTimer);
-      setStartTime(null);
-      setErrorNotice(null);
-    }
   };
 
   /**
@@ -561,36 +513,6 @@ export const SpellingScrambleCard: React.FC<SpellingScrambleCardProps> = ({
             <p className="text-xs text-slate-400 font-medium">
               Keep practicing to build your vocabulary and speed!
             </p>
-          </div>
-        )}
-
-        {/* 8. POST-GAME ACTION BUTTONS (PLAY AGAIN & NEXT LEVEL) */}
-        {(isCompleted || isTimeUp) && (
-          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5 animate-in fade-in">
-            <button
-              type="button"
-              onClick={handlePlayAgain}
-              className="w-full sm:flex-1 py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs sm:text-sm font-black border border-slate-700 shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-            >
-              <RotateCcw className="w-4 h-4 text-cyan-400" />
-              <span>PLAY AGAIN</span>
-            </button>
-
-            {nextScramble ? (
-              <button
-                type="button"
-                onClick={handleNextLevel}
-                className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
-              >
-                <span>NEXT LEVEL ({nextScramble.difficulty || 'Next'})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <div className="w-full sm:flex-1 py-3 px-3 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-1.5 min-h-[44px]">
-                <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                <span>All Levels Mastered!</span>
-              </div>
-            )}
           </div>
         )}
 
