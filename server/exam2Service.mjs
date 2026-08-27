@@ -604,20 +604,22 @@ export async function getTeacherExamsFromSupabase(serverSupabase, teacherId) {
   if (!serverSupabase || !teacherId) return [];
 
   try {
-    // 1. Fetch exams created by this teacher
-    const { data: exams, error } = await serverSupabase
+    // 1. Fetch exams created by this teacher (try with teacher_id or fallback to created_by)
+    let exams = null;
+    const queryRes = await serverSupabase
       .from('classroom_exams')
       .select(`
         *,
         classroom:classrooms!classroom_id (id, title, subject, grade)
       `)
-      .or(`teacher_id.eq.${teacherId},created_by.eq.${teacherId}`)
+      .eq('created_by', teacherId)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[Exam2Service] getTeacherExams error:', error.message);
+    if (queryRes.error) {
+      console.error('[Exam2Service] getTeacherExams error:', queryRes.error.message);
       return [];
     }
+    exams = queryRes.data;
 
     const examList = exams || [];
     if (examList.length === 0) return [];
@@ -661,13 +663,16 @@ export async function getTeacherExamsFromSupabase(serverSupabase, teacherId) {
       };
     });
   } catch (err) {
-    console.error('[Exam2Service] getTeacherExams exception:', err);
+    console.error('[Exam2Service] getTeacherExamsFromSupabase exception:', err);
     return [];
   }
 }
 
-export async function saveExamToSupabase(serverSupabase, payload, teacherId) {
+export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
   if (!serverSupabase) throw new Error('Database client not configured.');
+
+  const payload = typeof arg1 === 'object' && arg1 !== null ? arg1 : (typeof arg2 === 'object' && arg2 !== null ? arg2 : {});
+  const teacherId = typeof arg1 === 'string' ? arg1 : (typeof arg2 === 'string' ? arg2 : payload.teacher_id || payload.created_by || null);
 
   const examData = payload.exam || payload;
   const metadata = examData.metadata || {};
@@ -697,6 +702,7 @@ export async function saveExamToSupabase(serverSupabase, payload, teacherId) {
     difficulty,
     grading_mode: gradingMode,
     status,
+    questions: sections,
     questions_json: sections,
     exam_config_json: {
       metadata,
@@ -728,15 +734,48 @@ export async function saveExamToSupabase(serverSupabase, payload, teacherId) {
     );
   } catch {}
 
-  const { data, error } = await serverSupabase
+  let data = null;
+  let { data: inserted, error } = await serverSupabase
     .from('classroom_exams')
     .insert(insertRecord)
     .select()
     .single();
 
   if (error) {
-    console.error('[Exam2Service] saveExamToSupabase error:', error.message);
-    throw error;
+    // If schema cache does not yet have extended columns, retry with base columns
+    if (error.message?.includes('column') || error.message?.includes('schema cache')) {
+      console.warn('[Exam2Service] Retrying saveExamToSupabase with base schema columns:', error.message);
+      const baseRecord = {
+        title: insertRecord.title,
+        description: insertRecord.description,
+        instructions: insertRecord.instructions,
+        duration_minutes: insertRecord.duration_minutes,
+        total_marks: insertRecord.total_marks,
+        pass_marks: insertRecord.pass_marks,
+        status: insertRecord.status === 'published' ? 'published' : 'draft',
+        questions: sections,
+        created_by: teacherId,
+        updated_at: new Date().toISOString()
+      };
+      if (classroomId) baseRecord.classroom_id = classroomId;
+
+      const retryRes = await serverSupabase
+        .from('classroom_exams')
+        .insert(baseRecord)
+        .select()
+        .single();
+
+      if (retryRes.error) {
+        console.error('[Exam2Service] saveExamToSupabase base retry error:', retryRes.error.message);
+        throw retryRes.error;
+      }
+      data = retryRes.data;
+    } else {
+      console.error('[Exam2Service] saveExamToSupabase error:', error.message);
+      throw error;
+    }
+  } else {
+    data = inserted;
   }
 
   return data;
