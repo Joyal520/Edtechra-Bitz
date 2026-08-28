@@ -688,52 +688,68 @@ export const PodiumIllustration: React.FC<IllustrationProps> = ({ className = "w
 );
 
 // ============================================================================
-// 13. AI TEACHING INTELLIGENCE: Profile Head with Glowing Lightbulb Brain
+// 13. AI TEACHING INTELLIGENCE: Left-Facing Silhouette with Brain & Glowing Bulb
 // ============================================================================
 export const AITeachingIntelligenceIllustration: React.FC<IllustrationProps> = ({ className = "w-36 h-28" }) => (
   <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
       <filter id="aiGlow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#38bdf8" floodOpacity="0.35" />
+        <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#fde047" floodOpacity="0.45" />
+      </filter>
+      <filter id="headShadow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="-2" dy="4" stdDeviation="5" floodColor="#0f0c29" floodOpacity="0.35" />
       </filter>
       {/* Background Curved Layered Waves */}
       <linearGradient id="aiWave1" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#4f46e5" />
-        <stop offset="100%" stopColor="#312e81" />
+        <stop offset="0%" stopColor="#4338ca" />
+        <stop offset="100%" stopColor="#1e1b4b" />
       </linearGradient>
       <linearGradient id="aiWave2" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%" stopColor="#6366f1" />
-        <stop offset="100%" stopColor="#3730a3" />
+        <stop offset="100%" stopColor="#312e81" />
       </linearGradient>
       <linearGradient id="aiWave3" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%" stopColor="#818cf8" />
-        <stop offset="100%" stopColor="#4338ca" />
+        <stop offset="100%" stopColor="#3730a3" />
       </linearGradient>
     </defs>
 
-    {/* Layered Cut-Paper Silhouette Waves */}
-    <path d="M 80 0 C 110 30, 130 70, 160 80 L 160 0 Z" fill="url(#aiWave1)" opacity="0.5" />
-    <path d="M 60 0 C 95 35, 115 80, 160 110 L 160 0 Z" fill="url(#aiWave2)" opacity="0.4" />
-    <path d="M 40 0 C 80 40, 100 90, 160 140 L 160 0 Z" fill="url(#aiWave3)" opacity="0.3" />
+    {/* Layered Cut-Paper Background Silhouette Waves (Curving on Right) */}
+    <path d="M 0 0 C 40 40, 50 90, 80 140 L 160 140 L 160 0 Z" fill="url(#aiWave1)" opacity="0.6" />
+    <path d="M 30 0 C 65 35, 75 85, 105 140 L 160 140 L 160 0 Z" fill="url(#aiWave2)" opacity="0.45" />
+    <path d="M 60 0 C 90 30, 105 75, 130 140 L 160 140 L 160 0 Z" fill="url(#aiWave3)" opacity="0.35" />
 
-    {/* Layered Paper Human Head Profile (Right-Facing Silhouette) */}
-    <g transform="translate(50, 16)" filter="url(#aiGlow)">
-      {/* Profile Head Cutout */}
-      <path d="M 20 10 C 45 -5, 80 0, 85 30 C 87 40, 86 50, 88 56 C 90 60, 94 62, 92 68 C 90 74, 82 74, 80 80 C 78 86, 82 92, 78 98 C 74 104, 60 108, 48 108 L 48 120 L 15 120 C 15 105, 12 70, 10 50 C 8 30, 8 18, 20 10 Z" fill="#e0e7ff" />
+    {/* Left-Facing Human Head Profile (Lavender Paper Silhouette) */}
+    <g transform="translate(10, 10)" filter="url(#headShadow)">
+      {/* Profile Head Outline */}
+      <path
+        d="M 125 125 L 125 35 C 125 15, 105 5, 80 5 C 60 5, 42 16, 36 30 C 34 35, 30 42, 22 45 C 18 47, 18 52, 22 55 C 26 58, 28 62, 26 66 C 24 70, 20 73, 24 78 C 28 82, 32 82, 34 88 C 36 94, 30 102, 36 108 C 42 114, 52 118, 65 120 L 70 125 Z"
+        fill="#c7d2fe"
+      />
 
-      {/* Brain Cavity Cutout Area */}
-      <path d="M 32 24 C 48 14, 70 18, 72 38 C 74 54, 64 64, 48 68 C 34 68, 26 56, 26 42 C 26 30, 28 26, 32 24 Z" fill="#312e81" />
+      {/* Brain Cavity (White / Cream Multi-Lobed Paper Cloud) */}
+      <g transform="translate(68, 14)">
+        {/* Brain Lobes */}
+        <path
+          d="M 0 25 C -8 18, -8 6, 2 0 C 12 -6, 26 -2, 32 8 C 38 0, 50 2, 54 12 C 58 22, 52 32, 46 36 C 52 44, 46 56, 36 58 C 28 60, 20 56, 16 50 C 8 54, -2 46, 0 38 C 2 34, 0 28, 0 25 Z"
+          fill="#ffffff"
+          stroke="#e0e7ff"
+          strokeWidth="1.5"
+        />
 
-      {/* Glowing Golden Lightbulb in Brain */}
-      <g transform="translate(50, 42)">
-        {/* Bulb Glow */}
-        <circle cx="0" cy="0" r="13" fill="#fef08a" opacity="0.9" />
-        <circle cx="0" cy="0" r="10" fill="#fde047" />
-        {/* Filament */}
-        <path d="M -4 2 L -2 -4 L 2 -4 L 4 2" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-        {/* Screw Base */}
-        <rect x="-4" y="9" width="8" height="4" rx="1" fill="#94a3b8" />
-        <rect x="-2.5" y="13" width="5" height="2" rx="1" fill="#64748b" />
+        {/* Glowing Golden Lightbulb in Brain */}
+        <g transform="translate(25, 28)" filter="url(#aiGlow)">
+          {/* Radiant Bulb Body */}
+          <circle cx="0" cy="0" r="10" fill="#fde047" />
+          <path d="M -7 5 C -7 10, -4 14, -3 18 L 3 18 C 4 14, 7 10, 7 5 Z" fill="#fde047" />
+          
+          {/* Inner Filament */}
+          <path d="M -3 3 L -1 -3 L 1 -3 L 3 3" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          
+          {/* Metallic Base */}
+          <rect x="-3.5" y="18" width="7" height="3" rx="1" fill="#94a3b8" />
+          <rect x="-2" y="21" width="4" height="2" rx="1" fill="#64748b" />
+        </g>
       </g>
     </g>
   </svg>

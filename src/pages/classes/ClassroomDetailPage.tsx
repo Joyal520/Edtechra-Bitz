@@ -747,20 +747,22 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 4 — STUDENT PERFORMANCE (Two Columns: Leaderboard & AI Intel)     */}
+        {/* SECTION 4 — STUDENT PERFORMANCE & AI TEACHING INTELLIGENCE                */}
         {/* ========================================================================= */}
-        <section className="space-y-4">
+        <section className="bg-white rounded-[32px] p-6 sm:p-8 border border-stone-200/80 shadow-md relative overflow-hidden">
           
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-black text-slate-900 tracking-wider uppercase">
+          {/* Section Header with Blue Indicator Line */}
+          <div className="space-y-1 pb-5 border-b border-stone-100">
+            <h2 className="text-sm sm:text-base font-black text-[#0f233a] tracking-wider uppercase">
               Student Performance
             </h2>
+            <div className="w-8 h-0.5 bg-[#026fc3] rounded-full" />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          <div className="pt-5 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
             
-            {/* LEFT: Classroom Leaderboard (7 Cols) */}
-            <div className="lg:col-span-7">
+            {/* LEFT: Classroom Leaderboard (3D Podium + Top Students) (7 Cols) */}
+            <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
               <ClassroomLeaderboard
                 entries={leaderboard}
                 currentUserId={user?.id}
@@ -768,33 +770,25 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
 
             {/* RIGHT: AI Teaching Intelligence Card (5 Cols) */}
-            <div className="lg:col-span-5 bg-[#312e81] rounded-[24px] p-6 sm:p-7 text-white shadow-md flex flex-col justify-between space-y-4 relative overflow-hidden border border-indigo-900">
+            <div className="lg:col-span-5 xl:col-span-4 bg-gradient-to-br from-[#37268c] via-[#2f1f7d] to-[#221364] rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4 border border-indigo-950">
               
-              {/* Background Layered Waves */}
+              {/* Background Layered Waves & Glow */}
               <div className="absolute top-0 right-0 w-44 h-44 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
               
               <div className="space-y-3 relative z-10">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-300" />
-                    <span className="text-[10px] font-black tracking-widest uppercase text-indigo-200">
-                      Smart Analytics
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-300" />
+                  <span className="text-sm font-black text-white">
+                    AI Teaching Intelligence
+                  </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1.5 max-w-[240px]">
-                    <h3 className="text-base sm:text-lg font-black text-white leading-tight">
-                      AI Teaching Intelligence
-                    </h3>
-                    <p className="text-xs text-indigo-200 font-medium leading-relaxed">
-                      Understand your classroom. Know what to teach next.
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    <AITeachingIntelligenceIllustration className="w-24 sm:w-28 h-20" />
-                  </div>
+                <p className="text-xs text-indigo-200 font-medium leading-relaxed max-w-[240px]">
+                  Understand your classroom. Know what to teach next.
+                </p>
+
+                <div className="flex justify-end pt-2">
+                  <AITeachingIntelligenceIllustration className="w-36 h-28 drop-shadow-xl" />
                 </div>
               </div>
 
@@ -802,7 +796,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAiReportModalOpen(true)}
-                  className="w-full py-3 px-4 bg-white hover:bg-indigo-50 text-[#312e81] rounded-full text-xs font-black shadow-md active:scale-95 transition-all cursor-pointer"
+                  className="w-full py-3 px-5 bg-[#f9f7f1] hover:bg-white text-[#1e1b4b] rounded-full text-xs font-black shadow-md active:scale-95 transition-all text-center cursor-pointer"
                 >
                   Open Teaching Intelligence
                 </button>
