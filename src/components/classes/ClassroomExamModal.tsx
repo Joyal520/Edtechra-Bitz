@@ -1441,30 +1441,30 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                             </div>
 
                             {sec.passage && (
-                              <div className="p-3 bg-amber-50/60 border border-amber-200/70 rounded-xl text-xs text-slate-700 leading-relaxed font-medium">
+                              <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-sm sm:text-base text-slate-800 leading-relaxed font-medium">
                                 <strong>Reading Passage:</strong> {sec.passage}
                               </div>
                             )}
 
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                               {(sec.questions || []).map((q: any, qIdx: number) => (
-                                <div key={q.questionId || qIdx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                                <div key={q.questionId || qIdx} className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-black text-indigo-600">Question {qIdx + 1} ({q.marks} Marks)</span>
-                                    <span className="text-[11px] text-slate-400 font-bold">{q.difficulty || 'Mixed'}</span>
+                                    <span className="text-sm font-black text-indigo-700">Question {qIdx + 1} ({q.marks} Marks)</span>
+                                    <span className="text-xs text-slate-500 font-bold bg-white px-2.5 py-0.5 rounded-md border border-slate-200">{q.difficulty || 'Mixed'}</span>
                                   </div>
-                                  <p className="text-xs font-bold text-slate-800">{q.questionText}</p>
+                                  <p className="text-base font-black text-slate-900 leading-relaxed">{q.questionText}</p>
                                   
                                   {/* Options for MCQs */}
                                   {q.options && q.options.length > 0 && (
-                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                                       {q.options.map((opt: string, optIdx: number) => (
                                         <div
                                           key={optIdx}
-                                          className={`p-2 rounded-xl text-xs font-medium border ${
+                                          className={`p-3 rounded-xl text-sm font-semibold border ${
                                             opt === q.correctAnswer
-                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 font-bold'
-                                              : 'bg-white text-slate-600 border-slate-200'
+                                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-bold'
+                                              : 'bg-white text-slate-700 border-slate-200'
                                           }`}
                                         >
                                           {opt} {opt === q.correctAnswer && '✓'}
@@ -1475,7 +1475,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
                                   {/* Correct answer tag */}
                                   {(!q.options || q.options.length === 0) && (
-                                    <div className="text-[11px] text-emerald-700 bg-emerald-50 p-2 rounded-xl font-bold border border-emerald-200">
+                                    <div className="text-xs sm:text-sm text-emerald-800 bg-emerald-50 p-2.5 rounded-xl font-bold border border-emerald-200">
                                       Answer: {q.correctAnswer}
                                     </div>
                                   )}
@@ -1890,43 +1890,43 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <div className="space-y-6">
                   
                   {((studentTakingExam.questions_json || [])).map((sec: any, secIdx: number) => (
-                    <div key={secIdx} className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4">
-                      <div className="border-b border-slate-100 pb-3">
-                        <h4 className="text-sm font-black text-slate-900">{sec.title || sec.questionType}</h4>
+                    <div key={secIdx} className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 space-y-5 shadow-xs">
+                      <div className="border-b border-slate-100 pb-3.5">
+                        <h4 className="text-base sm:text-lg font-black text-slate-900">{sec.title || sec.questionType}</h4>
                         {sec.passage && (
-                          <div className="mt-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-800 leading-relaxed font-medium">
+                          <div className="mt-3 p-4 sm:p-5 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-base sm:text-lg text-slate-900 leading-relaxed font-medium">
                             {sec.passage}
                           </div>
                         )}
                       </div>
 
-                      <div className="space-y-4">
+                      <div className="space-y-5">
                         {(sec.questions || []).map((q: any, qIdx: number) => {
                           const qId = q.questionId || `q_${secIdx}_${qIdx}`;
                           const isMCQ = q.options && q.options.length > 0;
                           const isTF = q.questionType?.includes('True');
 
                           return (
-                            <div key={qId} className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 space-y-3">
+                            <div key={qId} className="p-5 sm:p-6 bg-slate-50/80 rounded-2xl border border-slate-200/90 space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-black text-slate-800">
+                                <span className="text-sm sm:text-base font-black text-indigo-700">
                                   Question {qIdx + 1}
                                 </span>
-                                <span className="text-[11px] text-slate-400 font-bold">{q.marks} Marks</span>
+                                <span className="text-xs sm:text-sm text-slate-500 font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200">{q.marks} Marks</span>
                               </div>
 
-                              <p className="text-xs font-bold text-slate-900">{q.questionText}</p>
+                              <p className="text-base sm:text-lg font-black text-slate-950 leading-relaxed">{q.questionText}</p>
 
                               {/* MCQ Options */}
                               {isMCQ && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                                   {q.options.map((opt: string, optIdx: number) => (
                                     <label
                                       key={optIdx}
-                                      className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2.5 cursor-pointer transition-all ${
+                                      className={`p-4 rounded-xl border text-sm sm:text-base font-bold flex items-center gap-3 cursor-pointer transition-all shadow-2xs ${
                                         studentAnswers[qId] === opt
-                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300/50'
+                                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
                                       }`}
                                     >
                                       <input
@@ -1944,16 +1944,16 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
                               {/* True / False Buttons */}
                               {isTF && (
-                                <div className="flex gap-3 pt-1">
+                                <div className="flex gap-4 pt-1">
                                   {['True', 'False'].map((tf) => (
                                     <button
                                       key={tf}
                                       type="button"
                                       onClick={() => handleStudentAnswerChange(qId, tf)}
-                                      className={`flex-1 py-2.5 rounded-xl border text-xs font-black cursor-pointer transition-all ${
+                                      className={`flex-1 py-3.5 sm:py-4 rounded-xl border text-sm sm:text-base font-black cursor-pointer transition-all ${
                                         studentAnswers[qId] === tf
-                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300/50'
+                                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
                                       }`}
                                     >
                                       {tf}
@@ -1965,11 +1965,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               {/* Text Input / Essay */}
                               {!isMCQ && !isTF && (
                                 <textarea
-                                  rows={3}
+                                  rows={4}
                                   placeholder="Type your answer here..."
                                   value={studentAnswers[qId] || ''}
                                   onChange={(e) => handleStudentAnswerChange(qId, e.target.value)}
-                                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:border-indigo-500"
+                                  className="w-full p-4 bg-white border border-slate-200 rounded-xl text-base font-medium focus:outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 leading-relaxed text-slate-900"
                                 />
                               )}
                             </div>

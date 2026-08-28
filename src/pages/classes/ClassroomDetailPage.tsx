@@ -998,6 +998,7 @@ export const ClassroomDetailPage: React.FC = () => {
               <StudentRoster
                 classroomId={classroom.id}
                 members={members}
+                classroomTeacherId={classroom.teacher_id}
                 isTeacher={isTeacher}
                 currentUserId={user?.id}
                 onMemberRemoved={loadAllClassroomData}
