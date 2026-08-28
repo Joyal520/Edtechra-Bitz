@@ -160,6 +160,15 @@ export const OCRGradingModal: React.FC<OCRGradingModalProps> = ({
     pollTimerRef.current = setInterval(poll, 1500);
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleSubmitEvaluation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentId) {
@@ -180,26 +189,17 @@ export const OCRGradingModal: React.FC<OCRGradingModalProps> = ({
 
     const evaluationId = crypto.randomUUID();
     setJobState('uploading');
-    setStatusMessage('Uploading temporary worksheet...');
+    setStatusMessage('Preparing and analyzing worksheet...');
     setErrorMessage('');
 
     try {
-      // 1. Presign temporary upload in R2
-      const presigned = await ocrService.presignTemporaryUpload({
-        classroomId,
-        filename: selectedFile.name,
-        contentType: selectedFile.type || 'image/jpeg',
-        size: selectedFile.size,
-        evaluationId
-      });
+      // 1. Convert selected worksheet file to Base64
+      const imageBase64 = await fileToBase64(selectedFile);
 
-      // 2. Direct upload to R2
-      await ocrService.uploadFileToR2(presigned.uploadUrl, selectedFile, selectedFile.type || 'image/jpeg');
+      setJobState('processing');
+      setStatusMessage('AI is analyzing the worksheet and grading performance...');
 
-      // 3. Submit async job
-      setJobState('queued');
-      setStatusMessage('Your worksheet is waiting for AI processing.');
-
+      // 2. Submit job directly with base64 data for instantaneous processing
       const jobRes = await ocrService.submitJob({
         evaluationId,
         classroomId,
@@ -207,13 +207,23 @@ export const OCRGradingModal: React.FC<OCRGradingModalProps> = ({
         category,
         maxMarks: Number(maxMarks),
         title: taskTitle.trim(),
-        temporaryFileKey: presigned.objectKey,
         fileContentType: selectedFile.type || 'image/jpeg',
-        studentName
+        studentName,
+        imageBase64
       });
 
-      // 4. Begin polling
-      startPolling(jobRes.jobId || evaluationId);
+      // 3. Handle immediate completion or start polling
+      if (jobRes.status === 'completed' || typeof jobRes.score === 'number') {
+        const completedEval = jobRes as unknown as OCREvaluation;
+        setEvaluation(completedEval);
+        setEditScore(completedEval.final_score ?? completedEval.score);
+        setEditFeedback(completedEval.feedback || '');
+        setJobState('completed');
+        setStatusMessage('Evaluation completed successfully.');
+        onSuccess();
+      } else {
+        startPolling(jobRes.jobId || evaluationId);
+      }
     } catch (err: any) {
       console.error('[OCR Modal] Submit error:', err);
       setJobState('failed');

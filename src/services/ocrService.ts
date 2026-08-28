@@ -62,7 +62,7 @@ class OcrService {
   }
 
   /**
-   * 3. Submits an asynchronous AI OCR evaluation job
+   * 3. Submits an AI OCR evaluation job (direct base64 or temporary storage)
    */
   async submitJob(payload: {
     evaluationId: string;
@@ -74,7 +74,8 @@ class OcrService {
     temporaryFileKey?: string;
     fileContentType?: string;
     studentName?: string;
-  }): Promise<{ jobId: string; evaluationId: string; status: string; data?: OCREvaluation }> {
+    imageBase64?: string;
+  }): Promise<{ jobId: string; evaluationId: string; status: string; [key: string]: any }> {
     const token = await this.getAuthToken();
     const res = await fetch('/api/classes/ocr-jobs', {
       method: 'POST',

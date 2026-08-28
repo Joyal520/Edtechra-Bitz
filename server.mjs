@@ -1857,7 +1857,7 @@ app.post('/api/classes/ocr/presign-upload', async (req, res) => {
   }
 });
 
-// POST /api/classes/ocr-jobs - Submit Asynchronous AI OCR Evaluation Job (Idempotent)
+// POST /api/classes/ocr-jobs - Submit AI OCR Evaluation Job (Supports Direct & Async)
 app.post('/api/classes/ocr-jobs', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -1874,7 +1874,8 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       title = '',
       temporaryFileKey,
       fileContentType = 'image/jpeg',
-      studentName: reqStudentName
+      studentName: reqStudentName,
+      imageBase64
     } = req.body;
 
     if (!classroomId || !studentId) {
@@ -1903,22 +1904,11 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
         .eq('id', targetEvalId)
         .maybeSingle();
 
-      if (existingEval) {
-        if (existingEval.status === 'completed') {
-          return res.json({
-            success: true,
-            data: existingEval
-          });
-        } else if (existingEval.status === 'queued' || existingEval.status === 'processing') {
-          return res.json({
-            success: true,
-            data: {
-              jobId: targetEvalId,
-              evaluationId: targetEvalId,
-              status: existingEval.status
-            }
-          });
-        }
+      if (existingEval && existingEval.status === 'completed') {
+        return res.json({
+          success: true,
+          data: existingEval
+        });
       }
     }
 
@@ -1941,7 +1931,7 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       }
     }
 
-    // Insert record with status = 'queued' in Supabase
+    // Insert initial record with status = 'processing' in Supabase
     if (serverSupabase) {
       const { error: insertError } = await serverSupabase
         .from('ocr_evaluations')
@@ -1953,19 +1943,19 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
           category,
           title: (title || '').trim(),
           max_marks: marks,
-          status: 'queued',
+          status: 'processing',
           temporary_file_key: temporaryFileKey || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
 
       if (insertError) {
-        console.error('[OCR Job] Supabase insert error:', insertError);
+        console.error('[OCR Job] Supabase insert warning:', insertError.message);
       }
     }
 
-    // Enqueue job into background worker
-    ocrEvaluationQueue.enqueue({
+    // Execute evaluation job directly to ensure completion in serverless environments
+    const jobPayload = {
       evaluationId: targetEvalId,
       classroomId,
       teacherId: authData.user.id,
@@ -1977,20 +1967,24 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       maxMarks: marks,
       title: (title || '').trim(),
       temporaryFileKey,
-      fileContentType
-    });
+      fileContentType,
+      imageBase64
+    };
+
+    const completedData = await ocrEvaluationQueue.processJob(jobPayload);
 
     res.json({
       success: true,
       data: {
         jobId: targetEvalId,
         evaluationId: targetEvalId,
-        status: 'queued'
+        status: 'completed',
+        ...(completedData || {})
       }
     });
   } catch (error) {
     console.error('Error in /api/classes/ocr-jobs:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to submit OCR evaluation job' });
+    res.status(500).json({ success: false, error: error.message || 'Failed to process OCR evaluation job' });
   }
 });
 

@@ -133,10 +133,17 @@ class OcrEvaluationQueue {
     }
 
     try {
-      // 2. Fetch temporary file buffer from Cloudflare R2
+      // 2. Fetch or decode temporary file buffer
       let imageBuffer = null;
-      if (job.temporaryFileKey) {
-        imageBuffer = await getBinaryContent(job.temporaryFileKey);
+      if (job.imageBase64) {
+        const cleanBase64 = job.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        imageBuffer = Buffer.from(cleanBase64, 'base64');
+      } else if (job.temporaryFileKey) {
+        try {
+          imageBuffer = await getBinaryContent(job.temporaryFileKey);
+        } catch (r2Err) {
+          console.warn('[OCR Engine] Warning: Failed to fetch temporary file from R2:', r2Err.message);
+        }
       }
 
       // 3. Perform Category-Specific AI Evaluation with Exponential Backoff
@@ -148,9 +155,11 @@ class OcrEvaluationQueue {
       // 4. Validate and sanitize AI Output
       const validated = this.validateAndNormalizeAiOutput(evaluationResult, job.maxMarks, job.category);
 
+      let updatedEvalRecord = null;
+
       // 5. Save structured evaluation data to Supabase
       if (this.serverSupabase) {
-        const { error: dbError } = await this.serverSupabase
+        const { data: savedData, error: dbError } = await this.serverSupabase
           .from('ocr_evaluations')
           .update({
             score: validated.score,
@@ -165,50 +174,60 @@ class OcrEvaluationQueue {
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
-          .eq('id', evaluationId);
+          .eq('id', evaluationId)
+          .select('*')
+          .maybeSingle();
 
         if (dbError) {
-          throw new Error(`Failed to persist evaluation record: ${dbError.message}`);
+          console.error(`[OCR Engine] Persist warning: ${dbError.message}`);
+        } else if (savedData) {
+          updatedEvalRecord = savedData;
         }
       }
 
-      // 6. Generate concise PDF report
-      const pdfBuffer = generateEvaluationReportPdf({
-        evaluationId,
-        studentName: job.studentName || 'Student',
-        teacherName: job.teacherName || 'Teacher',
-        classroomTitle: job.classroomTitle || 'Classroom',
-        category: job.category,
-        title: job.title || '',
-        maxMarks: job.maxMarks,
-        score: validated.score,
-        percentage: validated.percentage,
-        performance: validated.performance,
-        breakdown: validated.breakdown,
-        feedback: validated.feedback,
-        completedAt: new Date().toISOString()
-      });
+      // 6. Generate concise PDF report (safe fallback if PDF fails)
+      try {
+        const pdfBuffer = generateEvaluationReportPdf({
+          evaluationId,
+          studentName: job.studentName || 'Student',
+          teacherName: job.teacherName || 'Teacher',
+          classroomTitle: job.classroomTitle || 'Classroom',
+          category: job.category,
+          title: job.title || '',
+          maxMarks: job.maxMarks,
+          score: validated.score,
+          percentage: validated.percentage,
+          performance: validated.performance,
+          breakdown: validated.breakdown,
+          feedback: validated.feedback,
+          completedAt: new Date().toISOString()
+        });
 
-      // 7. Store PDF report in R2
-      const reportKey = buildOcrReportKey({
-        teacherId: job.teacherId,
-        studentId: job.studentId,
-        evaluationId
-      });
+        // 7. Store PDF report in R2
+        const reportKey = buildOcrReportKey({
+          teacherId: job.teacherId,
+          studentId: job.studentId,
+          evaluationId
+        });
 
-      await putBinaryContent(reportKey, pdfBuffer, 'application/pdf');
+        await putBinaryContent(reportKey, pdfBuffer, 'application/pdf');
 
-      // 8. Update evaluation record with report_file_key
+        // 8. Update evaluation record with report_file_key
+        if (this.serverSupabase) {
+          await this.serverSupabase
+            .from('ocr_evaluations')
+            .update({
+              report_file_key: reportKey,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', evaluationId);
+        }
+      } catch (pdfErr) {
+        console.warn('[OCR Engine] Notice: PDF report storage skipped:', pdfErr.message);
+      }
+
+      // 9. Award classroom points automatically
       if (this.serverSupabase) {
-        await this.serverSupabase
-          .from('ocr_evaluations')
-          .update({
-            report_file_key: reportKey,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', evaluationId);
-
-        // 9. Award classroom points automatically
         try {
           await this.serverSupabase
             .from('classroom_points')
@@ -226,7 +245,7 @@ class OcrEvaluationQueue {
         }
       }
 
-      // 10. SUCCESS CONFIRMED — Delete temporary source image from Cloudflare R2
+      // 10. SUCCESS CONFIRMED — Delete temporary source image from Cloudflare R2 if it was used
       if (job.temporaryFileKey) {
         try {
           await deleteObjects([job.temporaryFileKey]);
@@ -237,6 +256,24 @@ class OcrEvaluationQueue {
       }
 
       console.log(`[OCR Engine] Successfully completed evaluation job: ${evaluationId}`);
+
+      return updatedEvalRecord || {
+        id: evaluationId,
+        class_id: job.classroomId,
+        student_id: job.studentId,
+        teacher_id: job.teacherId,
+        category: job.category,
+        title: job.title || '',
+        max_marks: job.maxMarks,
+        score: validated.score,
+        final_score: validated.score,
+        percentage: validated.percentage,
+        performance: validated.performance,
+        breakdown_json: validated.breakdown,
+        feedback: validated.feedback,
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      };
     } catch (err) {
       console.error(`[OCR Engine] Evaluation job ${evaluationId} failed:`, err);
       // Mark evaluation as failed in Supabase
@@ -250,7 +287,7 @@ class OcrEvaluationQueue {
           })
           .eq('id', evaluationId);
       }
-      // Failure safety rule: Do NOT delete temporary image prematurely so job can be retried safely.
+      throw err;
     }
   }
 
