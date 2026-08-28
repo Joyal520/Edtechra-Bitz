@@ -5,511 +5,929 @@ interface IllustrationProps {
   size?: number;
 }
 
-// 1. OVERVIEW: Analytics dashboard window with charts and pie graph
-export const OverviewIllustration: React.FC<IllustrationProps> = ({ className = "w-28 h-24" }) => (
-  <svg viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 1. CLASSROOM HERO: 3D Paper-Cut Classroom Scene with Blackboard, Books, Desk
+// ============================================================================
+export const ClassroomHeroIllustration: React.FC<IllustrationProps> = ({ className = "w-full max-w-[420px] h-[220px]" }) => (
+  <svg viewBox="0 0 460 260" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="ovShadow" x="-10" y="-10" width="180" height="150" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#38bdf8" floodOpacity="0.2" />
+      {/* Paper Drop Shadows */}
+      <filter id="heroPaperShadow" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#020817" floodOpacity="0.35" />
       </filter>
-      <linearGradient id="ovWindowBg" x1="0" y1="0" x2="160" y2="130" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#ffffff" />
-        <stop offset="100%" stopColor="#f0f7ff" />
+      <filter id="softDepth" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#091e3a" floodOpacity="0.25" />
+      </filter>
+      <filter id="capShadow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#020817" floodOpacity="0.4" />
+      </filter>
+
+      {/* Wave Gradients */}
+      <linearGradient id="wave1" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#1e3a5f" />
+        <stop offset="100%" stopColor="#0d233e" />
       </linearGradient>
-      <linearGradient id="ovBlueBar" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#38bdf8" />
+      <linearGradient id="wave2" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#254d77" />
+        <stop offset="100%" stopColor="#153252" />
+      </linearGradient>
+      <linearGradient id="wave3" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#2e6093" />
+        <stop offset="100%" stopColor="#1b3d63" />
+      </linearGradient>
+
+      {/* Wood Desk Gradient */}
+      <linearGradient id="deskWood" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#d97706" />
+        <stop offset="100%" stopColor="#92400e" />
+      </linearGradient>
+      {/* Chair Yellow Gradient */}
+      <linearGradient id="chairYellow" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#fbbf24" />
+        <stop offset="100%" stopColor="#d97706" />
+      </linearGradient>
+      {/* Blackboard Surface */}
+      <linearGradient id="chalkboardBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#1e293b" />
+        <stop offset="100%" stopColor="#0f172a" />
+      </linearGradient>
+    </defs>
+
+    {/* LAYER 1: Background Organic Cut-Paper Waves */}
+    <g filter="url(#heroPaperShadow)">
+      <path d="M 0 0 C 60 40, 100 120, 120 260 L 0 260 Z" fill="url(#wave1)" opacity="0.9" />
+      <path d="M 30 0 C 90 60, 130 140, 150 260 L 0 260 Z" fill="url(#wave2)" opacity="0.65" />
+      <path d="M 70 0 C 120 80, 160 160, 180 260 L 0 260 Z" fill="url(#wave3)" opacity="0.45" />
+    </g>
+
+    {/* LAYER 2: Hanging Wall Clock on Upper Right */}
+    <g transform="translate(400, 48)" filter="url(#softDepth)">
+      <circle cx="0" cy="0" r="22" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="2.5" />
+      <circle cx="0" cy="0" r="19" fill="#ffffff" />
+      {/* Clock ticks */}
+      <line x1="0" y1="-16" x2="0" y2="-13" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="0" y1="16" x2="0" y2="13" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="-16" y1="0" x2="-13" y2="0" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="16" y1="0" x2="13" y2="0" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" />
+      {/* Clock Hands (10:10) */}
+      <line x1="0" y1="0" x2="-7" y2="-8" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="0" y1="0" x2="10" y2="-5" stroke="#0f172a" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="0" cy="0" r="2" fill="#f59e0b" />
+    </g>
+
+    {/* LAYER 3: Blackboard Frame & Chalkboard */}
+    <g transform="translate(190, 24)" filter="url(#heroPaperShadow)">
+      {/* Wooden Frame */}
+      <rect x="0" y="0" width="180" height="110" rx="10" fill="#92400e" stroke="#78350f" strokeWidth="2" />
+      <rect x="5" y="5" width="170" height="100" rx="6" fill="#b45309" />
+      {/* Chalkboard Slate */}
+      <rect x="10" y="10" width="160" height="90" rx="4" fill="url(#chalkboardBg)" />
+      
+      {/* Chalk Tray */}
+      <rect x="6" y="106" width="168" height="6" rx="2" fill="#78350f" />
+      <rect x="25" y="104" width="12" height="3" rx="1" fill="#ffffff" />
+      <rect x="42" y="104" width="8" height="3" rx="1" fill="#fef08a" />
+
+      {/* Chalk Formulas & Math Doodles on Blackboard */}
+      <path d="M 22 28 C 30 22, 40 32, 48 24" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.6" />
+      <path d="M 22 38 L 46 38 M 34 32 L 34 44" stroke="#38bdf8" strokeWidth="1.2" strokeLinecap="round" opacity="0.5" />
+      <text x="24" y="60" fill="#fde047" fontSize="11" fontWeight="bold" fontFamily="monospace" opacity="0.75">E = mc²</text>
+      <path d="M 24 74 L 40 74 M 45 74 L 55 74" stroke="#94a3b8" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
+
+      {/* Right Side: Stack of 3 Books on Board */}
+      <g transform="translate(70, 52)">
+        {/* Book 1 (Bottom - Gold) */}
+        <rect x="0" y="16" width="82" height="12" rx="2" fill="#d97706" />
+        <rect x="4" y="18" width="74" height="8" rx="1" fill="#fef3c7" />
+        <rect x="0" y="16" width="12" height="12" rx="2" fill="#b45309" />
+
+        {/* Book 2 (Middle - Amber) */}
+        <rect x="6" y="8" width="72" height="11" rx="2" fill="#f59e0b" />
+        <rect x="10" y="10" width="64" height="7" rx="1" fill="#ffffff" />
+        <rect x="6" y="8" width="10" height="11" rx="2" fill="#d97706" />
+
+        {/* Book 3 (Top - Cream) */}
+        <rect x="12" y="0" width="62" height="11" rx="2" fill="#f8fafc" />
+        <rect x="15" y="2" width="54" height="7" rx="1" fill="#f1f5f9" />
+        <rect x="12" y="0" width="9" height="11" rx="2" fill="#0284c7" />
+
+        {/* Graduation Cap on top of books */}
+        <g transform="translate(38, -14)" filter="url(#capShadow)">
+          {/* Diamond Cap Top */}
+          <path d="M 0 -8 L 30 0 L 0 8 L -30 0 Z" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+          {/* Cap Skull Underneath */}
+          <path d="M -16 2 L -16 10 C -16 16, 16 16, 16 10 L 16 2 Z" fill="#0369a1" />
+          {/* Golden Tassel */}
+          <path d="M 0 0 L 22 7 L 22 18" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx="22" cy="20" r="3" fill="#f59e0b" />
+          <circle cx="0" cy="0" r="2.5" fill="#fde047" />
+        </g>
+      </g>
+    </g>
+
+    {/* LAYER 4: Bookshelf with Books & Plant on Right */}
+    <g transform="translate(380, 100)" filter="url(#softDepth)">
+      {/* Bookshelf Frame */}
+      <rect x="0" y="0" width="68" height="145" rx="4" fill="#92400e" stroke="#78350f" strokeWidth="1.5" />
+      {/* Top Shelf Compartment */}
+      <rect x="4" y="4" width="60" height="42" fill="#b45309" />
+      {/* Middle Shelf Compartment */}
+      <rect x="4" y="50" width="60" height="42" fill="#b45309" />
+      {/* Bottom Shelf Compartment */}
+      <rect x="4" y="96" width="60" height="44" fill="#b45309" />
+
+      {/* Top Shelf: Potted Plant */}
+      <g transform="translate(18, 12)">
+        <rect x="4" y="20" width="18" height="14" rx="2" fill="#fed7aa" stroke="#f97316" strokeWidth="1" />
+        <path d="M 13 20 C 6 6, 11 0, 13 -3 C 15 0, 20 6, 13 20 Z" fill="#22c55e" />
+        <path d="M 9 18 C 0 10, 6 2, 9 18 Z" fill="#16a34a" />
+        <path d="M 17 18 C 26 10, 20 2, 17 18 Z" fill="#15803d" />
+      </g>
+
+      {/* Middle Shelf: Standing Vertical Books (Teal, Blue, Yellow) */}
+      <rect x="10" y="58" width="8" height="30" rx="1.5" fill="#0284c7" />
+      <rect x="20" y="54" width="9" height="34" rx="1.5" fill="#38bdf8" />
+      <rect x="31" y="60" width="8" height="28" rx="1.5" fill="#fbbf24" />
+      <rect x="41" y="56" width="9" height="32" rx="1.5" fill="#059669" />
+
+      {/* Bottom Shelf: Stacked Books & Globe */}
+      <rect x="10" y="122" width="48" height="8" rx="1" fill="#e2e8f0" />
+      <rect x="12" y="114" width="44" height="8" rx="1" fill="#38bdf8" />
+      <rect x="16" y="106" width="36" height="8" rx="1" fill="#fbbf24" />
+    </g>
+
+    {/* LAYER 5: Yellow Teacher Office Chair */}
+    <g transform="translate(325, 138)" filter="url(#heroPaperShadow)">
+      {/* Chair Backrest */}
+      <path d="M 10 0 C 2 0, 0 10, 0 24 C 0 38, 4 48, 14 50 L 32 50 C 42 48, 46 38, 46 24 C 46 10, 44 0, 36 0 Z" fill="url(#chairYellow)" stroke="#d97706" strokeWidth="1.5" />
+      <rect x="10" y="10" width="26" height="26" rx="4" fill="#fde047" opacity="0.6" />
+      {/* Chair Seat */}
+      <rect x="-4" y="46" width="54" height="14" rx="6" fill="#d97706" stroke="#b45309" strokeWidth="1" />
+      {/* Chair Stem */}
+      <rect x="19" y="58" width="8" height="24" fill="#475569" />
+      {/* Wheels Base */}
+      <path d="M 2 82 L 44 82" stroke="#334155" strokeWidth="5" strokeLinecap="round" />
+      <circle cx="4" cy="85" r="3" fill="#0f172a" />
+      <circle cx="42" cy="85" r="3" fill="#0f172a" />
+      <circle cx="23" cy="85" r="3" fill="#0f172a" />
+    </g>
+
+    {/* LAYER 6: Teacher Desk Surface & Legs */}
+    <g transform="translate(195, 172)" filter="url(#heroPaperShadow)">
+      {/* Desk Surface Tabletop */}
+      <rect x="0" y="0" width="180" height="14" rx="4" fill="url(#deskWood)" stroke="#78350f" strokeWidth="1.5" />
+      <rect x="4" y="2" width="172" height="4" rx="2" fill="#fbbf24" opacity="0.4" />
+      {/* Desk Legs */}
+      <rect x="14" y="14" width="10" height="74" rx="2" fill="#78350f" />
+      <rect x="156" y="14" width="10" height="74" rx="2" fill="#78350f" />
+      <rect x="24" y="44" width="132" height="5" rx="1" fill="#92400e" opacity="0.6" />
+
+      {/* Laptop on Desk */}
+      <g transform="translate(26, -34)">
+        {/* Laptop Screen (Silver/Grey with glow) */}
+        <path d="M 8 0 L 52 0 C 54 0, 56 2, 56 4 L 52 28 C 52 30, 50 32, 48 32 L 12 32 C 10 32, 8 30, 8 28 L 4 4 C 4 2, 6 0, 8 0 Z" fill="#94a3b8" stroke="#64748b" strokeWidth="1.5" />
+        <rect x="9" y="4" width="42" height="22" rx="2" fill="#38bdf8" />
+        <path d="M 14 10 L 26 10 M 14 16 L 36 16 M 14 20 L 30 20" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.8" />
+        {/* Laptop Base */}
+        <path d="M 0 32 L 60 32 L 56 36 L 4 36 Z" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1" />
+      </g>
+
+      {/* Coffee Mug on Desk */}
+      <g transform="translate(100, -18)">
+        <rect x="0" y="4" width="14" height="14" rx="3" fill="#0284c7" />
+        <path d="M 14 7 C 18 7, 18 15, 14 15" stroke="#0284c7" strokeWidth="2" fill="none" />
+        {/* Steam */}
+        <path d="M 4 0 C 3 -3, 6 -4, 5 -7" stroke="#93c5fd" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.7" />
+        <path d="M 9 1 C 8 -2, 11 -3, 10 -6" stroke="#93c5fd" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.7" />
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 2. OVERVIEW: 3D Paper-Cut Bar Chart & Donut Chart
+// ============================================================================
+export const OverviewIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="ovDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#0284c7" floodOpacity="0.25" />
+      </filter>
+      <linearGradient id="ovBar1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#7dd3fc" />
         <stop offset="100%" stopColor="#0284c7" />
       </linearGradient>
-      <linearGradient id="ovDarkBlueBar" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="ovBar2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#38bdf8" />
+        <stop offset="100%" stopColor="#0369a1" />
+      </linearGradient>
+      <linearGradient id="ovBar3" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#60a5fa" />
-        <stop offset="100%" stopColor="#2563eb" />
-      </linearGradient>
-      <linearGradient id="ovAmberBar" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fbbf24" />
-        <stop offset="100%" stopColor="#f59e0b" />
+        <stop offset="100%" stopColor="#1d4ed8" />
       </linearGradient>
     </defs>
-    {/* Window Container */}
-    <rect x="15" y="15" width="130" height="96" rx="14" fill="url(#ovWindowBg)" stroke="#bae6fd" strokeWidth="2" filter="url(#ovShadow)" />
-    
-    {/* Window Header Bar */}
-    <rect x="15" y="15" width="130" height="24" rx="14" fill="#e0f2fe" />
-    <circle cx="28" cy="27" r="3.5" fill="#38bdf8" />
-    <circle cx="38" cy="27" r="3.5" fill="#7dd3fc" />
-    <circle cx="48" cy="27" r="3.5" fill="#bae6fd" />
-    <rect x="62" y="24" width="40" height="6" rx="3" fill="#93c5fd" opacity="0.6" />
+    <g filter="url(#ovDepth)">
+      {/* Background Rounded Window Card */}
+      <rect x="16" y="14" width="108" height="82" rx="14" fill="#ffffff" stroke="#bae6fd" strokeWidth="1.5" />
+      
+      {/* Window Top Bar */}
+      <rect x="16" y="14" width="108" height="20" rx="14" fill="#e0f2fe" />
+      <circle cx="28" cy="24" r="3" fill="#38bdf8" />
+      <circle cx="37" cy="24" r="3" fill="#7dd3fc" />
+      <circle cx="46" cy="24" r="3" fill="#bae6fd" />
 
-    {/* Left: Bar Charts */}
-    <rect x="30" y="76" width="10" height="22" rx="4" fill="url(#ovBlueBar)" />
-    <rect x="44" y="62" width="10" height="36" rx="4" fill="url(#ovDarkBlueBar)" />
-    <rect x="58" y="50" width="10" height="48" rx="4" fill="url(#ovBlueBar)" />
-    <line x1="26" y1="100" x2="72" y2="100" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
+      {/* 3 Dimensional Bar Columns */}
+      <rect x="30" y="60" width="12" height="26" rx="4" fill="url(#ovBar1)" />
+      <rect x="48" y="46" width="12" height="40" rx="4" fill="url(#ovBar2)" />
+      <rect x="66" y="36" width="12" height="50" rx="4" fill="url(#ovBar3)" />
+      <line x1="24" y1="88" x2="84" y2="88" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
 
-    {/* Right: Pie Chart */}
-    <g transform="translate(108, 72)">
-      {/* Pie slice - Blue */}
-      <circle cx="0" cy="0" r="22" fill="#38bdf8" />
-      {/* Pie slice - Amber */}
-      <path d="M 0 0 L 22 0 A 22 22 0 0 1 -7 20.8 Z" fill="url(#ovAmberBar)" />
-      {/* Pie slice - Dark Blue */}
-      <path d="M 0 0 L -7 20.8 A 22 22 0 0 1 -20.8 -7 Z" fill="#2563eb" />
-      {/* Pie Center hole for donut look */}
-      <circle cx="0" cy="0" r="10" fill="#ffffff" />
+      {/* Donut Chart on Right */}
+      <g transform="translate(98, 62)">
+        <circle cx="0" cy="0" r="16" fill="#38bdf8" />
+        <path d="M 0 0 L 16 0 A 16 16 0 0 1 -5 15.2 Z" fill="#f59e0b" />
+        <path d="M 0 0 L -5 15.2 A 16 16 0 0 1 -15.2 -5 Z" fill="#2563eb" />
+        <circle cx="0" cy="0" r="8" fill="#ffffff" />
+      </g>
     </g>
   </svg>
 );
 
-// 2. TASK: Green checklist clipboard
-export const TaskIllustration: React.FC<IllustrationProps> = ({ className = "w-28 h-24" }) => (
-  <svg viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 3. TASKS: Green Checklist Clipboard with Metallic Clip & Pencil
+// ============================================================================
+export const TaskIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="taskShadow" x="-10" y="-10" width="180" height="150" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#34d399" floodOpacity="0.2" />
+      <filter id="taskDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#059669" floodOpacity="0.25" />
       </filter>
-      <linearGradient id="taskBoardGrad" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="taskBoard" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#10b981" />
-        <stop offset="100%" stopColor="#059669" />
+        <stop offset="100%" stopColor="#047857" />
       </linearGradient>
     </defs>
-    {/* Clipboard Base */}
-    <rect x="36" y="20" width="88" height="98" rx="14" fill="url(#taskBoardGrad)" filter="url(#taskShadow)" />
-    
-    {/* Clipboard Inner Sheet */}
-    <rect x="44" y="32" width="72" height="78" rx="8" fill="#ffffff" stroke="#a7f3d0" strokeWidth="1.5" />
+    <g filter="url(#taskDepth)">
+      {/* Board Base */}
+      <rect x="32" y="16" width="76" height="84" rx="12" fill="url(#taskBoard)" />
+      {/* Inner White Paper */}
+      <rect x="38" y="26" width="64" height="68" rx="8" fill="#ffffff" stroke="#a7f3d0" strokeWidth="1.5" />
 
-    {/* Top Metallic Clip */}
-    <rect x="62" y="12" width="36" height="14" rx="4" fill="#334155" />
-    <rect x="69" y="16" width="22" height="6" rx="2" fill="#94a3b8" />
-    <circle cx="80" cy="8" r="4" fill="#047857" stroke="#34d399" strokeWidth="2" />
+      {/* Top Clip */}
+      <rect x="54" y="10" width="32" height="12" rx="4" fill="#1e293b" />
+      <rect x="60" y="13" width="20" height="5" rx="2" fill="#94a3b8" />
+      <circle cx="70" cy="6" r="3" fill="#047857" stroke="#34d399" strokeWidth="1.5" />
 
-    {/* Item 1 */}
-    <path d="M 52 48 L 56 52 L 63 44" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="68" y="46" width="38" height="5" rx="2.5" fill="#10b981" opacity="0.85" />
+      {/* Checklist Rows with Checkmarks */}
+      <path d="M 45 40 L 49 44 L 56 36" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="60" y="38" width="34" height="4.5" rx="2" fill="#10b981" opacity="0.85" />
 
-    {/* Item 2 */}
-    <path d="M 52 64 L 56 68 L 63 60" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="68" y="62" width="34" height="5" rx="2.5" fill="#10b981" opacity="0.85" />
+      <path d="M 45 54 L 49 58 L 56 50" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="60" y="52" width="30" height="4.5" rx="2" fill="#10b981" opacity="0.85" />
 
-    {/* Item 3 */}
-    <path d="M 52 80 L 56 84 L 63 76" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="68" y="78" width="40" height="5" rx="2.5" fill="#10b981" opacity="0.85" />
+      <path d="M 45 68 L 49 72 L 56 64" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="60" y="66" width="36" height="4.5" rx="2" fill="#10b981" opacity="0.85" />
 
-    {/* Item 4 */}
-    <circle cx="56" cy="94" r="3.5" fill="#d1fae5" stroke="#10b981" strokeWidth="1.5" />
-    <rect x="68" y="92" width="28" height="4" rx="2" fill="#cbd5e1" />
-  </svg>
-);
-
-// 3. STUDENTS: Avatar group of boy and girl students
-export const StudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-28 h-24" }) => (
-  <svg viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <filter id="studShadow" x="-10" y="-10" width="180" height="150" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#818cf8" floodOpacity="0.22" />
-      </filter>
-      <linearGradient id="studDisc" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#ede9fe" />
-        <stop offset="100%" stopColor="#e0e7ff" />
-      </linearGradient>
-    </defs>
-    {/* Soft Lavender Background Disc */}
-    <circle cx="80" cy="65" r="48" fill="url(#studDisc)" filter="url(#studShadow)" />
-
-    {/* Left Student (Boy - in purple/indigo) */}
-    <g transform="translate(42, 38)">
-      {/* Hair */}
-      <path d="M 12 18 C 10 6, 26 2, 32 10 C 35 12, 36 20, 32 24 C 28 20, 14 20, 12 18 Z" fill="#1e1b4b" />
-      {/* Face */}
-      <circle cx="22" cy="22" r="12" fill="#fcd34d" />
-      {/* Neck */}
-      <rect x="19" y="32" width="6" height="6" fill="#f59e0b" />
-      {/* Clothes / Shirt */}
-      <path d="M 6 48 C 6 36, 38 36, 38 48 Z" fill="#6366f1" />
-    </g>
-
-    {/* Right Student (Girl - in blue/sky) */}
-    <g transform="translate(74, 42)">
-      {/* Long Hair Back */}
-      <path d="M 10 16 C 8 2, 36 2, 34 16 C 36 28, 38 40, 36 44 L 8 44 C 6 40, 8 28, 10 16 Z" fill="#0f172a" />
-      {/* Face */}
-      <circle cx="22" cy="20" r="11" fill="#fed7aa" />
-      {/* Hair Bangs */}
-      <path d="M 12 16 C 16 10, 28 10, 32 16 C 28 14, 16 14, 12 16 Z" fill="#0f172a" />
-      {/* Neck */}
-      <rect x="19" y="29" width="6" height="5" fill="#f97316" />
-      {/* Clothes / Shirt */}
-      <path d="M 8 46 C 8 35, 36 35, 36 46 Z" fill="#38bdf8" />
+      {/* Row 4 Pending */}
+      <circle cx="49" cy="80" r="3" fill="#d1fae5" stroke="#10b981" strokeWidth="1.5" />
+      <rect x="60" y="78" width="24" height="4" rx="2" fill="#cbd5e1" />
     </g>
   </svg>
 );
 
-// 4. STREAM: Stack of colourful textbooks
-export const StreamIllustration: React.FC<IllustrationProps> = ({ className = "w-28 h-24" }) => (
-  <svg viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 4. STUDENTS: Lavender Layered Student Avatars
+// ============================================================================
+export const StudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="streamShadow" x="-10" y="-10" width="180" height="150" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#f59e0b" floodOpacity="0.2" />
+      <filter id="studDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#7c3aed" floodOpacity="0.22" />
       </filter>
     </defs>
-    <g filter="url(#streamShadow)">
-      {/* Book 3 (Bottom - Sky Blue) */}
-      <rect x="30" y="82" width="98" height="18" rx="5" fill="#0284c7" />
-      <rect x="34" y="85" width="90" height="12" rx="3" fill="#ffffff" />
-      <rect x="30" y="82" width="18" height="18" rx="5" fill="#0369a1" />
-      <line x1="38" y1="84" x2="38" y2="98" stroke="#38bdf8" strokeWidth="2" />
+    <g filter="url(#studDepth)">
+      {/* Background Soft Disc */}
+      <circle cx="70" cy="55" r="42" fill="#f5f3ff" stroke="#ddd6fe" strokeWidth="1.5" />
 
-      {/* Book 2 (Middle - Emerald/Teal) */}
-      <rect x="34" y="62" width="90" height="17" rx="5" fill="#059669" />
-      <rect x="38" y="65" width="82" height="11" rx="3" fill="#ffffff" />
-      <rect x="34" y="62" width="16" height="17" rx="5" fill="#047857" />
-      <line x1="41" y1="64" x2="41" y2="77" stroke="#34d399" strokeWidth="2" />
+      {/* Center Main Student (Teacher/Leader - Gold/Indigo) */}
+      <g transform="translate(52, 28)">
+        <path d="M 8 16 C 6 4, 28 4, 26 16 C 30 24, 28 32, 26 36 L 8 36 Z" fill="#1e1b4b" />
+        <circle cx="18" cy="18" r="11" fill="#fcd34d" />
+        <path d="M 9 14 C 14 9, 22 9, 27 14 Z" fill="#1e1b4b" />
+        <path d="M 2 46 C 2 34, 34 34, 34 46 Z" fill="#6366f1" />
+      </g>
 
-      {/* Book 1 (Top - Orange / Coral) */}
-      <rect x="40" y="42" width="82" height="18" rx="5" fill="#ea580c" />
-      <rect x="44" y="45" width="74" height="12" rx="3" fill="#ffffff" />
-      <rect x="40" y="42" width="16" height="18" rx="5" fill="#c2410c" />
-      <line x1="47" y1="44" x2="47" y2="58" stroke="#fdba74" strokeWidth="2" />
+      {/* Left Student (Boy - Slate/Blue) */}
+      <g transform="translate(24, 36)">
+        <circle cx="15" cy="15" r="9" fill="#fed7aa" />
+        <path d="M 6 13 C 6 5, 24 5, 24 13 Z" fill="#0f172a" />
+        <path d="M 0 38 C 0 28, 30 28, 30 38 Z" fill="#0284c7" />
+      </g>
 
-      {/* Ribbon Bookmark coming out of top book */}
-      <path d="M 58 42 L 58 28 L 65 33 L 72 28 L 72 42 Z" fill="#fbbf24" />
+      {/* Right Student (Girl - Coral/Purple) */}
+      <g transform="translate(86, 36)">
+        <path d="M 4 12 C 4 2, 26 2, 26 12 C 28 20, 28 28, 26 34 L 4 34 Z" fill="#0f172a" />
+        <circle cx="15" cy="15" r="9" fill="#fed7aa" />
+        <path d="M 0 38 C 0 28, 30 28, 30 38 Z" fill="#e11d48" />
+      </g>
     </g>
   </svg>
 );
 
-// 5. RESOURCES: Golden folder with documents
-export const ResourcesIllustration: React.FC<IllustrationProps> = ({ className = "w-28 h-24" }) => (
-  <svg viewBox="0 0 160 130" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 5. STREAM: Pastel Yellow Layered Chat Speech Bubbles
+// ============================================================================
+export const StreamIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="resShadow" x="-10" y="-10" width="180" height="150" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#f43f5e" floodOpacity="0.18" />
+      <filter id="streamDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#d97706" floodOpacity="0.22" />
       </filter>
-      <linearGradient id="folderBack" x1="0" y1="0" x2="0" y2="1">
+    </defs>
+    <g filter="url(#streamDepth)">
+      {/* Large Blue Chat Bubble at Back */}
+      <rect x="36" y="22" width="70" height="44" rx="12" fill="#0284c7" />
+      <path d="M 50 66 L 44 76 L 60 66 Z" fill="#0284c7" />
+      {/* Chat lines inside */}
+      <rect x="48" y="32" width="36" height="4.5" rx="2" fill="#ffffff" />
+      <rect x="48" y="42" width="46" height="4" rx="2" fill="#bae6fd" />
+      <rect x="48" y="50" width="28" height="4" rx="2" fill="#bae6fd" />
+
+      {/* Front Small Amber/Gold Chat Bubble */}
+      <rect x="58" y="48" width="56" height="38" rx="10" fill="#f59e0b" stroke="#ffffff" strokeWidth="2" />
+      <path d="M 94 86 L 102 96 L 98 86 Z" fill="#f59e0b" />
+      {/* 3 typing dots */}
+      <circle cx="74" cy="67" r="3.5" fill="#ffffff" />
+      <circle cx="86" cy="67" r="3.5" fill="#ffffff" />
+      <circle cx="98" cy="67" r="3.5" fill="#ffffff" />
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 6. RESOURCES: Golden-Peach File Folder with Papers
+// ============================================================================
+export const ResourcesIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 140 110" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="resDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" floodColor="#e11d48" floodOpacity="0.2" />
+      </filter>
+      <linearGradient id="resFoldBack" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#d97706" />
         <stop offset="100%" stopColor="#b45309" />
       </linearGradient>
-      <linearGradient id="folderFront" x1="0" y1="0" x2="0" y2="1">
+      <linearGradient id="resFoldFront" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#fbbf24" />
         <stop offset="100%" stopColor="#f59e0b" />
       </linearGradient>
     </defs>
-    <g filter="url(#resShadow)">
-      {/* Folder Back Tab */}
-      <path d="M 32 38 C 32 34, 35 30, 40 30 L 68 30 L 78 38 L 122 38 C 126 38, 128 41, 128 46 L 128 92 L 32 92 Z" fill="url(#folderBack)" />
+    <g filter="url(#resDepth)">
+      {/* Folder Back with Tab */}
+      <path d="M 28 32 C 28 28, 31 24, 35 24 L 58 24 L 66 32 L 105 32 C 109 32, 112 35, 112 39 L 112 82 L 28 82 Z" fill="url(#resFoldBack)" />
 
-      {/* Papers / Sheets inside */}
-      <rect x="42" y="24" width="70" height="60" rx="4" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1.5" transform="rotate(-4 42 24)" />
-      <rect x="52" y="32" width="40" height="4" rx="2" fill="#94a3b8" transform="rotate(-4 42 24)" />
-      <rect x="52" y="40" width="50" height="4" rx="2" fill="#cbd5e1" transform="rotate(-4 42 24)" />
+      {/* Sheets of paper inside */}
+      <rect x="36" y="18" width="60" height="54" rx="4" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1.5" transform="rotate(-5 36 18)" />
+      <rect x="45" y="24" width="34" height="4" rx="2" fill="#94a3b8" transform="rotate(-5 36 18)" />
+      <rect x="45" y="32" width="42" height="3" rx="1.5" fill="#cbd5e1" transform="rotate(-5 36 18)" />
 
-      <rect x="50" y="22" width="68" height="60" rx="4" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" transform="rotate(3 50 22)" />
-      <rect x="60" y="30" width="42" height="4" rx="2" fill="#38bdf8" transform="rotate(3 50 22)" />
-      <rect x="60" y="38" width="48" height="4" rx="2" fill="#cbd5e1" transform="rotate(3 50 22)" />
+      <rect x="44" y="16" width="58" height="54" rx="4" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1.5" transform="rotate(4 44 16)" />
+      <rect x="52" y="22" width="36" height="4" rx="2" fill="#38bdf8" transform="rotate(4 44 16)" />
+      <rect x="52" y="30" width="40" height="3" rx="1.5" fill="#cbd5e1" transform="rotate(4 44 16)" />
 
       {/* Folder Front Flap */}
-      <path d="M 28 50 C 28 46, 32 44, 36 44 L 124 44 C 128 44, 132 46, 132 50 L 128 98 C 128 102, 124 105, 120 105 L 36 105 C 32 105, 28 102, 28 98 Z" fill="url(#folderFront)" />
-      
-      {/* Folder Front Detail Line */}
-      <path d="M 36 52 L 124 52" stroke="#fef3c7" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
+      <path d="M 24 42 C 24 38, 27 36, 31 36 L 109 36 C 113 36, 116 38, 116 42 L 112 88 C 112 92, 109 95, 105 95 L 31 95 C 27 95, 24 92, 24 88 Z" fill="url(#resFoldFront)" />
+      <path d="M 32 44 L 108 44" stroke="#fef3c7" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
     </g>
   </svg>
 );
 
-// 6. ASSIGN YOUR STUDENTS: Teacher guiding students with graduation cap
-export const AssignStudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-32 h-28" }) => (
-  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 7. ASSIGN YOUR STUDENTS: Graduation Cap Guiding Students
+// ============================================================================
+export const AssignStudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
+  <svg viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="assignShadow" x="-10" y="-10" width="180" height="160" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#6366f1" floodOpacity="0.22" />
-      </filter>
-      <linearGradient id="assignDisc" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#ede9fe" />
-        <stop offset="100%" stopColor="#ddd6fe" />
-      </linearGradient>
-    </defs>
-    {/* Purple Disc */}
-    <circle cx="80" cy="74" r="52" fill="url(#assignDisc)" filter="url(#assignShadow)" />
-
-    {/* Floating Graduation Cap at Top */}
-    <g transform="translate(80, 24)">
-      {/* Cap Diamond */}
-      <path d="M 0 -8 L 24 0 L 0 8 L -24 0 Z" fill="#4338ca" />
-      <path d="M -12 2 L -12 9 C -12 14, 12 14, 12 9 L 12 2 Z" fill="#312e81" />
-      {/* Tassel */}
-      <path d="M 0 0 L 16 7 L 16 16" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="16" cy="18" r="2.5" fill="#f59e0b" />
-      <circle cx="0" cy="0" r="2" fill="#fbbf24" />
-    </g>
-
-    {/* Teacher Guidance Arrow */}
-    <path d="M 44 48 L 56 48 M 56 48 L 50 42" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-    {/* Student 1 (Boy) */}
-    <g transform="translate(46, 56)">
-      <circle cx="18" cy="18" r="11" fill="#fcd34d" />
-      <path d="M 8 16 C 6 8, 22 4, 28 10 C 30 14, 28 20, 26 20 Z" fill="#1e1b4b" />
-      <path d="M 4 44 C 4 33, 32 33, 32 44 Z" fill="#4f46e5" />
-    </g>
-
-    {/* Student 2 (Girl) */}
-    <g transform="translate(82, 58)">
-      <circle cx="18" cy="18" r="11" fill="#fed7aa" />
-      <path d="M 6 16 C 6 4, 30 4, 30 16 C 32 26, 32 36, 30 42 L 6 42 C 4 36, 4 26, 6 16 Z" fill="#0f172a" />
-      <circle cx="18" cy="18" r="10" fill="#fed7aa" />
-      <path d="M 8 14 C 14 10, 22 10, 28 14 Z" fill="#0f172a" />
-      <path d="M 4 44 C 4 34, 32 34, 32 44 Z" fill="#e11d48" />
-    </g>
-  </svg>
-);
-
-// 7. LIVE QUIZ: Screen with LIVE banner, Trophy, and Quiz answer cards
-export const LiveQuizIllustration: React.FC<IllustrationProps> = ({ className = "w-32 h-28" }) => (
-  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <filter id="quizGlow" x="-10" y="-10" width="180" height="160" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="10" floodColor="#8b5cf6" floodOpacity="0.25" />
-      </filter>
-      <linearGradient id="quizBg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#7c3aed" />
-        <stop offset="100%" stopColor="#4c1d95" />
-      </linearGradient>
-    </defs>
-    {/* Device Screen Body */}
-    <rect x="28" y="28" width="104" height="82" rx="14" fill="url(#quizBg)" filter="url(#quizGlow)" stroke="#a78bfa" strokeWidth="2" />
-    
-    {/* Inner Screen Area */}
-    <rect x="36" y="36" width="88" height="66" rx="8" fill="#5b21b6" />
-
-    {/* Top LIVE Banner Tag */}
-    <g transform="translate(62, 14)">
-      <rect x="0" y="0" width="36" height="18" rx="6" fill="#ef4444" stroke="#ffffff" strokeWidth="2" />
-      <text x="18" y="13" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="900" fontFamily="sans-serif">LIVE</text>
-    </g>
-
-    {/* Center Mini Trophy */}
-    <g transform="translate(80, 56)">
-      <path d="M -10 -8 L 10 -8 L 8 4 C 6 10, -6 10, -8 4 Z" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" />
-      <path d="M -10 -5 C -14 -5, -14 0, -8 0" stroke="#f59e0b" strokeWidth="1.5" fill="none" />
-      <path d="M 10 -5 C 14 -5, 14 0, 8 0" stroke="#f59e0b" strokeWidth="1.5" fill="none" />
-      <rect x="-3" y="9" width="6" height="5" fill="#f59e0b" />
-      <rect x="-7" y="14" width="14" height="4" rx="2" fill="#d97706" />
-    </g>
-
-    {/* 4 Interactive Answer Pill Cards */}
-    <rect x="42" y="76" width="18" height="8" rx="3" fill="#ef4444" />
-    <rect x="64" y="76" width="18" height="8" rx="3" fill="#3b82f6" />
-    <rect x="86" y="76" width="18" height="8" rx="3" fill="#eab308" />
-    <rect x="106" y="76" width="14" height="8" rx="3" fill="#10b981" />
-  </svg>
-);
-
-// 8. EXAM: Clipboard with questions and red "A+" stamp
-export const ExamIllustration: React.FC<IllustrationProps> = ({ className = "w-32 h-28" }) => (
-  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    <defs>
-      <filter id="examShadow" x="-10" y="-10" width="180" height="160" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#64748b" floodOpacity="0.25" />
-      </filter>
-      <filter id="aPlusGlow" x="0" y="0" width="50" height="50" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#ef4444" floodOpacity="0.35" />
+      <filter id="assignDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#4f46e5" floodOpacity="0.25" />
       </filter>
     </defs>
-    {/* Clipboard Base */}
-    <rect x="38" y="24" width="84" height="96" rx="12" fill="#475569" filter="url(#examShadow)" />
+    <g filter="url(#assignDepth)">
+      {/* Soft Purple Disc Base */}
+      <circle cx="70" cy="62" r="44" fill="#ede9fe" />
 
-    {/* Paper Sheet */}
-    <rect x="46" y="34" width="68" height="78" rx="6" fill="#ffffff" />
+      {/* Top Floating Graduation Cap */}
+      <g transform="translate(70, 22)">
+        <path d="M 0 -7 L 24 0 L 0 7 L -24 0 Z" fill="#4338ca" stroke="#6366f1" strokeWidth="1" />
+        <path d="M -12 2 L -12 8 C -12 13, 12 13, 12 8 L 12 2 Z" fill="#312e81" />
+        {/* Golden Tassel */}
+        <path d="M 0 0 L 16 6 L 16 14" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="16" cy="16" r="2.5" fill="#f59e0b" />
+        <circle cx="0" cy="0" r="2" fill="#fbbf24" />
+      </g>
 
-    {/* Metallic Clip */}
-    <rect x="65" y="16" width="30" height="14" rx="4" fill="#334155" />
-    <rect x="71" y="20" width="18" height="5" rx="2" fill="#94a3b8" />
-    <circle cx="80" cy="13" r="3.5" fill="#cbd5e1" />
+      {/* Student 1 (Boy) */}
+      <g transform="translate(38, 48)">
+        <circle cx="16" cy="16" r="10" fill="#fcd34d" />
+        <path d="M 7 14 C 5 7, 19 3, 25 9 Z" fill="#1e1b4b" />
+        <path d="M 3 38 C 3 28, 29 28, 29 38 Z" fill="#4f46e5" />
+      </g>
 
-    {/* Exam Question Lines */}
-    <rect x="54" y="44" width="40" height="4" rx="2" fill="#3b82f6" />
-    <rect x="54" y="52" width="52" height="3" rx="1.5" fill="#94a3b8" />
-    <rect x="54" y="58" width="46" height="3" rx="1.5" fill="#cbd5e1" />
-    
-    <rect x="54" y="68" width="40" height="4" rx="2" fill="#3b82f6" />
-    <rect x="54" y="76" width="50" height="3" rx="1.5" fill="#94a3b8" />
-    <rect x="54" y="82" width="38" height="3" rx="1.5" fill="#cbd5e1" />
+      {/* Student 2 (Center Girl) */}
+      <g transform="translate(56, 44)">
+        <circle cx="14" cy="14" r="9" fill="#fed7aa" />
+        <path d="M 4 12 C 4 3, 24 3, 24 12 Z" fill="#0f172a" />
+        <path d="M 0 36 C 0 26, 28 26, 28 36 Z" fill="#0284c7" />
+      </g>
 
-    {/* Glowing Red A+ Stamp */}
-    <g transform="translate(92, 80)">
-      <circle cx="16" cy="16" r="16" fill="#ef4444" filter="url(#aPlusGlow)" />
-      <circle cx="16" cy="16" r="14" fill="none" stroke="#fecaca" strokeWidth="1.5" strokeDasharray="3 2" />
-      <text x="16" y="21.5" textAnchor="middle" fill="#ffffff" fontSize="13" fontWeight="900" fontFamily="sans-serif">A+</text>
+      {/* Student 3 (Right Student) */}
+      <g transform="translate(74, 48)">
+        <circle cx="16" cy="16" r="10" fill="#fed7aa" />
+        <path d="M 5 14 C 5 4, 25 4, 25 14 Z" fill="#0f172a" />
+        <path d="M 3 38 C 3 28, 29 28, 29 38 Z" fill="#e11d48" />
+      </g>
     </g>
   </svg>
 );
 
-// 9. OCR ASSESSMENT: Document with scanning boundary corners and OCR tag
-export const OCRIllustration: React.FC<IllustrationProps> = ({ className = "w-32 h-28" }) => (
-  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 8. LIVE QUIZ: Screen with LIVE Badge & Golden Trophy
+// ============================================================================
+export const LiveQuizIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
+  <svg viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="ocrShadow" x="-10" y="-10" width="180" height="160" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#8b5cf6" floodOpacity="0.2" />
+      <filter id="lqDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#7c3aed" floodOpacity="0.25" />
       </filter>
-      <linearGradient id="scanBeam" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
-        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-      </linearGradient>
     </defs>
-    {/* Soft Purple Background Disc */}
-    <circle cx="80" cy="70" r="50" fill="#f5f3ff" />
+    <g filter="url(#lqDepth)">
+      {/* Device Body */}
+      <rect x="24" y="24" width="92" height="74" rx="14" fill="#4c1d95" stroke="#8b5cf6" strokeWidth="2" />
+      {/* Screen Inner */}
+      <rect x="32" y="32" width="76" height="58" rx="8" fill="#5b21b6" />
 
-    {/* Paper Sheet */}
-    <g filter="url(#ocrShadow)">
-      <path d="M 50 28 L 94 28 L 110 44 L 110 106 C 110 110, 106 112, 102 112 L 50 112 C 46 112, 42 110, 42 106 L 42 36 C 42 32, 46 28, 50 28 Z" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1.5" />
-      <path d="M 94 28 L 94 44 L 110 44 Z" fill="#e2e8f0" />
-      
-      {/* Handwriting / Text Lines on Paper */}
-      <rect x="52" y="42" width="32" height="4" rx="2" fill="#6366f1" opacity="0.8" />
-      <rect x="52" y="52" width="46" height="3" rx="1.5" fill="#94a3b8" />
-      <rect x="52" y="60" width="50" height="3" rx="1.5" fill="#cbd5e1" />
-      <rect x="52" y="68" width="40" height="3" rx="1.5" fill="#cbd5e1" />
-      <rect x="52" y="76" width="48" height="3" rx="1.5" fill="#94a3b8" />
-    </g>
+      {/* Red LIVE Badge */}
+      <g transform="translate(54, 12)">
+        <rect x="0" y="0" width="32" height="16" rx="5" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5" />
+        <text x="16" y="11.5" textAnchor="middle" fill="#ffffff" fontSize="8.5" fontWeight="900" fontFamily="sans-serif">LIVE</text>
+      </g>
 
-    {/* 4 Purple Scanning Bracket Corners */}
-    <path d="M 34 42 L 34 26 L 50 26" stroke="#6366f1" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M 126 42 L 126 26 L 110 26" stroke="#6366f1" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M 34 98 L 34 114 L 50 114" stroke="#6366f1" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M 126 98 L 126 114 L 110 114" stroke="#6366f1" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Trophy Center */}
+      <g transform="translate(70, 52)">
+        <path d="M -8 -6 L 8 -6 L 6 3 C 5 8, -5 8, -6 3 Z" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" />
+        <path d="M -8 -4 C -11 -4, -11 0, -6 0" stroke="#f59e0b" strokeWidth="1.2" fill="none" />
+        <path d="M 8 -4 C 11 -4, 11 0, 6 0" stroke="#f59e0b" strokeWidth="1.2" fill="none" />
+        <rect x="-2.5" y="7" width="5" height="4" fill="#f59e0b" />
+        <rect x="-6" y="11" width="12" height="3" rx="1.5" fill="#d97706" />
+      </g>
 
-    {/* OCR Purple Pill Badge */}
-    <g transform="translate(90, 88)">
-      <rect x="0" y="0" width="38" height="20" rx="7" fill="#4f46e5" stroke="#ffffff" strokeWidth="2" />
-      <text x="19" y="14" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="900" fontFamily="sans-serif">OCR</text>
+      {/* 4 Colored Answer Buttons */}
+      <rect x="38" y="72" width="14" height="7" rx="2.5" fill="#ef4444" />
+      <rect x="56" y="72" width="14" height="7" rx="2.5" fill="#3b82f6" />
+      <rect x="74" y="72" width="14" height="7" rx="2.5" fill="#eab308" />
+      <rect x="92" y="72" width="10" height="7" rx="2.5" fill="#10b981" />
     </g>
   </svg>
 );
 
-// 10. COMPETITION: Golden Championship Trophy with Star
-export const CompetitionIllustration: React.FC<IllustrationProps> = ({ className = "w-32 h-28" }) => (
-  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+// ============================================================================
+// 9. EXAM: Exam Paper Clipboard with Glowing Red A+ Stamp
+// ============================================================================
+export const ExamIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
+  <svg viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
-      <filter id="tropGlow" x="-10" y="-10" width="180" height="160" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#f59e0b" floodOpacity="0.3" />
+      <filter id="examDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#334155" floodOpacity="0.25" />
       </filter>
-      <linearGradient id="goldCup" x1="0" y1="0" x2="0" y2="1">
+      <filter id="stampDepth" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#ef4444" floodOpacity="0.35" />
+      </filter>
+    </defs>
+    <g filter="url(#examDepth)">
+      {/* Clipboard Slate Base */}
+      <rect x="34" y="18" width="72" height="86" rx="10" fill="#334155" />
+      {/* Paper Sheet */}
+      <rect x="40" y="28" width="60" height="70" rx="6" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
+
+      {/* Top Metallic Clip */}
+      <rect x="56" y="12" width="28" height="12" rx="3" fill="#1e293b" />
+      <rect x="62" y="15" width="16" height="4" rx="2" fill="#94a3b8" />
+
+      {/* Question Lines */}
+      <rect x="48" y="38" width="34" height="3.5" rx="1.5" fill="#3b82f6" />
+      <rect x="48" y="45" width="44" height="2.5" rx="1" fill="#94a3b8" />
+      <rect x="48" y="50" width="38" height="2.5" rx="1" fill="#cbd5e1" />
+
+      <rect x="48" y="60" width="34" height="3.5" rx="1.5" fill="#3b82f6" />
+      <rect x="48" y="67" width="42" height="2.5" rx="1" fill="#94a3b8" />
+      <rect x="48" y="72" width="30" height="2.5" rx="1" fill="#cbd5e1" />
+
+      {/* Red A+ Stamp */}
+      <g transform="translate(80, 68)" filter="url(#stampDepth)">
+        <circle cx="14" cy="14" r="14" fill="#ef4444" />
+        <circle cx="14" cy="14" r="12" fill="none" stroke="#fecaca" strokeWidth="1.2" strokeDasharray="3 2" />
+        <text x="14" y="19" textAnchor="middle" fill="#ffffff" fontSize="12" fontWeight="900" fontFamily="sans-serif">A+</text>
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 10. OCR ASSESSMENT: Worksheet with 4 Purple Scanning Brackets & OCR Tag
+// ============================================================================
+export const OCRIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
+  <svg viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="ocrDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#6366f1" floodOpacity="0.25" />
+      </filter>
+    </defs>
+    <g filter="url(#ocrDepth)">
+      {/* Background Soft Purple Circle */}
+      <circle cx="70" cy="60" r="44" fill="#f5f3ff" />
+
+      {/* Paper Sheet with Corner Fold */}
+      <path d="M 44 24 L 84 24 L 98 38 L 98 96 C 98 100, 95 102, 91 102 L 44 102 C 40 102, 37 100, 37 96 L 37 31 C 37 27, 40 24, 44 24 Z" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1.5" />
+      <path d="M 84 24 L 84 38 L 98 38 Z" fill="#e2e8f0" />
+
+      {/* Handwriting Lines */}
+      <rect x="46" y="36" width="28" height="3.5" rx="1.5" fill="#6366f1" opacity="0.8" />
+      <rect x="46" y="45" width="40" height="2.5" rx="1" fill="#94a3b8" />
+      <rect x="46" y="52" width="44" height="2.5" rx="1" fill="#cbd5e1" />
+      <rect x="46" y="59" width="36" height="2.5" rx="1" fill="#cbd5e1" />
+      <rect x="46" y="66" width="42" height="2.5" rx="1" fill="#94a3b8" />
+
+      {/* 4 Purple Scanning Bracket Corners */}
+      <path d="M 30 36 L 30 22 L 44 22" stroke="#4f46e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 110 36 L 110 22 L 96 22" stroke="#4f46e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 30 84 L 30 98 L 44 98" stroke="#4f46e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 110 84 L 110 98 L 96 98" stroke="#4f46e5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* OCR Pill Tag */}
+      <g transform="translate(80, 78)">
+        <rect x="0" y="0" width="34" height="18" rx="6" fill="#4338ca" stroke="#ffffff" strokeWidth="1.5" />
+        <text x="17" y="12.5" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="900" fontFamily="sans-serif">OCR</text>
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 11. COMPETITION: Golden Championship Trophy with Star
+// ============================================================================
+export const CompetitionIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
+  <svg viewBox="0 0 140 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="compDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="5" stdDeviation="7" floodColor="#d97706" floodOpacity="0.28" />
+      </filter>
+      <linearGradient id="compGold" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#fde047" />
         <stop offset="50%" stopColor="#eab308" />
         <stop offset="100%" stopColor="#ca8a04" />
       </linearGradient>
     </defs>
-    {/* Soft Amber Disc */}
-    <circle cx="80" cy="70" r="50" fill="#fef3c7" />
+    <g filter="url(#compDepth)">
+      {/* Background Amber Circle */}
+      <circle cx="70" cy="60" r="44" fill="#fef3c7" />
 
-    <g filter="url(#tropGlow)">
       {/* Left Handle */}
-      <path d="M 54 44 C 36 44, 36 68, 58 68" stroke="#ca8a04" strokeWidth="5" strokeLinecap="round" fill="none" />
-      <path d="M 54 44 C 38 44, 38 68, 58 68" stroke="#fde047" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <path d="M 48 38 C 32 38, 32 58, 52 58" stroke="#ca8a04" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M 48 38 C 34 38, 34 58, 52 58" stroke="#fde047" strokeWidth="2" strokeLinecap="round" fill="none" />
 
       {/* Right Handle */}
-      <path d="M 106 44 C 124 44, 124 68, 102 68" stroke="#ca8a04" strokeWidth="5" strokeLinecap="round" fill="none" />
-      <path d="M 106 44 C 122 44, 122 68, 102 68" stroke="#fde047" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <path d="M 92 38 C 108 38, 108 58, 88 58" stroke="#ca8a04" strokeWidth="4" strokeLinecap="round" fill="none" />
+      <path d="M 92 38 C 106 38, 106 58, 88 58" stroke="#fde047" strokeWidth="2" strokeLinecap="round" fill="none" />
 
       {/* Main Trophy Cup */}
-      <path d="M 50 36 L 110 36 C 110 36, 108 72, 80 78 C 52 72, 50 36, 50 36 Z" fill="url(#goldCup)" stroke="#a16207" strokeWidth="1.5" />
+      <path d="M 44 30 L 96 30 C 96 30, 94 62, 70 68 C 46 62, 44 30, 44 30 Z" fill="url(#compGold)" stroke="#a16207" strokeWidth="1.5" />
+      <ellipse cx="70" cy="30" rx="26" ry="5" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.2" />
 
-      {/* Cup Rim Highlight */}
-      <ellipse cx="80" cy="36" rx="30" ry="6" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+      {/* White Star */}
+      <path d="M 70 39 L 72 44 L 77 44.5 L 73 48 L 74.5 53 L 70 50 L 65.5 53 L 67 48 L 63 44.5 L 68 44 Z" fill="#ffffff" />
 
-      {/* Center White Star */}
-      <path d="M 80 46 L 82.5 52 L 89 52.5 L 84 57 L 85.5 63.5 L 80 60 L 74.5 63.5 L 76 57 L 71 52.5 L 77.5 52 Z" fill="#ffffff" />
+      {/* Stem */}
+      <rect x="65" y="68" width="10" height="14" fill="#ca8a04" />
+      <rect x="67" y="68" width="6" height="14" fill="#fde047" />
 
-      {/* Trophy Stem */}
-      <rect x="74" y="78" width="12" height="16" fill="#ca8a04" />
-      <rect x="76" y="78" width="8" height="16" fill="#fde047" />
-
-      {/* Trophy Base Pedestal */}
-      <path d="M 64 94 L 96 94 L 102 108 L 58 108 Z" fill="#1e293b" />
-      <rect x="62" y="98" width="36" height="6" rx="1.5" fill="#fde047" />
+      {/* Pedestal Base */}
+      <path d="M 56 82 L 84 82 L 89 94 L 51 94 Z" fill="#1e293b" />
+      <rect x="55" y="85" width="30" height="4.5" rx="1.5" fill="#fde047" />
     </g>
   </svg>
 );
 
-// 11. SIDEBAR WORKSTATION: Dark background desk with computer, chair & plant
+// ============================================================================
+// 12. PODIUM: 3D Paper-Cut Leaderboard Podium (2, 1, 3)
+// ============================================================================
+export const PodiumIllustration: React.FC<IllustrationProps> = ({ className = "w-44 h-32" }) => (
+  <svg viewBox="0 0 200 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="podiumShadow" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#0f172a" floodOpacity="0.2" />
+      </filter>
+    </defs>
+    <g filter="url(#podiumShadow)">
+      {/* 2nd Place Step (Left - Slate/Silver) */}
+      <g transform="translate(18, 55)">
+        {/* Step Block */}
+        <path d="M 0 12 L 48 12 L 48 65 L 0 65 Z" fill="#334155" />
+        <rect x="0" y="0" width="48" height="12" fill="#475569" />
+        <text x="24" y="45" textAnchor="middle" fill="#ffffff" fontSize="22" fontWeight="900" fontFamily="sans-serif">2</text>
+        
+        {/* Student Avatar on Step 2 */}
+        <g transform="translate(24, -20)">
+          <circle cx="0" cy="0" r="14" fill="#64748b" stroke="#cbd5e1" strokeWidth="2" />
+          <path d="M -6 -4 C -6 -12, 6 -12, 6 -4 Z" fill="#0f172a" />
+          <circle cx="0" cy="0" r="10" fill="#fed7aa" />
+          <path d="M -5 -2 C -2 -6, 2 -6, 5 -2 Z" fill="#0f172a" />
+        </g>
+      </g>
+
+      {/* 1st Place Step (Center - Gold) */}
+      <g transform="translate(68, 32)">
+        {/* Step Block */}
+        <path d="M 0 14 L 64 14 L 64 88 L 0 88 Z" fill="#d97706" />
+        <rect x="0" y="0" width="64" height="14" fill="#fbbf24" />
+        <text x="32" y="58" textAnchor="middle" fill="#ffffff" fontSize="32" fontWeight="900" fontFamily="sans-serif">1</text>
+        
+        {/* Crown atop Step 1 */}
+        <g transform="translate(32, -42)">
+          <path d="M -12 12 L -16 -2 L -6 4 L 0 -6 L 6 4 L 16 -2 L 12 12 Z" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+          <circle cx="-16" cy="-2" r="2" fill="#ef4444" />
+          <circle cx="0" cy="-6" r="2" fill="#3b82f6" />
+          <circle cx="16" cy="-2" r="2" fill="#10b981" />
+        </g>
+
+        {/* Student Avatar on Step 1 */}
+        <g transform="translate(32, -18)">
+          <circle cx="0" cy="0" r="16" fill="#fbbf24" stroke="#fef08a" strokeWidth="2.5" />
+          <circle cx="0" cy="0" r="13" fill="#fcd34d" />
+          <path d="M -7 -4 C -7 -14, 7 -14, 7 -4 Z" fill="#1e1b4b" />
+          {/* Eyeglasses */}
+          <circle cx="-4" cy="0" r="3.5" stroke="#1e1b4b" strokeWidth="1.2" fill="none" />
+          <circle cx="4" cy="0" r="3.5" stroke="#1e1b4b" strokeWidth="1.2" fill="none" />
+          <line x1="-0.5" y1="0" x2="0.5" y2="0" stroke="#1e1b4b" strokeWidth="1.2" />
+        </g>
+      </g>
+
+      {/* 3rd Place Step (Right - Bronze/Coral) */}
+      <g transform="translate(134, 68)">
+        {/* Step Block */}
+        <path d="M 0 10 L 48 10 L 48 52 L 0 52 Z" fill="#c2410c" />
+        <rect x="0" y="0" width="48" height="10" fill="#ea580c" />
+        <text x="24" y="38" textAnchor="middle" fill="#ffffff" fontSize="20" fontWeight="900" fontFamily="sans-serif">3</text>
+        
+        {/* Student Avatar on Step 3 */}
+        <g transform="translate(24, -18)">
+          <circle cx="0" cy="0" r="13" fill="#ea580c" stroke="#fed7aa" strokeWidth="2" />
+          <circle cx="0" cy="0" r="10" fill="#fed7aa" />
+          <path d="M -6 -2 C -6 -10, 6 -10, 6 -2 Z" fill="#0f172a" />
+        </g>
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 13. AI TEACHING INTELLIGENCE: Profile Head with Glowing Lightbulb Brain
+// ============================================================================
+export const AITeachingIntelligenceIllustration: React.FC<IllustrationProps> = ({ className = "w-36 h-28" }) => (
+  <svg viewBox="0 0 160 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="aiGlow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#38bdf8" floodOpacity="0.35" />
+      </filter>
+      {/* Background Curved Layered Waves */}
+      <linearGradient id="aiWave1" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#4f46e5" />
+        <stop offset="100%" stopColor="#312e81" />
+      </linearGradient>
+      <linearGradient id="aiWave2" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#6366f1" />
+        <stop offset="100%" stopColor="#3730a3" />
+      </linearGradient>
+      <linearGradient id="aiWave3" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#818cf8" />
+        <stop offset="100%" stopColor="#4338ca" />
+      </linearGradient>
+    </defs>
+
+    {/* Layered Cut-Paper Silhouette Waves */}
+    <path d="M 80 0 C 110 30, 130 70, 160 80 L 160 0 Z" fill="url(#aiWave1)" opacity="0.5" />
+    <path d="M 60 0 C 95 35, 115 80, 160 110 L 160 0 Z" fill="url(#aiWave2)" opacity="0.4" />
+    <path d="M 40 0 C 80 40, 100 90, 160 140 L 160 0 Z" fill="url(#aiWave3)" opacity="0.3" />
+
+    {/* Layered Paper Human Head Profile (Right-Facing Silhouette) */}
+    <g transform="translate(50, 16)" filter="url(#aiGlow)">
+      {/* Profile Head Cutout */}
+      <path d="M 20 10 C 45 -5, 80 0, 85 30 C 87 40, 86 50, 88 56 C 90 60, 94 62, 92 68 C 90 74, 82 74, 80 80 C 78 86, 82 92, 78 98 C 74 104, 60 108, 48 108 L 48 120 L 15 120 C 15 105, 12 70, 10 50 C 8 30, 8 18, 20 10 Z" fill="#e0e7ff" />
+
+      {/* Brain Cavity Cutout Area */}
+      <path d="M 32 24 C 48 14, 70 18, 72 38 C 74 54, 64 64, 48 68 C 34 68, 26 56, 26 42 C 26 30, 28 26, 32 24 Z" fill="#312e81" />
+
+      {/* Glowing Golden Lightbulb in Brain */}
+      <g transform="translate(50, 42)">
+        {/* Bulb Glow */}
+        <circle cx="0" cy="0" r="13" fill="#fef08a" opacity="0.9" />
+        <circle cx="0" cy="0" r="10" fill="#fde047" />
+        {/* Filament */}
+        <path d="M -4 2 L -2 -4 L 2 -4 L 4 2" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+        {/* Screw Base */}
+        <rect x="-4" y="9" width="8" height="4" rx="1" fill="#94a3b8" />
+        <rect x="-2.5" y="13" width="5" height="2" rx="1" fill="#64748b" />
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 14. CREATE COURSE: Stack of Textbooks with Graduation Cap
+// ============================================================================
+export const CreateCourseIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <defs>
+      <filter id="courseDepth" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#0284c7" floodOpacity="0.25" />
+      </filter>
+    </defs>
+    <g filter="url(#courseDepth)">
+      {/* Background Soft Sky Circle */}
+      <circle cx="65" cy="50" r="38" fill="#f0f9ff" />
+
+      {/* Book 2 (Bottom - Emerald) */}
+      <rect x="25" y="58" width="76" height="15" rx="3" fill="#059669" />
+      <rect x="29" y="60" width="68" height="10" rx="1.5" fill="#f8fafc" />
+      <rect x="25" y="58" width="12" height="15" rx="3" fill="#047857" />
+
+      {/* Book 1 (Top - Gold/Amber) */}
+      <rect x="30" y="44" width="66" height="14" rx="3" fill="#d97706" />
+      <rect x="34" y="46" width="58" height="9" rx="1.5" fill="#ffffff" />
+      <rect x="30" y="44" width="10" height="14" rx="3" fill="#b45309" />
+
+      {/* Graduation Cap on top */}
+      <g transform="translate(63, 24)">
+        <path d="M 0 -7 L 24 0 L 0 7 L -24 0 Z" fill="#0284c7" stroke="#38bdf8" strokeWidth="1" />
+        <path d="M -12 2 L -12 8 C -12 13, 12 13, 12 8 L 12 2 Z" fill="#0369a1" />
+        {/* Tassel */}
+        <path d="M 0 0 L 16 6 L 16 13" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+        <circle cx="16" cy="15" r="2.5" fill="#f59e0b" />
+        <circle cx="0" cy="0" r="2" fill="#fbbf24" />
+      </g>
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 15. MEGAPHONE: Blue Announcement Megaphone
+// ============================================================================
+export const MegaphoneIllustration: React.FC<IllustrationProps> = ({ className = "w-10 h-10" }) => (
+  <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <circle cx="30" cy="30" r="26" fill="#e0f2fe" />
+    <g transform="translate(14, 16)">
+      {/* Megaphone Cone */}
+      <path d="M 6 12 L 20 4 L 20 24 L 6 16 Z" fill="#0284c7" />
+      <path d="M 20 4 C 23 4, 25 8, 25 14 C 25 20, 23 24, 20 24 Z" fill="#38bdf8" />
+      {/* Back Handle */}
+      <rect x="0" y="11" width="6" height="6" rx="2" fill="#0369a1" />
+      {/* Bottom Grip Handle */}
+      <path d="M 12 16 L 14 26 L 18 26 L 16 16 Z" fill="#0369a1" />
+      {/* Sound waves */}
+      <path d="M 28 8 C 31 10, 31 18, 28 20" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" fill="none" />
+      <path d="M 32 5 C 36 8, 36 22, 32 25" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" />
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 16. BOTANICAL PAPER-CUT FRAME: Decorative Layered 3D Leaves around Page
+// ============================================================================
+export const BotanicalPaperCutFrame: React.FC = () => (
+  <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
+    {/* TOP-LEFT: Layered Blue & Teal Paper Leaves */}
+    <div className="absolute -top-6 -left-6 w-48 sm:w-64 h-48 sm:h-64 opacity-90 transition-transform">
+      <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <defs>
+          <filter id="botShadowTL" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="3" dy="6" stdDeviation="6" floodColor="#0c4a6e" floodOpacity="0.25" />
+          </filter>
+        </defs>
+        <g filter="url(#botShadowTL)">
+          {/* Layer 1: Dark Navy Leaf */}
+          <path d="M 0 0 C 40 40, 80 80, 70 140 C 40 130, 20 90, 0 60 Z" fill="#0369a1" />
+          {/* Layer 2: Medium Blue Leaf */}
+          <path d="M 0 0 C 60 30, 110 60, 110 110 C 75 110, 45 75, 0 45 Z" fill="#0284c7" />
+          {/* Layer 3: Cyan Light Leaf */}
+          <path d="M 0 0 C 80 15, 140 40, 140 85 C 95 85, 60 55, 0 30 Z" fill="#38bdf8" />
+          {/* Layer 4: Soft Sky Leaf */}
+          <path d="M 0 0 C 90 0, 160 15, 160 55 C 110 55, 70 35, 0 15 Z" fill="#7dd3fc" />
+        </g>
+      </svg>
+    </div>
+
+    {/* TOP-RIGHT: Layered Green & Sage Paper Leaves */}
+    <div className="absolute -top-6 -right-6 w-48 sm:w-64 h-48 sm:h-64 opacity-90 transition-transform">
+      <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <defs>
+          <filter id="botShadowTR" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="-3" dy="6" stdDeviation="6" floodColor="#064e3b" floodOpacity="0.25" />
+          </filter>
+        </defs>
+        <g filter="url(#botShadowTR)">
+          {/* Layer 1: Deep Emerald Leaf */}
+          <path d="M 200 0 C 160 40, 120 80, 130 140 C 160 130, 180 90, 200 60 Z" fill="#047857" />
+          {/* Layer 2: Medium Green Leaf */}
+          <path d="M 200 0 C 140 30, 90 60, 90 110 C 125 110, 155 75, 200 45 Z" fill="#059669" />
+          {/* Layer 3: Vibrant Green Leaf */}
+          <path d="M 200 0 C 120 15, 60 40, 60 85 C 105 85, 140 55, 200 30 Z" fill="#10b981" />
+          {/* Layer 4: Mint Light Leaf */}
+          <path d="M 200 0 C 110 0, 40 15, 40 55 C 90 55, 130 35, 200 15 Z" fill="#34d399" />
+        </g>
+      </svg>
+    </div>
+
+    {/* LEFT-MIDDLE: Golden-Yellow & Coral Paper Leaves */}
+    <div className="absolute top-[52%] -left-8 w-44 sm:w-56 h-44 sm:h-56 opacity-85 transition-transform">
+      <svg viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <defs>
+          <filter id="botShadowLM" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="3" dy="5" stdDeviation="6" floodColor="#78350f" floodOpacity="0.2" />
+          </filter>
+        </defs>
+        <g filter="url(#botShadowLM)">
+          {/* Terracotta-Red Leaf Bottom */}
+          <path d="M 0 100 C 40 100, 70 130, 70 170 C 40 165, 20 140, 0 120 Z" fill="#dc2626" />
+          {/* Amber-Gold Leaf */}
+          <path d="M 0 60 C 50 60, 90 90, 85 140 C 55 130, 30 100, 0 80 Z" fill="#d97706" />
+          {/* Bright Yellow Leaf */}
+          <path d="M 0 20 C 60 20, 110 50, 100 100 C 65 90, 35 60, 0 40 Z" fill="#fbbf24" />
+        </g>
+      </svg>
+    </div>
+
+    {/* BOTTOM-RIGHT: Terracotta-Red & Coral Paper Leaves */}
+    <div className="absolute -bottom-8 -right-8 w-48 sm:w-64 h-48 sm:h-64 opacity-85 transition-transform">
+      <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <defs>
+          <filter id="botShadowBR" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="-4" dy="-4" stdDeviation="6" floodColor="#7f1d1d" floodOpacity="0.25" />
+          </filter>
+        </defs>
+        <g filter="url(#botShadowBR)">
+          <path d="M 200 200 C 160 160, 120 120, 130 60 C 160 70, 180 110, 200 140 Z" fill="#991b1b" />
+          <path d="M 200 200 C 140 170, 90 140, 90 90 C 125 90, 155 125, 200 155 Z" fill="#b91c1c" />
+          <path d="M 200 200 C 120 185, 60 160, 60 115 C 105 115, 140 145, 200 170 Z" fill="#ef4444" />
+        </g>
+      </svg>
+    </div>
+  </div>
+);
+
+// ============================================================================
+// 17. COURSE CARD DECORATIVE LEAVES: Green leaves emerging from right edge
+// ============================================================================
+export const CourseCardLeaves: React.FC = () => (
+  <div className="absolute -bottom-2 -right-3 w-32 h-24 pointer-events-none select-none opacity-90 hidden sm:block">
+    <svg viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <defs>
+        <filter id="courseLeafShadow" x="-10%" y="-10%" width="120%" height="120%" filterUnits="userSpaceOnUse">
+          <feDropShadow dx="-2" dy="2" stdDeviation="3" floodColor="#064e3b" floodOpacity="0.2" />
+        </filter>
+      </defs>
+      <g filter="url(#courseLeafShadow)">
+        <path d="M 120 90 C 90 70, 70 40, 75 10 C 90 25, 105 55, 120 70 Z" fill="#047857" />
+        <path d="M 120 90 C 80 80, 50 60, 50 25 C 70 40, 95 65, 120 80 Z" fill="#059669" />
+        <path d="M 120 90 C 70 90, 30 75, 30 45 C 55 55, 85 75, 120 85 Z" fill="#10b981" />
+        <path d="M 120 90 C 60 90, 15 85, 15 65 C 45 70, 75 80, 120 88 Z" fill="#34d399" />
+      </g>
+    </svg>
+  </div>
+);
+
+// ============================================================================
+// 18. SIDEBAR ILLUSTRATION: Compact classroom desk
+// ============================================================================
 export const SidebarIllustration: React.FC<IllustrationProps> = ({ className = "w-full max-w-[200px]" }) => (
-  <svg viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    {/* Subtle Background Glowing Doodles */}
-    <path d="M 30 40 L 40 40 M 35 35 L 35 45" stroke="#38bdf8" strokeWidth="1.5" opacity="0.3" strokeLinecap="round" />
-    {/* Floating Graduation Cap Doodle */}
-    <path d="M 140 38 L 155 33 L 170 38 L 155 43 Z" stroke="#818cf8" strokeWidth="1.5" fill="none" opacity="0.4" />
-    <path d="M 147 40 L 147 46 C 147 48, 163 48, 163 46 L 163 40" stroke="#818cf8" strokeWidth="1.5" fill="none" opacity="0.4" />
-    <circle cx="165" cy="50" r="1.5" fill="#818cf8" opacity="0.4" />
-
-    {/* Study Desk */}
-    <rect x="25" y="112" width="150" height="8" rx="3" fill="#d97706" />
-    {/* Desk Legs */}
-    <line x1="38" y1="120" x2="30" y2="152" stroke="#b45309" strokeWidth="4" strokeLinecap="round" />
-    <line x1="162" y1="120" x2="170" y2="152" stroke="#b45309" strokeWidth="4" strokeLinecap="round" />
-
-    {/* Laptop on Desk */}
-    <path d="M 46 96 L 78 96 L 74 112 L 50 112 Z" fill="#93c5fd" stroke="#60a5fa" strokeWidth="1.5" />
-    <path d="M 40 112 L 84 112" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
-
-    {/* Desk Plant */}
-    <rect x="145" y="98" width="16" height="14" rx="2" fill="#ffffff" />
-    <path d="M 153 98 C 145 84, 150 78, 153 74 C 156 78, 161 84, 153 98 Z" fill="#22c55e" />
-    <path d="M 148 95 C 138 88, 142 80, 148 95 Z" fill="#16a34a" />
-    <path d="M 158 95 C 168 88, 164 80, 158 95 Z" fill="#15803d" />
-
-    {/* Modern Blue Office Chair */}
-    <g transform="translate(85, 94)">
-      {/* Chair Backrest */}
-      <rect x="8" y="0" width="28" height="34" rx="8" fill="#3b82f6" stroke="#2563eb" strokeWidth="1.5" />
-      {/* Chair Seat */}
-      <rect x="0" y="28" width="44" height="10" rx="4" fill="#2563eb" />
-      {/* Chair Stem */}
-      <rect x="19" y="38" width="6" height="14" fill="#64748b" />
-      {/* Chair Wheels Base */}
-      <path d="M 10 52 L 34 52" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
-      <circle cx="10" cy="54" r="2" fill="#0f172a" />
-      <circle cx="34" cy="54" r="2" fill="#0f172a" />
-    </g>
+  <svg viewBox="0 0 200 140" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <rect x="25" y="92" width="150" height="8" rx="3" fill="#d97706" />
+    <line x1="38" y1="100" x2="30" y2="132" stroke="#b45309" strokeWidth="4" strokeLinecap="round" />
+    <line x1="162" y1="100" x2="170" y2="132" stroke="#b45309" strokeWidth="4" strokeLinecap="round" />
+    <rect x="46" y="76" width="32" height="16" rx="2" fill="#38bdf8" stroke="#0284c7" strokeWidth="1" />
+    <rect x="145" y="78" width="16" height="14" rx="2" fill="#fed7aa" />
+    <path d="M 153 78 C 145 64, 150 58, 153 54 C 156 58, 161 64, 153 78 Z" fill="#22c55e" />
   </svg>
 );
 
-// 12. BOTTOM BANNER ILLUSTRATION: Plant, books and mug
+// ============================================================================
+// 19. BOTTOM BANNER ILLUSTRATION
+// ============================================================================
 export const BottomBannerIllustration: React.FC<IllustrationProps> = ({ className = "w-40 h-20" }) => (
   <svg viewBox="0 0 160 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    {/* Wooden Desk Surface */}
     <rect x="10" y="66" width="140" height="6" rx="3" fill="#d97706" />
-
-    {/* Left Plant */}
-    <g transform="translate(24, 36)">
-      <rect x="8" y="18" width="12" height="12" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-      <path d="M 14 18 C 8 4, 12 0, 14 -2 C 16 0, 20 4, 14 18 Z" fill="#22c55e" />
-      <path d="M 10 16 C 2 10, 8 2, 10 16 Z" fill="#16a34a" />
-      <path d="M 18 16 C 26 10, 20 2, 18 16 Z" fill="#15803d" />
-    </g>
-
-    {/* Stack of 3 Books */}
-    <g transform="translate(54, 38)">
-      {/* Book 3 (Bottom) */}
-      <rect x="0" y="20" width="46" height="8" rx="2" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1" />
-      <rect x="0" y="20" width="8" height="8" rx="2" fill="#0284c7" />
-
-      {/* Book 2 (Middle) */}
-      <rect x="2" y="11" width="42" height="8" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-      <rect x="2" y="11" width="8" height="8" rx="2" fill="#f59e0b" />
-
-      {/* Book 1 (Top) */}
-      <rect x="5" y="2" width="36" height="8" rx="2" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
-      <rect x="5" y="2" width="7" height="8" rx="2" fill="#8b5cf6" />
-    </g>
-
-    {/* Coffee / Tea Mug with Steam */}
-    <g transform="translate(112, 42)">
-      {/* Mug Handle */}
-      <path d="M 18 8 C 24 8, 24 18, 18 18" stroke="#8b5cf6" strokeWidth="3" fill="none" strokeLinecap="round" />
-      {/* Mug Cup */}
-      <rect x="0" y="4" width="20" height="20" rx="4" fill="#7c3aed" />
-      <rect x="2" y="6" width="16" height="4" rx="2" fill="#6d28d9" />
-      {/* Steam curves */}
-      <path d="M 6 0 C 4 -4, 8 -6, 6 -10" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7" />
-      <path d="M 12 2 C 10 -2, 14 -4, 12 -8" stroke="#c4b5fd" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7" />
-    </g>
+    <rect x="24" y="48" width="16" height="18" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+    <path d="M 32 48 C 26 34, 30 30, 32 28 C 34 30, 38 34, 32 48 Z" fill="#22c55e" />
+    <rect x="54" y="52" width="46" height="14" rx="2" fill="#0284c7" />
+    <rect x="56" y="44" width="42" height="8" rx="2" fill="#f59e0b" />
+    <rect x="112" y="46" width="20" height="20" rx="4" fill="#7c3aed" />
   </svg>
 );

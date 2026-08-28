@@ -65,22 +65,18 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
   return (
     <>
       {/* Danger Zone Bottom Banner */}
-      <div className="mt-12 rounded-3xl border-2 border-rose-200/80 bg-gradient-to-r from-rose-50/70 via-red-50/40 to-orange-50/50 p-6 sm:p-8 shadow-xs relative overflow-hidden">
-        {/* Subtle warning stripe accent */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 via-red-600 to-amber-500" />
-
+      <div className="mt-8 rounded-[24px] border border-rose-200 bg-[#fff8f8] p-5 sm:p-7 shadow-xs relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-rose-100/90 text-rose-800 text-[11px] font-black uppercase tracking-wider">
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-              <span>Danger Zone • Authorized Staff Only</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black uppercase tracking-wider">
+              <AlertTriangle className="w-3 h-3 text-rose-600" />
+              <span>DANGER ZONE</span>
             </div>
             <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
               Decommission & Delete Classroom
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-              Permanently destroy this classroom, all assignments, student submission grades,
-              points history, live quiz lobbies, and active enrollments. This action is irreversible.
+              Permanently delete this classroom, student submission records, points history, live quiz lobbies, and active enrollments. This action is irreversible.
             </p>
           </div>
 
@@ -93,7 +89,7 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
                 setErrorMessage(null);
                 setIsOpen(true);
               }}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs sm:text-sm shadow-md hover:shadow-lg hover:shadow-rose-500/20 active:scale-95 transition-all cursor-pointer border border-rose-500/30"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-black text-xs sm:text-sm shadow-xs hover:shadow-sm active:scale-95 transition-all cursor-pointer border border-rose-500/30"
             >
               <Trash2 className="w-4 h-4" />
               <span>Delete This Classroom</span>
