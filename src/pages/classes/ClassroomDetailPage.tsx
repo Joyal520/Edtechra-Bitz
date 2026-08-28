@@ -44,7 +44,6 @@ import {
   ExamIllustration,
   OCRIllustration,
   CompetitionIllustration,
-  AITeachingIntelligenceIllustration,
   CreateCourseIllustration,
   BotanicalPaperCutFrame,
   CourseCardLeaves
@@ -770,33 +769,36 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
 
             {/* RIGHT: AI Teaching Intelligence Card (5 Cols) */}
-            <div className="lg:col-span-5 xl:col-span-4 bg-gradient-to-br from-[#37268c] via-[#2f1f7d] to-[#221364] rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4 border border-indigo-950">
+            <div className="lg:col-span-5 xl:col-span-4 rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4 border border-indigo-950/60 min-h-[300px]">
               
-              {/* Background Layered Waves & Glow */}
-              <div className="absolute top-0 right-0 w-44 h-44 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
-              
-              <div className="space-y-3 relative z-10">
+              {/* Background Paper-Cut Artwork Image */}
+              <img
+                src="/assets/92697e31-f3ea-46a7-b531-ca18d5725169.png"
+                alt="AI Teaching Intelligence Artwork"
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
+
+              {/* Soft Contrast Gradient Overlay for Crystal Clear Text Legibility */}
+              <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/90 via-indigo-950/30 to-indigo-950/40 pointer-events-none" />
+
+              <div className="space-y-2 relative z-10">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-300" />
-                  <span className="text-sm font-black text-white">
+                  <span className="text-sm sm:text-base font-black text-white">
                     AI Teaching Intelligence
                   </span>
                 </div>
 
-                <p className="text-xs text-indigo-200 font-medium leading-relaxed max-w-[240px]">
+                <p className="text-xs sm:text-sm text-indigo-100 font-medium leading-relaxed max-w-[240px] drop-shadow-xs">
                   Understand your classroom. Know what to teach next.
                 </p>
-
-                <div className="flex justify-end pt-2">
-                  <AITeachingIntelligenceIllustration className="w-36 h-28 drop-shadow-xl" />
-                </div>
               </div>
 
-              <div className="pt-2 relative z-10">
+              <div className="pt-4 relative z-10">
                 <button
                   type="button"
                   onClick={() => setAiReportModalOpen(true)}
-                  className="w-full py-3 px-5 bg-[#f9f7f1] hover:bg-white text-[#1e1b4b] rounded-full text-xs font-black shadow-md active:scale-95 transition-all text-center cursor-pointer"
+                  className="w-full py-3 px-5 bg-[#f9f7f1] hover:bg-white text-[#1e1b4b] rounded-full text-xs sm:text-sm font-black shadow-md active:scale-95 transition-all text-center cursor-pointer"
                 >
                   Open Teaching Intelligence
                 </button>
