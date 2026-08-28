@@ -7,7 +7,9 @@ import {
   RefreshCw,
   ShieldCheck,
   Zap,
-  ArrowUp
+  ArrowUp,
+  CheckCircle2,
+  GraduationCap
 } from 'lucide-react';
 import { StudentPost } from '@/types/post';
 import { QuizBit, QuizAttemptResult, YouTubeShort, ReadingBit, PollBit, ReorderActivity, SpellingScramble, SpellingFlipCardItem, WordOfTheDay } from '@/types';
@@ -164,6 +166,8 @@ export const PostFeed: React.FC = () => {
         setScrambles(prev => prev.filter(s => String(s.id) !== String(id)));
       } else if (type === 'spelling_flip') {
         setFlipCards(prev => prev.filter(f => String(f.id) !== String(id)));
+      } else if (type === 'word_of_the_day') {
+        setWordsOfDay(prev => prev.filter(w => String(w.id) !== String(id)));
       }
     };
 
@@ -566,6 +570,20 @@ export const PostFeed: React.FC = () => {
     return items;
   }, [posts, quizzes, shorts, readings, polls, reorders, scrambles, flipCards, wordsOfDay]);
 
+  // Detect when all learning activity pools are exhausted (student completed everything)
+  const allLearningCaughtUp = useMemo(() => {
+    if (loading) return false;
+    return (
+      quizzes.length === 0 &&
+      readings.length === 0 &&
+      scrambles.length === 0 &&
+      flipCards.length === 0 &&
+      wordsOfDay.filter(w => !w.is_saved_by_me).length === 0 &&
+      reorders.length === 0 &&
+      posts.length > 0  // only show if feed has posts (not initial empty state)
+    );
+  }, [loading, quizzes, readings, scrambles, flipCards, wordsOfDay, reorders, posts]);
+
   // Extract ordered list of YouTube Short IDs in current feed
   const feedShortIds = useMemo(() => {
     return feedItems
@@ -675,6 +693,26 @@ export const PostFeed: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* All Learning Activities Completed Banner */}
+      {allLearningCaughtUp && !loading && (
+        <div className="mx-3 sm:mx-0 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-100 border border-emerald-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+              <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm sm:text-base font-black text-emerald-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>You're all caught up!</span>
+              </h3>
+              <p className="text-[11px] sm:text-xs text-emerald-700/80 font-semibold mt-0.5 leading-snug">
+                Amazing work — you've completed all available learning activities. New content will appear here as it's added!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3. Feed List (Interleaved Posts, Quiz Bits, and Category-Rotated YouTube Shorts) */}
       {loading ? (

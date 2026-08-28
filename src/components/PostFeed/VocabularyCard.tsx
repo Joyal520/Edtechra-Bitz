@@ -26,6 +26,7 @@ import { VocabularyItem, VocabularyContentType } from '@/types/vocabulary';
 import { pronunciationService } from '@/services/pronunciationService';
 import { vocabularyService } from '@/services/vocabularyService';
 import { useAuth } from '@/context/AuthContext';
+import { activityService } from '@/services/activityService';
 import { triggerConfetti } from '@/utils/confetti';
 
 interface VocabularyCardProps {
@@ -127,6 +128,18 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
       if (nextSaved) {
         triggerConfetti();
         setSavedToast('Added to My Words!');
+
+        // Record database-backed completion for feed exclusion across sessions
+        activityService.recordInteraction(item.id, 'word_of_the_day', 'completed').catch(() => {});
+
+        // Dispatch event so PostFeed removes this card from current session feed
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('edtechra:activity_completed', {
+              detail: { type: 'word_of_the_day', id: item.id }
+            })
+          );
+        }
       } else {
         setSavedToast('Removed from My Words');
       }

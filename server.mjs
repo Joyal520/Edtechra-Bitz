@@ -4928,6 +4928,15 @@ app.post('/api/quiz/attempt', async (req, res) => {
       } catch (sbErr) {
         console.warn('[Supabase save attempt notice]:', sbErr.message);
       }
+
+      if (xpAwarded > 0) {
+        try {
+          const { data: prof } = await serverSupabase.from('profiles').select('xp').eq('id', userId).maybeSingle();
+          if (prof) {
+            await serverSupabase.from('profiles').update({ xp: (prof.xp || 0) + xpAwarded, updated_at: new Date().toISOString() }).eq('id', userId);
+          }
+        } catch (e) {}
+      }
     }
 
     // If correctly completed, record to user activity interactions for feed deduplication
@@ -8903,6 +8912,15 @@ app.post('/api/reorders/complete', async (req, res) => {
         } catch (e) {
           console.warn('[Supabase completion notice]:', e.message);
         }
+
+        if (xpAwarded > 0) {
+          try {
+            const { data: prof } = await serverSupabase.from('profiles').select('xp').eq('id', userId).maybeSingle();
+            if (prof) {
+              await serverSupabase.from('profiles').update({ xp: (prof.xp || 0) + xpAwarded, updated_at: new Date().toISOString() }).eq('id', userId);
+            }
+          } catch (e) {}
+        }
       }
 
       if (isCorrect && userId && userId !== 'guest_user') {
@@ -9521,6 +9539,15 @@ app.post('/api/spelling-scrambles/complete', async (req, res) => {
       } catch (e) {
         console.warn('[Supabase scramble completion notice]:', e.message);
       }
+
+      if (xpAwarded > 0) {
+        try {
+          const { data: prof } = await serverSupabase.from('profiles').select('xp').eq('id', userId).maybeSingle();
+          if (prof) {
+            await serverSupabase.from('profiles').update({ xp: (prof.xp || 0) + xpAwarded, updated_at: new Date().toISOString() }).eq('id', userId);
+          }
+        } catch (e) {}
+      }
     }
 
     if (isCorrect && userId && userId !== 'guest_user') {
@@ -10104,7 +10131,7 @@ app.post('/api/spelling-flip-cards/complete', async (req, res) => {
     if (userId && xpAwarded > 0 && serverSupabase) {
       try {
         const { data: prof } = await serverSupabase
-          .from('user_profiles')
+          .from('profiles')
           .select('xp')
           .eq('id', userId)
           .single();
@@ -10112,7 +10139,7 @@ app.post('/api/spelling-flip-cards/complete', async (req, res) => {
         if (prof) {
           const updatedXp = (prof.xp || 0) + xpAwarded;
           await serverSupabase
-            .from('user_profiles')
+            .from('profiles')
             .update({ xp: updatedXp })
             .eq('id', userId);
         }
@@ -10264,13 +10291,13 @@ app.post('/api/bubble-pop/complete', async (req, res) => {
     if (userId && xpAwarded > 0 && serverSupabase) {
       try {
         const { data: prof } = await serverSupabase
-          .from('user_profiles')
+          .from('profiles')
           .select('xp')
           .eq('id', userId)
           .single();
         if (prof) {
           await serverSupabase
-            .from('user_profiles')
+            .from('profiles')
             .update({ xp: (prof.xp || 0) + xpAwarded })
             .eq('id', userId);
         }
@@ -10454,9 +10481,10 @@ async function handleVocabularyFeed(req, res) {
       items.sort((a, b) => new Date(b.published_at || b.created_at).getTime() - new Date(a.published_at || a.created_at).getTime());
     }
 
-    // Retrieve saved and liked items for current session user
+    // Retrieve saved, liked, and completed items for current session user
     let userSavedIds = new Set();
     let userLikedIds = new Set();
+    let userCompletedIds = new Set();
 
     if (userId) {
       if (serverSupabase) {
@@ -10476,6 +10504,9 @@ async function handleVocabularyFeed(req, res) {
 
       const likesCache = loadWordLikesCache();
       likesCache.filter(l => l.user_id === userId).forEach(l => userLikedIds.add(l.word_id));
+
+      // Fetch completed vocabulary items from user_activity_interactions
+      userCompletedIds = await getUserInteractedIds(userId, 'word_of_the_day');
     }
 
     let decorated = items.map(item => {
@@ -10496,9 +10527,9 @@ async function handleVocabularyFeed(req, res) {
       };
     });
 
-    // Exclude saved words so they don't repeat in Explore feed once bookmarked
-    if (userSavedIds.size > 0) {
-      decorated = decorated.filter(w => !userSavedIds.has(w.id));
+    // Exclude saved AND completed words so they don't repeat in Explore feed
+    if (userSavedIds.size > 0 || userCompletedIds.size > 0) {
+      decorated = decorated.filter(w => !userSavedIds.has(w.id) && !userCompletedIds.has(w.id));
     }
 
     res.json({ success: true, data: decorated });

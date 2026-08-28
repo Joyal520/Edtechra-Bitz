@@ -21,20 +21,39 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({
   onGameCompleted
 }) => {
   const { session } = useAuth();
-  const progress = loadBubblePopProgress();
-  const assignedLevel = initialLevelProp || progress.highestUnlockedLevel || 1;
+  const [assignedLevel, setAssignedLevel] = useState<number>(() => {
+    if (initialLevelProp) return initialLevelProp;
+    const progress = loadBubblePopProgress();
+    return progress.highestUnlockedLevel || 1;
+  });
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [completedRecord, setCompletedRecord] = useState<BubblePopCompletionResult | null>(() => {
-    return bubblePopService.getLocalCompletedLevel(assignedLevel);
-  });
+  const [completedRecord, setCompletedRecord] = useState<BubblePopCompletionResult | null>(null);
 
   const targetScore = calculateTargetScore(assignedLevel);
 
-  // Check server/local progress on mount
+  // Check server and local progress on mount to ensure fresh unlocked level is selected
   useEffect(() => {
     let isMounted = true;
     async function checkProgress() {
+      const token = session?.access_token || null;
+      // 1. If no explicit level prop is passed, check server for latest uncompleted level
+      if (!initialLevelProp) {
+        try {
+          const serverProgress = await bubblePopService.getProgress(token);
+          if (isMounted && serverProgress?.highestUnlockedLevel) {
+            const nextLvl = serverProgress.highestUnlockedLevel;
+            setAssignedLevel(nextLvl);
+            const localRec = bubblePopService.getLocalCompletedLevel(nextLvl);
+            setCompletedRecord(localRec);
+            return;
+          }
+        } catch (e) {
+          // Fallback to local
+        }
+      }
+
+      // 2. Check local completed status for current assigned level
       const local = bubblePopService.getLocalCompletedLevel(assignedLevel);
       if (local && isMounted) {
         setCompletedRecord(local);
@@ -42,7 +61,7 @@ export const BubblePopCard: React.FC<BubblePopCardProps> = ({
     }
     checkProgress();
     return () => { isMounted = false; };
-  }, [assignedLevel]);
+  }, [assignedLevel, initialLevelProp, session]);
 
   const handleGameSuccess = async (details: {
     level: number;

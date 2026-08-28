@@ -88,6 +88,17 @@ class BubblePopService {
         if (json && json.success && json.data) {
           const result = json.data as BubblePopCompletionResult;
           this.saveLocalCompletedLevel(level, result);
+
+          // Update local progress so highestUnlockedLevel advances immediately
+          const currentProgress = loadBubblePopProgress();
+          if (level >= currentProgress.highestUnlockedLevel && level < 100) {
+            saveBubblePopProgress({
+              ...currentProgress,
+              highestUnlockedLevel: level + 1,
+              totalXP: currentProgress.totalXP + (result.xp_awarded || 0)
+            });
+          }
+
           return result;
         }
       }
@@ -144,6 +155,17 @@ class BubblePopService {
           };
 
           this.saveLocalCompletedLevel(level, result);
+
+          // Update local progress
+          const currentProgress = loadBubblePopProgress();
+          if (level >= currentProgress.highestUnlockedLevel && level < 100) {
+            saveBubblePopProgress({
+              ...currentProgress,
+              highestUnlockedLevel: level + 1,
+              totalXP: currentProgress.totalXP + result.xp_awarded
+            });
+          }
+
           return result;
         }
       } catch (sbErr) {

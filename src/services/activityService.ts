@@ -37,7 +37,7 @@ class ActivityService {
    */
   async recordInteraction(
     activityId: string,
-    activityType: 'quiz' | 'spelling_scramble' | 'youtube_short' | 'poll' | 'reorder' | 'reading' | 'lesson' | 'game' | 'flashcard',
+    activityType: 'quiz' | 'spelling_scramble' | 'youtube_short' | 'poll' | 'reorder' | 'reading' | 'lesson' | 'game' | 'flashcard' | 'word_of_the_day' | 'bubble_pop',
     interactionType: 'completed' | 'watched' | 'voted' | 'answered' | 'played' | 'opened' = 'completed',
     token?: string | null
   ): Promise<boolean> {
