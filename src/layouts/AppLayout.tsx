@@ -32,6 +32,7 @@ export const AppLayout: React.FC = () => {
   const location = useLocation();
 
   const isHomePage = location.pathname === '/';
+  const isClassesPage = location.pathname.startsWith('/classes');
 
   const { user, profile, isAdmin, isLoading, signOut, requireAuth } = useAuth();
 
@@ -96,7 +97,7 @@ export const AppLayout: React.FC = () => {
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : 'bg-[#fbfbf7] text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
       
       {/* ========================================================================= */}
       {/* FLOATING NAVIGATION HEADER                                                */}
@@ -105,6 +106,8 @@ export const AppLayout: React.FC = () => {
         <div className={`max-w-5xl mx-auto rounded-2xl sm:rounded-full px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between transition-all ${
           isHomePage
             ? 'bg-[#031528]/85 backdrop-blur-md border border-sky-400/70 shadow-[0_0_25px_rgba(56,189,248,0.35)] text-white'
+            : isClassesPage
+            ? 'bg-[#071a2f] backdrop-blur-md border border-slate-800 shadow-xl text-white'
             : 'bg-white/95 backdrop-blur-md border border-stone-200/80 shadow-xs text-slate-900'
         }`}>
           
@@ -112,7 +115,7 @@ export const AppLayout: React.FC = () => {
           <div className="flex md:hidden items-center">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`p-1.5 -ml-1 rounded-xl transition-colors ${isHomePage ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'}`}
+              className={`p-1.5 -ml-1 rounded-xl transition-colors ${isHomePage || isClassesPage ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'}`}
               aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -130,7 +133,7 @@ export const AppLayout: React.FC = () => {
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shadow-xs group-hover:scale-105 transition-transform"
             />
             <div className="flex items-center gap-1.5">
-              <span className={`text-base sm:text-lg font-black tracking-tight ${isHomePage ? 'text-white' : 'text-[#0f233a]'}`}>
+              <span className={`text-base sm:text-lg font-black tracking-tight ${isHomePage || isClassesPage ? 'text-white' : 'text-[#0f233a]'}`}>
                 EdTechra
               </span>
               {!isHomePage && (
@@ -148,6 +151,8 @@ export const AppLayout: React.FC = () => {
               className={({ isActive }) =>
                 isHomePage
                   ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold px-4 sm:px-5 py-1.5 rounded-full bg-blue-600/30 border border-sky-400 text-white shadow-[0_0_15px_rgba(56,189,248,0.45)] transition-all'
+                  : isClassesPage
+                  ? `flex items-center gap-1.5 text-xs sm:text-sm font-bold transition-all py-1 ${isActive ? 'text-sky-300 font-black' : 'text-slate-300 hover:text-white'}`
                   : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
                       isActive
                         ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
@@ -165,6 +170,8 @@ export const AppLayout: React.FC = () => {
               className={({ isActive }) =>
                 isHomePage
                   ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white/90 hover:text-white transition-all py-1'
+                  : isClassesPage
+                  ? `flex items-center gap-1.5 text-xs sm:text-sm font-bold transition-all py-1 ${isActive ? 'text-sky-300 font-black' : 'text-slate-300 hover:text-white'}`
                   : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
                       isActive
                         ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
@@ -182,6 +189,8 @@ export const AppLayout: React.FC = () => {
               className={({ isActive }) =>
                 isHomePage
                   ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white/90 hover:text-white transition-all py-1'
+                  : isClassesPage
+                  ? `flex items-center gap-1.5 text-xs sm:text-sm font-bold transition-all py-1 ${isActive ? 'text-sky-300 font-black' : 'text-slate-300 hover:text-white'}`
                   : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
                       isActive
                         ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
@@ -198,6 +207,8 @@ export const AppLayout: React.FC = () => {
               className={({ isActive }) =>
                 isHomePage
                   ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white/90 hover:text-white transition-all py-1'
+                  : isClassesPage
+                  ? 'flex items-center gap-1.5 text-xs sm:text-sm font-black transition-all py-1 relative text-sky-300 after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-sky-400 after:rounded-full'
                   : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
                       isActive
                         ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
@@ -235,7 +246,7 @@ export const AppLayout: React.FC = () => {
               <button
                 onClick={triggerInstall}
                 className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer shadow-2xs active:scale-95 group ${
-                  isHomePage
+                  isHomePage || isClassesPage
                     ? 'bg-sky-500/25 hover:bg-sky-500/40 text-white border border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
                     : 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200 hover:border-brand-300'
                 }`}
@@ -251,7 +262,11 @@ export const AppLayout: React.FC = () => {
             {!isHomePage && (
               <button
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                  isClassesPage
+                    ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
                 aria-label="Search"
               >
                 <Search className="w-4 h-4" />
@@ -264,8 +279,8 @@ export const AppLayout: React.FC = () => {
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
                   className={`flex items-center gap-1.5 sm:gap-2 p-1 pr-2.5 rounded-full transition-all border shadow-2xs group cursor-pointer ${
-                    isHomePage
-                      ? 'border-sky-400/40 bg-white/10 text-white hover:bg-white/20'
+                    isHomePage || isClassesPage
+                      ? 'border-slate-700 bg-slate-900/90 text-white hover:bg-slate-800'
                       : 'border-stone-200/80 bg-white text-[#0f233a] hover:bg-slate-100/90'
                   }`}
                   aria-label="User Profile Menu"

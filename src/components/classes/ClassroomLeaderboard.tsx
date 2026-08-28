@@ -30,8 +30,21 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
 
   return (
     <>
-      <div className="bg-white rounded-[24px] p-4 sm:p-5 border border-stone-200/70 shadow-xs flex flex-col justify-between space-y-4 relative overflow-hidden h-full">
+      <div className="bg-white rounded-[24px] p-5 sm:p-6 border border-stone-200/70 shadow-xs flex flex-col justify-between space-y-4 relative overflow-hidden h-full">
         
+        {/* Card Header */}
+        <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+              Classroom Leaderboard
+            </h3>
+          </div>
+          <span className="text-[11px] font-extrabold text-slate-400">
+            {entries.length} {entries.length === 1 ? 'Student' : 'Students'}
+          </span>
+        </div>
+
         {/* Main Content: Split Grid (Left Podium / Right List) */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
           
@@ -116,22 +129,22 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                 return (
                   <div
                     key={entry.student_id}
-                    className={`flex items-center justify-between p-2 rounded-xl transition-all ${
+                    className={`flex items-center justify-between p-2.5 rounded-xl transition-all ${
                       isCurrentUser
                         ? 'bg-blue-50/90 border border-blue-200'
-                        : 'hover:bg-slate-50'
+                        : 'hover:bg-slate-50 border border-transparent'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {/* Rank Indicator */}
-                      <span className={`w-4 text-center text-xs font-black shrink-0 ${
+                      <span className={`w-5 text-center text-xs font-black shrink-0 ${
                         isFirst ? 'text-amber-500' : 'text-slate-500'
                       }`}>
-                        {isFirst ? '#1' : `${idx + 1}`}
+                        {isFirst ? '#1' : `#${idx + 1}`}
                       </span>
 
                       {/* Avatar */}
-                      <div className="w-7 h-7 rounded-full bg-slate-100 shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-700">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-700">
                         {entry.avatar_url ? (
                           <img src={entry.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
@@ -139,10 +152,13 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                         )}
                       </div>
 
-                      {/* Name */}
+                      {/* Name & Tasks */}
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-slate-900 truncate">
                           {entry.name}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-semibold">
+                          {entry.assignments_completed || 0} tasks completed
                         </div>
                       </div>
                     </div>
