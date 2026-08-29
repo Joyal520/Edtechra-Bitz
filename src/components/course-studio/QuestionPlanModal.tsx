@@ -527,18 +527,25 @@ export const QuestionPlanModal: React.FC<Props> = ({
                     <div className="space-y-3">
                       <div className="flex items-center gap-2 text-emerald-900 font-black text-sm">
                         <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                        <span>AI QUESTIONS READY ({validationResult.summary.totalQuestions} Questions Validated)</span>
+                        <span>✓ JSON VALID & READY TO IMPORT</span>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {Object.entries(validationResult.summary.byType).map(([typeKey, count]) => (
-                          <span
-                            key={typeKey}
-                            className="px-3 py-1 rounded-lg bg-emerald-100/80 text-emerald-900 text-xs font-bold"
-                          >
-                            {QUESTION_TYPE_LABELS[typeKey as QuestionType] || typeKey}: {count}
-                          </span>
+                      <div className="p-3.5 rounded-xl bg-white/90 border border-emerald-300/80 space-y-2 text-xs">
+                        <div className="font-bold text-slate-700 uppercase tracking-wider text-[10px] pb-1 border-b border-emerald-200">
+                          Question Plan Breakdown
+                        </div>
+                        {planItems.map(item => (
+                          <div key={item.id} className="flex items-center justify-between font-medium text-slate-800">
+                            <span>{QUESTION_TYPE_LABELS[item.type]}</span>
+                            <span className="font-bold text-emerald-700">
+                              {validationResult.summary.byType[item.type] || 0} / {item.count}
+                            </span>
+                          </div>
                         ))}
+                        <div className="pt-2 border-t border-emerald-200 flex items-center justify-between font-black text-slate-900">
+                          <span>Total Questions</span>
+                          <span className="text-emerald-800 font-extrabold text-sm">{validationResult.summary.totalQuestions}</span>
+                        </div>
                       </div>
 
                       {validationResult.warnings.length > 0 && (
