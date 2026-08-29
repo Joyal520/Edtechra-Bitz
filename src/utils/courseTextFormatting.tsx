@@ -1,7 +1,7 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: EDITORIAL COURSE TEXT FORMATTING UTILITY
-// Premium Reading-First Typography (Apple Books & Kindle inspired).
-// Desktop: 22-24px, Mobile: 20-22px, Line-height: 1.7-1.85, Left-aligned.
+// EDTECHRA DIGITAL CLASSROOM: DIGITAL TEXTBOOK TYPOGRAPHY UTILITY
+// Premium Reading-First Typography (Digital Textbook & Editorial standard).
+// Strict 14px Body Text with 1.75 line-height and left-alignment.
 // ============================================================================
 
 import React from 'react';
@@ -77,39 +77,39 @@ export type TextScale = 'sm' | 'md' | 'lg' | 'xl';
 
 export const TEXT_SCALE_CLASSES: Record<TextScale, { body: string; quote: string; h1: string; h2: string; h3: string }> = {
   sm: {
-    body: 'text-[18px] sm:text-[19px] md:text-[21px] leading-[1.75]',
-    quote: 'text-[18px] sm:text-[20px] md:text-[22px]',
-    h1: 'text-[26px] sm:text-[30px] md:text-[36px]',
-    h2: 'text-[22px] sm:text-[25px] md:text-[30px]',
-    h3: 'text-[19px] sm:text-[22px] md:text-[25px]'
+    body: 'text-[13px] leading-[1.7]',
+    quote: 'text-[13px]',
+    h1: 'text-[20px] sm:text-[22px]',
+    h2: 'text-[16px] sm:text-[18px]',
+    h3: 'text-[14px] sm:text-[15px]'
   },
   md: {
-    // Standard Editorial: Mobile 20-22px, Desktop 22-24px, Line-height 1.75-1.85
-    body: 'text-[20px] sm:text-[21px] md:text-[23px] lg:text-[24px] leading-[1.78] tracking-[-0.01em]',
-    quote: 'text-[21px] sm:text-[23px] md:text-[26px]',
-    h1: 'text-[30px] sm:text-[34px] md:text-[40px] lg:text-[44px]',
-    h2: 'text-[25px] sm:text-[28px] md:text-[34px] lg:text-[36px]',
-    h3: 'text-[21px] sm:text-[24px] md:text-[27px]'
+    // Standard Strict Specification: 14px Body with 1.75 Line-Height
+    body: 'text-[14px] leading-[1.75] tracking-normal',
+    quote: 'text-[14px]',
+    h1: 'text-[22px] sm:text-[24px]',
+    h2: 'text-[18px] sm:text-[20px]',
+    h3: 'text-[15px] sm:text-[16px]'
   },
   lg: {
-    body: 'text-[22px] sm:text-[24px] md:text-[26px] lg:text-[27px] leading-[1.82] tracking-[-0.01em]',
-    quote: 'text-[23px] sm:text-[26px] md:text-[29px]',
-    h1: 'text-[34px] sm:text-[38px] md:text-[46px] lg:text-[50px]',
-    h2: 'text-[28px] sm:text-[32px] md:text-[38px] lg:text-[40px]',
-    h3: 'text-[23px] sm:text-[27px] md:text-[30px]'
+    body: 'text-[16px] leading-[1.8] tracking-normal',
+    quote: 'text-[16px]',
+    h1: 'text-[26px] sm:text-[28px]',
+    h2: 'text-[20px] sm:text-[22px]',
+    h3: 'text-[17px] sm:text-[18px]'
   },
   xl: {
-    body: 'text-[24px] sm:text-[27px] md:text-[29px] lg:text-[30px] leading-[1.88] tracking-[-0.01em]',
-    quote: 'text-[26px] sm:text-[29px] md:text-[33px]',
-    h1: 'text-[38px] sm:text-[44px] md:text-[52px] lg:text-[56px]',
-    h2: 'text-[32px] sm:text-[36px] md:text-[42px] lg:text-[46px]',
-    h3: 'text-[26px] sm:text-[30px] md:text-[34px]'
+    body: 'text-[18px] leading-[1.85] tracking-normal',
+    quote: 'text-[18px]',
+    h1: 'text-[30px] sm:text-[32px]',
+    h2: 'text-[24px] sm:text-[26px]',
+    h3: 'text-[19px] sm:text-[20px]'
   }
 };
 
 /**
- * Renders structured educational text with refined book typography,
- * generous paragraph rhythm, and left-aligned reading-first typography.
+ * Renders structured educational text with 14px body typography,
+ * comfortable line-height (1.75), left-alignment, and paragraph rhythm.
  */
 export const FormattedLessonText: React.FC<{
   text: string;
@@ -139,7 +139,7 @@ export const FormattedLessonText: React.FC<{
         elements.push(
           <p
             key={`p-${elements.length}`}
-            className={`${scale.body} font-normal text-current antialiased my-5 sm:my-6 first:mt-0 last:mb-0 text-left selection:bg-amber-200/60 selection:text-slate-950`}
+            className={`${scale.body} font-normal text-current antialiased my-4 sm:my-5 first:mt-0 last:mb-0 text-left selection:bg-amber-200/60 selection:text-slate-950`}
           >
             {formatInlineText(paragraphText)}
           </p>
@@ -153,17 +153,17 @@ export const FormattedLessonText: React.FC<{
     if (currentListItems.length > 0) {
       if (isNumberedList) {
         elements.push(
-          <ol key={`ol-${elements.length}`} className={`list-decimal pl-6 sm:pl-8 space-y-2.5 sm:space-y-3.5 ${scale.body} font-normal text-current my-5 sm:my-7 text-left`}>
+          <ol key={`ol-${elements.length}`} className={`list-decimal pl-6 sm:pl-7 space-y-2 ${scale.body} font-normal text-current my-4 sm:my-5 text-left`}>
             {currentListItems.map((item, idx) => (
-              <li key={idx} className="pl-1.5">{formatInlineText(item)}</li>
+              <li key={idx} className="pl-1">{formatInlineText(item)}</li>
             ))}
           </ol>
         );
       } else {
         elements.push(
-          <ul key={`ul-${elements.length}`} className={`list-disc pl-6 sm:pl-8 space-y-2.5 sm:space-y-3.5 ${scale.body} font-normal text-current my-5 sm:my-7 text-left`}>
+          <ul key={`ul-${elements.length}`} className={`list-disc pl-6 sm:pl-7 space-y-2 ${scale.body} font-normal text-current my-4 sm:my-5 text-left`}>
             {currentListItems.map((item, idx) => (
-              <li key={idx} className="pl-1.5">{formatInlineText(item)}</li>
+              <li key={idx} className="pl-1">{formatInlineText(item)}</li>
             ))}
           </ul>
         );
@@ -188,7 +188,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <div key={`div-${elements.length}`} className="flex items-center justify-center gap-3 my-8 sm:my-12 text-stone-300 dark:text-stone-700 select-none">
+        <div key={`div-${elements.length}`} className="flex items-center justify-center gap-3 my-6 sm:my-8 text-stone-300 dark:text-stone-700 select-none">
           <span className="w-12 h-px bg-stone-300/80 dark:bg-stone-700/80" />
           <span className="text-xs">✦</span>
           <span className="w-12 h-px bg-stone-300/80 dark:bg-stone-700/80" />
@@ -202,7 +202,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h4 key={`h4-${elements.length}`} className={`${scale.h3} font-bold text-current tracking-tight pt-5 pb-1.5 text-left`}>
+        <h4 key={`h4-${elements.length}`} className={`${scale.h3} font-bold text-current tracking-tight pt-4 pb-1 text-left`}>
           {formatInlineText(line.slice(4))}
         </h4>
       );
@@ -214,7 +214,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h3 key={`h3-${elements.length}`} className={`${scale.h2} font-bold text-current tracking-tight pt-7 pb-2 text-left`}>
+        <h3 key={`h3-${elements.length}`} className={`${scale.h2} font-bold text-current tracking-tight pt-5 pb-1.5 text-left`}>
           {formatInlineText(line.slice(3))}
         </h3>
       );
@@ -226,7 +226,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h2 key={`h2-${elements.length}`} className={`${scale.h1} font-bold text-current tracking-tight pt-9 pb-3 text-left`}>
+        <h2 key={`h2-${elements.length}`} className={`${scale.h1} font-bold text-current tracking-tight pt-6 pb-2 text-left`}>
           {formatInlineText(line.slice(2))}
         </h2>
       );
@@ -240,7 +240,7 @@ export const FormattedLessonText: React.FC<{
       elements.push(
         <blockquote
           key={`quote-${elements.length}`}
-          className={`border-l-2 sm:border-l-3 border-[#026fc3]/80 pl-5 sm:pl-7 my-6 sm:my-8 italic ${scale.quote} font-serif leading-relaxed text-current/90 text-left`}
+          className={`border-l-2 sm:border-l-3 border-[#026fc3]/80 pl-4 sm:pl-5 my-4 sm:my-6 italic ${scale.quote} font-serif leading-relaxed text-current/90 text-left`}
         >
           {formatInlineText(line.slice(2))}
         </blockquote>

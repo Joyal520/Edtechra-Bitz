@@ -1,8 +1,9 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: MOBILE-FIRST EDITORIAL CONTENT RENDERER
 // Apple Books & Kindle inspired reading-first digital lesson layout.
-// Guarantees zero horizontal overflow, responsive single-column mobile flow,
-// large editorial typography, and seamless activity transitions.
+// Standard 14px body reading typography with 700-800px max reading width.
+// Fully supports all 6 question types: Multiple Choice, True/False, Fill Blank,
+// Matching, Ordering, and Short Answer with instant interactive feedback.
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -10,10 +11,13 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
-  Check
+  Check,
+  ArrowUpDown,
+  Send
 } from 'lucide-react';
-import { CourseBlock, CourseQuestion } from '@/types/courseStudio';
+import { CourseBlock, CourseQuestion, QuestionType } from '@/types/courseStudio';
 import { FormattedLessonText, TextScale } from '@/utils/courseTextFormatting';
+import { QUESTION_TYPE_LABELS } from '@/utils/questionSchemaValidator';
 
 interface Props {
   blocks: CourseBlock[];
@@ -41,23 +45,38 @@ export const CourseContentRenderer: React.FC<Props> = ({
 }) => {
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>(userAnswers);
   const [localFeedback, setLocalFeedback] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>(feedbackState);
+  const [textInputs, setTextInputs] = useState<Record<string, string>>({});
 
-  const handleSelectOption = (question: CourseQuestion, optionText: string) => {
-    const isCorrect = optionText.trim().toLowerCase() === question.correct_answer.trim().toLowerCase();
+  const handleEvaluateAnswer = (question: CourseQuestion, studentAnswer: string) => {
+    let isCorrect = false;
+    const cleanStudent = studentAnswer.trim().toLowerCase();
+    const cleanCorrect = question.correct_answer.trim().toLowerCase();
+
+    if (question.question_type === 'multiple_choice' || question.question_type === 'true_false' || question.question_type === 'fill_blank') {
+      isCorrect = cleanStudent === cleanCorrect;
+    } else if (question.question_type === 'short_answer') {
+      const acceptable = Array.isArray(question.options)
+        ? question.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || '').trim().toLowerCase())
+        : [];
+      isCorrect = cleanStudent === cleanCorrect || acceptable.includes(cleanStudent);
+    } else {
+      isCorrect = cleanStudent === cleanCorrect;
+    }
+
     const pointsAwarded = isCorrect ? (question.points || 10) : 0;
 
-    setLocalAnswers(prev => ({ ...prev, [question.id]: optionText }));
+    setLocalAnswers(prev => ({ ...prev, [question.id]: studentAnswer }));
     setLocalFeedback(prev => ({
       ...prev,
       [question.id]: {
         isCorrect,
         showExplanation: true,
-        selected: optionText
+        selected: studentAnswer
       }
     }));
 
     if (onQuestionAnswer) {
-      onQuestionAnswer(question.id, optionText, isCorrect, pointsAwarded, question);
+      onQuestionAnswer(question.id, studentAnswer, isCorrect, pointsAwarded, question);
     }
   };
 
@@ -103,7 +122,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             return (
               <section key={block.id || idx} className="w-full space-y-3">
                 {textContent?.title && (
-                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
                     {textContent.title}
                   </h3>
                 )}
@@ -126,7 +145,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             return (
               <section key={block.id || idx} className="w-full space-y-5 clear-both">
                 {item.title && (
-                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
                     {item.title}
                   </h3>
                 )}
@@ -149,7 +168,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       />
                     </div>
                     {img.caption && (
-                      <figcaption className="text-xs sm:text-sm text-center mt-2.5 italic opacity-75 leading-relaxed font-serif">
+                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif">
                         {img.caption}
                       </figcaption>
                     )}
@@ -171,7 +190,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       />
                     </div>
                     {img.caption && (
-                      <figcaption className="text-xs sm:text-sm text-center mt-2.5 italic opacity-75 leading-relaxed font-serif">
+                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif">
                         {img.caption}
                       </figcaption>
                     )}
@@ -194,7 +213,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             return (
               <section key={block.id || idx} className="w-full space-y-5 clear-both">
                 {item.title && (
-                  <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
                     {item.title}
                   </h3>
                 )}
@@ -256,7 +275,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {imgContent.caption && (
-                  <figcaption className="text-xs sm:text-sm text-center mt-2.5 italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center mt-2 italic opacity-75 font-serif">
                     {imgContent.caption}
                   </figcaption>
                 )}
@@ -283,7 +302,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {yt.title && (
-                  <figcaption className="text-xs sm:text-sm text-center italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center italic opacity-75 font-serif">
                     {yt.title}
                   </figcaption>
                 )}
@@ -310,7 +329,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {yt.title && (
-                  <figcaption className="text-xs sm:text-sm text-center mt-2.5 italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center mt-2.5 italic opacity-75 font-serif">
                     {yt.title}
                   </figcaption>
                 )}
@@ -330,12 +349,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
           <div className="text-center space-y-1.5 pb-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-current/5 text-[11px] font-bold uppercase tracking-widest opacity-80">
               <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
-              <span>Comprehension & Reflection</span>
+              <span>Comprehension & Practice</span>
             </div>
-            <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-inherit">
+            <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-inherit">
               Think About the Story
             </h3>
-            <p className="text-sm sm:text-base opacity-75 max-w-md mx-auto font-serif italic">
+            <p className="text-xs sm:text-sm opacity-75 max-w-md mx-auto font-serif italic">
               Reflect on what you’ve read and check your understanding.
             </p>
           </div>
@@ -346,6 +365,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
               const feedback = localFeedback[q.id];
               const selectedAnswer = localAnswers[q.id];
               const isAnswered = Boolean(selectedAnswer);
+              const qType = (q.question_type || 'multiple_choice') as QuestionType;
 
               // Normalize options array
               const optionsList: string[] = Array.isArray(q.options)
@@ -355,15 +375,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
               return (
                 <div
                   key={q.id || qIndex}
-                  className="w-full rounded-2xl p-5 sm:p-7 bg-current/3 border border-current/10 space-y-4 transition-all box-border"
+                  className="w-full rounded-2xl p-5 sm:p-6 bg-current/3 border border-current/10 space-y-4 transition-all box-border text-[14px]"
                 >
                   {/* Question Header */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 flex-1">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-[#026fc3]">
-                        Question {qIndex + 1}
-                      </span>
-                      <h4 className="text-base sm:text-lg md:text-xl font-bold text-inherit leading-snug text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#026fc3]">
+                          Question {qIndex + 1}
+                        </span>
+                        <span className="text-[10px] font-bold opacity-60 uppercase px-2 py-0.5 rounded bg-current/5">
+                          {QUESTION_TYPE_LABELS[qType] || qType}
+                        </span>
+                      </div>
+                      <h4 className="text-sm sm:text-base font-bold text-inherit leading-snug text-left">
                         {q.question_text}
                       </h4>
                     </div>
@@ -374,57 +399,171 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     )}
                   </div>
 
-                  {/* Options List */}
-                  <div className="w-full space-y-2 pt-1">
-                    {optionsList.map((optText, optIdx) => {
-                      const letter = String.fromCharCode(65 + optIdx);
-                      const isSelected = selectedAnswer === optText;
-                      const isCorrectAnswer = optText.trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
+                  {/* -------------------------------------------------------- */}
+                  {/* TYPE 1: MULTIPLE CHOICE                                  */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'multiple_choice' && (
+                    <div className="w-full space-y-2 pt-1">
+                      {optionsList.map((optText, optIdx) => {
+                        const letter = String.fromCharCode(65 + optIdx);
+                        const isSelected = selectedAnswer === optText;
+                        const isCorrectAnswer = optText.trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
 
-                      let btnStyle = 'bg-white/80 dark:bg-stone-800/80 border-current/15 hover:border-current/30 text-inherit hover:bg-white dark:hover:bg-stone-800';
+                        let btnStyle = 'bg-white/80 dark:bg-stone-800/80 border-current/15 hover:border-current/30 text-inherit hover:bg-white dark:hover:bg-stone-800';
 
-                      if (isAnswered) {
-                        if (isSelected && feedback?.isCorrect) {
-                          btnStyle = 'bg-emerald-500/15 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-bold';
-                        } else if (isSelected && !feedback?.isCorrect) {
-                          btnStyle = 'bg-rose-500/15 border-rose-600 text-rose-950 dark:text-rose-200 font-bold';
-                        } else if (isCorrectAnswer) {
-                          btnStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-900 dark:text-emerald-300';
-                        } else {
-                          btnStyle = 'opacity-40 border-current/10';
+                        if (isAnswered) {
+                          if (isSelected && feedback?.isCorrect) {
+                            btnStyle = 'bg-emerald-500/15 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-bold';
+                          } else if (isSelected && !feedback?.isCorrect) {
+                            btnStyle = 'bg-rose-500/15 border-rose-600 text-rose-950 dark:text-rose-200 font-bold';
+                          } else if (isCorrectAnswer) {
+                            btnStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-900 dark:text-emerald-300';
+                          } else {
+                            btnStyle = 'opacity-40 border-current/10';
+                          }
                         }
-                      }
 
-                      return (
-                        <button
-                          key={optIdx}
-                          type="button"
-                          onClick={() => handleSelectOption(q, optText)}
-                          className={`w-full p-3.5 sm:p-4 rounded-xl border text-left text-sm sm:text-base transition-all flex items-center gap-3 cursor-pointer shadow-2xs box-border ${btnStyle}`}
-                        >
-                          <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
-                            isSelected
-                              ? feedback?.isCorrect
+                        return (
+                          <button
+                            key={optIdx}
+                            type="button"
+                            onClick={() => handleEvaluateAnswer(q, optText)}
+                            className={`w-full p-3 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-center gap-3 cursor-pointer shadow-2xs box-border ${btnStyle}`}
+                          >
+                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                              isSelected
+                                ? feedback?.isCorrect
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-rose-600 text-white'
-                              : 'bg-current/10 text-inherit'
-                          }`}>
-                            {isSelected ? (
-                              feedback?.isCorrect ? <Check className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />
-                            ) : (
-                              letter
-                            )}
-                          </span>
-                          <span className="flex-1 leading-relaxed break-words">{optText}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                                : 'bg-current/10 text-inherit'
+                            }`}>
+                              {isSelected ? (
+                                feedback?.isCorrect ? <Check className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />
+                              ) : (
+                                letter
+                              )}
+                            </span>
+                            <span className="flex-1 leading-relaxed break-words">{optText}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* TYPE 2: TRUE / FALSE                                     */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'true_false' && (
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      {['True', 'False'].map((choice) => {
+                        const isSelected = selectedAnswer === choice;
+                        const isCorrectChoice = choice.toLowerCase() === q.correct_answer.toLowerCase();
+
+                        let btnStyle = 'bg-white/80 dark:bg-stone-800/80 border-current/15 hover:border-current/30 text-inherit';
+
+                        if (isAnswered) {
+                          if (isSelected && feedback?.isCorrect) {
+                            btnStyle = 'bg-emerald-500/15 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-bold';
+                          } else if (isSelected && !feedback?.isCorrect) {
+                            btnStyle = 'bg-rose-500/15 border-rose-600 text-rose-950 dark:text-rose-200 font-bold';
+                          } else if (isCorrectChoice) {
+                            btnStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-900 dark:text-emerald-300';
+                          } else {
+                            btnStyle = 'opacity-40 border-current/10';
+                          }
+                        }
+
+                        return (
+                          <button
+                            key={choice}
+                            type="button"
+                            onClick={() => handleEvaluateAnswer(q, choice)}
+                            className={`p-3.5 rounded-xl border text-center text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-2xs ${btnStyle}`}
+                          >
+                            {choice}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* TYPE 3 & 6: FILL IN THE BLANK / SHORT ANSWER             */}
+                  {/* -------------------------------------------------------- */}
+                  {(qType === 'fill_blank' || qType === 'short_answer') && (
+                    <div className="pt-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          disabled={isAnswered}
+                          value={textInputs[q.id] || selectedAnswer || ''}
+                          onChange={e => setTextInputs(prev => ({ ...prev, [q.id]: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && textInputs[q.id]?.trim()) {
+                              handleEvaluateAnswer(q, textInputs[q.id]);
+                            }
+                          }}
+                          placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
+                          className="flex-1 px-3.5 py-2.5 rounded-xl border border-current/20 bg-white/80 dark:bg-stone-800/80 text-xs sm:text-sm text-inherit focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                        />
+                        {!isAnswered && (
+                          <button
+                            type="button"
+                            disabled={!textInputs[q.id]?.trim()}
+                            onClick={() => handleEvaluateAnswer(q, textInputs[q.id] || '')}
+                            className="px-4 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Check</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* TYPE 4: MATCHING PAIRS                                   */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'matching' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="p-3 rounded-xl bg-current/5 border border-current/10 text-xs space-y-1.5">
+                        <p className="font-bold opacity-80">Reference Matching Pairs:</p>
+                        <div className="space-y-1">
+                          {optionsList.map((pairStr, pIdx) => (
+                            <div key={pIdx} className="flex items-center justify-between p-2 rounded-lg bg-white/80 dark:bg-stone-800/80 border border-current/10 text-xs">
+                              <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
+                              <span className="text-[#026fc3] font-mono font-bold">⇄</span>
+                              <span className="opacity-90">{pairStr.split('->')[1]?.trim()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* TYPE 5: ORDERING SEQUENCE                                */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'ordering' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="p-3 rounded-xl bg-current/5 border border-current/10 text-xs space-y-1.5">
+                        <p className="font-bold opacity-80 flex items-center gap-1">
+                          <ArrowUpDown className="w-3.5 h-3.5" />
+                          <span>Correct Sequence:</span>
+                        </p>
+                        <ol className="list-decimal pl-5 space-y-1 text-xs">
+                          {optionsList.map((itemStr, oIdx) => (
+                            <li key={oIdx} className="font-medium">{itemStr}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Immediate Explanation Callout */}
                   {feedback?.showExplanation && (
                     <div
-                      className={`p-3.5 sm:p-4 rounded-xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 ${
+                      className={`p-3.5 sm:p-4 rounded-xl text-xs leading-relaxed border transition-all animate-in fade-in duration-200 ${
                         feedback.isCorrect
                           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200'
                           : 'bg-rose-500/10 border-rose-500/30 text-rose-950 dark:text-rose-200'

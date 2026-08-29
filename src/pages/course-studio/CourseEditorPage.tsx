@@ -1,119 +1,90 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: PREMIUM 3-PANEL COURSE STUDIO EDITOR
-// Left: Course Outline | Center: Editorial Content Studio (Text+Image, Text+Video, Questions) | Right: Settings & AI
+// EDTECHRA DIGITAL CLASSROOM: DIGITAL COURSE STUDIO EDITOR
+// Teacher-controlled content authoring, composite rich media blocks,
+// Question Planning (v1.0 schema), prompt generation, JSON validation & import,
+// with maximum 10 units support and digital textbook typography (14px).
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Sparkles,
-  Layers,
-  BookOpen,
+  ArrowLeft,
+  Save,
+  Eye,
   Plus,
   Trash2,
-  Play,
-  Send,
-  Eye,
-  Check,
-  ChevronRight,
   ChevronDown,
-  Clock,
-  ArrowLeft,
-  Image as ImageIcon,
-  HelpCircle,
-  Wand2,
+  ChevronRight,
+  MoveUp,
+  MoveDown,
+  Copy,
+  Layers,
+  Sparkles,
+  Send,
   AlertCircle,
-  FileText,
-  Video,
-  Save,
   CheckCircle2,
-  ArrowUp,
-  ArrowDown,
-  Bold,
-  Italic,
-  Heading,
-  List,
-  ListOrdered,
-  Quote,
-  Upload
+  Clock,
+  FileText,
+  Image as ImageIcon,
+  Video,
+  Play,
+  UploadCloud,
+  HelpCircle,
+  BookOpen
 } from 'lucide-react';
 import {
   Course,
-  CourseEpisode,
   CourseBlock,
+  CourseEpisode,
   CourseQuestion,
-  BlockType
+  BlockType,
+  QuestionType
 } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
+import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 
 export const CourseEditorPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
 
+  // Core Course & Selection State
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
-  const [publishModalOpen, setPublishModalOpen] = useState(false);
-  const [showAddSectionMenu, setShowAddSectionMenu] = useState(false);
-
-  // Selection states
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
 
-  // Active Episode Content States
-  const [currentBlocks, setCurrentBlocks] = useState<CourseBlock[]>([]);
-  const [currentQuestions, setCurrentQuestions] = useState<CourseQuestion[]>([]);
+  // Active Episode Content State
   const [episodeTitle, setEpisodeTitle] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState(15);
+  const [currentBlocks, setCurrentBlocks] = useState<CourseBlock[]>([]);
+  const [currentQuestions, setCurrentQuestions] = useState<CourseQuestion[]>([]);
 
-  // Right Panel State
+  // UI Modals & Panels State
+  const [showAddSectionMenu, setShowAddSectionMenu] = useState(false);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [showQuestionPlanModal, setShowQuestionPlanModal] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<'ai' | 'settings'>('ai');
-  const [rawPastedMaterial, setRawPastedMaterial] = useState('');
-  const [aiGeneratingLesson, setAiGeneratingLesson] = useState(false);
-  const [aiGeneratingQuestions, setAiGeneratingQuestions] = useState(false);
-  const [aiReviewOutput, setAiReviewOutput] = useState<any>(null);
-  const [errorBanner, setErrorBanner] = useState<string | null>(null);
-
-  // Question AI Form
-  const [aiQuestionCount, setAiQuestionCount] = useState(5);
-  const [aiQuestionDifficulty, setAiQuestionDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-
-  // Media uploading state
   const [uploadingBlockIndex, setUploadingBlockIndex] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeUploadTarget, setActiveUploadTarget] = useState<{ blockIndex: number; field: string } | null>(null);
 
+  // Status & Feedback State
+  const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // File Upload Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeUploadBlockIndexRef = useRef<number | null>(null);
+
+  // --------------------------------------------------------------------------
+  // INITIAL DATA LOADING
+  // --------------------------------------------------------------------------
   useEffect(() => {
     if (courseId) {
       loadCourseData(courseId);
     }
   }, [courseId]);
-
-  const loadCourseData = async (id: string) => {
-    setLoading(true);
-    try {
-      const data = await courseStudioService.getCourse(id);
-      setCourse(data);
-
-      const units = data.units || [];
-      if (units.length > 0) {
-        const firstUnit = units[0];
-        setSelectedUnitId(firstUnit.id);
-        setExpandedUnits({ [firstUnit.id]: true });
-
-        const firstEp = (firstUnit.episodes || [])[0];
-        if (firstEp) {
-          selectEpisode(firstEp, firstUnit.id);
-        }
-      }
-    } catch (err: any) {
-      setErrorBanner(err.message || 'Failed to load course.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const normalizeBlocks = (blocks: CourseBlock[]): CourseBlock[] => {
     return (blocks || []).map(b => {
@@ -127,6 +98,35 @@ export const CourseEditorPage: React.FC = () => {
     });
   };
 
+  const loadCourseData = async (id: string) => {
+    setLoading(true);
+    setErrorBanner(null);
+    try {
+      const data = await courseStudioService.getCourse(id);
+      setCourse(data);
+
+      // Auto-expand all units
+      const initialExpanded: Record<string, boolean> = {};
+      (data.units || []).forEach(u => {
+        initialExpanded[u.id] = true;
+      });
+      setExpandedUnits(initialExpanded);
+
+      // Select first unit and first episode
+      const firstUnit = data.units?.[0];
+      if (firstUnit) {
+        const firstEp = firstUnit.episodes?.[0];
+        if (firstEp) {
+          selectEpisode(firstEp, firstUnit.id);
+        }
+      }
+    } catch (err: any) {
+      setErrorBanner(err.message || 'Failed to load course details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const selectEpisode = (ep: CourseEpisode, unitId: string) => {
     setSelectedUnitId(unitId);
     setSelectedEpisodeId(ep.id);
@@ -134,7 +134,6 @@ export const CourseEditorPage: React.FC = () => {
     setEstimatedMinutes(ep.estimated_minutes || 15);
     setCurrentBlocks(normalizeBlocks(ep.blocks || []));
     setCurrentQuestions(ep.questions || []);
-    setAiReviewOutput(null);
   };
 
   // --------------------------------------------------------------------------
@@ -145,17 +144,24 @@ export const CourseEditorPage: React.FC = () => {
 
     const timer = setTimeout(() => {
       handleSaveCurrentEpisode();
-    }, 2200);
+    }, 2400);
 
     return () => clearTimeout(timer);
   }, [savingStatus, episodeTitle, estimatedMinutes, currentBlocks, currentQuestions, selectedEpisodeId]);
 
   // --------------------------------------------------------------------------
-  // OUTLINE ACTIONS (UNITS & EPISODES)
+  // OUTLINE ACTIONS (UNITS & EPISODES) — MAX 10 UNITS
   // --------------------------------------------------------------------------
 
   const handleAddUnit = async () => {
     if (!course) return;
+
+    // Strict 10 units maximum rule
+    if ((course.units?.length || 0) >= 10) {
+      setErrorBanner('Maximum of 10 units reached.');
+      return;
+    }
+
     try {
       const newUnit = await courseStudioService.createUnit(course.id, {
         title: `Unit ${(course.units?.length || 0) + 1}`,
@@ -198,29 +204,28 @@ export const CourseEditorPage: React.FC = () => {
       setCourse({ ...course, units: updatedUnits });
       selectEpisode(newEp, unitId);
     } catch (err: any) {
-      setErrorBanner(err.message || 'Failed to add episode.');
+      setErrorBanner(err.message || 'Failed to add lesson.');
     }
   };
 
   const handleDeleteUnit = async (e: React.MouseEvent, unitId: string) => {
     e.stopPropagation();
-    if (!course || !confirm('Delete this unit and all its lessons?')) return;
+    if (!course || !confirm('Are you sure you want to delete this unit and all its lessons?')) return;
 
     try {
       await courseStudioService.deleteUnit(course.id, unitId);
-      const remainingUnits = (course.units || []).filter(u => u.id !== unitId);
-      setCourse({ ...course, units: remainingUnits });
+      const nextUnits = (course.units || []).filter(u => u.id !== unitId);
+      setCourse({ ...course, units: nextUnits });
 
-      if (remainingUnits.length > 0) {
-        setSelectedUnitId(remainingUnits[0].id);
-        if (remainingUnits[0].episodes?.[0]) {
-          selectEpisode(remainingUnits[0].episodes[0], remainingUnits[0].id);
+      if (selectedUnitId === unitId) {
+        if (nextUnits.length > 0 && nextUnits[0].episodes?.[0]) {
+          selectEpisode(nextUnits[0].episodes[0], nextUnits[0].id);
+        } else {
+          setSelectedUnitId(null);
+          setSelectedEpisodeId(null);
+          setCurrentBlocks([]);
+          setCurrentQuestions([]);
         }
-      } else {
-        setSelectedUnitId(null);
-        setSelectedEpisodeId(null);
-        setCurrentBlocks([]);
-        setCurrentQuestions([]);
       }
     } catch (err: any) {
       setErrorBanner(err.message || 'Failed to delete unit.');
@@ -251,7 +256,7 @@ export const CourseEditorPage: React.FC = () => {
   };
 
   // --------------------------------------------------------------------------
-  // BLOCK STREAM ACTIONS
+  // CONTENT SECTION ACTIONS (5 Section Types)
   // --------------------------------------------------------------------------
 
   const handleAddSection = (type: BlockType) => {
@@ -263,13 +268,13 @@ export const CourseEditorPage: React.FC = () => {
       initialContent = {
         title: '',
         text: '',
-        image: { url: '', caption: '', position: 'right', size: 'medium' }
+        image: { url: '', caption: '', position: 'above', size: 'medium' }
       };
     } else if (type === 'text_video') {
       initialContent = {
         title: '',
         text: '',
-        video: { url: '', position: 'right', is_short: false }
+        video: { url: '', position: 'above', is_short: false }
       };
     } else if (type === 'image') {
       initialContent = { url: '', caption: '', size: 'medium' };
@@ -316,86 +321,108 @@ export const CourseEditorPage: React.FC = () => {
     setSavingStatus('unsaved');
   };
 
+  const handleDuplicateBlock = (bIndex: number) => {
+    const target = currentBlocks[bIndex];
+    if (!target) return;
+    const duplicated: CourseBlock = {
+      ...target,
+      id: `blk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      order_index: bIndex + 1,
+      content: JSON.parse(JSON.stringify(target.content))
+    };
+    const next = [...currentBlocks];
+    next.splice(bIndex + 1, 0, duplicated);
+    setCurrentBlocks(next.map((b, idx) => ({ ...b, order_index: idx })));
+    setSavingStatus('unsaved');
+  };
+
   const handleDeleteBlock = (bIndex: number) => {
     setCurrentBlocks(prev => prev.filter((_, idx) => idx !== bIndex));
     setSavingStatus('unsaved');
   };
 
   // --------------------------------------------------------------------------
-  // INLINE FORMATTING TOOLBAR HELPER
+  // CLOUDFLARE R2 IMAGE UPLOAD FOR BLOCKS
   // --------------------------------------------------------------------------
 
-  const handleInsertFormatting = (bIndex: number, field: string, tagBefore: string, tagAfter: string = '') => {
-    const block = currentBlocks[bIndex];
-    if (!block) return;
-    const content = { ...(block.content as any) };
-    const currentVal = content[field] || '';
-
-    content[field] = currentVal ? `${currentVal}\n${tagBefore} ${tagAfter}` : `${tagBefore} ${tagAfter}`;
-    handleUpdateBlockContent(bIndex, content);
-  };
-
-  // --------------------------------------------------------------------------
-  // CLOUDFLARE R2 IMAGE UPLOAD HANDLER
-  // --------------------------------------------------------------------------
-
-  const handleTriggerUpload = (blockIndex: number, field: string = 'image') => {
-    setActiveUploadTarget({ blockIndex, field });
+  const triggerBlockImageUpload = (bIndex: number) => {
+    activeUploadBlockIndexRef.current = bIndex;
     if (fileInputRef.current) {
+      fileInputRef.current.value = '';
       fileInputRef.current.click();
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBlockImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !activeUploadTarget || !course) return;
+    const bIndex = activeUploadBlockIndexRef.current;
+    if (!file || bIndex === null || bIndex === undefined) return;
 
-    const { blockIndex, field } = activeUploadTarget;
-    setUploadingBlockIndex(blockIndex);
-
+    setUploadingBlockIndex(bIndex);
     try {
-      // 1. Optimize & Upload directly to Cloudflare R2
-      const result = await courseStudioService.uploadCourseImage(file, course.id, false);
+      const res = await courseStudioService.uploadCourseImage(file, 'blocks', true);
+      const targetBlock = currentBlocks[bIndex];
 
-      // 2. Update Block Content with R2 URL
-      const block = currentBlocks[blockIndex];
-      const content = { ...(block.content as any) };
-
-      if (field === 'image') {
-        if (block.block_type === 'text_image') {
-          content.image = { ...(content.image || {}), url: result.publicUrl, storage_key: result.storageKey };
-        } else {
-          content.url = result.publicUrl;
-          content.storage_key = result.storageKey;
-        }
+      if (targetBlock.block_type === 'text_image') {
+        const nextContent = {
+          ...targetBlock.content,
+          image: {
+            ...(targetBlock.content as any)?.image,
+            url: res.publicUrl,
+            storage_key: res.storageKey
+          }
+        };
+        handleUpdateBlockContent(bIndex, nextContent);
+      } else if (targetBlock.block_type === 'image') {
+        const nextContent = {
+          ...targetBlock.content,
+          url: res.publicUrl,
+          storage_key: res.storageKey
+        };
+        handleUpdateBlockContent(bIndex, nextContent);
       }
-
-      handleUpdateBlockContent(blockIndex, content);
     } catch (err: any) {
-      setErrorBanner(err.message || 'Image upload failed.');
+      setErrorBanner(err.message || 'Failed to upload image to Cloudflare R2.');
     } finally {
       setUploadingBlockIndex(null);
-      setActiveUploadTarget(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      activeUploadBlockIndexRef.current = null;
     }
   };
 
   // --------------------------------------------------------------------------
-  // QUESTION SECTION ACTIONS
+  // QUESTION MANAGEMENT ACTIONS (All 6 Question Types)
   // --------------------------------------------------------------------------
 
-  const handleAddQuestion = () => {
+  const handleAddQuestion = (type: QuestionType = 'multiple_choice') => {
+    let initialOptions: string[] = ['Option A', 'Option B', 'Option C', 'Option D'];
+    let initialCorrect = 'Option A';
+
+    if (type === 'true_false') {
+      initialOptions = ['True', 'False'];
+      initialCorrect = 'True';
+    } else if (type === 'fill_blank') {
+      initialOptions = [];
+      initialCorrect = 'answer';
+    } else if (type === 'matching') {
+      initialOptions = ['Character A -> Action A', 'Character B -> Action B'];
+      initialCorrect = 'matches';
+    } else if (type === 'ordering') {
+      initialOptions = ['First event', 'Second event', 'Third event'];
+      initialCorrect = 'sequence';
+    } else if (type === 'short_answer') {
+      initialOptions = ['acceptable answer'];
+      initialCorrect = 'expected answer';
+    }
+
     const newQ: CourseQuestion = {
       id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       episode_id: selectedEpisodeId || '',
       course_id: course?.id || '',
-      question_text: '',
-      question_type: 'multiple_choice',
-      options: ['Option A', 'Option B', 'Option C', 'Option D'],
-      correct_answer: 'Option A',
-      explanation: '',
-      skill: course?.subject || 'General',
-      concept: 'Concept Practice',
+      question_text: type === 'true_false' ? 'Statement based on the lesson' : 'New practice question',
+      question_type: type,
+      options: initialOptions,
+      correct_answer: initialCorrect,
+      explanation: 'Explanation shown after answering.',
       difficulty: 'medium',
       points: 10,
       order_index: currentQuestions.length
@@ -405,11 +432,25 @@ export const CourseEditorPage: React.FC = () => {
     setSavingStatus('unsaved');
   };
 
-  const handleUpdateQuestion = (qIndex: number, field: string, value: any) => {
+  const handleUpdateQuestion = (qIndex: number, field: keyof CourseQuestion, value: any) => {
     setCurrentQuestions(prev => {
       const next = [...prev];
       next[qIndex] = { ...next[qIndex], [field]: value };
       return next;
+    });
+    setSavingStatus('unsaved');
+  };
+
+  const handleMoveQuestion = (qIndex: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? qIndex - 1 : qIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentQuestions.length) return;
+
+    setCurrentQuestions(prev => {
+      const next = [...prev];
+      const temp = next[qIndex];
+      next[qIndex] = next[targetIndex];
+      next[targetIndex] = temp;
+      return next.map((q, idx) => ({ ...q, order_index: idx }));
     });
     setSavingStatus('unsaved');
   };
@@ -420,13 +461,15 @@ export const CourseEditorPage: React.FC = () => {
   };
 
   // --------------------------------------------------------------------------
-  // SAVE EPISODE DATA
+  // SAVE CURRENT EPISODE (Blocks + Questions)
   // --------------------------------------------------------------------------
 
   const handleSaveCurrentEpisode = async () => {
     if (!course || !selectedEpisodeId) return;
 
     setSavingStatus('saving');
+    setErrorBanner(null);
+
     try {
       await courseStudioService.updateEpisode(course.id, selectedEpisodeId, {
         title: episodeTitle,
@@ -457,6 +500,8 @@ export const CourseEditorPage: React.FC = () => {
       });
 
       setSavingStatus('saved');
+      setSuccessBanner('Changes saved successfully.');
+      setTimeout(() => setSuccessBanner(null), 2500);
     } catch (err: any) {
       setSavingStatus('unsaved');
       const msg = err.message && (err.message.includes('check constraint') || err.message.includes('violates check'))
@@ -466,222 +511,120 @@ export const CourseEditorPage: React.FC = () => {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // AI ACTIONS
-  // --------------------------------------------------------------------------
+  // Extract combined text, video, and image presence from current blocks for Question Plan
+  const combinedLessonText = currentBlocks
+    .map(b => (b.content as any)?.text || (b.content as any)?.markdown || '')
+    .filter(Boolean)
+    .join('\n\n');
 
-  const handleBuildLessonWithAI = async () => {
-    if (!course || !rawPastedMaterial.trim()) {
-      setErrorBanner('Please paste teaching material to build the lesson.');
-      return;
-    }
+  const hasVideoInLesson = currentBlocks.some(b => b.block_type === 'text_video' || b.block_type === 'youtube_video' || b.block_type === 'youtube_short');
+  const hasImageInLesson = currentBlocks.some(b => b.block_type === 'text_image' || b.block_type === 'image');
 
-    setAiGeneratingLesson(true);
-    setErrorBanner(null);
+  const currentUnit = course?.units?.find(u => u.id === selectedUnitId);
 
-    try {
-      const res = await courseStudioService.buildLessonWithAI({
-        course_id: course.id,
-        raw_material: rawPastedMaterial,
-        course_title: course.title,
-        unit_title: course.units?.find(u => u.id === selectedUnitId)?.title || 'Unit 1',
-        subject: course.subject,
-        grade_level: course.grade_level
-      });
-
-      setAiReviewOutput({
-        type: 'lesson',
-        title: res.title,
-        summary: res.summary,
-        blocks: res.blocks || [],
-        questions: res.suggested_questions || []
-      });
-      setRightPanelTab('ai');
-    } catch (err: any) {
-      setErrorBanner(err.message || 'Failed to build lesson with AI.');
-    } finally {
-      setAiGeneratingLesson(false);
-    }
-  };
-
-  const handleGenerateQuestionsWithAI = async () => {
-    if (!course) return;
-    const contentText = currentBlocks.map(b => (b.content as any)?.text || '').join('\n\n') || rawPastedMaterial;
-    if (!contentText.trim()) {
-      setErrorBanner('Please write or paste content in the lesson first so AI can generate grounded questions.');
-      return;
-    }
-
-    setAiGeneratingQuestions(true);
-    setErrorBanner(null);
-
-    try {
-      const res = await courseStudioService.generateQuestionsWithAI({
-        course_id: course.id,
-        episode_id: selectedEpisodeId || undefined,
-        scope: 'episode',
-        content_text: contentText,
-        question_types: ['multiple_choice'],
-        question_count: aiQuestionCount,
-        difficulty: aiQuestionDifficulty,
-        target_grade: course.grade_level,
-        subject: course.subject
-      });
-
-      setAiReviewOutput({
-        type: 'questions',
-        questions: res.questions || []
-      });
-      setRightPanelTab('ai');
-    } catch (err: any) {
-      setErrorBanner(err.message || 'Failed to generate questions with AI.');
-    } finally {
-      setAiGeneratingQuestions(false);
-    }
-  };
-
-  const handleApplyAIOutput = () => {
-    if (!aiReviewOutput) return;
-
-    if (aiReviewOutput.type === 'lesson') {
-      if (aiReviewOutput.title) setEpisodeTitle(aiReviewOutput.title);
-      if (aiReviewOutput.blocks) {
-        const formattedBlocks = aiReviewOutput.blocks.map((b: any, idx: number) => ({
-          id: `blk_ai_${Date.now()}_${idx}`,
-          episode_id: selectedEpisodeId || '',
-          course_id: course?.id || '',
-          block_type: b.block_type || 'text',
-          order_index: idx,
-          content: b.content || {}
-        }));
-        setCurrentBlocks(formattedBlocks);
-      }
-
-      if (aiReviewOutput.questions) {
-        const formattedQuestions = aiReviewOutput.questions.map((q: any, idx: number) => ({
-          id: `q_ai_${Date.now()}_${idx}`,
-          episode_id: selectedEpisodeId || '',
-          course_id: course?.id || '',
-          question_text: q.question_text,
-          question_type: q.question_type || 'multiple_choice',
-          options: q.options || [],
-          correct_answer: q.correct_answer,
-          explanation: q.explanation || '',
-          skill: q.skill || course?.subject || 'Grammar',
-          concept: q.concept || 'General',
-          difficulty: q.difficulty || 'medium',
-          points: 10,
-          order_index: idx
-        }));
-        setCurrentQuestions(formattedQuestions);
-      }
-    } else if (aiReviewOutput.type === 'questions') {
-      const formattedQuestions = (aiReviewOutput.questions || []).map((q: any, idx: number) => ({
-        id: `q_ai_${Date.now()}_${idx}`,
-        episode_id: selectedEpisodeId || '',
-        course_id: course?.id || '',
-        question_text: q.question_text,
-        question_type: q.question_type || 'multiple_choice',
-        options: q.options || [],
-        correct_answer: q.correct_answer,
-        explanation: q.explanation || '',
-        skill: q.skill || course?.subject || 'Grammar',
-        concept: q.concept || 'General',
-        difficulty: q.difficulty || 'medium',
-        points: 10,
-        order_index: currentQuestions.length + idx
-      }));
-      setCurrentQuestions(prev => [...prev, ...formattedQuestions]);
-    }
-
-    setAiReviewOutput(null);
-    setSavingStatus('unsaved');
-  };
-
-  if (loading || !course) {
+  if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#fcfaf6]">
+      <div className="min-h-screen bg-[#fcfaf6] flex items-center justify-center">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-3 border-[#026fc3] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-600">Loading Course Studio Editor...</p>
+          <div className="w-10 h-10 rounded-full bg-sky-100 text-[#026fc3] flex items-center justify-center mx-auto animate-spin">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <p className="text-xs font-black uppercase tracking-wider text-slate-600">Loading Course Studio...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="min-h-screen bg-[#fcfaf6] flex items-center justify-center p-6 text-center">
+        <div className="space-y-4 max-w-md">
+          <h2 className="text-xl font-bold text-slate-800">Course not found</h2>
+          <button
+            onClick={() => navigate('/course-studio')}
+            className="px-6 py-2.5 bg-[#026fc3] text-white rounded-xl text-xs font-bold"
+          >
+            Return to Dashboard
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#fcfaf6] font-sans antialiased text-slate-800 overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#fbf9f4] text-slate-900 font-sans overflow-hidden">
       
-      {/* Hidden File Input for R2 Uploads */}
+      {/* Hidden File Input for R2 Cloudflare Uploads */}
       <input
         type="file"
         ref={fileInputRef}
-        onChange={handleFileChange}
-        accept="image/png,image/jpeg,image/webp,image/jpg"
+        onChange={handleBlockImageSelected}
+        accept="image/png,image/jpeg,image/webp,image/gif"
         className="hidden"
       />
 
-      {/* TOP APP BAR */}
-      <header className="h-16 bg-white border-b border-stone-200/80 px-4 sm:px-6 flex items-center justify-between shrink-0 z-20">
+      {/* TOP COMPACT STUDIO BAR */}
+      <header className="h-14 bg-white border-b border-stone-200/90 px-4 sm:px-6 flex items-center justify-between shrink-0 z-20">
+        
+        {/* Left: Back & Course Metadata */}
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate('/course-studio')}
-            className="p-2 rounded-xl hover:bg-stone-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
-            title="Back to Studio"
+            className="p-2 rounded-xl hover:bg-stone-100 text-slate-600 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+            title="Return to Studio Dashboard"
           >
             <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Studio</span>
           </button>
 
-          <div className="h-6 w-px bg-stone-200" />
+          <div className="h-5 w-px bg-stone-200" />
 
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-black text-slate-900 leading-none truncate max-w-xs sm:max-w-md">
-                {course.title}
-              </h1>
-              <span className="px-2 py-0.5 rounded-full bg-sky-50 text-[#026fc3] text-[10px] font-black border border-sky-100 uppercase">
-                {course.subject}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-              {course.grade_level} • {course.status === 'published' ? 'Published' : 'Draft'}
-            </p>
+            <h1 className="text-sm font-black text-slate-900 truncate max-w-[200px] sm:max-w-xs md:max-w-md">
+              {course.title}
+            </h1>
+            <span className="text-[11px] font-bold text-[#026fc3]">
+              {course.subject} • {course.units?.length || 0} Units (Max 10)
+            </span>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 font-medium mr-2">
-            {savingStatus === 'saving' && (
-              <span className="text-amber-600 flex items-center gap-1 font-bold animate-pulse">
-                <Clock className="w-3.5 h-3.5" /> Saving...
-              </span>
-            )}
-            {savingStatus === 'saved' && (
-              <span className="text-emerald-600 flex items-center gap-1 font-bold">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Saved
-              </span>
-            )}
-            {savingStatus === 'unsaved' && (
-              <span className="text-slate-400 font-semibold">Unsaved changes</span>
-            )}
-          </div>
+        {/* Center: Save State Indicator */}
+        <div className="flex items-center gap-2">
+          {savingStatus === 'saving' && (
+            <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" /> Saving...
+            </span>
+          )}
+          {savingStatus === 'saved' && (
+            <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+            </span>
+          )}
+          {savingStatus === 'unsaved' && (
+            <span className="text-[11px] font-bold text-slate-400">
+              Unsaved changes
+            </span>
+          )}
+        </div>
 
+        {/* Right: Preview, Save, Publish */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate(`/course-studio/${course.id}/preview`)}
-            className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-50 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Preview</span>
+            <Eye className="w-3.5 h-3.5 text-[#026fc3]" />
+            <span className="hidden sm:inline">Preview Course</span>
           </button>
 
           <button
             type="button"
             onClick={handleSaveCurrentEpisode}
             disabled={savingStatus === 'saving'}
-            className="px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Save</span>
@@ -690,7 +633,7 @@ export const CourseEditorPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setPublishModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
             <span>Publish & Assign</span>
@@ -698,24 +641,50 @@ export const CourseEditorPage: React.FC = () => {
         </div>
       </header>
 
-      {/* 3-PANEL WORKSPACE */}
+      {/* ERROR & SUCCESS NOTIFICATIONS */}
+      {errorBanner && (
+        <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-xs font-semibold text-rose-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorBanner}</span>
+          </div>
+          <button onClick={() => setErrorBanner(null)} className="text-rose-500 hover:text-rose-800">✕</button>
+        </div>
+      )}
+
+      {successBanner && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successBanner}</span>
+          </div>
+          <button onClick={() => setSuccessBanner(null)} className="text-emerald-500 hover:text-emerald-800">✕</button>
+        </div>
+      )}
+
+      {/* 3-PANEL AUTHORING WORKSPACE */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* 1. LEFT PANEL: COURSE OUTLINE */}
-        <aside className="w-72 bg-white border-r border-stone-200/80 flex flex-col shrink-0 overflow-hidden">
-          <div className="p-4 border-b border-stone-100 flex items-center justify-between">
+        {/* -------------------------------------------------------------------- */}
+        {/* 1. LEFT PANEL: COURSE OUTLINE (MAX 10 UNITS)                         */}
+        {/* -------------------------------------------------------------------- */}
+        <aside className="w-72 bg-white border-r border-stone-200/90 flex flex-col shrink-0 overflow-hidden">
+          <div className="p-3.5 border-b border-stone-100 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-black text-slate-900 uppercase tracking-wider">
               <Layers className="w-4 h-4 text-[#026fc3]" />
-              <span>Course Outline</span>
+              <span>Course Outline ({(course.units || []).length}/10)</span>
             </div>
-            <button
-              type="button"
-              onClick={handleAddUnit}
-              className="p-1.5 rounded-lg hover:bg-sky-50 text-[#026fc3] transition-all cursor-pointer"
-              title="Add Unit"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            
+            {(course.units?.length || 0) < 10 && (
+              <button
+                type="button"
+                onClick={handleAddUnit}
+                className="p-1.5 rounded-lg hover:bg-sky-50 text-[#026fc3] transition-all cursor-pointer"
+                title="Add Unit"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -723,8 +692,8 @@ export const CourseEditorPage: React.FC = () => {
               const isExpanded = expandedUnits[unit.id] ?? true;
 
               return (
-                <div key={unit.id} className="rounded-xl border border-stone-200/70 overflow-hidden bg-stone-50/50">
-                  {/* Unit Title Header */}
+                <div key={unit.id} className="rounded-xl border border-stone-200 overflow-hidden bg-stone-50/50">
+                  {/* Unit Header */}
                   <div
                     onClick={() => setExpandedUnits(prev => ({ ...prev, [unit.id]: !isExpanded }))}
                     className="p-2.5 bg-white flex items-center justify-between cursor-pointer hover:bg-stone-50 transition-all text-xs font-black text-slate-800"
@@ -759,36 +728,37 @@ export const CourseEditorPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Episodes List */}
+                  {/* Lessons List */}
                   {isExpanded && (
                     <div className="p-1.5 space-y-1">
-                      {(unit.episodes || []).map(ep => {
+                      {(unit.episodes || []).map((ep) => {
                         const isSelected = selectedEpisodeId === ep.id;
 
                         return (
                           <div
                             key={ep.id}
                             onClick={() => selectEpisode(ep, unit.id)}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                            className={`p-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${
                               isSelected
-                                ? 'bg-sky-50 border border-sky-200 text-[#026fc3] shadow-2xs'
-                                : 'hover:bg-stone-100 text-slate-700'
+                                ? 'bg-[#026fc3] text-white shadow-2xs'
+                                : 'text-slate-700 hover:bg-white'
                             }`}
                           >
                             <div className="flex items-center gap-2 truncate">
-                              <BookOpen className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-[#026fc3]' : 'text-slate-400'}`} />
+                              <BookOpen className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
                               <span className="truncate">{ep.title}</span>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[10px] text-slate-400 font-semibold">
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[10px] ${isSelected ? 'text-sky-100' : 'text-slate-400'}`}>
                                 {ep.estimated_minutes || 15}m
                               </span>
-                              {(unit.episodes?.length || 0) > 1 && (
+                              {(unit.episodes || []).length > 1 && (
                                 <button
                                   type="button"
                                   onClick={e => handleDeleteEpisode(e, ep.id, unit.id)}
-                                  className="p-1 hover:text-rose-600 text-slate-300"
+                                  className={`p-0.5 opacity-0 group-hover:opacity-100 ${isSelected ? 'text-white' : 'text-slate-400 hover:text-rose-600'}`}
+                                  title="Delete Lesson"
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -802,506 +772,333 @@ export const CourseEditorPage: React.FC = () => {
                 </div>
               );
             })}
+
+            {/* 10 Units Reached Note */}
+            {(course.units?.length || 0) >= 10 && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-800 text-center">
+                Maximum of 10 units reached.
+              </div>
+            )}
           </div>
         </aside>
 
-        {/* 2. CENTER PANEL: EDITORIAL CONTENT STUDIO */}
-        <main className="flex-1 bg-[#fcfaf6] overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-          <div className="max-w-[760px] mx-auto space-y-6">
-
-            {errorBanner && (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{errorBanner}</span>
-                </div>
-                <button onClick={() => setErrorBanner(null)} className="text-rose-600 font-black">✕</button>
-              </div>
-            )}
-
+        {/* -------------------------------------------------------------------- */}
+        {/* 2. CENTER PANEL: LESSON CONTENT EDITOR (700-800PX READING WIDTH)     */}
+        {/* -------------------------------------------------------------------- */}
+        <main className="flex-1 bg-[#fcfaf6] overflow-y-auto p-4 sm:p-6 md:p-8">
+          <div className="max-w-[760px] mx-auto space-y-8">
+            
             {/* Lesson Title & Duration Header */}
-            <div className="bg-white rounded-2xl p-5 border border-stone-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1 flex-1">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Lesson / Episode Title</label>
-                <input
-                  type="text"
-                  value={episodeTitle}
-                  onChange={e => {
-                    setEpisodeTitle(e.target.value);
-                    setSavingStatus('unsaved');
-                  }}
-                  placeholder="e.g. Day 1: Introduction to Simple Present"
-                  className="w-full text-base font-black text-slate-900 bg-transparent border-0 border-b border-stone-200 focus:border-[#026fc3] focus:ring-0 px-0 py-1"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Duration</label>
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-slate-400" />
-                    <input
-                      type="number"
-                      min={1}
-                      max={120}
-                      value={estimatedMinutes}
-                      onChange={e => {
-                        setEstimatedMinutes(parseInt(e.target.value, 10) || 15);
-                        setSavingStatus('unsaved');
-                      }}
-                      className="w-16 px-2 py-1 rounded-lg bg-stone-50 border border-stone-200 text-xs font-bold text-slate-800 text-center"
-                    />
-                    <span className="text-xs text-slate-500 font-bold">min</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* PASTE TEACHING MATERIAL & AI BUILDER CARD (Assistive) */}
-            <div className="bg-gradient-to-br from-[#0a213c] to-[#0f3460] text-white rounded-2xl p-5 shadow-md border border-slate-800 space-y-3.5">
+            <div className="bg-white rounded-2xl p-5 border border-stone-200 shadow-2xs space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wand2 className="w-4 h-4 text-[#fbbf24]" />
-                  <h3 className="text-sm font-black text-white">Paste Raw Material & Build with AI</h3>
-                </div>
-                <span className="text-[10px] font-black uppercase text-sky-200 bg-sky-500/20 px-2 py-0.5 rounded-full border border-sky-400/30">
-                  Optional AI
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#026fc3]">
+                  {currentUnit?.title || 'Unit 1'} • Lesson Editor
                 </span>
-              </div>
-
-              <textarea
-                rows={2}
-                value={rawPastedMaterial}
-                onChange={e => setRawPastedMaterial(e.target.value)}
-                placeholder="Paste lesson text, notes, or article content to automatically structure into sections..."
-                className="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white placeholder:text-slate-400 focus:ring-2 focus:ring-sky-400 focus:outline-none"
-              />
-
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-slate-300 font-bold">Quick Examples:</span>
-                  <button
-                    type="button"
-                    onClick={() => setRawPastedMaterial('The simple present tense expresses habits, general truths, and repeated actions. For third-person singular (he, she, it), add -s or -es to the base verb (e.g. He walks, She watches). For negatives, use do not / does not + base verb.')}
-                    className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-semibold text-sky-200 border border-white/10 transition-all cursor-pointer"
-                  >
-                    Simple Present Rules
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRawPastedMaterial('Photosynthesis is the process by which green plants convert light energy into chemical energy. Plants take in carbon dioxide and water to produce glucose and oxygen using sunlight absorbed by chlorophyll in chloroplasts.')}
-                    className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-semibold text-sky-200 border border-white/10 transition-all cursor-pointer"
-                  >
-                    Photosynthesis
-                  </button>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-bold">
+                  <Clock className="w-3.5 h-3.5" />
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={estimatedMinutes}
+                    onChange={e => {
+                      setEstimatedMinutes(parseInt(e.target.value, 10) || 15);
+                      setSavingStatus('unsaved');
+                    }}
+                    className="w-12 px-1.5 py-0.5 rounded bg-stone-50 border border-stone-200 text-center text-xs font-bold"
+                  />
+                  <span>min read</span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleBuildLessonWithAI}
-                  disabled={aiGeneratingLesson || !rawPastedMaterial.trim()}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#fbbf24] hover:bg-amber-400 text-slate-900 text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>{aiGeneratingLesson ? 'Building...' : '✨ Build with AI'}</span>
-                </button>
               </div>
+
+              <input
+                type="text"
+                value={episodeTitle}
+                onChange={e => {
+                  setEpisodeTitle(e.target.value);
+                  setSavingStatus('unsaved');
+                }}
+                placeholder="Lesson Title (e.g. Day 1: The Eagle and the Chicken)"
+                className="w-full text-xl sm:text-2xl font-black text-slate-900 bg-transparent border-0 border-b border-stone-200 focus:border-[#026fc3] focus:ring-0 px-0 py-1"
+              />
             </div>
 
-            {/* INLINE AI PROPOSAL BANNER */}
-            {aiReviewOutput && (
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-5 border-2 border-amber-300 shadow-md space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-amber-600" />
-                    <h4 className="text-sm font-black text-slate-900">
-                      ✨ AI Structured Lesson Proposal Ready
-                    </h4>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAiReviewOutput(null)}
-                    className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-
-                <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                  AI parsed your material into <span className="font-extrabold text-slate-900">{aiReviewOutput.blocks?.length || 0} structured concept blocks</span> and <span className="font-extrabold text-slate-900">{aiReviewOutput.questions?.length || 0} practice questions</span> with concept metadata.
-                </p>
-
-                <div className="flex items-center gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleApplyAIOutput}
-                    className="px-5 py-2.5 bg-[#10b981] hover:bg-[#059669] text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Accept & Create Blocks in Lesson</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAiReviewOutput(null)}
-                    className="px-4 py-2.5 bg-white hover:bg-stone-100 text-slate-700 rounded-xl text-xs font-bold border border-stone-200 transition-all cursor-pointer"
-                  >
-                    Discard
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* CONTENT BLOCKS STREAM */}
+            {/* CONTENT SECTIONS STREAM */}
             <div className="space-y-5">
               {currentBlocks.map((block, bIdx) => {
-                const content = block.content as any;
+                const isFirst = bIdx === 0;
+                const isLast = bIdx === currentBlocks.length - 1;
 
                 return (
                   <div
                     key={block.id || bIdx}
-                    className="bg-white rounded-2xl p-5 border border-stone-200/80 shadow-2xs space-y-4 relative group"
+                    className="bg-white rounded-2xl border border-stone-200 shadow-2xs overflow-hidden transition-all"
                   >
-                    {/* Block Header Toolbar */}
-                    <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                    {/* Section Top Controls Bar */}
+                    <div className="px-4 py-2.5 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-black uppercase text-slate-600 tracking-wider flex items-center gap-1.5">
-                          {block.block_type === 'text' && <FileText className="w-3.5 h-3.5 text-[#026fc3]" />}
-                          {block.block_type === 'text_image' && <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />}
-                          {block.block_type === 'text_video' && <Video className="w-3.5 h-3.5 text-rose-500" />}
-                          {block.block_type === 'image' && <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />}
-                          {block.block_type === 'youtube_video' && <Video className="w-3.5 h-3.5 text-rose-500" />}
-                          {block.block_type === 'youtube_short' && <Play className="w-3.5 h-3.5 text-rose-600" />}
-                          <span>{block.block_type.replace('_', ' + ')} Section</span>
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                          Section #{bIdx + 1}:
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-[10px] font-black uppercase text-[#026fc3]">
+                          {block.block_type.replace('_', ' ')}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-1">
-                        {/* Move Up/Down */}
                         <button
                           type="button"
-                          disabled={bIdx === 0}
+                          disabled={isFirst}
                           onClick={() => handleMoveBlock(bIdx, 'up')}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                          className="p-1 rounded hover:bg-stone-200 text-slate-600 disabled:opacity-30 cursor-pointer"
                           title="Move Up"
                         >
-                          <ArrowUp className="w-3.5 h-3.5" />
+                          <MoveUp className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
-                          disabled={bIdx === currentBlocks.length - 1}
+                          disabled={isLast}
                           onClick={() => handleMoveBlock(bIdx, 'down')}
-                          className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 cursor-pointer"
+                          className="p-1 rounded hover:bg-stone-200 text-slate-600 disabled:opacity-30 cursor-pointer"
                           title="Move Down"
                         >
-                          <ArrowDown className="w-3.5 h-3.5" />
+                          <MoveDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateBlock(bIdx)}
+                          className="p-1 rounded hover:bg-stone-200 text-slate-600 cursor-pointer"
+                          title="Duplicate Section"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteBlock(bIdx)}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
-                          title="Delete Block"
+                          className="p-1 rounded hover:bg-rose-100 text-rose-600 cursor-pointer"
+                          title="Delete Section"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Section Title (Optional) */}
-                    <div className="space-y-1">
+                    {/* Section Editor Body */}
+                    <div className="p-4 sm:p-5 space-y-4">
+                      
+                      {/* Section Optional Title */}
                       <input
                         type="text"
-                        value={content.title || ''}
-                        onChange={e => handleUpdateBlockContent(bIdx, { ...content, title: e.target.value })}
-                        placeholder="Section Heading (e.g. Introduction, Core Concepts) — Optional"
-                        className="w-full text-xs font-bold text-slate-900 border-0 border-b border-stone-100 focus:border-[#026fc3] focus:ring-0 px-0 py-1"
+                        value={(block.content as any)?.title || ''}
+                        onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, title: e.target.value })}
+                        placeholder="Section Heading (Optional)"
+                        className="w-full text-sm font-bold text-slate-800 bg-transparent border-0 border-b border-stone-100 focus:border-[#026fc3] focus:ring-0 px-0 py-1"
                       />
-                    </div>
 
-                    {/* --- TYPE 1: PURE TEXT BLOCK --- */}
-                    {block.block_type === 'text' && (
-                      <div className="space-y-2">
-                        {/* Formatting Toolbar */}
-                        <div className="flex items-center gap-1 bg-stone-50 p-1.5 rounded-lg border border-stone-200/60 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '**Bold Text**')}
-                            className="p-1 hover:bg-white rounded text-slate-700 font-bold"
-                            title="Bold"
-                          >
-                            <Bold className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '*Italic Text*')}
-                            className="p-1 hover:bg-white rounded text-slate-700 italic"
-                            title="Italic"
-                          >
-                            <Italic className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '### Subheading')}
-                            className="p-1 hover:bg-white rounded text-slate-700"
-                            title="Heading"
-                          >
-                            <Heading className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '- Bullet item')}
-                            className="p-1 hover:bg-white rounded text-slate-700"
-                            title="Bullet List"
-                          >
-                            <List className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '1. Numbered item')}
-                            className="p-1 hover:bg-white rounded text-slate-700"
-                            title="Numbered List"
-                          >
-                            <ListOrdered className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleInsertFormatting(bIdx, 'text', '> Callout / Quote')}
-                            className="p-1 hover:bg-white rounded text-slate-700"
-                            title="Quote / Callout"
-                          >
-                            <Quote className="w-3.5 h-3.5" />
-                          </button>
+                      {/* 1. TEXT SECTION */}
+                      {block.block_type === 'text' && (
+                        <div className="space-y-1">
+                          <textarea
+                            rows={6}
+                            value={(block.content as any)?.text || ''}
+                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
+                            placeholder="Type or paste lesson text here (supports **bold**, *italic*, bullet lists, etc.)..."
+                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none placeholder:text-slate-400"
+                          />
                         </div>
+                      )}
 
-                        <textarea
-                          rows={6}
-                          value={content.text || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, text: e.target.value })}
-                          placeholder="Write or paste reading passage here (paragraphs will be rendered with clean 14px typography)..."
-                          className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 text-[14px] leading-relaxed font-normal text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                        />
-                      </div>
-                    )}
+                      {/* 2. TEXT + IMAGE SECTION */}
+                      {block.block_type === 'text_image' && (
+                        <div className="space-y-4">
+                          {/* Image Settings */}
+                          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/70 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <ImageIcon className="w-4 h-4 text-emerald-600" />
+                                <span>Story Illustration</span>
+                              </span>
 
-                    {/* --- TYPE 2: TEXT + IMAGE COMBINED SECTION --- */}
-                    {block.block_type === 'text_image' && (
-                      <div className="space-y-4">
-                        {/* Image Controls Toolbar (Position, Size, Upload) */}
-                        <div className="bg-stone-50 p-3 rounded-xl border border-stone-200/80 space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                            {/* Position Selector */}
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-600">Image Position:</span>
-                              {(['left', 'right', 'above', 'below'] as const).map(p => (
+                              <div className="flex items-center gap-3">
+                                {/* Position Selector */}
+                                <div className="flex items-center gap-1 text-xs">
+                                  <span className="text-[11px] font-bold text-slate-400">Position:</span>
+                                  <select
+                                    value={(block.content as any)?.image?.position || 'above'}
+                                    onChange={e => {
+                                      const nextImg = { ...(block.content as any)?.image, position: e.target.value };
+                                      handleUpdateBlockContent(bIdx, { ...block.content, image: nextImg });
+                                    }}
+                                    className="px-2 py-1 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                                  >
+                                    <option value="above">Above Text</option>
+                                    <option value="below">Below Text</option>
+                                    <option value="left">Float Left (Desktop)</option>
+                                    <option value="right">Float Right (Desktop)</option>
+                                  </select>
+                                </div>
+
+                                {/* Upload to Cloudflare R2 Button */}
                                 <button
-                                  key={p}
                                   type="button"
-                                  onClick={() =>
-                                    handleUpdateBlockContent(bIdx, {
-                                      ...content,
-                                      image: { ...(content.image || {}), position: p }
-                                    })
-                                  }
-                                  className={`px-2 py-1 rounded-md text-[11px] font-bold capitalize transition-all cursor-pointer ${
-                                    (content.image?.position || 'right') === p
-                                      ? 'bg-[#026fc3] text-white shadow-2xs'
-                                      : 'bg-white text-slate-700 border border-stone-200 hover:bg-stone-100'
-                                  }`}
+                                  onClick={() => triggerBlockImageUpload(bIdx)}
+                                  disabled={uploadingBlockIndex === bIdx}
+                                  className="px-3 py-1 rounded-lg bg-white hover:bg-stone-100 border border-stone-200 text-xs font-bold text-slate-800 flex items-center gap-1 cursor-pointer shadow-2xs"
                                 >
-                                  {p}
+                                  <UploadCloud className="w-3.5 h-3.5 text-[#026fc3]" />
+                                  <span>{uploadingBlockIndex === bIdx ? 'Uploading...' : 'Upload Image (R2)'}</span>
                                 </button>
-                              ))}
+                              </div>
                             </div>
 
-                            {/* Size Selector */}
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-600">Size:</span>
-                              {(['small', 'medium', 'large'] as const).map(s => (
-                                <button
-                                  key={s}
-                                  type="button"
-                                  onClick={() =>
-                                    handleUpdateBlockContent(bIdx, {
-                                      ...content,
-                                      image: { ...(content.image || {}), size: s }
-                                    })
-                                  }
-                                  className={`px-2 py-1 rounded-md text-[11px] font-bold capitalize transition-all cursor-pointer ${
-                                    (content.image?.size || 'medium') === s
-                                      ? 'bg-slate-900 text-white shadow-2xs'
-                                      : 'bg-white text-slate-700 border border-stone-200 hover:bg-stone-100'
-                                  }`}
-                                >
-                                  {s}
-                                </button>
-                              ))}
+                            {/* Image URL & Caption */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <input
+                                type="text"
+                                value={(block.content as any)?.image?.url || ''}
+                                onChange={e => {
+                                  const nextImg = { ...(block.content as any)?.image, url: e.target.value };
+                                  handleUpdateBlockContent(bIdx, { ...block.content, image: nextImg });
+                                }}
+                                placeholder="Image URL (or upload above)"
+                                className="px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs"
+                              />
+                              <input
+                                type="text"
+                                value={(block.content as any)?.image?.caption || ''}
+                                onChange={e => {
+                                  const nextImg = { ...(block.content as any)?.image, caption: e.target.value };
+                                  handleUpdateBlockContent(bIdx, { ...block.content, image: nextImg });
+                                }}
+                                placeholder="Optional caption (12-13px)"
+                                className="px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs"
+                              />
                             </div>
                           </div>
 
-                          {/* Image URL & Upload button */}
-                          <div className="flex items-center gap-2">
+                          {/* Text Body */}
+                          <textarea
+                            rows={6}
+                            value={(block.content as any)?.text || ''}
+                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
+                            placeholder="Type or paste lesson text here..."
+                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* 3. TEXT + VIDEO SECTION */}
+                      {block.block_type === 'text_video' && (
+                        <div className="space-y-4">
+                          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/70 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <Video className="w-4 h-4 text-rose-500" />
+                                <span>Video Embed</span>
+                              </span>
+                              <div className="flex items-center gap-1 text-xs">
+                                <span className="text-[11px] font-bold text-slate-400">Position:</span>
+                                <select
+                                  value={(block.content as any)?.video?.position || 'above'}
+                                  onChange={e => {
+                                    const nextVid = { ...(block.content as any)?.video, position: e.target.value };
+                                    handleUpdateBlockContent(bIdx, { ...block.content, video: nextVid });
+                                  }}
+                                  className="px-2 py-1 rounded-lg border border-stone-200 text-xs font-bold bg-white"
+                                >
+                                  <option value="above">Above Text</option>
+                                  <option value="below">Below Text</option>
+                                  <option value="left">Float Left (Desktop)</option>
+                                  <option value="right">Float Right (Desktop)</option>
+                                </select>
+                              </div>
+                            </div>
+
                             <input
                               type="text"
-                              value={content.image?.url || ''}
-                              onChange={e =>
-                                handleUpdateBlockContent(bIdx, {
-                                  ...content,
-                                  image: { ...(content.image || {}), url: e.target.value }
-                                })
-                              }
-                              placeholder="Image URL or upload directly via Cloudflare R2..."
-                              className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
+                              value={(block.content as any)?.video?.url || ''}
+                              onChange={e => {
+                                const nextVid = { ...(block.content as any)?.video, url: e.target.value };
+                                handleUpdateBlockContent(bIdx, { ...block.content, video: nextVid });
+                              }}
+                              placeholder="YouTube URL (e.g. https://www.youtube.com/watch?v=... or /shorts/...)"
+                              className="w-full px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs font-mono"
                             />
+                          </div>
+
+                          <textarea
+                            rows={6}
+                            value={(block.content as any)?.text || ''}
+                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
+                            placeholder="Type or paste lesson text here..."
+                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* 4. IMAGE ONLY SECTION */}
+                      {block.block_type === 'image' && (
+                        <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/70 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <ImageIcon className="w-4 h-4 text-slate-600" />
+                              <span>Standalone Image</span>
+                            </span>
                             <button
                               type="button"
-                              onClick={() => handleTriggerUpload(bIdx, 'image')}
+                              onClick={() => triggerBlockImageUpload(bIdx)}
                               disabled={uploadingBlockIndex === bIdx}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              className="px-3 py-1 rounded-lg bg-white hover:bg-stone-100 border border-stone-200 text-xs font-bold text-slate-800 flex items-center gap-1 cursor-pointer shadow-2xs"
                             >
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>{uploadingBlockIndex === bIdx ? 'Uploading...' : 'Upload'}</span>
+                              <UploadCloud className="w-3.5 h-3.5 text-[#026fc3]" />
+                              <span>{uploadingBlockIndex === bIdx ? 'Uploading...' : 'Upload Image (R2)'}</span>
                             </button>
                           </div>
 
-                          {/* Optional Caption */}
-                          <input
-                            type="text"
-                            value={content.image?.caption || ''}
-                            onChange={e =>
-                              handleUpdateBlockContent(bIdx, {
-                                ...content,
-                                image: { ...(content.image || {}), caption: e.target.value }
-                              })
-                            }
-                            placeholder="Optional Image Caption (e.g. Figure 1: The young eagle...)"
-                            className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-600"
-                          />
-                        </div>
-
-                        {/* Text Area for the story / explanation */}
-                        <textarea
-                          rows={6}
-                          value={content.text || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, text: e.target.value })}
-                          placeholder="Write text that will wrap around the image in the student view (14px comfortable reading typography)..."
-                          className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 text-[14px] leading-relaxed font-normal text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                        />
-                      </div>
-                    )}
-
-                    {/* --- TYPE 3: TEXT + VIDEO COMBINED SECTION --- */}
-                    {block.block_type === 'text_video' && (
-                      <div className="space-y-4">
-                        <div className="bg-stone-50 p-3 rounded-xl border border-stone-200/80 space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-slate-600">Video Position:</span>
-                              {(['left', 'right', 'above', 'below'] as const).map(p => (
-                                <button
-                                  key={p}
-                                  type="button"
-                                  onClick={() =>
-                                    handleUpdateBlockContent(bIdx, {
-                                      ...content,
-                                      video: { ...(content.video || {}), position: p }
-                                    })
-                                  }
-                                  className={`px-2 py-1 rounded-md text-[11px] font-bold capitalize transition-all cursor-pointer ${
-                                    (content.video?.position || 'right') === p
-                                      ? 'bg-[#026fc3] text-white shadow-2xs'
-                                      : 'bg-white text-slate-700 border border-stone-200 hover:bg-stone-100'
-                                  }`}
-                                >
-                                  {p}
-                                </button>
-                              ))}
-                            </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <input
+                              type="text"
+                              value={(block.content as any)?.url || ''}
+                              onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, url: e.target.value })}
+                              placeholder="Image URL"
+                              className="px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs"
+                            />
+                            <input
+                              type="text"
+                              value={(block.content as any)?.caption || ''}
+                              onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, caption: e.target.value })}
+                              placeholder="Caption (Optional)"
+                              className="px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs"
+                            />
                           </div>
+                        </div>
+                      )}
+
+                      {/* 5. VIDEO ONLY SECTION */}
+                      {(block.block_type === 'youtube_video' || block.block_type === 'youtube_short') && (
+                        <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200/70 space-y-2.5">
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Play className="w-4 h-4 text-slate-600" />
+                            <span>{block.block_type === 'youtube_short' ? 'YouTube Short (9:16)' : 'YouTube Video (16:9)'}</span>
+                          </span>
 
                           <input
                             type="text"
-                            value={content.video?.url || ''}
-                            onChange={e =>
-                              handleUpdateBlockContent(bIdx, {
-                                ...content,
-                                video: {
-                                  ...(content.video || {}),
-                                  url: e.target.value,
-                                  is_short: e.target.value.includes('/shorts/')
-                                }
-                              })
-                            }
-                            placeholder="Paste YouTube Video or YouTube Short URL..."
-                            className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
+                            value={(block.content as any)?.url || ''}
+                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, url: e.target.value })}
+                            placeholder="YouTube URL"
+                            className="w-full px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs font-mono"
                           />
                         </div>
+                      )}
 
-                        <textarea
-                          rows={6}
-                          value={content.text || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, text: e.target.value })}
-                          placeholder="Write text that will accompany the video..."
-                          className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 text-[14px] leading-relaxed font-normal text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                        />
-                      </div>
-                    )}
-
-                    {/* --- TYPE 4: STANDALONE IMAGE --- */}
-                    {block.block_type === 'image' && (
-                      <div className="space-y-3 bg-stone-50 p-4 rounded-xl border border-stone-200">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={content.url || ''}
-                            onChange={e => handleUpdateBlockContent(bIdx, { ...content, url: e.target.value })}
-                            placeholder="Image URL or upload..."
-                            className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleTriggerUpload(bIdx, 'image')}
-                            disabled={uploadingBlockIndex === bIdx}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                          >
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>{uploadingBlockIndex === bIdx ? 'Uploading...' : 'Upload'}</span>
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={content.caption || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, caption: e.target.value })}
-                          placeholder="Optional image caption..."
-                          className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-600"
-                        />
-                      </div>
-                    )}
-
-                    {/* --- TYPE 5: STANDALONE YOUTUBE / SHORTS --- */}
-                    {(block.block_type === 'youtube_video' || block.block_type === 'youtube_short') && (
-                      <div className="space-y-3 bg-stone-50 p-4 rounded-xl border border-stone-200">
-                        <input
-                          type="text"
-                          value={content.url || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, url: e.target.value })}
-                          placeholder="Paste YouTube Video URL (e.g. https://www.youtube.com/watch?v=... or https://youtube.com/shorts/...)"
-                          className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
-                        />
-                        <input
-                          type="text"
-                          value={content.title || ''}
-                          onChange={e => handleUpdateBlockContent(bIdx, { ...content, title: e.target.value })}
-                          placeholder="Video Title / Caption (Optional)"
-                          className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-600"
-                        />
-                      </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* + ADD SECTION BUTTON & POLISHED VISUAL PICKER */}
+            {/* + ADD SECTION PICKER */}
             <div className="relative py-2">
               {!showAddSectionMenu ? (
                 <button
@@ -1336,7 +1133,7 @@ export const CourseEditorPage: React.FC = () => {
                         <span>📝 Text</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                        Write or paste lesson text (14px)
+                        Standard 14px reading body text
                       </p>
                     </button>
 
@@ -1350,7 +1147,7 @@ export const CourseEditorPage: React.FC = () => {
                         <span>🖼 Text + Image</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                        Combine text with wrapped image
+                        Composite story text & illustration
                       </p>
                     </button>
 
@@ -1364,7 +1161,7 @@ export const CourseEditorPage: React.FC = () => {
                         <span>🎥 Text + Video</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                        Combine explanation with video
+                        Composite text & video lesson
                       </p>
                     </button>
 
@@ -1392,7 +1189,7 @@ export const CourseEditorPage: React.FC = () => {
                         <span>▶ YouTube Video</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                        16:9 widescreen video embed
+                        16:9 widescreen video player
                       </p>
                     </button>
 
@@ -1417,10 +1214,10 @@ export const CourseEditorPage: React.FC = () => {
             {/* ---------------------------------------------------------------- */}
             {/* INTERACTIVE PRACTICE QUESTIONS SECTION                           */}
             {/* ---------------------------------------------------------------- */}
-            <div className="bg-white rounded-2xl p-6 border border-stone-200/80 shadow-2xs space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-stone-200 shadow-2xs space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-100">
                 <div className="flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-[#fbbf24]" />
+                  <HelpCircle className="w-4 h-4 text-[#026fc3]" />
                   <h3 className="text-sm font-black text-slate-900">
                     Interactive Practice Questions ({currentQuestions.length})
                   </h3>
@@ -1429,113 +1226,197 @@ export const CourseEditorPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleAddQuestion}
-                    className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                    onClick={() => handleAddQuestion('multiple_choice')}
+                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Question</span>
+                    <span>+ Add Question</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={handleGenerateQuestionsWithAI}
-                    disabled={aiGeneratingQuestions}
-                    className="px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    onClick={() => setShowQuestionPlanModal(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{aiGeneratingQuestions ? 'Generating...' : 'AI Generate'}</span>
+                    <span>AI Question Plan & Prompt (v1.0)</span>
                   </button>
                 </div>
               </div>
 
+              {/* Questions List */}
               {currentQuestions.length === 0 ? (
-                <div className="text-center py-6 border-2 border-dashed border-stone-200 rounded-xl space-y-2">
+                <div className="text-center py-8 border-2 border-dashed border-stone-200 rounded-2xl space-y-3">
                   <p className="text-xs text-slate-500 font-medium">
                     No practice questions added yet for this lesson.
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleAddQuestion}
-                    className="px-3 py-1.5 bg-[#026fc3] text-white rounded-lg text-xs font-bold"
-                  >
-                    + Add First Question
-                  </button>
+                  <div className="flex justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuestion('multiple_choice')}
+                      className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-slate-800 rounded-xl text-xs font-bold"
+                    >
+                      + Add Question Manually
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionPlanModal(true)}
+                      className="px-4 py-2 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Create AI Question Plan</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {currentQuestions.map((q, qIdx) => (
-                    <div
-                      key={q.id || qIdx}
-                      className="p-4 rounded-xl bg-stone-50/70 border border-stone-200 space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900">Question {qIdx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteQuestion(qIdx)}
-                          className="text-slate-400 hover:text-rose-600 text-xs font-bold"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                  {currentQuestions.map((q, qIdx) => {
+                    const isFirstQ = qIdx === 0;
+                    const isLastQ = qIdx === currentQuestions.length - 1;
+                    const qType = q.question_type || 'multiple_choice';
 
-                      <input
-                        type="text"
-                        value={q.question_text}
-                        onChange={e => handleUpdateQuestion(qIdx, 'question_text', e.target.value)}
-                        placeholder="Enter question text here..."
-                        className="w-full px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs font-bold text-slate-900"
-                      />
+                    return (
+                      <div
+                        key={q.id || qIdx}
+                        className="p-4 rounded-2xl bg-stone-50/70 border border-stone-200 space-y-3"
+                      >
+                        {/* Question Header & Controls */}
+                        <div className="flex items-center justify-between pb-2 border-b border-stone-200/60">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">Q#{qIdx + 1}</span>
+                            <select
+                              value={qType}
+                              onChange={e => handleUpdateQuestion(qIdx, 'question_type', e.target.value as QuestionType)}
+                              className="px-2 py-0.5 rounded-md border border-stone-200 text-[11px] font-bold bg-white"
+                            >
+                              <option value="multiple_choice">Multiple Choice</option>
+                              <option value="true_false">True / False</option>
+                              <option value="fill_blank">Fill in the Blank</option>
+                              <option value="matching">Matching</option>
+                              <option value="ordering">Ordering</option>
+                              <option value="short_answer">Short Answer</option>
+                            </select>
+                          </div>
 
-                      {/* Options & Correct Answer */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {(q.options as string[]).map((opt, oIdx) => (
-                          <div key={oIdx} className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => handleUpdateQuestion(qIdx, 'correct_answer', opt)}
-                              className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs cursor-pointer ${
-                                q.correct_answer === opt
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-stone-200 text-slate-600 hover:bg-stone-300'
-                              }`}
-                              title="Mark as correct answer"
+                              disabled={isFirstQ}
+                              onClick={() => handleMoveQuestion(qIdx, 'up')}
+                              className="p-1 rounded hover:bg-stone-200 text-slate-600 disabled:opacity-30 cursor-pointer"
+                              title="Move Up"
                             >
-                              {String.fromCharCode(65 + oIdx)}
+                              <MoveUp className="w-3 h-3" />
                             </button>
+                            <button
+                              type="button"
+                              disabled={isLastQ}
+                              onClick={() => handleMoveQuestion(qIdx, 'down')}
+                              className="p-1 rounded hover:bg-stone-200 text-slate-600 disabled:opacity-30 cursor-pointer"
+                              title="Move Down"
+                            >
+                              <MoveDown className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuestion(qIdx)}
+                              className="p-1 rounded hover:bg-rose-100 text-rose-600 cursor-pointer"
+                              title="Delete Question"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Question Prompt Input */}
+                        <input
+                          type="text"
+                          value={q.question_text}
+                          onChange={e => handleUpdateQuestion(qIdx, 'question_text', e.target.value)}
+                          placeholder="Enter question prompt..."
+                          className="w-full px-3 py-2 rounded-xl bg-white border border-stone-200 text-xs font-bold text-slate-900"
+                        />
+
+                        {/* Multiple Choice Options */}
+                        {qType === 'multiple_choice' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {(q.options as string[]).map((opt, oIdx) => (
+                              <div key={oIdx} className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateQuestion(qIdx, 'correct_answer', opt)}
+                                  className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs cursor-pointer ${
+                                    q.correct_answer === opt
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-stone-200 text-slate-600 hover:bg-stone-300'
+                                  }`}
+                                  title="Mark as correct answer"
+                                >
+                                  {String.fromCharCode(65 + oIdx)}
+                                </button>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={e => {
+                                    const newOpts = [...(q.options as string[])];
+                                    newOpts[oIdx] = e.target.value;
+                                    handleUpdateQuestion(qIdx, 'options', newOpts);
+                                  }}
+                                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* True / False Options */}
+                        {qType === 'true_false' && (
+                          <div className="flex items-center gap-3 pt-1">
+                            <span className="text-xs font-bold text-slate-500">Correct Answer:</span>
+                            {['True', 'False'].map(choice => (
+                              <button
+                                key={choice}
+                                type="button"
+                                onClick={() => handleUpdateQuestion(qIdx, 'correct_answer', choice)}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                                  q.correct_answer.toLowerCase() === choice.toLowerCase()
+                                    ? 'bg-emerald-600 text-white shadow-2xs'
+                                    : 'bg-white text-slate-700 border border-stone-200'
+                                }`}
+                              >
+                                {choice}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Fill in the Blank / Short Answer Correct Answer */}
+                        {(qType === 'fill_blank' || qType === 'short_answer') && (
+                          <div className="pt-1 space-y-1">
+                            <label className="text-[11px] font-bold text-slate-500 uppercase">Correct Expected Answer:</label>
                             <input
                               type="text"
-                              value={opt}
-                              onChange={e => {
-                                const newOpts = [...(q.options as string[])];
-                                newOpts[oIdx] = e.target.value;
-                                handleUpdateQuestion(qIdx, 'options', newOpts);
-                              }}
-                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800"
+                              value={q.correct_answer}
+                              onChange={e => handleUpdateQuestion(qIdx, 'correct_answer', e.target.value)}
+                              placeholder="e.g. mountain"
+                              className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-800 font-bold"
                             />
                           </div>
-                        ))}
-                      </div>
+                        )}
 
-                      {/* Concept & Explanation */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        <input
-                          type="text"
-                          value={q.concept || ''}
-                          onChange={e => handleUpdateQuestion(qIdx, 'concept', e.target.value)}
-                          placeholder="Concept (e.g. Subject-Verb Agreement)"
-                          className="px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-[11px] text-slate-700"
-                        />
-                        <input
-                          type="text"
-                          value={q.explanation || ''}
-                          onChange={e => handleUpdateQuestion(qIdx, 'explanation', e.target.value)}
-                          placeholder="Explanation shown after answering"
-                          className="px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-[11px] text-slate-700"
-                        />
+                        {/* Explanation */}
+                        <div className="pt-1">
+                          <input
+                            type="text"
+                            value={q.explanation || ''}
+                            onChange={e => handleUpdateQuestion(qIdx, 'explanation', e.target.value)}
+                            placeholder="Explanation shown to students after answering..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-700"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1543,8 +1424,10 @@ export const CourseEditorPage: React.FC = () => {
           </div>
         </main>
 
-        {/* 3. RIGHT PANEL: AI CO-PILOT & COURSE SETTINGS */}
-        <aside className="w-80 bg-white border-l border-stone-200/80 flex flex-col shrink-0 overflow-hidden">
+        {/* -------------------------------------------------------------------- */}
+        {/* 3. RIGHT PANEL: OPTIONAL AI ASSISTANT & COURSE SETTINGS              */}
+        {/* -------------------------------------------------------------------- */}
+        <aside className="w-80 bg-white border-l border-stone-200/90 flex flex-col shrink-0 overflow-hidden">
           <div className="flex border-b border-stone-100">
             <button
               type="button"
@@ -1573,101 +1456,49 @@ export const CourseEditorPage: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {rightPanelTab === 'ai' ? (
               <div className="space-y-4">
-                <div className="p-3.5 rounded-xl bg-sky-50/60 border border-sky-100 text-xs space-y-1">
-                  <span className="font-black text-[#026fc3]">AI Assessment Co-Pilot</span>
-                  <p className="text-slate-600 font-medium leading-relaxed">
-                    Generate grounded multiple-choice questions from your lesson text with educational concept tags.
+                <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-100 text-xs space-y-1.5">
+                  <span className="font-black text-[#026fc3] flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Optional AI Workflow</span>
+                  </span>
+                  <p className="text-slate-600 font-medium leading-relaxed text-[11px]">
+                    Create questions, summarize text, or build grounded practice sets. AI is your assistant — you remain in 100% control of all content.
                   </p>
                 </div>
 
-                <div className="space-y-3 bg-stone-50 p-3.5 rounded-xl border border-stone-200/80">
-                  <label className="text-xs font-bold text-slate-800">Question Count</label>
-                  <div className="flex gap-2">
-                    {[3, 5, 10].map(cnt => (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => setAiQuestionCount(cnt)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
-                          aiQuestionCount === cnt
-                            ? 'bg-[#026fc3] text-white shadow-2xs'
-                            : 'bg-white text-slate-700 border border-stone-200'
-                        }`}
-                      >
-                        {cnt} Qs
-                      </button>
-                    ))}
-                  </div>
-
-                  <label className="text-xs font-bold text-slate-800 pt-1 block">Difficulty</label>
-                  <div className="flex gap-2">
-                    {(['easy', 'medium', 'hard'] as const).map(diff => (
-                      <button
-                        key={diff}
-                        type="button"
-                        onClick={() => setAiQuestionDifficulty(diff)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold capitalize cursor-pointer ${
-                          aiQuestionDifficulty === diff
-                            ? 'bg-slate-900 text-white shadow-2xs'
-                            : 'bg-white text-slate-700 border border-stone-200'
-                        }`}
-                      >
-                        {diff}
-                      </button>
-                    ))}
-                  </div>
-
+                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
+                  <span className="text-xs font-black text-slate-800 block">Question Plan Builder</span>
+                  <p className="text-slate-500 text-[11px] font-medium leading-relaxed">
+                    Formulate exact question types and counts, generate the v1.0 AI prompt, and import the returned JSON.
+                  </p>
                   <button
                     type="button"
-                    onClick={handleGenerateQuestionsWithAI}
-                    disabled={aiGeneratingQuestions}
-                    className="w-full py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 mt-2"
+                    onClick={() => setShowQuestionPlanModal(true)}
+                    className="w-full py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{aiGeneratingQuestions ? 'Generating Questions...' : 'Generate Practice Questions'}</span>
+                    <span>Open Question Planner</span>
                   </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">Course Title</label>
-                  <input
-                    type="text"
-                    value={course.title}
-                    onChange={e => setCourse({ ...course, title: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-xs font-bold text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">Subject</label>
-                  <input
-                    type="text"
-                    value={course.subject}
-                    onChange={e => setCourse({ ...course, subject: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-xs font-bold text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">Grade Level</label>
-                  <input
-                    type="text"
-                    value={course.grade_level || 'Grade 8'}
-                    onChange={e => setCourse({ ...course, grade_level: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-50 border border-stone-200 text-xs font-bold text-slate-900"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">Short Description</label>
-                  <textarea
-                    rows={3}
-                    value={course.short_description || ''}
-                    onChange={e => setCourse({ ...course, short_description: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-medium text-slate-800"
-                  />
+                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
+                  <span className="text-xs font-black text-slate-800">Course Metadata</span>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 block">Subject</span>
+                      <span className="font-bold text-slate-800">{course.subject}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 block">Course Type</span>
+                      <span className="font-bold text-slate-800 uppercase">{course.course_type} Course</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 block">Status</span>
+                      <span className="font-bold text-emerald-700 capitalize">{course.status}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1676,18 +1507,39 @@ export const CourseEditorPage: React.FC = () => {
 
       </div>
 
-      {/* Publish Modal */}
-      {publishModalOpen && course && (
-        <CoursePublishModal
-          course={course}
-          isOpen={publishModalOpen}
-          onClose={() => setPublishModalOpen(false)}
-          onSuccess={() => {
-            setPublishModalOpen(false);
-            if (courseId) loadCourseData(courseId);
-          }}
-        />
-      )}
+      {/* QUESTION PLAN & AI IMPORT MODAL */}
+      <QuestionPlanModal
+        isOpen={showQuestionPlanModal}
+        onClose={() => setShowQuestionPlanModal(false)}
+        courseTitle={course.title}
+        unitTitle={currentUnit?.title || 'Unit 1'}
+        episodeTitle={episodeTitle || 'Lesson 1'}
+        episodeId={selectedEpisodeId || ''}
+        courseId={course.id}
+        lessonText={combinedLessonText}
+        hasVideo={hasVideoInLesson}
+        hasImage={hasImageInLesson}
+        onImportQuestions={(importedQuestions) => {
+          setCurrentQuestions(prev => [...prev, ...importedQuestions]);
+          setSavingStatus('unsaved');
+          setSuccessBanner(`Successfully imported ${importedQuestions.length} practice questions.`);
+          setTimeout(() => setSuccessBanner(null), 3000);
+        }}
+      />
+
+      {/* COURSE PUBLISH & ASSIGN MODAL */}
+      <CoursePublishModal
+        isOpen={publishModalOpen}
+        onClose={() => setPublishModalOpen(false)}
+        course={course}
+        onSuccess={() => {
+          setCourse(prev => prev ? { ...prev, status: 'published' } : null);
+          setPublishModalOpen(false);
+          setSuccessBanner('Course successfully published and assigned to selected classrooms!');
+          setTimeout(() => setSuccessBanner(null), 3500);
+        }}
+      />
+
     </div>
   );
 };

@@ -57,13 +57,12 @@ test('CourseContentRenderer eliminates fixed min-width and floats on mobile', ()
 // ----------------------------------------------------------------------------
 // TEST 3: Left-Aligned Editorial Typography
 // ----------------------------------------------------------------------------
-test('Typography is strictly left-aligned with exact mobile (20-22px) and desktop (22-24px) scale', () => {
+test('Typography is strictly left-aligned with exact 14px body textbook scale (1.75 leading)', () => {
   const textFormatPath = path.join(ROOT_DIR, 'src/utils/courseTextFormatting.tsx');
   const content = fs.readFileSync(textFormatPath, 'utf8');
 
   assert(content.includes('text-left'), 'Must enforce left alignment on story text');
-  assert(content.includes('text-[20px] sm:text-[21px] md:text-[23px] lg:text-[24px]'), 'Must support 20-22px mobile and 22-24px desktop scale');
-  assert(content.includes('leading-[1.78]'), 'Must support comfortable literary line-height');
+  assert(content.includes('text-[14px] leading-[1.75]'), 'Must support 14px body typography with 1.75 leading');
 });
 
 // ----------------------------------------------------------------------------
