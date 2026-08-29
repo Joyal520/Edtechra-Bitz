@@ -29,10 +29,49 @@ export type QuestionType =
   | 'matching'
   | 'sentence_builder'
   | 'ordering'
-  | 'short_answer';
+  | 'short_answer'
+  | 'cloze_passage'
+  | 'essay';
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 export type MasteryStatus = 'strong' | 'good' | 'needs_support' | 'at_risk';
+
+export interface ClozeBlank {
+  id: string;
+  answer: string;
+  options: string[]; // exactly 4 options (1 correct, 3 distractors)
+}
+
+export interface ClozePassageData {
+  passage: string;
+  blanks: ClozeBlank[];
+}
+
+export type EssayEvaluationCriteriaType =
+  | 'content_accuracy'
+  | 'relevance'
+  | 'completeness'
+  | 'language'
+  | 'grammar'
+  | 'vocabulary';
+
+export interface EssayConfig {
+  image_url?: string;
+  min_words?: number;
+  max_words?: number;
+  evaluation_criteria?: (EssayEvaluationCriteriaType | string)[];
+}
+
+export interface EssayEvaluationResult {
+  score: number;
+  max_score: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  criteria_scores: Record<string, number>;
+  ai_provider?: 'gemini' | 'openai_fallback' | 'deterministic_evaluator';
+  model?: string;
+}
 
 // ----------------------------------------------------------------------------
 // 1. CONTENT BLOCKS PAYLOADS
@@ -118,7 +157,7 @@ export interface CourseQuestion {
   block_id?: string | null;
   question_text: string;
   question_type: QuestionType;
-  options: string[] | Array<{ text: string; id?: string }>;
+  options: string[] | Array<{ text: string; id?: string }> | Record<string, any>;
   correct_answer: string;
   explanation?: string;
   skill?: string;
@@ -126,6 +165,13 @@ export interface CourseQuestion {
   difficulty: DifficultyLevel;
   points: number;
   order_index: number;
+  passage?: string;
+  blanks?: ClozeBlank[];
+  image_url?: string;
+  min_words?: number;
+  max_words?: number;
+  evaluation_criteria?: string[];
+  essay_result?: EssayEvaluationResult;
   created_at?: string;
   updated_at?: string;
 }

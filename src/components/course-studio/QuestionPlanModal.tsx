@@ -370,26 +370,39 @@ export const QuestionPlanModal: React.FC<Props> = ({
                           <label className="text-[11px] font-bold text-slate-500 uppercase">Type</label>
                           <select
                             value={item.type}
-                            onChange={e => handleUpdatePlanItem(item.id, { type: e.target.value as QuestionType })}
+                            onChange={e => handleUpdatePlanItem(item.id, {
+                              type: e.target.value as QuestionType,
+                              min_words: e.target.value === 'essay' ? 80 : undefined,
+                              max_words: e.target.value === 'essay' ? 100 : undefined,
+                              evaluation_criteria: e.target.value === 'essay' ? ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'] : undefined
+                            })}
                             className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
                           >
                             <option value="multiple_choice">Multiple Choice (A,B,C,D)</option>
                             <option value="true_false">True / False</option>
                             <option value="fill_blank">Fill in the Blank</option>
+                            <option value="cloze_passage">Cloze Passage</option>
                             <option value="matching">Matching Pairs</option>
                             <option value="ordering">Ordering Sequence</option>
                             <option value="short_answer">Short Answer</option>
+                            <option value="essay">Essay / Descriptive Response</option>
                           </select>
                         </div>
 
-                        {/* Question / Sentence Count */}
+                        {/* Question / Sentence / Activity Count */}
                         <div className="space-y-1">
                           <label className="text-[11px] font-bold text-slate-500 uppercase">
-                            {item.type === 'ordering' ? 'Sentences / Blocks' : item.type === 'matching' ? 'Pairs' : 'Question Count'}
+                            {item.type === 'ordering'
+                              ? 'Sentences / Blocks'
+                              : item.type === 'matching'
+                              ? 'Pairs'
+                              : item.type === 'cloze_passage'
+                              ? 'Passage Activities'
+                              : 'Question Count'}
                           </label>
                           <input
                             type="number"
-                            min={2}
+                            min={1}
                             max={20}
                             value={item.count}
                             onChange={e => handleUpdatePlanItem(item.id, { count: Math.max(1, parseInt(e.target.value) || 1) })}
@@ -412,6 +425,88 @@ export const QuestionPlanModal: React.FC<Props> = ({
                         </div>
                       </div>
 
+                      {/* Extended Controls for Essay */}
+                      {item.type === 'essay' && (
+                        <div className="p-3 rounded-xl bg-sky-50/50 border border-sky-200/70 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-[#026fc3] uppercase tracking-wider">
+                              Essay Configuration & AI Evaluation
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                              Gemini + OpenAI
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase">Answer Length</label>
+                              <select
+                                value={`${item.min_words || 80}-${item.max_words || 100}`}
+                                onChange={e => {
+                                  const [min, max] = e.target.value.split('-').map(Number);
+                                  handleUpdatePlanItem(item.id, { min_words: min, max_words: max });
+                                }}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                              >
+                                <option value="30-50">Short (30–50 words)</option>
+                                <option value="50-80">50–80 words</option>
+                                <option value="80-100">80–100 words (Standard)</option>
+                                <option value="100-150">100–150 words</option>
+                                <option value="150-200">120–200 words</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase">Attached Image URL (Optional)</label>
+                              <input
+                                type="text"
+                                value={item.image_url || ''}
+                                onChange={e => handleUpdatePlanItem(item.id, { image_url: e.target.value })}
+                                placeholder="https://..."
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Evaluation Criteria Toggles */}
+                          <div className="space-y-1 pt-1">
+                            <label className="text-[10px] font-bold text-slate-600 uppercase">Evaluation Criteria</label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {[
+                                { id: 'content_accuracy', label: 'Content Accuracy' },
+                                { id: 'relevance', label: 'Relevance' },
+                                { id: 'completeness', label: 'Completeness' },
+                                { id: 'language', label: 'Language' },
+                                { id: 'grammar', label: 'Grammar' },
+                                { id: 'vocabulary', label: 'Vocabulary' }
+                              ].map(crit => {
+                                const currentCriteria = item.evaluation_criteria || ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'];
+                                const isSelected = currentCriteria.includes(crit.id);
+                                return (
+                                  <button
+                                    key={crit.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const next = isSelected
+                                        ? currentCriteria.filter(c => c !== crit.id)
+                                        : [...currentCriteria, crit.id];
+                                      handleUpdatePlanItem(item.id, { evaluation_criteria: next });
+                                    }}
+                                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-[#026fc3] text-white shadow-2xs'
+                                        : 'bg-white text-slate-600 border border-stone-200 hover:bg-stone-100'
+                                    }`}
+                                  >
+                                    {isSelected ? '✓ ' : '+ '}{crit.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Instructions */}
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-slate-500 uppercase">Instructions for this Set (Optional)</label>
@@ -419,7 +514,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
                           type="text"
                           value={item.instructions || ''}
                           onChange={e => handleUpdatePlanItem(item.id, { instructions: e.target.value })}
-                          placeholder="e.g. Focus on vocabulary and character motivation..."
+                          placeholder={item.type === 'cloze_passage' ? 'e.g. Focus on vocabulary from paragraph 2...' : item.type === 'essay' ? 'e.g. Describe the character emotions and setting...' : 'e.g. Focus on key themes and vocabulary...'}
                           className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
                         />
                       </div>

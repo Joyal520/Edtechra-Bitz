@@ -210,3 +210,7 @@ class CourseSoundSystem {
 }
 
 export const courseAudio = new CourseSoundSystem();
+
+export const playCorrectSound = () => courseAudio.playCorrectSound();
+export const playIncorrectSound = () => courseAudio.playIncorrectSound();
+export const playCompleteSound = () => courseAudio.playCompleteSound();

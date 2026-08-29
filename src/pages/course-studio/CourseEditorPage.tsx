@@ -394,7 +394,7 @@ export const CourseEditorPage: React.FC = () => {
   // --------------------------------------------------------------------------
 
   const handleAddQuestion = (type: QuestionType = 'multiple_choice') => {
-    let initialOptions: string[] = ['Option A', 'Option B', 'Option C', 'Option D'];
+    let initialOptions: any = ['Option A', 'Option B', 'Option C', 'Option D'];
     let initialCorrect = 'Option A';
 
     if (type === 'true_false') {
@@ -412,20 +412,48 @@ export const CourseEditorPage: React.FC = () => {
     } else if (type === 'short_answer') {
       initialOptions = ['acceptable answer'];
       initialCorrect = 'expected answer';
+    } else if (type === 'cloze_passage') {
+      const defaultPassage = 'The young bird looked at the sky every morning. He wanted to fly.';
+      const defaultBlanks = [
+        { id: 'blank_1', answer: 'sky', options: ['sky', 'ground', 'farm', 'nest'] },
+        { id: 'blank_2', answer: 'fly', options: ['fly', 'walk', 'sleep', 'run'] }
+      ];
+      initialOptions = { passage: defaultPassage, blanks: defaultBlanks };
+      initialCorrect = 'sky, fly';
+    } else if (type === 'essay') {
+      initialOptions = {
+        image_url: '',
+        min_words: 80,
+        max_words: 100,
+        evaluation_criteria: ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary']
+      };
+      initialCorrect = 'AI Evaluated';
     }
 
     const newQ: CourseQuestion = {
       id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       episode_id: selectedEpisodeId || '',
       course_id: course?.id || '',
-      question_text: type === 'true_false' ? 'Statement based on the lesson' : 'New practice question',
+      question_text: type === 'true_false'
+        ? 'Statement based on the lesson'
+        : type === 'cloze_passage'
+        ? 'Complete the passage using the correct words.'
+        : type === 'essay'
+        ? 'Describe this image in 80–100 words.'
+        : 'New practice question',
       question_type: type,
       options: initialOptions,
       correct_answer: initialCorrect,
       explanation: 'Explanation shown after answering.',
       difficulty: 'medium',
-      points: 10,
-      order_index: currentQuestions.length
+      points: type === 'essay' ? 20 : 10,
+      order_index: currentQuestions.length,
+      passage: type === 'cloze_passage' ? (initialOptions as any).passage : undefined,
+      blanks: type === 'cloze_passage' ? (initialOptions as any).blanks : undefined,
+      image_url: type === 'essay' ? (initialOptions as any).image_url : undefined,
+      min_words: type === 'essay' ? (initialOptions as any).min_words : undefined,
+      max_words: type === 'essay' ? (initialOptions as any).max_words : undefined,
+      evaluation_criteria: type === 'essay' ? (initialOptions as any).evaluation_criteria : undefined
     };
 
     setCurrentQuestions(prev => [...prev, newQ]);
@@ -1292,9 +1320,11 @@ export const CourseEditorPage: React.FC = () => {
                               <option value="multiple_choice">Multiple Choice</option>
                               <option value="true_false">True / False</option>
                               <option value="fill_blank">Fill in the Blank</option>
+                              <option value="cloze_passage">Cloze Passage</option>
                               <option value="matching">Matching</option>
                               <option value="ordering">Ordering</option>
                               <option value="short_answer">Short Answer</option>
+                              <option value="essay">Essay / Descriptive Response</option>
                             </select>
                           </div>
 
@@ -1340,7 +1370,7 @@ export const CourseEditorPage: React.FC = () => {
                         {/* Multiple Choice Options */}
                         {qType === 'multiple_choice' && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                            {(q.options as string[]).map((opt, oIdx) => (
+                            {(Array.isArray(q.options) ? (q.options as string[]) : []).map((opt, oIdx) => (
                               <div key={oIdx} className="flex items-center gap-2">
                                 <button
                                   type="button"
@@ -1387,6 +1417,180 @@ export const CourseEditorPage: React.FC = () => {
                                 {choice}
                               </button>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Cloze Passage Editor */}
+                        {qType === 'cloze_passage' && (
+                          <div className="pt-2 space-y-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                Passage Text (Use [word] for blanks):
+                              </label>
+                              <textarea
+                                rows={4}
+                                value={q.passage || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).passage : '')}
+                                onChange={e => {
+                                  const newPassage = e.target.value;
+                                  const currentBlanks = q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []);
+                                  handleUpdateQuestion(qIdx, 'passage', newPassage);
+                                  handleUpdateQuestion(qIdx, 'options', { passage: newPassage, blanks: currentBlanks });
+                                }}
+                                placeholder="The young bird looked at the [sky] every morning. He wanted to [fly]..."
+                                className="w-full p-2.5 rounded-xl bg-white border border-stone-200 text-xs font-medium text-slate-800"
+                              />
+                            </div>
+
+                            {/* Blanks List */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase">
+                                <span>Blanks & 4-Option Choices:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentBlanks = q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) || [];
+                                    const newBlank = {
+                                      id: `blank_${currentBlanks.length + 1}`,
+                                      answer: 'new_word',
+                                      options: ['new_word', 'distractor1', 'distractor2', 'distractor3']
+                                    };
+                                    const nextBlanks = [...currentBlanks, newBlank];
+                                    const currentPassage = q.passage || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).passage : '');
+                                    handleUpdateQuestion(qIdx, 'blanks', nextBlanks);
+                                    handleUpdateQuestion(qIdx, 'options', { passage: currentPassage, blanks: nextBlanks });
+                                  }}
+                                  className="px-2 py-0.5 rounded-md bg-sky-50 text-[#026fc3] border border-sky-200 text-[10px] font-black cursor-pointer"
+                                >
+                                  + Add Blank
+                                </button>
+                              </div>
+
+                              {((q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : [])) || []).map((blank: any, bIdx: number) => (
+                                <div key={bIdx} className="p-3 rounded-xl bg-white border border-stone-200 space-y-2 shadow-2xs">
+                                  <div className="flex items-center justify-between text-xs font-bold">
+                                    <span className="text-[#026fc3]">Blank #{bIdx + 1} ({blank.id || `blank_${bIdx + 1}`})</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentBlanks = (q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) || []).filter((_: any, idx: number) => idx !== bIdx);
+                                        const currentPassage = q.passage || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).passage : '');
+                                        handleUpdateQuestion(qIdx, 'blanks', currentBlanks);
+                                        handleUpdateQuestion(qIdx, 'options', { passage: currentPassage, blanks: currentBlanks });
+                                      }}
+                                      className="p-1 rounded text-rose-500 hover:bg-rose-50 cursor-pointer"
+                                      title="Delete Blank"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="space-y-0.5">
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase">Correct Answer Word:</label>
+                                      <input
+                                        type="text"
+                                        value={blank.answer}
+                                        onChange={e => {
+                                          const currentBlanks = [...(q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) || [])];
+                                          const newAns = e.target.value;
+                                          const opts = [...(currentBlanks[bIdx].options || [newAns, 'distractor1', 'distractor2', 'distractor3'])];
+                                          opts[0] = newAns;
+                                          currentBlanks[bIdx] = { ...currentBlanks[bIdx], answer: newAns, options: opts };
+                                          const currentPassage = q.passage || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).passage : '');
+                                          handleUpdateQuestion(qIdx, 'blanks', currentBlanks);
+                                          handleUpdateQuestion(qIdx, 'options', { passage: currentPassage, blanks: currentBlanks });
+                                        }}
+                                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50/50 text-xs font-bold text-emerald-900"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-0.5">
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase">Distractors (3 options):</label>
+                                      <div className="flex gap-1.5">
+                                        {[1, 2, 3].map(optI => (
+                                          <input
+                                            key={optI}
+                                            type="text"
+                                            value={blank.options?.[optI] || ''}
+                                            onChange={e => {
+                                              const currentBlanks = [...(q.blanks || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).blanks : []) || [])];
+                                              const newOpts = [...(currentBlanks[bIdx].options || [blank.answer, '', '', ''])];
+                                              newOpts[optI] = e.target.value;
+                                              currentBlanks[bIdx] = { ...currentBlanks[bIdx], options: newOpts };
+                                              const currentPassage = q.passage || (typeof q.options === 'object' && !Array.isArray(q.options) ? (q.options as any).passage : '');
+                                              handleUpdateQuestion(qIdx, 'blanks', currentBlanks);
+                                              handleUpdateQuestion(qIdx, 'options', { passage: currentPassage, blanks: currentBlanks });
+                                            }}
+                                            placeholder={`Option ${optI + 1}`}
+                                            className="flex-1 px-2 py-1.5 rounded-lg border border-stone-200 bg-white text-[11px] font-medium"
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Essay Configuration Editor */}
+                        {qType === 'essay' && (
+                          <div className="pt-2 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Target Word Range:</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min={20}
+                                    max={500}
+                                    value={q.min_words || 80}
+                                    onChange={e => {
+                                      const min = parseInt(e.target.value) || 50;
+                                      handleUpdateQuestion(qIdx, 'min_words', min);
+                                      handleUpdateQuestion(qIdx, 'options', { ...(typeof q.options === 'object' ? q.options : {}), min_words: min });
+                                    }}
+                                    className="w-20 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-bold text-slate-800"
+                                  />
+                                  <span className="text-xs text-slate-400 font-bold">to</span>
+                                  <input
+                                    type="number"
+                                    min={30}
+                                    max={1000}
+                                    value={q.max_words || 100}
+                                    onChange={e => {
+                                      const max = parseInt(e.target.value) || 100;
+                                      handleUpdateQuestion(qIdx, 'max_words', max);
+                                      handleUpdateQuestion(qIdx, 'options', { ...(typeof q.options === 'object' ? q.options : {}), max_words: max });
+                                    }}
+                                    className="w-20 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-bold text-slate-800"
+                                  />
+                                  <span className="text-[11px] text-slate-500 font-medium">words</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Attached Image URL (Optional):</label>
+                                <input
+                                  type="text"
+                                  value={q.image_url || ''}
+                                  onChange={e => {
+                                    const url = e.target.value;
+                                    handleUpdateQuestion(qIdx, 'image_url', url);
+                                    handleUpdateQuestion(qIdx, 'options', { ...(typeof q.options === 'object' ? q.options : {}), image_url: url });
+                                  }}
+                                  placeholder="https://..."
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium text-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            {q.image_url && (
+                              <div className="w-32 h-20 rounded-lg overflow-hidden border border-stone-200">
+                                <img src={q.image_url} alt="Prompt visual" className="w-full h-full object-cover" />
+                              </div>
+                            )}
                           </div>
                         )}
 

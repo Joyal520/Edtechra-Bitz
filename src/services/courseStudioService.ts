@@ -17,7 +17,8 @@ import {
   AILessonGenerationResponse,
   AIQuestionGenerationPayload,
   AIQuestionGenerationResponse,
-  CourseAssignmentSettings
+  CourseAssignmentSettings,
+  EssayEvaluationResult
 } from '@/types/courseStudio';
 import { optimizeImageForUpload } from '@/utils/imageOptimization';
 
@@ -437,5 +438,27 @@ export const courseStudioService = {
     const json = await res.json();
     if (!res.ok || !json.success) return [];
     return json.attempts || [];
+  },
+
+  async evaluateEssay(payload: {
+    question_text: string;
+    student_response: string;
+    image_url?: string;
+    lesson_context?: string;
+    min_words?: number;
+    max_words?: number;
+    evaluation_criteria?: string[];
+  }): Promise<EssayEvaluationResult> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/essay-evaluate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Failed to evaluate essay response.');
+    }
+    return json.evaluation;
   }
 };

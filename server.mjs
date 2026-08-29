@@ -117,6 +117,7 @@ import {
   cancelQueueBatch,
   retryQueueItem
 } from './server/postQueueService.mjs';
+import { evaluateStudentEssay } from './server/courseEssayEvaluationService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2539,8 +2540,8 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
         block_id: q.block_id || null,
         question_text: q.question_text,
         question_type: q.question_type || 'multiple_choice',
-        options: Array.isArray(q.options) ? q.options : [],
-        correct_answer: q.correct_answer,
+        options: (typeof q.options === 'object' && q.options !== null) || Array.isArray(q.options) ? q.options : [],
+        correct_answer: q.correct_answer || (q.question_type === 'essay' ? 'AI Evaluated' : 'Answer'),
         explanation: q.explanation || '',
         skill: q.skill || 'General',
         concept: q.concept || 'General',
@@ -2561,6 +2562,46 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
     res.json({ success: true, questions: [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to save questions.' });
+  }
+});
+
+// 14b. POST /api/course-studio/essay-evaluate - Evaluate student essay with Gemini/OpenAI
+app.post('/api/course-studio/essay-evaluate', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      question_text,
+      student_response,
+      image_url,
+      lesson_context,
+      min_words,
+      max_words,
+      evaluation_criteria
+    } = req.body;
+
+    if (!question_text || !student_response) {
+      return res.status(400).json({ success: false, error: 'question_text and student_response are required' });
+    }
+
+    const evaluation = await evaluateStudentEssay({
+      question_text,
+      student_response,
+      image_url,
+      lesson_context,
+      min_words,
+      max_words,
+      evaluation_criteria,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, evaluation });
+  } catch (err) {
+    console.error('Error in POST /api/course-studio/essay-evaluate:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to evaluate essay.' });
   }
 });
 

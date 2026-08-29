@@ -25,6 +25,8 @@ import { QUESTION_TYPE_LABELS } from '@/utils/questionSchemaValidator';
 import { courseAudio } from '@/utils/courseAudio';
 import { triggerConfettiBurst } from '@/utils/courseConfetti';
 import { DraggableOrderingQuestion } from '@/components/course-studio/DraggableOrderingQuestion';
+import { ClozePassageQuestion } from '@/components/course-studio/ClozePassageQuestion';
+import { EssayQuestion } from '@/components/course-studio/EssayQuestion';
 
 interface Props {
   blocks: CourseBlock[];
@@ -707,9 +709,37 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   )}
 
                   {/* -------------------------------------------------------- */}
+                  {/* 6. CLOZE PASSAGE (INTERACTIVE READING WITH BLANKS)       */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'cloze_passage' && (
+                    <ClozePassageQuestion
+                      question={q}
+                      isLocked={isLocked}
+                      isSubmitting={isSubmitting}
+                      selectedAnswer={selectedAnswer}
+                      feedback={feedback}
+                      onEvaluateAnswer={handleEvaluateAnswer}
+                    />
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* 7. ESSAY / DESCRIPTIVE RESPONSE (AI EVALUATED)           */}
+                  {/* -------------------------------------------------------- */}
+                  {qType === 'essay' && (
+                    <EssayQuestion
+                      question={q}
+                      isLocked={isLocked}
+                      isSubmitting={isSubmitting}
+                      selectedAnswer={selectedAnswer}
+                      feedback={feedback}
+                      onEvaluateAnswer={handleEvaluateAnswer}
+                    />
+                  )}
+
+                  {/* -------------------------------------------------------- */}
                   {/* REFINED EXPLANATION CARD (Locked state for standard Qs)  */}
                   {/* -------------------------------------------------------- */}
-                  {qType !== 'ordering' && feedback?.showExplanation && (
+                  {qType !== 'ordering' && qType !== 'cloze_passage' && qType !== 'essay' && feedback?.showExplanation && (
                     <div
                       className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 ${
                         feedback.isCorrect

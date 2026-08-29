@@ -2,9 +2,16 @@
 // EDTECHRA DIGITAL CLASSROOM: QUESTION SCHEMA, PROMPT BUILDER & VALIDATOR
 // Implements EdTechra Question JSON Schema v1.0, Prompt Construction,
 // Strict Untrusted JSON Validation, and Course Question Import Engine.
+// Supports 8 Question Types: Multiple Choice, True/False, Fill in the Blank,
+// Matching, Sentence Builder, Ordering, Short Answer, Cloze Passage, and Essay.
 // ============================================================================
 
-import { CourseQuestion, DifficultyLevel, QuestionType } from '@/types/courseStudio';
+import {
+  CourseQuestion,
+  DifficultyLevel,
+  QuestionType,
+  ClozeBlank
+} from '@/types/courseStudio';
 
 export interface QuestionPlanItem {
   id: string;
@@ -12,6 +19,11 @@ export interface QuestionPlanItem {
   count: number;
   difficulty: DifficultyLevel;
   instructions?: string;
+  // Extended fields for Essay / Ordering / Cloze
+  image_url?: string;
+  min_words?: number;
+  max_words?: number;
+  evaluation_criteria?: string[];
 }
 
 export interface QuestionPlan {
@@ -39,7 +51,9 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   matching: 'Matching',
   sentence_builder: 'Sentence Builder',
   ordering: 'Ordering',
-  short_answer: 'Short Answer'
+  short_answer: 'Short Answer',
+  cloze_passage: 'Cloze Passage',
+  essay: 'Essay / Descriptive Response'
 };
 
 const TYPE_EXAMPLE_TEMPLATES: Record<QuestionType, any> = {
@@ -138,6 +152,54 @@ const TYPE_EXAMPLE_TEMPLATES: Record<QuestionType, any> = {
         points: 10
       }
     ]
+  },
+  cloze_passage: {
+    type: 'cloze_passage',
+    questions: [
+      {
+        question: 'Complete the passage using the correct words.',
+        passage: 'The young bird looked at the sky every morning. He wanted to fly.',
+        blanks: [
+          {
+            id: 'blank_1',
+            answer: 'sky',
+            options: ['sky', 'ground', 'farm', 'nest']
+          },
+          {
+            id: 'blank_2',
+            answer: 'fly',
+            options: ['fly', 'walk', 'sleep', 'run']
+          }
+        ],
+        explanation: 'The passage states that the young bird looked at the sky and wanted to fly.',
+        difficulty: 'medium',
+        points: 10
+      }
+    ]
+  },
+  essay: {
+    type: 'essay',
+    questions: [
+      {
+        question: 'Describe this image in 80–100 words.',
+        image_url: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80',
+        answer_length: {
+          min_words: 80,
+          max_words: 100
+        },
+        evaluation_criteria: [
+          'content_accuracy',
+          'relevance',
+          'completeness',
+          'language',
+          'grammar',
+          'vocabulary'
+        ],
+        explanation: 'Provide a clear descriptive response grounded in the lesson visual and themes.',
+        difficulty: 'medium',
+        points: 20
+      }
+    ]
   }
 };
 
@@ -195,6 +257,10 @@ export function buildAiQuestionPrompt(params: {
     const label = QUESTION_TYPE_LABELS[item.type] || item.type;
     if (item.type === 'ordering') {
       prompt += `${index + 1}. Ordering — ONE activity containing ${item.count} sentence blocks — Difficulty: ${item.difficulty.toUpperCase()}`;
+    } else if (item.type === 'cloze_passage') {
+      prompt += `${index + 1}. Cloze Passage — ${item.count} passage activit${item.count > 1 ? 'ies' : 'y'} (each containing 3–6 blanks with exactly 4 options per blank) — Difficulty: ${item.difficulty.toUpperCase()}`;
+    } else if (item.type === 'essay') {
+      prompt += `${index + 1}. Essay / Descriptive Response — ${item.count} question${item.count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words) — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else {
       prompt += `${index + 1}. ${label} — ${item.count} question${item.count > 1 ? 's' : ''} — Difficulty: ${item.difficulty.toUpperCase()}`;
     }
@@ -215,7 +281,9 @@ export function buildAiQuestionPrompt(params: {
   prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0.\n`;
   prompt += `3. Do not include markdown code block backticks if possible, or wrap inside standard \`\`\`json block.\n`;
   prompt += `4. For Ordering: Create ONE ordering activity containing exactly the requested sentence count in the "items" array.\n`;
-  prompt += `5. Provide a clear educational explanation for every question.\n\n`;
+  prompt += `5. For Cloze Passage: Provide complete passages with a "blanks" array. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
+  prompt += `6. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
+  prompt += `7. Provide a clear educational explanation for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
   const exampleQuestionSets = plan.items.map(item => {
@@ -325,7 +393,9 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
     'matching',
     'sentence_builder',
     'ordering',
-    'short_answer'
+    'short_answer',
+    'cloze_passage',
+    'essay'
   ];
 
   const planTypes = (plan?.items || []).map(item => item.type);
@@ -410,6 +480,33 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         if (!q.correct_answer && (!Array.isArray(q.acceptable_answers) || q.acceptable_answers.length === 0)) {
           errors.push(`${qNum}: Missing "correct_answer" or "acceptable_answers".`);
         }
+      } else if (typeKey === 'cloze_passage') {
+        const passage = q.passage || q.question_text || q.text;
+        if (!passage || typeof passage !== 'string' || !passage.trim()) {
+          errors.push(`${qNum}: Missing "passage" text.`);
+        }
+        if (!Array.isArray(q.blanks) || q.blanks.length === 0) {
+          errors.push(`${qNum}: Cloze passage requires a "blanks" array with at least 1 blank.`);
+        } else {
+          q.blanks.forEach((b: any, bIdx: number) => {
+            if (!b.id) b.id = `blank_${bIdx + 1}`;
+            if (!b.answer || typeof b.answer !== 'string' || !b.answer.trim()) {
+              errors.push(`${qNum} Blank #${bIdx + 1}: Missing "answer".`);
+            }
+            if (!Array.isArray(b.options) || b.options.length !== 4) {
+              errors.push(`${qNum} Blank #${bIdx + 1}: Must contain exactly 4 options in "options".`);
+            } else if (b.answer && !b.options.some((opt: any) => String(opt).trim().toLowerCase() === String(b.answer).trim().toLowerCase())) {
+              errors.push(`${qNum} Blank #${bIdx + 1}: "options" must include the correct answer "${b.answer}".`);
+            }
+          });
+        }
+      } else if (typeKey === 'essay') {
+        if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
+          errors.push(`${qNum}: Missing "question" prompt.`);
+        }
+        if (q.evaluation_criteria && !Array.isArray(q.evaluation_criteria)) {
+          errors.push(`${qNum}: "evaluation_criteria" must be an array of criteria strings.`);
+        }
       }
     });
   });
@@ -434,7 +531,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
           }
         }
       } else if (actualCount !== planItem.count) {
-        errors.push(`${label} requires ${planItem.count} questions, but JSON contains ${actualCount}. (Expected: ${planItem.count})`);
+        errors.push(`${label} requires ${planItem.count} question${planItem.count > 1 ? 's' : ''}, but JSON contains ${actualCount}. (Expected: ${planItem.count})`);
       }
     });
   }
@@ -469,8 +566,14 @@ export function convertValidatedJsonToCourseQuestions(
 
     (qSet.questions || []).forEach((q: any) => {
       let qText = q.question || q.statement || q.sentence || '';
-      let optionsList: string[] = [];
+      let optionsList: any = [];
       let correctAnswerStr = String(q.correct_answer ?? '');
+      let passageText: string | undefined = undefined;
+      let blanksList: ClozeBlank[] | undefined = undefined;
+      let imageUrl: string | undefined = undefined;
+      let minWords: number | undefined = undefined;
+      let maxWords: number | undefined = undefined;
+      let criteriaList: string[] | undefined = undefined;
 
       if (qType === 'multiple_choice') {
         optionsList = Array.isArray(q.options)
@@ -483,7 +586,6 @@ export function convertValidatedJsonToCourseQuestions(
       } else if (qType === 'fill_blank') {
         optionsList = [];
       } else if (qType === 'matching') {
-        // Encode pairs in options for transport
         if (Array.isArray(q.pairs)) {
           optionsList = q.pairs.map((p: any) => `${p.left || ''} -> ${p.right || ''}`);
         }
@@ -493,6 +595,28 @@ export function convertValidatedJsonToCourseQuestions(
         if (Array.isArray(q.acceptable_answers)) {
           optionsList = q.acceptable_answers;
         }
+      } else if (qType === 'cloze_passage') {
+        passageText = q.passage || '';
+        blanksList = Array.isArray(q.blanks) ? q.blanks : [];
+        optionsList = {
+          passage: passageText,
+          blanks: blanksList
+        };
+        correctAnswerStr = (blanksList || []).map(b => b.answer).join(', ') || 'All blanks completed';
+      } else if (qType === 'essay') {
+        imageUrl = q.image_url || undefined;
+        minWords = q.answer_length?.min_words || q.min_words || 80;
+        maxWords = q.answer_length?.max_words || q.max_words || 100;
+        criteriaList = Array.isArray(q.evaluation_criteria)
+          ? q.evaluation_criteria
+          : ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'];
+        optionsList = {
+          image_url: imageUrl,
+          min_words: minWords,
+          max_words: maxWords,
+          evaluation_criteria: criteriaList
+        };
+        correctAnswerStr = 'AI Evaluated';
       }
 
       result.push({
@@ -504,11 +628,17 @@ export function convertValidatedJsonToCourseQuestions(
         options: optionsList,
         correct_answer: correctAnswerStr,
         explanation: q.explanation || '',
-        skill: q.skill || 'Comprehension',
+        skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : 'Comprehension'),
         concept: q.concept || 'General',
         difficulty: (q.difficulty as DifficultyLevel) || 'medium',
-        points: q.points || 10,
-        order_index: orderIndex++
+        points: q.points || (qType === 'essay' ? 20 : 10),
+        order_index: orderIndex++,
+        passage: passageText,
+        blanks: blanksList,
+        image_url: imageUrl,
+        min_words: minWords,
+        max_words: maxWords,
+        evaluation_criteria: criteriaList
       });
     });
   });
