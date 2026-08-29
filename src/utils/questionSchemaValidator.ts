@@ -16,10 +16,21 @@ import {
 export interface QuestionPlanItem {
   id: string;
   type: QuestionType;
-  count: number;
   difficulty: DifficultyLevel;
   instructions?: string;
-  // Extended fields for Essay / Ordering / Cloze
+  points: number; // Marks per question (or marks per activity for Ordering / Cloze)
+  
+  // Generic question count (MCQ, TF, Fill in Blank, Matching, Short Answer, Essay)
+  count: number;
+  
+  // Cloze Passage specific: Number of blanks in the single passage
+  blankCount?: number;
+  
+  // Ordering specific: Number of activities & sentence items per activity
+  activityCount?: number;
+  itemsPerActivity?: number;
+  
+  // Essay options
   image_url?: string;
   min_words?: number;
   max_words?: number;
@@ -39,6 +50,8 @@ export interface ValidationResult {
   warnings: string[];
   summary: {
     totalQuestions: number;
+    totalActivities: number;
+    totalMarks: number;
     byType: Record<string, number>;
   };
   parsedData?: any;
@@ -50,11 +63,40 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   fill_blank: 'Fill in the Blank',
   matching: 'Matching',
   sentence_builder: 'Sentence Builder',
-  ordering: 'Ordering',
+  ordering: 'Ordering Sequence',
   short_answer: 'Short Answer',
   cloze_passage: 'Cloze Passage',
   essay: 'Essay / Descriptive Response'
 };
+
+/**
+ * Returns the semantic activity count for a QuestionPlanItem.
+ * Cloze Passage is always 1 activity.
+ * Ordering has `activityCount` activities (default 1).
+ * Other question types have `count` questions.
+ */
+export function getPlanItemActivityCount(item: QuestionPlanItem): number {
+  if (item.type === 'cloze_passage') return 1;
+  if (item.type === 'ordering') return item.activityCount || 1;
+  return item.count || 1;
+}
+
+/**
+ * Returns the calculated total marks for a QuestionPlanItem.
+ * Cloze: marks per activity (1 activity = points).
+ * Ordering: activityCount * marks per activity.
+ * Others: count * marks per question.
+ */
+export function getPlanItemTotalMarks(item: QuestionPlanItem): number {
+  const points = typeof item.points === 'number' ? item.points : (item.type === 'essay' || item.type === 'cloze_passage' ? 20 : 10);
+  if (item.type === 'cloze_passage') {
+    return points;
+  }
+  if (item.type === 'ordering') {
+    return (item.activityCount || 1) * points;
+  }
+  return (item.count || 1) * points;
+}
 
 const TYPE_EXAMPLE_TEMPLATES: Record<QuestionType, any> = {
   multiple_choice: {
@@ -173,7 +215,7 @@ const TYPE_EXAMPLE_TEMPLATES: Record<QuestionType, any> = {
         ],
         explanation: 'The passage states that the young bird looked at the sky and wanted to fly.',
         difficulty: 'medium',
-        points: 10
+        points: 20
       }
     ]
   },
@@ -255,14 +297,21 @@ export function buildAiQuestionPrompt(params: {
 
   plan.items.forEach((item, index) => {
     const label = QUESTION_TYPE_LABELS[item.type] || item.type;
+    const points = typeof item.points === 'number' ? item.points : (item.type === 'essay' || item.type === 'cloze_passage' ? 20 : 10);
+
     if (item.type === 'ordering') {
-      prompt += `${index + 1}. Ordering — ONE activity containing ${item.count} sentence blocks — Difficulty: ${item.difficulty.toUpperCase()}`;
+      const actCount = item.activityCount || 1;
+      const sentCount = item.itemsPerActivity || item.count || 5;
+      prompt += `${index + 1}. Ordering — Create exactly ${actCount} Ordering activit${actCount > 1 ? 'ies' : 'y'}, each containing exactly ${sentCount} sentence blocks. Points: ${points} per activity — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'cloze_passage') {
-      prompt += `${index + 1}. Cloze Passage — ${item.count} passage activit${item.count > 1 ? 'ies' : 'y'} (each containing 3–6 blanks with exactly 4 options per blank) — Difficulty: ${item.difficulty.toUpperCase()}`;
+      const blankCount = item.blankCount || item.count || 10;
+      prompt += `${index + 1}. Cloze Passage — Create exactly ONE Cloze Passage question containing exactly ${blankCount} blanks. Each blank must have exactly four answer options with one correct answer. Points: ${points} (for the entire passage activity) — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'essay') {
-      prompt += `${index + 1}. Essay / Descriptive Response — ${item.count} question${item.count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words) — Difficulty: ${item.difficulty.toUpperCase()}`;
+      const count = item.count || 1;
+      prompt += `${index + 1}. Essay / Descriptive Response — ${count} question${count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words, Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else {
-      prompt += `${index + 1}. ${label} — ${item.count} question${item.count > 1 ? 's' : ''} — Difficulty: ${item.difficulty.toUpperCase()}`;
+      const count = item.count || 1;
+      prompt += `${index + 1}. ${label} — ${count} question${count > 1 ? 's' : ''} (Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
     }
     if (item.instructions?.trim()) {
       prompt += ` (Instructions: ${item.instructions.trim()})`;
@@ -280,34 +329,108 @@ export function buildAiQuestionPrompt(params: {
   prompt += `1. Generate ONLY the requested question types listed above. Do NOT include unused question types or empty question sets.\n`;
   prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0.\n`;
   prompt += `3. Do not include markdown code block backticks if possible, or wrap inside standard \`\`\`json block.\n`;
-  prompt += `4. For Ordering: Create ONE ordering activity containing exactly the requested sentence count in the "items" array.\n`;
-  prompt += `5. For Cloze Passage: Provide complete passages with a "blanks" array. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
+  prompt += `4. For Ordering: Generate the exact number of activities requested, with each activity containing the exact requested number of sentence blocks in the "items" array.\n`;
+  prompt += `5. For Cloze Passage: Generate EXACTLY ONE question containing a complete passage and a "blanks" array with the EXACT requested number of blanks. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
   prompt += `6. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
-  prompt += `7. Provide a clear educational explanation for every question.\n\n`;
+  prompt += `7. Include "points" for every question matching the teacher's selected marks.\n`;
+  prompt += `8. Provide a clear educational explanation for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
   const exampleQuestionSets = plan.items.map(item => {
+    const points = typeof item.points === 'number' ? item.points : (item.type === 'essay' || item.type === 'cloze_passage' ? 20 : 10);
+
     if (item.type === 'ordering') {
+      const actCount = item.activityCount || 1;
+      const sentCount = item.itemsPerActivity || item.count || 5;
+      const defaultItems = [
+        "The egg rolled away from the eagle's nest.",
+        "The egg reached a farm.",
+        "A chicken put the egg in her nest.",
+        "The eggs opened and the chicks came out.",
+        "The young bird flew higher and higher.",
+        "He looked down at the farm below.",
+        "He soared toward the mountain peak.",
+        "He found his family among the clouds."
+      ];
+      const items = defaultItems.slice(0, Math.max(2, sentCount));
+
+      const questions = [];
+      for (let a = 0; a < actCount; a++) {
+        questions.push({
+          question: `Arrange the story events in chronological order${actCount > 1 ? ` (Part ${a + 1})` : ''}`,
+          items: items,
+          explanation: 'The egg rolled away, hatched on the farm, and eventually learned to soar.',
+          difficulty: item.difficulty || 'medium',
+          points: points
+        });
+      }
+
       return {
         type: 'ordering',
+        questions
+      };
+    }
+
+    if (item.type === 'cloze_passage') {
+      const blankCount = item.blankCount || item.count || 10;
+      const sampleBlanks = [];
+      for (let b = 1; b <= blankCount; b++) {
+        sampleBlanks.push({
+          id: `blank_${b}`,
+          answer: `word_${b}`,
+          options: [`word_${b}`, `distractor_${b}a`, `distractor_${b}b`, `distractor_${b}c`]
+        });
+      }
+
+      return {
+        type: 'cloze_passage',
         questions: [
           {
-            question: 'Arrange the story events in chronological order',
-            items: [
-              "The egg rolled away from the eagle's nest.",
-              "The egg reached a farm.",
-              "A chicken put the egg in her nest.",
-              "The eggs opened and the chicks came out.",
-              "The young bird flew higher and higher."
-            ],
-            explanation: 'The egg rolled away, hatched on the farm, and eventually learned to soar.',
+            question: 'Complete the passage using the correct words.',
+            passage: `The young bird looked at the sky every morning. (Passage with ${blankCount} blanks)...`,
+            blanks: sampleBlanks,
+            explanation: 'Based on contextual clues in the lesson.',
             difficulty: item.difficulty || 'medium',
-            points: 10
+            points: points
           }
         ]
       };
     }
-    return TYPE_EXAMPLE_TEMPLATES[item.type] || TYPE_EXAMPLE_TEMPLATES.multiple_choice;
+
+    if (item.type === 'essay') {
+      return {
+        type: 'essay',
+        questions: [
+          {
+            question: 'Describe this image in 80–100 words.',
+            image_url: item.image_url || 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80',
+            answer_length: {
+              min_words: item.min_words || 80,
+              max_words: item.max_words || 100
+            },
+            evaluation_criteria: item.evaluation_criteria || [
+              'content_accuracy',
+              'relevance',
+              'completeness',
+              'language',
+              'grammar',
+              'vocabulary'
+            ],
+            explanation: 'Provide a clear descriptive response grounded in the lesson visual and themes.',
+            difficulty: item.difficulty || 'medium',
+            points: points
+          }
+        ]
+      };
+    }
+
+    const template = TYPE_EXAMPLE_TEMPLATES[item.type] || TYPE_EXAMPLE_TEMPLATES.multiple_choice;
+    const cloned = JSON.parse(JSON.stringify(template));
+    if (cloned.questions?.[0]) {
+      cloned.questions[0].points = points;
+      cloned.questions[0].difficulty = item.difficulty || 'medium';
+    }
+    return cloned;
   });
 
   const exampleJson = {
@@ -332,13 +455,15 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
   const warnings: string[] = [];
   const byType: Record<string, number> = {};
   let totalQuestions = 0;
+  let totalActivities = 0;
+  let totalMarks = 0;
 
   if (!jsonString || !jsonString.trim()) {
     return {
       isValid: false,
       errors: ['Please paste JSON generated by your AI tool.'],
       warnings: [],
-      summary: { totalQuestions: 0, byType: {} }
+      summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };
   }
 
@@ -358,7 +483,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       isValid: false,
       errors: [`Invalid JSON syntax: ${err.message}`],
       warnings: [],
-      summary: { totalQuestions: 0, byType: {} }
+      summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };
   }
 
@@ -367,7 +492,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       isValid: false,
       errors: ['Root JSON must be an object with "question_sets" array.'],
       warnings: [],
-      summary: { totalQuestions: 0, byType: {} }
+      summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };
   }
 
@@ -382,7 +507,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       isValid: false,
       errors,
       warnings,
-      summary: { totalQuestions: 0, byType: {} }
+      summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };
   }
 
@@ -418,7 +543,6 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
     seenTypes.add(typeKey);
 
     // 2. Empty Question Set Rule:
-    // If a set is present with "questions": [], it is INVALID.
     if (!Array.isArray(qSet.questions) || qSet.questions.length === 0) {
       errors.push(`${label} question set is empty.`);
       return;
@@ -432,10 +556,13 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
     byType[typeKey] = (byType[typeKey] || 0) + qSet.questions.length;
     totalQuestions += qSet.questions.length;
+    totalActivities += (typeKey === 'cloze_passage' ? 1 : qSet.questions.length);
 
     // 4. Content validation per question
     qSet.questions.forEach((q: any, qIdx: number) => {
       const qNum = `${label} #${qIdx + 1}`;
+      const pts = typeof q.points === 'number' ? q.points : (typeKey === 'essay' || typeKey === 'cloze_passage' ? 20 : 10);
+      totalMarks += pts;
 
       if (typeKey === 'multiple_choice') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
@@ -495,8 +622,13 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
             }
             if (!Array.isArray(b.options) || b.options.length !== 4) {
               errors.push(`${qNum} Blank #${bIdx + 1}: Must contain exactly 4 options in "options".`);
-            } else if (b.answer && !b.options.some((opt: any) => String(opt).trim().toLowerCase() === String(b.answer).trim().toLowerCase())) {
-              errors.push(`${qNum} Blank #${bIdx + 1}: "options" must include the correct answer "${b.answer}".`);
+            } else if (b.answer) {
+              const matchCount = b.options.filter((opt: any) => String(opt).trim().toLowerCase() === String(b.answer).trim().toLowerCase()).length;
+              if (matchCount === 0) {
+                errors.push(`${qNum} Blank #${bIdx + 1}: "options" must include the correct answer "${b.answer}".`);
+              } else if (matchCount > 1) {
+                errors.push(`${qNum} Blank #${bIdx + 1}: "options" contains multiple instances of the answer "${b.answer}". Exactly 1 required.`);
+              }
             }
           });
         }
@@ -511,27 +643,47 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
     });
   });
 
-  // 5. Verify against Question Plan if provided
+  // 5. Strict Verification against Question Plan if provided
   if (plan && plan.items.length > 0) {
     plan.items.forEach(planItem => {
-      const actualCount = byType[planItem.type] || 0;
       const label = QUESTION_TYPE_LABELS[planItem.type] || planItem.type;
+      const qSet = parsed.question_sets.find((s: any) => s.type === planItem.type);
 
-      if (!seenTypes.has(planItem.type) || actualCount === 0) {
-        errors.push(`Missing required question set: ${label} (Expected ${planItem.count} question${planItem.count > 1 ? 's' : ''}).`);
-      } else if (planItem.type === 'ordering') {
-        // For ordering, planItem.count is the number of sentences in the single ordering activity
-        const ordQuestions = parsed.question_sets.find((s: any) => s.type === 'ordering')?.questions || [];
-        if (ordQuestions.length !== 1) {
-          errors.push(`Ordering should contain 1 ordering activity (with ${planItem.count} sentences).`);
+      if (!seenTypes.has(planItem.type) || !qSet || !Array.isArray(qSet.questions) || qSet.questions.length === 0) {
+        errors.push(`Missing required question set: ${label}.`);
+        return;
+      }
+
+      if (planItem.type === 'cloze_passage') {
+        const expectedBlanks = planItem.blankCount || planItem.count || 10;
+        if (qSet.questions.length !== 1) {
+          errors.push(`Cloze Passage must contain exactly 1 passage activity.`);
         } else {
-          const itemCount = ordQuestions[0]?.items?.length || 0;
-          if (itemCount !== planItem.count) {
-            errors.push(`Ordering requires ${planItem.count} sentences, but JSON contains ${itemCount}. (Expected: ${planItem.count})`);
+          const actualBlanks = qSet.questions[0]?.blanks?.length || 0;
+          if (actualBlanks !== expectedBlanks) {
+            errors.push(`Cloze Passage must contain exactly ${expectedBlanks} blanks. The generated JSON contains ${actualBlanks}.`);
           }
         }
-      } else if (actualCount !== planItem.count) {
-        errors.push(`${label} requires ${planItem.count} question${planItem.count > 1 ? 's' : ''}, but JSON contains ${actualCount}. (Expected: ${planItem.count})`);
+      } else if (planItem.type === 'ordering') {
+        const expectedActivities = planItem.activityCount || 1;
+        const expectedItems = planItem.itemsPerActivity || planItem.count || 5;
+
+        if (qSet.questions.length !== expectedActivities) {
+          errors.push(`Ordering should contain ${expectedActivities} ordering activit${expectedActivities > 1 ? 'ies' : 'y'} (JSON contains ${qSet.questions.length}).`);
+        } else {
+          qSet.questions.forEach((q: any, idx: number) => {
+            const actualItemCount = q?.items?.length || 0;
+            if (actualItemCount !== expectedItems) {
+              errors.push(`Ordering activity #${idx + 1} requires ${expectedItems} sentences, but JSON contains ${actualItemCount}. (Expected: ${expectedItems})`);
+            }
+          });
+        }
+      } else {
+        const expectedCount = planItem.count || 1;
+        const actualCount = qSet.questions.length;
+        if (actualCount !== expectedCount) {
+          errors.push(`${label} requires ${expectedCount} question${expectedCount > 1 ? 's' : ''}, but JSON contains ${actualCount}. (Expected: ${expectedCount})`);
+        }
       }
     });
   }
@@ -542,6 +694,8 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
     warnings,
     summary: {
       totalQuestions,
+      totalActivities,
+      totalMarks,
       byType
     },
     parsedData: parsed
@@ -574,6 +728,7 @@ export function convertValidatedJsonToCourseQuestions(
       let minWords: number | undefined = undefined;
       let maxWords: number | undefined = undefined;
       let criteriaList: string[] | undefined = undefined;
+      const points = typeof q.points === 'number' ? q.points : (qType === 'essay' || qType === 'cloze_passage' ? 20 : 10);
 
       if (qType === 'multiple_choice') {
         optionsList = Array.isArray(q.options)
@@ -631,7 +786,7 @@ export function convertValidatedJsonToCourseQuestions(
         skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : 'Comprehension'),
         concept: q.concept || 'General',
         difficulty: (q.difficulty as DifficultyLevel) || 'medium',
-        points: q.points || (qType === 'essay' ? 20 : 10),
+        points: points,
         order_index: orderIndex++,
         passage: passageText,
         blanks: blanksList,

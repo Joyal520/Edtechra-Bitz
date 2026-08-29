@@ -69,9 +69,15 @@ export const CourseEditorPage: React.FC = () => {
   const [uploadingBlockIndex, setUploadingBlockIndex] = useState<number | null>(null);
 
   // Status & Feedback State
-  const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved' | 'retrying'>('saved');
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  // Autosave tracking refs
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef<boolean>(false);
+  const lastSavedSignatureRef = useRef<string>('');
+  const retryCountRef = useRef<number>(0);
 
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,22 +138,101 @@ export const CourseEditorPage: React.FC = () => {
     setSelectedEpisodeId(ep.id);
     setEpisodeTitle(ep.title);
     setEstimatedMinutes(ep.estimated_minutes || 15);
-    setCurrentBlocks(normalizeBlocks(ep.blocks || []));
-    setCurrentQuestions(ep.questions || []);
+    const normalized = normalizeBlocks(ep.blocks || []);
+    const questions = ep.questions || [];
+    setCurrentBlocks(normalized);
+    setCurrentQuestions(questions);
+    
+    // Initialize signature so newly loaded episode starts in 'saved' state
+    lastSavedSignatureRef.current = JSON.stringify({
+      title: ep.title,
+      estimated_minutes: ep.estimated_minutes || 15,
+      blocks: normalized,
+      questions
+    });
+    setSavingStatus('saved');
   };
 
   // --------------------------------------------------------------------------
-  // DEBOUNCED AUTOSAVE EFFECT
+  // NON-BLOCKING DEBOUNCED BACKGROUND AUTOSAVE ENGINE
   // --------------------------------------------------------------------------
+  const currentSignature = JSON.stringify({
+    title: episodeTitle,
+    estimated_minutes: estimatedMinutes,
+    blocks: currentBlocks,
+    questions: currentQuestions
+  });
+
+  const performBackgroundSave = async (isManual = false) => {
+    if (!course || !selectedEpisodeId || isSavingRef.current) return;
+
+    const signatureToSave = currentSignature;
+    if (!isManual && signatureToSave === lastSavedSignatureRef.current) {
+      setSavingStatus('saved');
+      return;
+    }
+
+    isSavingRef.current = true;
+    setSavingStatus('saving');
+
+    try {
+      await courseStudioService.updateEpisode(course.id, selectedEpisodeId, {
+        title: episodeTitle,
+        estimated_minutes: estimatedMinutes,
+        episode_type: 'lesson',
+        order_index: 0
+      });
+
+      await courseStudioService.saveEpisodeBlocks(course.id, selectedEpisodeId, currentBlocks);
+      await courseStudioService.saveEpisodeQuestions(course.id, selectedEpisodeId, currentQuestions);
+
+      lastSavedSignatureRef.current = signatureToSave;
+      retryCountRef.current = 0;
+      setSavingStatus('saved');
+
+      if (isManual) {
+        setSuccessBanner('Changes saved successfully.');
+        setTimeout(() => setSuccessBanner(null), 2500);
+      }
+    } catch (err: any) {
+      console.warn('[Autosave] Background save error, scheduling retry:', err.message);
+      setSavingStatus('retrying');
+
+      if (retryCountRef.current < 3) {
+        retryCountRef.current += 1;
+        saveTimeoutRef.current = setTimeout(() => {
+          performBackgroundSave(false);
+        }, 3000);
+      } else {
+        setSavingStatus('unsaved');
+      }
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
+  // Debounced trigger whenever in-memory data changes
   useEffect(() => {
-    if (savingStatus !== 'unsaved' || !course || !selectedEpisodeId) return;
+    if (!course || !selectedEpisodeId || loading) return;
 
-    const timer = setTimeout(() => {
-      handleSaveCurrentEpisode();
-    }, 2400);
+    if (currentSignature === lastSavedSignatureRef.current) {
+      return;
+    }
 
-    return () => clearTimeout(timer);
-  }, [savingStatus, episodeTitle, estimatedMinutes, currentBlocks, currentQuestions, selectedEpisodeId]);
+    setSavingStatus('unsaved');
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      performBackgroundSave(false);
+    }, 1800);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [currentSignature, selectedEpisodeId, course?.id, loading]);
 
   // --------------------------------------------------------------------------
   // OUTLINE ACTIONS (UNITS & EPISODES) — MAX 10 UNITS
@@ -493,50 +578,7 @@ export const CourseEditorPage: React.FC = () => {
   // --------------------------------------------------------------------------
 
   const handleSaveCurrentEpisode = async () => {
-    if (!course || !selectedEpisodeId) return;
-
-    setSavingStatus('saving');
-    setErrorBanner(null);
-
-    try {
-      await courseStudioService.updateEpisode(course.id, selectedEpisodeId, {
-        title: episodeTitle,
-        estimated_minutes: estimatedMinutes,
-        episode_type: 'lesson',
-        order_index: 0
-      });
-
-      const savedBlocks = await courseStudioService.saveEpisodeBlocks(course.id, selectedEpisodeId, currentBlocks);
-      const normalizedBlocks = normalizeBlocks(savedBlocks);
-      setCurrentBlocks(normalizedBlocks);
-
-      const savedQuestions = await courseStudioService.saveEpisodeQuestions(course.id, selectedEpisodeId, currentQuestions);
-      setCurrentQuestions(savedQuestions);
-
-      setCourse(prev => {
-        if (!prev) return prev;
-        const nextUnits = (prev.units || []).map(u => ({
-          ...u,
-          episodes: (u.episodes || []).map(ep => {
-            if (ep.id === selectedEpisodeId) {
-              return { ...ep, title: episodeTitle, estimated_minutes: estimatedMinutes, blocks: normalizedBlocks, questions: savedQuestions };
-            }
-            return ep;
-          })
-        }));
-        return { ...prev, units: nextUnits };
-      });
-
-      setSavingStatus('saved');
-      setSuccessBanner('Changes saved successfully.');
-      setTimeout(() => setSuccessBanner(null), 2500);
-    } catch (err: any) {
-      setSavingStatus('unsaved');
-      const msg = err.message && (err.message.includes('check constraint') || err.message.includes('violates check'))
-        ? "Couldn't save this section. Please try again."
-        : (err.message || 'Failed to save episode changes.');
-      setErrorBanner(msg);
-    }
+    await performBackgroundSave(true);
   };
 
   // Extract combined text, video, and image presence from current blocks for Question Plan
@@ -618,16 +660,24 @@ export const CourseEditorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Center: Save State Indicator */}
+        {/* Center: Non-blocking Save State Indicator */}
         <div className="flex items-center gap-2">
           {savingStatus === 'saving' && (
-            <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" /> Saving...
+            <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+              <span>Saving...</span>
             </span>
           )}
           {savingStatus === 'saved' && (
             <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Saved</span>
+            </span>
+          )}
+          {savingStatus === 'retrying' && (
+            <span className="text-[11px] font-bold text-amber-600 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+              <span>Couldn't save — retrying</span>
             </span>
           )}
           {savingStatus === 'unsaved' && (
@@ -652,7 +702,7 @@ export const CourseEditorPage: React.FC = () => {
             type="button"
             onClick={handleSaveCurrentEpisode}
             disabled={savingStatus === 'saving'}
-            className="px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
           >
             <Save className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Save</span>
@@ -1326,6 +1376,18 @@ export const CourseEditorPage: React.FC = () => {
                               <option value="short_answer">Short Answer</option>
                               <option value="essay">Essay / Descriptive Response</option>
                             </select>
+
+                            <div className="flex items-center gap-1 ml-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase">Marks:</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={q.points || (qType === 'essay' || qType === 'cloze_passage' ? 20 : 10)}
+                                onChange={e => handleUpdateQuestion(qIdx, 'points', Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-12 px-1.5 py-0.5 rounded-md border border-stone-200 text-[11px] font-bold bg-white text-slate-800 text-center"
+                              />
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1">

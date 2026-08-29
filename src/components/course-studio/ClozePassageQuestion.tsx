@@ -136,7 +136,7 @@ export const ClozePassageQuestion: React.FC<Props> = ({
                     isAnswered
                       ? status.isCorrect
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-900 dark:text-emerald-100'
-                        : 'bg-rose-50 dark:bg-rose-950/60 border-rose-500 text-rose-950 dark:text-rose-100'
+                        : 'bg-rose-50 dark:bg-rose-950/60 border-rose-500 text-rose-950 dark:text-rose-100 animate-subtle-shake'
                       : isOpen
                       ? 'bg-sky-50 dark:bg-sky-950/60 border-[#026fc3] text-[#026fc3] ring-2 ring-[#026fc3]/20'
                       : 'bg-white dark:bg-stone-800 text-slate-700 dark:text-slate-200 border-stone-300 dark:border-stone-600 hover:border-[#026fc3] hover:bg-sky-50/40 cursor-pointer'

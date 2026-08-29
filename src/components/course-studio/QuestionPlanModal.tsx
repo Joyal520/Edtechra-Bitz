@@ -2,6 +2,8 @@
 // EDTECHRA DIGITAL CLASSROOM: QUESTION PLANNER & AI JSON IMPORT MODAL
 // Teacher-controlled question planning, prompt generation (v1.0 schema),
 // untrusted JSON validation, and importing into Course Studio questions.
+// Supports type-specific counts (Cloze Blanks, Ordering Sentences),
+// Marks per Question / Activity, and Non-blocking Authoring.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -17,9 +19,9 @@ import {
   FileText,
   Video,
   Image as ImageIcon,
-  ArrowRight,
   Code2,
-  Layers
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { CourseQuestion, DifficultyLevel, QuestionType } from '@/types/courseStudio';
 import {
@@ -29,6 +31,8 @@ import {
   buildAiQuestionPrompt,
   validateAiQuestionJson,
   convertValidatedJsonToCourseQuestions,
+  getPlanItemActivityCount,
+  getPlanItemTotalMarks,
   ValidationResult
 } from '@/utils/questionSchemaValidator';
 
@@ -63,7 +67,14 @@ export const QuestionPlanModal: React.FC<Props> = ({
   
   // Question Plan state
   const [planItems, setPlanItems] = useState<QuestionPlanItem[]>([
-    { id: '1', type: 'multiple_choice', count: 5, difficulty: 'medium', instructions: '' }
+    {
+      id: '1',
+      type: 'multiple_choice',
+      count: 5,
+      difficulty: 'medium',
+      points: 10,
+      instructions: ''
+    }
   ]);
   const [videoTranscript, setVideoTranscript] = useState('');
   const [imageDescription, setImageDescription] = useState('');
@@ -88,21 +99,20 @@ export const QuestionPlanModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
-  // Calculate lesson text word count & total interactive activities
+  // Calculate lesson text word count & total interactive activities & marks
   const wordCount = lessonText.trim() ? lessonText.trim().split(/\s+/).length : 0;
-  const totalPlanActivities = planItems.reduce((sum, item) => {
-    if (item.type === 'ordering' || item.type === 'matching') return sum + 1;
-    return sum + (Number(item.count) || 0);
-  }, 0);
+  const totalPlanActivities = planItems.reduce((sum, item) => sum + getPlanItemActivityCount(item), 0);
+  const totalPlanMarks = planItems.reduce((sum, item) => sum + getPlanItemTotalMarks(item), 0);
 
   const handleAddPlanItem = () => {
     setPlanItems(prev => [
       ...prev,
       {
-        id: `plan_${Date.now()}`,
+        id: `plan_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         type: 'true_false',
         count: 3,
         difficulty: 'medium',
+        points: 10,
         instructions: ''
       }
     ]);
@@ -174,14 +184,14 @@ export const QuestionPlanModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/65 backdrop-blur-xs overflow-y-auto">
       {/* Modal Dialog Container - Wide Landscape */}
-      <div className="bg-white rounded-[24px] sm:rounded-[28px] max-w-[980px] w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[88vh] transition-all animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-[24px] sm:rounded-[28px] max-w-[1000px] w-full border border-stone-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Header - Fixed at Top */}
+        {/* Header - Fixed at Top with Premium Badges */}
         <div className="px-6 py-4 sm:px-8 bg-[#0a213c] text-white flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center border border-sky-400/30">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center border border-sky-400/30 shadow-inner">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -193,9 +203,13 @@ export const QuestionPlanModal: React.FC<Props> = ({
                   v1.0 Schema
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {courseTitle} • {unitTitle} • {episodeTitle}
-              </p>
+              <div className="flex items-center gap-2 pt-0.5 text-xs text-slate-400 font-medium">
+                <span className="truncate max-w-xs">{courseTitle}</span>
+                <span>•</span>
+                <span className="text-sky-300 font-bold">{totalPlanActivities} Activities</span>
+                <span>•</span>
+                <span className="text-emerald-300 font-bold">{totalPlanMarks} Total Marks</span>
+              </div>
             </div>
           </div>
 
@@ -329,13 +343,19 @@ export const QuestionPlanModal: React.FC<Props> = ({
               {/* Question Sets List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                    Question Sets ({planItems.length}) • Total Activities: {totalPlanActivities}
-                  </span>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider block">
+                      QUESTION SETS ({planItems.length}) • TOTAL ACTIVITIES: {totalPlanActivities}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      Total Points: <span className="text-[#026fc3] font-black">{totalPlanMarks} pts</span>
+                    </span>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleAddPlanItem}
-                    className="px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1 cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Add Question Set</span>
@@ -343,183 +363,275 @@ export const QuestionPlanModal: React.FC<Props> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {planItems.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="p-4 rounded-2xl bg-white border border-stone-200 shadow-2xs space-y-3"
-                    >
-                      <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-                        <span className="text-xs font-black text-slate-800">
-                          Set #{index + 1}
-                        </span>
-                        {planItems.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePlanItem(item.id)}
-                            className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer"
-                            title="Remove set"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                  {planItems.map((item, index) => {
+                    const isCloze = item.type === 'cloze_passage';
+                    const isOrdering = item.type === 'ordering';
+                    const isEssay = item.type === 'essay';
+                    const pointsVal = typeof item.points === 'number' ? item.points : (isEssay || isCloze ? 20 : 10);
+                    const itemTotalMarks = getPlanItemTotalMarks(item);
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {/* Question Type */}
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Type</label>
-                          <select
-                            value={item.type}
-                            onChange={e => handleUpdatePlanItem(item.id, {
-                              type: e.target.value as QuestionType,
-                              min_words: e.target.value === 'essay' ? 80 : undefined,
-                              max_words: e.target.value === 'essay' ? 100 : undefined,
-                              evaluation_criteria: e.target.value === 'essay' ? ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'] : undefined
-                            })}
-                            className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
-                          >
-                            <option value="multiple_choice">Multiple Choice (A,B,C,D)</option>
-                            <option value="true_false">True / False</option>
-                            <option value="fill_blank">Fill in the Blank</option>
-                            <option value="cloze_passage">Cloze Passage</option>
-                            <option value="matching">Matching Pairs</option>
-                            <option value="ordering">Ordering Sequence</option>
-                            <option value="short_answer">Short Answer</option>
-                            <option value="essay">Essay / Descriptive Response</option>
-                          </select>
-                        </div>
-
-                        {/* Question / Sentence / Activity Count */}
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">
-                            {item.type === 'ordering'
-                              ? 'Sentences / Blocks'
-                              : item.type === 'matching'
-                              ? 'Pairs'
-                              : item.type === 'cloze_passage'
-                              ? 'Passage Activities'
-                              : 'Question Count'}
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={item.count}
-                            onChange={e => handleUpdatePlanItem(item.id, { count: Math.max(1, parseInt(e.target.value) || 1) })}
-                            className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
-                          />
-                        </div>
-
-                        {/* Difficulty */}
-                        <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Difficulty</label>
-                          <select
-                            value={item.difficulty}
-                            onChange={e => handleUpdatePlanItem(item.id, { difficulty: e.target.value as DifficultyLevel })}
-                            className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
-                          >
-                            <option value="easy">Easy</option>
-                            <option value="medium">Medium</option>
-                            <option value="hard">Hard</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Extended Controls for Essay */}
-                      {item.type === 'essay' && (
-                        <div className="p-3 rounded-xl bg-sky-50/50 border border-sky-200/70 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-[#026fc3] uppercase tracking-wider">
-                              Essay Configuration & AI Evaluation
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-4 hover:border-sky-300/80 transition-all"
+                      >
+                        {/* Header & Removal */}
+                        <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900">
+                              Set #{index + 1}:
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
-                              Gemini + OpenAI
+                            <span className="text-xs font-bold text-[#026fc3]">
+                              {QUESTION_TYPE_LABELS[item.type]}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-stone-100 text-slate-700 text-[10px] font-bold">
+                              {itemTotalMarks} pts
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-600 uppercase">Answer Length</label>
-                              <select
-                                value={`${item.min_words || 80}-${item.max_words || 100}`}
-                                onChange={e => {
-                                  const [min, max] = e.target.value.split('-').map(Number);
-                                  handleUpdatePlanItem(item.id, { min_words: min, max_words: max });
-                                }}
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
-                              >
-                                <option value="30-50">Short (30–50 words)</option>
-                                <option value="50-80">50–80 words</option>
-                                <option value="80-100">80–100 words (Standard)</option>
-                                <option value="100-150">100–150 words</option>
-                                <option value="150-200">120–200 words</option>
-                              </select>
-                            </div>
+                          {planItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePlanItem(item.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer transition-all"
+                              title="Remove set"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
+                        {/* Controls Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                          {/* 1. Question Type */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-500 uppercase">Type</label>
+                            <select
+                              value={item.type}
+                              onChange={e => {
+                                const newType = e.target.value as QuestionType;
+                                handleUpdatePlanItem(item.id, {
+                                  type: newType,
+                                  points: newType === 'essay' || newType === 'cloze_passage' ? 20 : 10,
+                                  blankCount: newType === 'cloze_passage' ? 10 : undefined,
+                                  activityCount: newType === 'ordering' ? 1 : undefined,
+                                  itemsPerActivity: newType === 'ordering' ? 5 : undefined,
+                                  min_words: newType === 'essay' ? 80 : undefined,
+                                  max_words: newType === 'essay' ? 100 : undefined,
+                                  evaluation_criteria: newType === 'essay' ? ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'] : undefined
+                                });
+                              }}
+                              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                            >
+                              <option value="multiple_choice">Multiple Choice (A,B,C,D)</option>
+                              <option value="true_false">True / False</option>
+                              <option value="fill_blank">Fill in the Blank</option>
+                              <option value="cloze_passage">Cloze Passage</option>
+                              <option value="matching">Matching Pairs</option>
+                              <option value="ordering">Ordering Sequence</option>
+                              <option value="short_answer">Short Answer</option>
+                              <option value="essay">Essay / Descriptive Response</option>
+                            </select>
+                          </div>
+
+                          {/* 2. Type-Specific Count Fields */}
+                          {isCloze ? (
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-600 uppercase">Attached Image URL (Optional)</label>
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">
+                                Number of Blanks
+                              </label>
                               <input
-                                type="text"
-                                value={item.image_url || ''}
-                                onChange={e => handleUpdatePlanItem(item.id, { image_url: e.target.value })}
-                                placeholder="https://..."
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                                type="number"
+                                min={1}
+                                max={30}
+                                value={item.blankCount || item.count || 10}
+                                onChange={e => {
+                                  const val = Math.max(1, parseInt(e.target.value) || 1);
+                                  handleUpdatePlanItem(item.id, { blankCount: val, count: val });
+                                }}
+                                className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                              />
+                              <span className="text-[10px] text-slate-400 font-medium block">
+                                Create one passage with exactly this many blanks.
+                              </span>
+                            </div>
+                          ) : isOrdering ? (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-slate-500 uppercase">
+                                  Number of Activities
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={10}
+                                  value={item.activityCount || 1}
+                                  onChange={e => handleUpdatePlanItem(item.id, { activityCount: Math.max(1, parseInt(e.target.value) || 1) })}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-slate-500 uppercase">
+                                  Sentences per Activity
+                                </label>
+                                <input
+                                  type="number"
+                                  min={2}
+                                  max={20}
+                                  value={item.itemsPerActivity || item.count || 5}
+                                  onChange={e => {
+                                    const val = Math.max(2, parseInt(e.target.value) || 2);
+                                    handleUpdatePlanItem(item.id, { itemsPerActivity: val, count: val });
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase">
+                                Question Count
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={item.count}
+                                onChange={e => handleUpdatePlanItem(item.id, { count: Math.max(1, parseInt(e.target.value) || 1) })}
+                                className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
                               />
                             </div>
+                          )}
+
+                          {/* 3. Difficulty */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-500 uppercase">Difficulty</label>
+                            <select
+                              value={item.difficulty}
+                              onChange={e => handleUpdatePlanItem(item.id, { difficulty: e.target.value as DifficultyLevel })}
+                              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                            >
+                              <option value="easy">Easy</option>
+                              <option value="medium">Medium</option>
+                              <option value="hard">Hard</option>
+                            </select>
                           </div>
 
-                          {/* Evaluation Criteria Toggles */}
-                          <div className="space-y-1 pt-1">
-                            <label className="text-[10px] font-bold text-slate-600 uppercase">Evaluation Criteria</label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {[
-                                { id: 'content_accuracy', label: 'Content Accuracy' },
-                                { id: 'relevance', label: 'Relevance' },
-                                { id: 'completeness', label: 'Completeness' },
-                                { id: 'language', label: 'Language' },
-                                { id: 'grammar', label: 'Grammar' },
-                                { id: 'vocabulary', label: 'Vocabulary' }
-                              ].map(crit => {
-                                const currentCriteria = item.evaluation_criteria || ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'];
-                                const isSelected = currentCriteria.includes(crit.id);
-                                return (
-                                  <button
-                                    key={crit.id}
-                                    type="button"
-                                    onClick={() => {
-                                      const next = isSelected
-                                        ? currentCriteria.filter(c => c !== crit.id)
-                                        : [...currentCriteria, crit.id];
-                                      handleUpdatePlanItem(item.id, { evaluation_criteria: next });
-                                    }}
-                                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-[#026fc3] text-white shadow-2xs'
-                                        : 'bg-white text-slate-600 border border-stone-200 hover:bg-stone-100'
-                                    }`}
-                                  >
-                                    {isSelected ? '✓ ' : '+ '}{crit.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                          {/* 4. Marks / Points per Question or Activity */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold text-slate-500 uppercase">
+                              {isCloze || isOrdering ? 'Marks per Activity' : 'Marks per Question'}
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={pointsVal}
+                              onChange={e => handleUpdatePlanItem(item.id, { points: Math.max(1, parseInt(e.target.value) || 1) })}
+                              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                            />
+                            <span className="text-[10px] text-[#026fc3] font-bold block">
+                              Total: {itemTotalMarks} pts
+                            </span>
                           </div>
                         </div>
-                      )}
 
-                      {/* Instructions */}
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase">Instructions for this Set (Optional)</label>
-                        <input
-                          type="text"
-                          value={item.instructions || ''}
-                          onChange={e => handleUpdatePlanItem(item.id, { instructions: e.target.value })}
-                          placeholder={item.type === 'cloze_passage' ? 'e.g. Focus on vocabulary from paragraph 2...' : item.type === 'essay' ? 'e.g. Describe the character emotions and setting...' : 'e.g. Focus on key themes and vocabulary...'}
-                          className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
-                        />
+                        {/* Extended Controls for Essay */}
+                        {isEssay && (
+                          <div className="p-3.5 rounded-xl bg-sky-50/50 border border-sky-200/70 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-[#026fc3] uppercase tracking-wider">
+                                Essay Configuration & AI Evaluation
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                                Gemini + OpenAI
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-600 uppercase">Answer Length</label>
+                                <select
+                                  value={`${item.min_words || 80}-${item.max_words || 100}`}
+                                  onChange={e => {
+                                    const [min, max] = e.target.value.split('-').map(Number);
+                                    handleUpdatePlanItem(item.id, { min_words: min, max_words: max });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                                >
+                                  <option value="30-50">Short (30–50 words)</option>
+                                  <option value="50-80">50–80 words</option>
+                                  <option value="80-100">80–100 words (Standard)</option>
+                                  <option value="100-150">100–150 words</option>
+                                  <option value="150-200">120–200 words</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-600 uppercase">Attached Image URL (Optional)</label>
+                                <input
+                                  type="text"
+                                  value={item.image_url || ''}
+                                  onChange={e => handleUpdatePlanItem(item.id, { image_url: e.target.value })}
+                                  placeholder="https://..."
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Evaluation Criteria Toggles */}
+                            <div className="space-y-1 pt-1">
+                              <label className="text-[10px] font-bold text-slate-600 uppercase">Evaluation Criteria</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { id: 'content_accuracy', label: 'Content Accuracy' },
+                                  { id: 'relevance', label: 'Relevance' },
+                                  { id: 'completeness', label: 'Completeness' },
+                                  { id: 'language', label: 'Language' },
+                                  { id: 'grammar', label: 'Grammar' },
+                                  { id: 'vocabulary', label: 'Vocabulary' }
+                                ].map(crit => {
+                                  const currentCriteria = item.evaluation_criteria || ['content_accuracy', 'relevance', 'completeness', 'language', 'grammar', 'vocabulary'];
+                                  const isSelected = currentCriteria.includes(crit.id);
+                                  return (
+                                    <button
+                                      key={crit.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const next = isSelected
+                                          ? currentCriteria.filter(c => c !== crit.id)
+                                          : [...currentCriteria, crit.id];
+                                        handleUpdatePlanItem(item.id, { evaluation_criteria: next });
+                                      }}
+                                      className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-[#026fc3] text-white shadow-2xs'
+                                          : 'bg-white text-slate-600 border border-stone-200 hover:bg-stone-100'
+                                      }`}
+                                    >
+                                      {isSelected ? '✓ ' : '+ '}{crit.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Instructions */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">Instructions for this Set (Optional)</label>
+                          <input
+                            type="text"
+                            value={item.instructions || ''}
+                            onChange={e => handleUpdatePlanItem(item.id, { instructions: e.target.value })}
+                            placeholder={isCloze ? 'e.g. Focus on vocabulary from paragraph 2...' : isOrdering ? 'e.g. Focus on sequence of character decisions...' : 'e.g. Focus on comprehension and key themes...'}
+                            className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -533,50 +645,87 @@ export const QuestionPlanModal: React.FC<Props> = ({
                   value={teacherInstructions}
                   onChange={e => setTeacherInstructions(e.target.value)}
                   placeholder="e.g. Focus on comprehension, key themes, and critical thinking."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
+                  className="w-full p-3 rounded-xl border border-stone-200 text-xs font-medium focus:ring-2 focus:ring-[#026fc3] focus:outline-none bg-white"
                 />
               </div>
 
+              {/* Action Button */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleGeneratePrompt}
+                  className="px-6 py-3 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black transition-all cursor-pointer shadow-sm flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>Generate AI Prompt ({totalPlanActivities} Activities • {totalPlanMarks} Marks)</span>
+                </button>
+              </div>
             </div>
           )}
 
           {/* ---------------------------------------------------------------- */}
-          {/* TAB 2: GENERATED AI PROMPT                                       */}
+          {/* TAB 2: GENERATED PROMPT PREVIEW & COPY                           */}
           {/* ---------------------------------------------------------------- */}
           {tab === 'prompt' && (
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs font-black text-amber-900">
-                    How to use this AI Prompt:
-                  </p>
-                  <p className="text-xs text-amber-800 font-medium">
-                    1. Click <strong>[Copy Prompt]</strong> below. <br />
-                    2. Paste it into <strong>ChatGPT, Claude, Gemini</strong>, or your preferred LLM. <br />
-                    3. Copy the returned JSON and paste it into the <strong>Validate & Import JSON</strong> tab.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCopyPrompt}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs"
-                >
-                  {copied ? <Check className="w-4 h-4 text-emerald-200" /> : <Copy className="w-4 h-4" />}
-                  <span>{copied ? 'Copied to Clipboard!' : 'Copy Prompt'}</span>
-                </button>
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>AI Prompt Ready!</span>
+                </p>
+                <p>
+                  Copy the prompt below and paste it into ChatGPT (GPT-4o), Claude 3.5 Sonnet, or Google Gemini.
+                  Then paste the returned JSON into Tab 3 to validate and import into your course.
+                </p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">
-                  Formatted Prompt (EdTechra Question Schema v1.0)
-                </label>
+              <div className="relative">
                 <textarea
                   readOnly
                   rows={14}
                   value={generatedPrompt}
-                  className="w-full p-4 rounded-2xl bg-slate-900 text-sky-200 text-xs font-mono border border-slate-800 leading-relaxed select-all"
+                  className="w-full p-4 rounded-2xl bg-slate-900 text-slate-100 text-xs font-mono border border-slate-800 focus:outline-none selection:bg-sky-500 selection:text-white"
                 />
+                <button
+                  type="button"
+                  onClick={handleCopyPrompt}
+                  className={`absolute top-4 right-4 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-md ${
+                    copied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-[#026fc3] hover:bg-[#03589e] text-white'
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Copied to Clipboard!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Full Prompt</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setTab('plan')}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                >
+                  ← Edit Question Plan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTab('import')}
+                  className="px-6 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-2"
+                >
+                  <span>Proceed to Import JSON</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           )}
@@ -592,7 +741,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
                     Paste AI Generated JSON below:
                   </label>
                   <span className="text-[11px] font-bold text-slate-400">
-                    Expected: {totalPlanActivities} activities
+                    Expected: {totalPlanActivities} activities • {totalPlanMarks} pts
                   </span>
                 </div>
                 <textarea
@@ -635,21 +784,30 @@ export const QuestionPlanModal: React.FC<Props> = ({
                           Question Plan Breakdown
                         </div>
                         {planItems.map(item => {
+                          const isCloze = item.type === 'cloze_passage';
                           const isOrd = item.type === 'ordering';
-                          const isMatch = item.type === 'matching';
-                          const label = isOrd ? `${item.count} sentences (1 activity)` : isMatch ? `${item.count} pairs (1 activity)` : `${validationResult.summary.byType[item.type] || 0} / ${item.count}`;
+                          const label = isCloze
+                            ? `1 activity (${item.blankCount || item.count || 10} blanks)`
+                            : isOrd
+                            ? `${item.activityCount || 1} activit${(item.activityCount || 1) > 1 ? 'ies' : 'y'} (${item.itemsPerActivity || item.count || 5} sentences)`
+                            : `${validationResult.summary.byType[item.type] || 0} / ${item.count} questions`;
+                          const pts = getPlanItemTotalMarks(item);
+
                           return (
                             <div key={item.id} className="flex items-center justify-between font-medium text-slate-800">
                               <span>{QUESTION_TYPE_LABELS[item.type]}</span>
-                              <span className="font-bold text-emerald-700">
-                                {label}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-emerald-700">{label}</span>
+                                <span className="text-[10px] font-bold text-slate-500">({pts} pts)</span>
+                              </div>
                             </div>
                           );
                         })}
                         <div className="pt-2 border-t border-emerald-200 flex items-center justify-between font-black text-slate-900">
-                          <span>Total Activities</span>
-                          <span className="text-emerald-800 font-extrabold text-sm">{validationResult.summary.totalQuestions}</span>
+                          <span>Total Activities & Marks</span>
+                          <span className="text-emerald-800 font-extrabold text-sm">
+                            {validationResult.summary.totalActivities} Activities • {validationResult.summary.totalMarks} Points
+                          </span>
                         </div>
                       </div>
 
@@ -667,7 +825,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
                         <AlertCircle className="w-5 h-5 text-rose-600" />
                         <span>JSON Validation Issues Detected</span>
                       </div>
-                      <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
+                      <ul className="space-y-1 text-xs text-rose-800 list-disc list-inside">
                         {validationResult.errors.map((err, idx) => (
                           <li key={idx}>{err}</li>
                         ))}
@@ -676,58 +834,31 @@ export const QuestionPlanModal: React.FC<Props> = ({
                   )}
                 </div>
               )}
+
+              {/* Final Import CTA */}
+              <div className="flex items-center justify-between pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setTab('prompt')}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                >
+                  ← Back to Prompt
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!validationResult || !validationResult.isValid}
+                  onClick={handleExecuteImport}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all cursor-pointer shadow-xs disabled:opacity-40 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Import Questions into Course</span>
+                </button>
+              </div>
             </div>
           )}
 
         </div>
-
-        {/* Footer Actions - Fixed at Bottom */}
-        <div className="px-6 py-4 sm:px-8 bg-stone-50 border-t border-stone-200 flex items-center justify-between shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-stone-300 hover:bg-stone-100 text-slate-700 text-xs font-bold cursor-pointer"
-          >
-            Cancel
-          </button>
-
-          <div className="flex items-center gap-2.5">
-            {tab === 'plan' && (
-              <button
-                type="button"
-                onClick={handleGeneratePrompt}
-                className="px-6 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Generate AI Prompt</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-
-            {tab === 'prompt' && (
-              <button
-                type="button"
-                onClick={() => setTab('import')}
-                className="px-6 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Paste & Validate JSON</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-
-            {tab === 'import' && (
-              <button
-                type="button"
-                onClick={handleExecuteImport}
-                disabled={!validationResult?.isValid}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Check className="w-4 h-4" />
-                <span>Import into Lesson</span>
-              </button>
-            )}
-          </div>
-        </div>
-
       </div>
     </div>
   );
