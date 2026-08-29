@@ -1211,22 +1211,37 @@ export const ClassroomDetailPage: React.FC = () => {
                       return (
                         <div
                           key={c.id}
-                          className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                          className="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-xs flex flex-col justify-between"
                         >
                           <div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
-                                {course?.subject || 'Subject'}
-                              </span>
-                              <span className="text-xs font-bold text-slate-400">
-                                {course?.grade_level || 'All Grades'}
-                              </span>
-                            </div>
-
-                            <h3 className="text-base font-black text-slate-900 mt-2 line-clamp-1">{course?.title}</h3>
-                            {course?.short_description && (
-                              <p className="text-xs text-slate-500 mt-1 font-medium line-clamp-2">{course.short_description}</p>
+                            {course?.cover_image_url && (
+                              <div className={`relative w-full bg-slate-900 overflow-hidden ${
+                                course.cover_aspect_ratio === '1:1' ? 'aspect-square max-h-48' : 'h-32'
+                              }`}>
+                                <img
+                                  src={course.cover_image_url}
+                                  alt={course.title || 'Course Cover'}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                              </div>
                             )}
+
+                            <div className="p-5 pb-0 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
+                                  {course?.subject || 'Subject'}
+                                </span>
+                                <span className="text-xs font-bold text-slate-400">
+                                  {course?.grade_level || 'All Grades'}
+                                </span>
+                              </div>
+
+                              <h3 className="text-base font-black text-slate-900 line-clamp-1">{course?.title}</h3>
+                              {course?.short_description && (
+                                <p className="text-xs text-slate-500 font-medium line-clamp-2">{course.short_description}</p>
+                              )}
+                            </div>
 
                             {!isTeacher && (
                               <div className="mt-4 space-y-1.5">

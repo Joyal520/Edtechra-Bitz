@@ -43,6 +43,7 @@ export const CreateCourseModal: React.FC<Props> = ({ isOpen, onClose, onSuccess 
   const [courseType, setCourseType] = useState<'full' | 'quick'>('full');
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageKey, setCoverImageKey] = useState<string | null>(null);
+  const [coverAspectRatio, setCoverAspectRatio] = useState<'1:1' | '16:9'>('16:9');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export const CreateCourseModal: React.FC<Props> = ({ isOpen, onClose, onSuccess 
       setCourseType('full');
       setCoverImageUrl(null);
       setCoverImageKey(null);
+      setCoverAspectRatio('16:9');
       setError(null);
       setSubmitting(false);
       setUploadingImage(false);
@@ -109,7 +111,8 @@ export const CreateCourseModal: React.FC<Props> = ({ isOpen, onClose, onSuccess 
         grade_level: 'All Grades',
         course_type: courseType,
         cover_image_url: coverImageUrl,
-        cover_image_key: coverImageKey
+        cover_image_key: coverImageKey,
+        cover_aspect_ratio: coverAspectRatio
       });
 
       onSuccess(newCourse);
@@ -282,6 +285,32 @@ export const CreateCourseModal: React.FC<Props> = ({ isOpen, onClose, onSuccess 
                 <span className="text-[11px] text-slate-400 font-semibold">
                   Optional
                 </span>
+              </div>
+
+              {/* Aspect Ratio Toggle (1:1 vs 16:9) */}
+              <div className="flex items-center gap-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setCoverAspectRatio('16:9')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                    coverAspectRatio !== '1:1'
+                      ? 'bg-sky-50 border-[#026fc3] text-[#026fc3] ring-1 ring-[#026fc3]'
+                      : 'bg-white border-stone-200 text-slate-600 hover:bg-stone-50'
+                  }`}
+                >
+                  16:9 Banner
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCoverAspectRatio('1:1')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                    coverAspectRatio === '1:1'
+                      ? 'bg-sky-50 border-[#026fc3] text-[#026fc3] ring-1 ring-[#026fc3]'
+                      : 'bg-white border-stone-200 text-slate-600 hover:bg-stone-50'
+                  }`}
+                >
+                  1:1 Square Cover
+                </button>
               </div>
 
               <input

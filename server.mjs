@@ -1945,6 +1945,7 @@ app.post('/api/course-studio/courses', async (req, res) => {
       grade_level = 'All Grades',
       cover_image_url,
       cover_image_key,
+      cover_aspect_ratio = '16:9',
       course_type = 'full'
     } = req.body;
 
@@ -1964,6 +1965,7 @@ app.post('/api/course-studio/courses', async (req, res) => {
         grade_level: grade_level.trim(),
         cover_image_url: cover_image_url || null,
         cover_image_key: cover_image_key || null,
+        cover_aspect_ratio: cover_aspect_ratio === '1:1' ? '1:1' : '16:9',
         course_type: course_type === 'quick' ? 'quick' : 'full',
         status: 'draft'
       })
@@ -2113,7 +2115,19 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
     const courseId = req.params.id;
-    const { title, short_description, subject, grade_level, cover_image_url, cover_image_key, status } = req.body;
+    const {
+      title,
+      short_description,
+      subject,
+      grade_level,
+      cover_image_url,
+      cover_image_key,
+      cover_aspect_ratio,
+      status,
+      daily_release_enabled,
+      course_timezone,
+      course_start_date
+    } = req.body;
 
     const updates = { updated_at: new Date().toISOString() };
     if (title !== undefined) updates.title = title.trim();
@@ -2122,7 +2136,11 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
     if (grade_level !== undefined) updates.grade_level = grade_level.trim();
     if (cover_image_url !== undefined) updates.cover_image_url = cover_image_url;
     if (cover_image_key !== undefined) updates.cover_image_key = cover_image_key;
+    if (cover_aspect_ratio !== undefined) updates.cover_aspect_ratio = cover_aspect_ratio === '1:1' ? '1:1' : '16:9';
     if (status !== undefined) updates.status = status;
+    if (daily_release_enabled !== undefined) updates.daily_release_enabled = Boolean(daily_release_enabled);
+    if (course_timezone !== undefined) updates.course_timezone = course_timezone;
+    if (course_start_date !== undefined) updates.course_start_date = course_start_date;
 
     const { data: updated, error } = await serverSupabase
       .from('courses')
@@ -2407,13 +2425,26 @@ app.put('/api/course-studio/courses/:id/episodes/:episodeId', async (req, res) =
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
     const { episodeId } = req.params;
-    const { title, episode_type, order_index, estimated_minutes } = req.body;
+    const {
+      title,
+      episode_type,
+      order_index,
+      position,
+      estimated_minutes,
+      daily_release_enabled,
+      release_day,
+      is_manually_unlocked
+    } = req.body;
 
     const updates = { updated_at: new Date().toISOString() };
     if (title !== undefined) updates.title = title.trim();
     if (episode_type !== undefined) updates.episode_type = episode_type;
     if (order_index !== undefined) updates.order_index = order_index;
+    if (position !== undefined) updates.position = position;
     if (estimated_minutes !== undefined) updates.estimated_minutes = estimated_minutes;
+    if (daily_release_enabled !== undefined) updates.daily_release_enabled = Boolean(daily_release_enabled);
+    if (release_day !== undefined) updates.release_day = release_day;
+    if (is_manually_unlocked !== undefined) updates.is_manually_unlocked = Boolean(is_manually_unlocked);
 
     const { data: ep, error } = await serverSupabase
       .from('course_episodes')
@@ -2426,6 +2457,65 @@ app.put('/api/course-studio/courses/:id/episodes/:episodeId', async (req, res) =
     res.json({ success: true, episode: ep });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to update episode.' });
+  }
+});
+
+// 11b. POST /api/course-studio/courses/:id/episodes/reorder - Persist explicit lesson order
+app.post('/api/course-studio/courses/:id/episodes/reorder', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { unit_id, episode_ids } = req.body;
+
+    if (!unit_id || !Array.isArray(episode_ids)) {
+      return res.status(400).json({ success: false, error: 'unit_id and episode_ids array are required.' });
+    }
+
+    // Persist position, order_index and release_day for all reordered episodes
+    for (let i = 0; i < episode_ids.length; i++) {
+      const epId = episode_ids[i];
+      await serverSupabase
+        .from('course_episodes')
+        .update({
+          order_index: i,
+          position: i + 1,
+          release_day: i + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', epId)
+        .eq('course_id', courseId);
+    }
+
+    res.json({ success: true, message: 'Episodes reordered successfully.' });
+  } catch (err) {
+    console.error('Error in POST /api/course-studio/courses/:id/episodes/reorder:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to reorder episodes.' });
+  }
+});
+
+// 11c. POST /api/course-studio/courses/:id/episodes/:episodeId/unlock - Teacher override to unlock
+app.post('/api/course-studio/courses/:id/episodes/:episodeId/unlock', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { episodeId } = req.params;
+    const { data: ep, error } = await serverSupabase
+      .from('course_episodes')
+      .update({
+        is_manually_unlocked: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', episodeId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, episode: ep, message: 'Episode unlocked for students now.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to unlock episode.' });
   }
 });
 

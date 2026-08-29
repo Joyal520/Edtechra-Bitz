@@ -30,7 +30,9 @@ import {
   Play,
   UploadCloud,
   HelpCircle,
-  BookOpen
+  BookOpen,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import {
   Course,
@@ -82,6 +84,8 @@ export const CourseEditorPage: React.FC = () => {
   // File Upload Ref
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadBlockIndexRef = useRef<number | null>(null);
+  const courseCoverInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingCover, setUploadingCover] = useState<boolean>(false);
 
   // --------------------------------------------------------------------------
   // INITIAL DATA LOADING
@@ -340,6 +344,72 @@ export const CourseEditorPage: React.FC = () => {
     }
   };
 
+  const handleMoveEpisode = async (e: React.MouseEvent, unitId: string, epIndex: number, direction: 'up' | 'down') => {
+    e.stopPropagation();
+    if (!course) return;
+
+    const unit = course.units?.find(u => u.id === unitId);
+    if (!unit || !unit.episodes) return;
+
+    const targetIndex = direction === 'up' ? epIndex - 1 : epIndex + 1;
+    if (targetIndex < 0 || targetIndex >= unit.episodes.length) return;
+
+    const reordered = [...unit.episodes];
+    const temp = reordered[epIndex];
+    reordered[epIndex] = reordered[targetIndex];
+    reordered[targetIndex] = temp;
+
+    // Update order_index, position, and release_day explicitly
+    const updatedEps = reordered.map((ep, idx) => ({
+      ...ep,
+      order_index: idx,
+      position: idx + 1,
+      release_day: idx + 1
+    }));
+
+    const nextUnits = (course.units || []).map(u => {
+      if (u.id === unitId) {
+        return { ...u, episodes: updatedEps };
+      }
+      return u;
+    });
+
+    setCourse({ ...course, units: nextUnits });
+
+    try {
+      await courseStudioService.reorderEpisodes(course.id, unitId, updatedEps.map(e => e.id));
+    } catch (err: any) {
+      console.error('Failed to persist episode order:', err);
+    }
+  };
+
+  const handleUnlockEpisode = async (e: React.MouseEvent, ep: CourseEpisode, unitId: string) => {
+    e.stopPropagation();
+    if (!course) return;
+
+    if (!confirm(`Unlock "${ep.title}" for students now?\n\nStudents will be able to access this lesson immediately.`)) {
+      return;
+    }
+
+    try {
+      await courseStudioService.manuallyUnlockEpisode(course.id, ep.id);
+      const nextUnits = (course.units || []).map(u => {
+        if (u.id === unitId) {
+          return {
+            ...u,
+            episodes: (u.episodes || []).map(item => item.id === ep.id ? { ...item, is_manually_unlocked: true } : item)
+          };
+        }
+        return u;
+      });
+      setCourse({ ...course, units: nextUnits });
+      setSuccessBanner(`"${ep.title}" is now unlocked for students.`);
+      setTimeout(() => setSuccessBanner(null), 3000);
+    } catch (err: any) {
+      setErrorBanner(err.message || 'Failed to unlock lesson.');
+    }
+  };
+
   // --------------------------------------------------------------------------
   // CONTENT SECTION ACTIONS (5 Section Types)
   // --------------------------------------------------------------------------
@@ -471,6 +541,60 @@ export const CourseEditorPage: React.FC = () => {
     } finally {
       setUploadingBlockIndex(null);
       activeUploadBlockIndexRef.current = null;
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !course) return;
+
+    setUploadingCover(true);
+    setErrorBanner(null);
+    try {
+      const res = await courseStudioService.uploadCourseImage(file, 'general', true);
+      await courseStudioService.updateCourse(course.id, {
+        cover_image_url: res.publicUrl,
+        cover_image_key: res.storageKey
+      });
+      setCourse(prev => prev ? { ...prev, cover_image_url: res.publicUrl, cover_image_key: res.storageKey } : null);
+      setSuccessBanner('Course cover image updated successfully.');
+      setTimeout(() => setSuccessBanner(null), 3000);
+    } catch (err: any) {
+      setErrorBanner(err.message || 'Failed to upload course cover image.');
+    } finally {
+      setUploadingCover(false);
+      if (courseCoverInputRef.current) {
+        courseCoverInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveCover = async () => {
+    if (!course) return;
+    try {
+      await courseStudioService.updateCourse(course.id, {
+        cover_image_url: null,
+        cover_image_key: null
+      });
+      setCourse(prev => prev ? { ...prev, cover_image_url: null, cover_image_key: null } : null);
+      setSuccessBanner('Course cover image removed.');
+      setTimeout(() => setSuccessBanner(null), 3000);
+    } catch (err: any) {
+      setErrorBanner(err.message || 'Failed to remove cover image.');
+    }
+  };
+
+  const handleSetAspectRatio = async (ratio: '1:1' | '16:9') => {
+    if (!course) return;
+    try {
+      await courseStudioService.updateCourse(course.id, {
+        cover_aspect_ratio: ratio
+      });
+      setCourse(prev => prev ? { ...prev, cover_aspect_ratio: ratio } : null);
+      setSuccessBanner(`Card cover format set to ${ratio === '1:1' ? '1:1 Square' : '16:9 Banner'}.`);
+      setTimeout(() => setSuccessBanner(null), 2500);
+    } catch (err: any) {
+      setErrorBanner(err.message || 'Failed to update cover format.');
     }
   };
 
@@ -808,37 +932,102 @@ export const CourseEditorPage: React.FC = () => {
 
                   {/* Lessons List */}
                   {isExpanded && (
-                    <div className="p-1.5 space-y-1">
-                      {(unit.episodes || []).map((ep) => {
+                    <div className="p-1.5 space-y-1.5">
+                      {(unit.episodes || []).map((ep, epIdx) => {
                         const isSelected = selectedEpisodeId === ep.id;
+                        const isFirst = epIdx === 0;
+                        const isLast = epIdx === (unit.episodes || []).length - 1;
+                        const pos = ep.position || epIdx + 1;
+                        const isDailyLocked = Boolean(course.daily_release_enabled) && pos > 1 && !ep.is_manually_unlocked;
 
                         return (
                           <div
                             key={ep.id}
                             onClick={() => selectEpisode(ep, unit.id)}
-                            className={`p-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${
+                            className={`p-2 sm:p-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between gap-1.5 group cursor-pointer ${
                               isSelected
-                                ? 'bg-[#026fc3] text-white shadow-2xs'
-                                : 'text-slate-700 hover:bg-white'
+                                ? 'bg-[#026fc3] text-white shadow-xs'
+                                : 'text-slate-700 hover:bg-white border border-stone-200/50 bg-stone-50/50'
                             }`}
                           >
-                            <div className="flex items-center gap-2 truncate">
+                            <div className="flex items-center gap-2 truncate min-w-0">
                               <BookOpen className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
-                              <span className="truncate">{ep.title}</span>
+                              <div className="truncate">
+                                <span className="truncate block">{ep.title}</span>
+                                <div className="flex items-center gap-2 text-[10px] opacity-80 pt-0.5">
+                                  <span>{ep.estimated_minutes || 15}m</span>
+                                  {course.daily_release_enabled ? (
+                                    ep.is_manually_unlocked ? (
+                                      <span className="font-bold text-emerald-400">🔓 Unlocked</span>
+                                    ) : pos === 1 ? (
+                                      <span className="font-bold text-sky-200">🔓 Day 1</span>
+                                    ) : (
+                                      <span className={`font-bold ${isSelected ? 'text-amber-200' : 'text-amber-600'}`}>🔒 Day {pos}</span>
+                                    )
+                                  ) : (
+                                    <span className="opacity-60">Open</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
 
-                            <div className="flex items-center gap-1">
-                              <span className={`text-[10px] ${isSelected ? 'text-sky-100' : 'text-slate-400'}`}>
-                                {ep.estimated_minutes || 15}m
-                              </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {/* Reorder Arrows (Desktop & Mobile Touch Accessible) */}
+                              <div className="flex items-center rounded-lg bg-black/5 dark:bg-white/10 p-0.5">
+                                <button
+                                  type="button"
+                                  disabled={isFirst}
+                                  onClick={e => handleMoveEpisode(e, unit.id, epIdx, 'up')}
+                                  className={`p-1.5 sm:p-1 rounded min-w-[28px] min-h-[28px] sm:min-w-[22px] sm:min-h-[22px] flex items-center justify-center transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed ${
+                                    isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-stone-200 text-slate-700'
+                                  }`}
+                                  title="Move Lesson Up"
+                                  aria-label="Move Lesson Up"
+                                >
+                                  <MoveUp className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={isLast}
+                                  onClick={e => handleMoveEpisode(e, unit.id, epIdx, 'down')}
+                                  className={`p-1.5 sm:p-1 rounded min-w-[28px] min-h-[28px] sm:min-w-[22px] sm:min-h-[22px] flex items-center justify-center transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed ${
+                                    isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-stone-200 text-slate-700'
+                                  }`}
+                                  title="Move Lesson Down"
+                                  aria-label="Move Lesson Down"
+                                >
+                                  <MoveDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Teacher Manual Unlock Override */}
+                              {isDailyLocked && (
+                                <button
+                                  type="button"
+                                  onClick={e => handleUnlockEpisode(e, ep, unit.id)}
+                                  className={`px-1.5 py-1 rounded text-[10px] font-bold flex items-center gap-0.5 cursor-pointer ${
+                                    isSelected ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-amber-100 hover:bg-amber-200 text-amber-800'
+                                  }`}
+                                  title="Unlock lesson for students now"
+                                >
+                                  <Unlock className="w-3 h-3" />
+                                  <span className="hidden md:inline">Unlock</span>
+                                </button>
+                              )}
+
+                              {/* Delete Lesson */}
                               {(unit.episodes || []).length > 1 && (
                                 <button
                                   type="button"
                                   onClick={e => handleDeleteEpisode(e, ep.id, unit.id)}
-                                  className={`p-0.5 opacity-0 group-hover:opacity-100 ${isSelected ? 'text-white' : 'text-slate-400 hover:text-rose-600'}`}
+                                  className={`p-1.5 sm:p-1 rounded opacity-60 hover:opacity-100 cursor-pointer ${
+                                    isSelected ? 'text-white hover:bg-white/20' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                                  }`}
                                   title="Delete Lesson"
+                                  aria-label="Delete Lesson"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               )}
                             </div>
@@ -1851,6 +2040,217 @@ export const CourseEditorPage: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Learning Progression Settings Card */}
+                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-[#026fc3]" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                      Learning Progression
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50/80 cursor-pointer transition-all">
+                      <input
+                        type="radio"
+                        name="daily_release"
+                        checked={!course.daily_release_enabled}
+                        onChange={async () => {
+                          try {
+                            await courseStudioService.updateCourse(course.id, { daily_release_enabled: false });
+                            setCourse(prev => prev ? { ...prev, daily_release_enabled: false } : null);
+                            setSuccessBanner('Progression set to: All lessons accessible.');
+                            setTimeout(() => setSuccessBanner(null), 2500);
+                          } catch (err: any) {
+                            setErrorBanner(err.message || 'Failed to update setting.');
+                          }
+                        }}
+                        className="mt-0.5 text-[#026fc3] focus:ring-[#026fc3]"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Open Access</span>
+                        <span className="text-[11px] text-slate-500 block leading-tight">Students can access all lessons immediately.</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-2.5 rounded-xl border border-sky-300 bg-sky-50/60 hover:bg-sky-50 cursor-pointer transition-all">
+                      <input
+                        type="radio"
+                        name="daily_release"
+                        checked={Boolean(course.daily_release_enabled)}
+                        onChange={async () => {
+                          try {
+                            await courseStudioService.updateCourse(course.id, { daily_release_enabled: true });
+                            setCourse(prev => prev ? { ...prev, daily_release_enabled: true } : null);
+                            setSuccessBanner('Progression set to: Daily Lesson Release (1 lesson/day).');
+                            setTimeout(() => setSuccessBanner(null), 2500);
+                          } catch (err: any) {
+                            setErrorBanner(err.message || 'Failed to update setting.');
+                          }
+                        }}
+                        className="mt-0.5 text-[#026fc3] focus:ring-[#026fc3]"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-[#026fc3] block">● Daily Lesson Release</span>
+                        <span className="text-[11px] text-slate-600 block leading-tight">
+                          Students unlock one lesson each day. Next lesson opens at midnight.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Course Timezone */}
+                  <div className="pt-2 border-t border-stone-200/60 space-y-1">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span>Course Timezone</span>
+                    </label>
+                    <select
+                      value={course.course_timezone || 'Asia/Colombo'}
+                      onChange={async (e) => {
+                        const tz = e.target.value;
+                        try {
+                          await courseStudioService.updateCourse(course.id, { course_timezone: tz });
+                          setCourse(prev => prev ? { ...prev, course_timezone: tz } : null);
+                          setSuccessBanner(`Timezone updated to ${tz}`);
+                          setTimeout(() => setSuccessBanner(null), 2500);
+                        } catch (err: any) {
+                          setErrorBanner(err.message || 'Failed to update timezone.');
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-[#026fc3]"
+                    >
+                      <option value="Asia/Colombo">Asia/Colombo (UTC+05:30 - Default)</option>
+                      <option value="Asia/Kolkata">Asia/Kolkata (IST - UTC+05:30)</option>
+                      <option value="UTC">UTC (Universal Coordinated Time)</option>
+                      <option value="America/New_York">America/New York (EST/EDT)</option>
+                      <option value="Europe/London">Europe/London (GMT/BST)</option>
+                      <option value="Asia/Dubai">Asia/Dubai (GST - UTC+04:00)</option>
+                      <option value="Asia/Singapore">Asia/Singapore (SGT - UTC+08:00)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Course Cover Page & Card Format Card */}
+                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-[#026fc3]" />
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Course Cover & Card
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
+                      {course.cover_aspect_ratio === '1:1' ? '1:1 Square' : '16:9 Banner'}
+                    </span>
+                  </div>
+
+                  {/* 1:1 vs 16:9 Aspect Ratio Toggle */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase block">
+                      Card Cover Format
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSetAspectRatio('1:1')}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          course.cover_aspect_ratio === '1:1'
+                            ? 'bg-sky-50 border-[#026fc3] text-[#026fc3] ring-2 ring-[#026fc3]/20 shadow-xs'
+                            : 'bg-white border-stone-200 hover:bg-stone-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-xs font-black block">1:1 Square</span>
+                        <span className="text-[10px] text-slate-500 block leading-tight">Digital card cover</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSetAspectRatio('16:9')}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          course.cover_aspect_ratio !== '1:1'
+                            ? 'bg-sky-50 border-[#026fc3] text-[#026fc3] ring-2 ring-[#026fc3]/20 shadow-xs'
+                            : 'bg-white border-stone-200 hover:bg-stone-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-xs font-black block">16:9 Banner</span>
+                        <span className="text-[10px] text-slate-500 block leading-tight">Landscape banner</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cover Image Preview & Upload Dropzone */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase block">
+                      Cover Image Preview
+                    </label>
+
+                    <input
+                      type="file"
+                      ref={courseCoverInputRef}
+                      onChange={handleCoverUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+
+                    {course.cover_image_url ? (
+                      <div className="space-y-2">
+                        <div className={`relative w-full rounded-xl overflow-hidden bg-slate-900 border border-stone-200 shadow-2xs ${
+                          course.cover_aspect_ratio === '1:1' ? 'aspect-square max-h-52 mx-auto' : 'aspect-video'
+                        }`}>
+                          <img
+                            src={course.cover_image_url}
+                            alt={course.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-2 right-2">
+                            <span className="px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs">
+                              {course.cover_aspect_ratio === '1:1' ? '1:1 Square' : '16:9 Banner'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={uploadingCover}
+                            onClick={() => courseCoverInputRef.current?.click()}
+                            className="flex-1 py-1.5 rounded-lg bg-stone-200 hover:bg-stone-300 text-slate-800 text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>{uploadingCover ? 'Uploading...' : 'Change Image'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRemoveCover}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => courseCoverInputRef.current?.click()}
+                        className={`border-2 border-dashed border-stone-300 hover:border-[#026fc3] rounded-xl bg-white p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                          course.cover_aspect_ratio === '1:1' ? 'aspect-square max-h-44 mx-auto' : 'aspect-video'
+                        }`}
+                      >
+                        <ImageIcon className="w-6 h-6 text-slate-400" />
+                        <span className="text-xs font-bold text-slate-700 text-center">
+                          {uploadingCover ? 'Uploading Cover...' : 'Click to Upload Cover Image'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {course.cover_aspect_ratio === '1:1' ? '1:1 Square format' : '16:9 Landscape format'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Course Metadata Card */}
                 <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
                   <span className="text-xs font-black text-slate-800">Course Metadata</span>
                   <div className="space-y-2 text-xs">
@@ -1861,6 +2261,12 @@ export const CourseEditorPage: React.FC = () => {
                     <div>
                       <span className="text-[11px] font-bold text-slate-400 block">Course Type</span>
                       <span className="font-bold text-slate-800 uppercase">{course.course_type} Course</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-400 block">Cover Format</span>
+                      <span className="font-bold text-slate-800 uppercase">
+                        {course.cover_aspect_ratio === '1:1' ? '1:1 Square' : '16:9 Banner'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-[11px] font-bold text-slate-400 block">Status</span>

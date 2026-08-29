@@ -285,13 +285,22 @@ export const CourseStudioDashboardPage: React.FC = () => {
                     {/* Cover / Header */}
                     <div>
                       {course.cover_image_url ? (
-                        <div className="relative h-36 w-full bg-slate-900 overflow-hidden">
+                        <div className={`relative w-full bg-slate-900 overflow-hidden ${
+                          course.cover_aspect_ratio === '1:1' ? 'aspect-square max-h-56' : 'h-36'
+                        }`}>
                           <img
                             src={course.cover_image_url}
                             alt={course.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                          <div className="absolute top-3 left-3">
+                            {course.cover_aspect_ratio === '1:1' && (
+                              <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-xs text-white text-[10px] font-black uppercase tracking-wider border border-white/20">
+                                1:1 Square
+                              </span>
+                            )}
+                          </div>
                           <div className="absolute top-3 right-3">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${

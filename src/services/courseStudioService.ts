@@ -68,6 +68,7 @@ export const courseStudioService = {
     grade_level?: string;
     cover_image_url?: string | null;
     cover_image_key?: string | null;
+    cover_aspect_ratio?: '1:1' | '16:9';
     course_type?: 'full' | 'quick';
   }): Promise<Course> {
     const headers = await getAuthHeader();
@@ -92,7 +93,11 @@ export const courseStudioService = {
       grade_level: string;
       cover_image_url: string | null;
       cover_image_key: string | null;
+      cover_aspect_ratio: '1:1' | '16:9';
       status: 'draft' | 'published' | 'archived';
+      daily_release_enabled: boolean;
+      course_timezone: string;
+      course_start_date: string;
     }>
   ): Promise<Course> {
     const headers = await getAuthHeader();
@@ -189,7 +194,16 @@ export const courseStudioService = {
   async updateEpisode(
     courseId: string,
     episodeId: string,
-    updates: Partial<{ title: string; episode_type: string; order_index: number; estimated_minutes: number }>
+    updates: Partial<{
+      title: string;
+      episode_type: string;
+      order_index: number;
+      position: number;
+      estimated_minutes: number;
+      daily_release_enabled: boolean;
+      release_day: number;
+      is_manually_unlocked: boolean;
+    }>
   ): Promise<CourseEpisode> {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}`, {
@@ -199,6 +213,28 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update episode.');
+    return json.episode;
+  },
+
+  async reorderEpisodes(courseId: string, unitId: string, episodeIds: string[]): Promise<void> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/reorder`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ unit_id: unitId, episode_ids: episodeIds })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reorder episodes.');
+  },
+
+  async manuallyUnlockEpisode(courseId: string, episodeId: string): Promise<CourseEpisode> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}/unlock`, {
+      method: 'POST',
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to unlock episode.');
     return json.episode;
   },
 

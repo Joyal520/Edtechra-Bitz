@@ -187,6 +187,8 @@ export interface CourseBlock {
   updated_at?: string;
 }
 
+export type LessonProgressionStatus = 'locked' | 'available' | 'in_progress' | 'completed';
+
 export interface CourseEpisode {
   id: string;
   unit_id: string;
@@ -194,14 +196,20 @@ export interface CourseEpisode {
   title: string;
   episode_type: EpisodeType;
   order_index: number;
+  position?: number;
   estimated_minutes: number;
+  daily_release_enabled?: boolean;
+  release_day?: number;
+  is_manually_unlocked?: boolean;
   created_at?: string;
   updated_at?: string;
 
-  // Joined relationships
+  // Joined relationships & computed progression
   blocks?: CourseBlock[];
   questions?: CourseQuestion[];
   is_completed?: boolean;
+  progression_status?: LessonProgressionStatus;
+  unlock_message?: string;
 }
 
 export interface CourseUnit {
@@ -226,9 +234,13 @@ export interface Course {
   grade_level: string;
   cover_image_url?: string | null;
   cover_image_key?: string | null;
+  cover_aspect_ratio?: '1:1' | '16:9';
   course_type: CourseType;
   status: CourseStatus;
   estimated_hours?: number;
+  daily_release_enabled?: boolean;
+  course_timezone?: string;
+  course_start_date?: string;
   created_at: string;
   updated_at: string;
 
@@ -244,6 +256,26 @@ export interface Course {
     email?: string | null;
     avatar_url?: string | null;
   };
+}
+
+export interface RoadmapLessonItem {
+  id: string;
+  unit_id: string;
+  unit_title: string;
+  unit_index: number;
+  title: string;
+  position: number;
+  order_index: number;
+  estimated_minutes: number;
+  status: LessonProgressionStatus;
+  release_day: number;
+  is_locked: boolean;
+  unlock_message?: string;
+  release_date_str?: string;
+  score?: number;
+  max_score?: number;
+  completed_at?: string;
+  questions_count?: number;
 }
 
 // ----------------------------------------------------------------------------
@@ -296,6 +328,8 @@ export interface CourseEnrollment {
   total_episodes_count: number;
   started_at?: string | null;
   completed_at?: string | null;
+  created_at?: string | null;
+  enrolled_at?: string | null;
   last_activity_at: string;
 
   // Joined student data
