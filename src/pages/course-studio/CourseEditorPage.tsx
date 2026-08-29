@@ -762,6 +762,25 @@ export const CourseEditorPage: React.FC = () => {
               className="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white placeholder:text-slate-400 focus:ring-2 focus:ring-sky-400 focus:outline-none"
             />
 
+            {/* Quick Template Chips */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-slate-300 font-bold">Quick Examples:</span>
+              <button
+                type="button"
+                onClick={() => setRawPastedMaterial('The simple present tense expresses habits, general truths, and repeated actions. For third-person singular (he, she, it), add -s or -es to the base verb (e.g. He walks, She watches). For negatives, use do not / does not + base verb.')}
+                className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-semibold text-sky-200 border border-white/10 transition-all cursor-pointer"
+              >
+                Simple Present Rules
+              </button>
+              <button
+                type="button"
+                onClick={() => setRawPastedMaterial('Photosynthesis is the process by which green plants convert light energy into chemical energy. Plants take in carbon dioxide and water to produce glucose and oxygen using sunlight absorbed by chlorophyll in chloroplasts.')}
+                className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-semibold text-sky-200 border border-white/10 transition-all cursor-pointer"
+              >
+                Photosynthesis
+              </button>
+            </div>
+
             <div className="flex items-center justify-between pt-1">
               <p className="text-[11px] text-slate-300 font-medium">
                 AI will organize into structured concept blocks + generate 2-3 practice questions.
@@ -777,6 +796,50 @@ export const CourseEditorPage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* INLINE AI PROPOSAL BANNER */}
+          {aiReviewOutput && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-5 border-2 border-amber-300 shadow-md space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-600" />
+                  <h4 className="text-sm font-black text-slate-900">
+                    ✨ AI Structured Lesson Proposal Ready
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAiReviewOutput(null)}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                AI parsed your material into <span className="font-extrabold text-slate-900">{aiReviewOutput.blocks?.length || 0} structured concept blocks</span> and <span className="font-extrabold text-slate-900">{aiReviewOutput.questions?.length || 0} practice questions</span> with concept metadata.
+              </p>
+
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleApplyAIOutput}
+                  className="px-5 py-2.5 bg-[#10b981] hover:bg-[#059669] text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Accept & Create Blocks in Lesson</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAiReviewOutput(null)}
+                  className="px-4 py-2.5 bg-white hover:bg-stone-100 text-slate-700 rounded-xl text-xs font-bold border border-stone-200 transition-all cursor-pointer"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* CONTENT BLOCKS STREAM */}
           <div className="space-y-4">
