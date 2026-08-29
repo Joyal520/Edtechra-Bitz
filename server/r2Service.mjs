@@ -82,6 +82,34 @@ export function buildClassroomObjectKey({ classroomId, userId, filename = 'docum
   return `classrooms/${cleanClassroomId}/${cleanUserId}/${timestamp}_${randomSuffix}.${cleanExt}`;
 }
 
+export function buildCourseMediaObjectKey({ courseId, userId, filename = 'image.webp', contentType = 'image/webp' }) {
+  const cleanCourseId = sanitizeSegment(courseId) || 'general';
+  const cleanUserId = sanitizeSegment(userId) || 'teacher';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  
+  let ext = 'webp';
+  if (contentType === 'image/png') ext = 'png';
+  else if (contentType === 'image/jpeg' || contentType === 'image/jpg') ext = 'jpg';
+  else if (contentType === 'application/pdf') ext = 'pdf';
+  else if (filename && filename.includes('.')) ext = sanitizeSegment(filename.split('.').pop()).slice(0, 8) || 'webp';
+
+  return `courses/${cleanCourseId}/media/${cleanUserId}/${timestamp}_${randomSuffix}.${ext}`;
+}
+
+export function buildCourseCoverObjectKey({ courseId, userId, contentType = 'image/webp' }) {
+  const cleanCourseId = sanitizeSegment(courseId) || 'general';
+  const cleanUserId = sanitizeSegment(userId) || 'teacher';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+
+  let ext = 'webp';
+  if (contentType === 'image/png') ext = 'png';
+  else if (contentType === 'image/jpeg' || contentType === 'image/jpg') ext = 'jpg';
+
+  return `courses/${cleanCourseId}/covers/${cleanUserId}/${timestamp}_${randomSuffix}.${ext}`;
+}
+
 export function buildPublicUrl(objectKey) {
   const { publicBaseUrl } = getR2Config();
   const cleanKey = objectKey.replace(/^\/+/, '');

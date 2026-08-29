@@ -17,6 +17,11 @@ import { LiveQuizLobbyPage } from '@/pages/classes/live-quiz/LiveQuizLobbyPage';
 import { LiveQuizHostPage } from '@/pages/classes/live-quiz/LiveQuizHostPage';
 import { LiveQuizPlayPage } from '@/pages/classes/live-quiz/LiveQuizPlayPage';
 import { LiveQuizJoinPage } from '@/pages/classes/live-quiz/LiveQuizJoinPage';
+import { CourseStudioDashboardPage } from '@/pages/course-studio/CourseStudioDashboardPage';
+import { CourseEditorPage } from '@/pages/course-studio/CourseEditorPage';
+import { CoursePreviewPage } from '@/pages/course-studio/CoursePreviewPage';
+import { CourseAnalyticsPage } from '@/pages/course-studio/CourseAnalyticsPage';
+import { StudentCoursePlayerPage } from '@/pages/classes/courses/StudentCoursePlayerPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -38,6 +43,16 @@ export const AppRoutes: React.FC = () => {
         <Route path="classes/:classroomId/live-quiz/lobby/:pin" element={<LiveQuizLobbyPage />} />
         <Route path="classes/:classroomId/live-quiz/host/:sessionId" element={<LiveQuizHostPage />} />
         <Route path="classes/:classroomId/live-quiz/play/:sessionId" element={<LiveQuizPlayPage />} />
+
+        {/* Course Studio (Teacher-Level Studio) Routes */}
+        <Route path="course-studio" element={<CourseStudioDashboardPage />} />
+        <Route path="course-studio/:courseId" element={<CourseEditorPage />} />
+        <Route path="course-studio/:courseId/preview" element={<CoursePreviewPage />} />
+        <Route path="course-studio/:courseId/analytics" element={<CourseAnalyticsPage />} />
+
+        {/* Student Classroom Course Player */}
+        <Route path="classes/:classroomId/courses/:courseId" element={<StudentCoursePlayerPage />} />
+        <Route path="classes/:classroomId/courses/:courseId/learn" element={<StudentCoursePlayerPage />} />
 
         <Route path="bitz/:id" element={<BitzLessonPage />} />
         <Route path="auth" element={<AuthPage />} />

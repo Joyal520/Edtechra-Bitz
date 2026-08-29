@@ -9,7 +9,8 @@ import {
   Copy,
   Check,
   MessageSquareShare,
-  Users
+  Users,
+  BookOpen
 } from 'lucide-react';
 import {
   Classroom,
@@ -66,8 +67,10 @@ import { ChallengeListModal } from '@/components/classes/challenges/ChallengeLis
 import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
 import { StudentAssessmentHistoryModal } from '@/components/classes/StudentAssessmentHistoryModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
+import { CourseClassroomAssignment } from '@/types/courseStudio';
+import { courseStudioService } from '@/services/courseStudioService';
 
-type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams';
+type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
 export const ClassroomDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -81,6 +84,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [messages, setMessages] = useState<ClassroomMessage[]>([]);
   const [buckets, setBuckets] = useState<ContentBucket[]>([]);
   const [exams, setExams] = useState<ClassroomExam[]>([]);
+  const [classroomCourses, setClassroomCourses] = useState<CourseClassroomAssignment[]>([]);
   const [leaderboard, setLeaderboard] = useState<ClassroomLeaderboardEntry[]>([]);
   const [stats, setStats] = useState<IClassroomStats>({
     total_students: 0,
@@ -164,7 +168,8 @@ export const ClassroomDetailPage: React.FC = () => {
         bucketsData,
         examsData,
         leaderboardData,
-        statsData
+        statsData,
+        coursesData
       ] = await Promise.all([
         classroomService.getClassroomById(id),
         classroomService.getOrCreateInvite(id),
@@ -174,7 +179,8 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomResourceService.getBucketsByClassroom(id),
         classroomExamService.getExamsByClassroom(id),
         classroomPointsService.getClassroomLeaderboard(id),
-        classroomService.getClassroomStats(id)
+        classroomService.getClassroomStats(id),
+        courseStudioService.getClassroomCourses(id).catch(() => [])
       ]);
 
       if (!classData) {
@@ -191,6 +197,7 @@ export const ClassroomDetailPage: React.FC = () => {
       setExams(examsData);
       setLeaderboard(leaderboardData);
       setStats(statsData);
+      setClassroomCourses(coursesData || []);
     } catch (err) {
       console.error('Error loading classroom:', err);
     } finally {
@@ -412,9 +419,9 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 2 — MAIN TEACHER TOOLS (5 Pastel Cards)                           */}
+        {/* SECTION 2 — MAIN TEACHER TOOLS (6 Pastel Cards)                           */}
         {/* ========================================================================= */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5">
           
           {/* Card 1: Overview */}
           <div
@@ -554,6 +561,39 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
             <div className="flex justify-end pt-3">
               <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-rose-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-rose-200">
+                <ArrowRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 6: Courses */}
+          <div
+            onClick={() => handleSelectTab('courses')}
+            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+              activeTab === 'courses'
+                ? 'bg-[#eef2ff] border-indigo-300 shadow-md ring-2 ring-indigo-400/50'
+                : 'bg-[#eef2ff] border-indigo-100/90 hover:border-indigo-300'
+            }`}
+          >
+            <div className="space-y-3">
+              <div className="flex justify-center py-2">
+                <div className="w-16 h-14 rounded-2xl bg-indigo-100/80 text-indigo-700 flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
+                  <BookOpen className="w-7 h-7" />
+                </div>
+              </div>
+              <div className="space-y-1 text-left">
+                <h3 className="text-base font-black text-slate-900">
+                  {isTeacher ? 'Courses' : 'My Courses'}
+                </h3>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  {isTeacher
+                    ? 'Structured multi-day digital courses.'
+                    : 'Access assigned interactive course lessons.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-3">
+              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-indigo-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-indigo-200">
                 <ArrowRight className="w-3.5 h-3.5" />
               </div>
             </div>
@@ -1120,6 +1160,122 @@ export const ClassroomDetailPage: React.FC = () => {
                 entries={leaderboard}
                 currentUserId={user?.id}
               />
+            )}
+
+            {/* TAB: COURSES */}
+            {activeTab === 'courses' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">Assigned Digital Courses</h2>
+                    <p className="text-xs text-slate-500 font-semibold">{classroomCourses.length} active digital courses assigned</p>
+                  </div>
+                  {isTeacher && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/course-studio')}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Assign / Manage Studio Courses</span>
+                    </button>
+                  )}
+                </div>
+
+                {classroomCourses.length === 0 ? (
+                  <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-3">
+                    <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">No courses assigned to this classroom yet.</p>
+                    <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                      {isTeacher
+                        ? 'Build courses in Course Studio and assign them to this classroom in one click.'
+                        : 'Your teacher has not assigned any digital courses yet.'}
+                    </p>
+                    {isTeacher && (
+                      <button
+                        type="button"
+                        onClick={() => navigate('/course-studio')}
+                        className="px-4 py-2 bg-[#026fc3] text-white text-xs font-black rounded-xl shadow-xs"
+                      >
+                        Open Course Studio
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {classroomCourses.map((c) => {
+                      const course = c.course;
+                      const enrollment = c.enrollment;
+                      const progressPct = Math.round(enrollment?.progress_percent || 0);
+
+                      return (
+                        <div
+                          key={c.id}
+                          className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
+                                {course?.subject || 'Subject'}
+                              </span>
+                              <span className="text-xs font-bold text-slate-400">
+                                {course?.grade_level || 'All Grades'}
+                              </span>
+                            </div>
+
+                            <h3 className="text-base font-black text-slate-900 mt-2 line-clamp-1">{course?.title}</h3>
+                            {course?.short_description && (
+                              <p className="text-xs text-slate-500 mt-1 font-medium line-clamp-2">{course.short_description}</p>
+                            )}
+
+                            {!isTeacher && (
+                              <div className="mt-4 space-y-1.5">
+                                <div className="flex items-center justify-between text-xs font-bold">
+                                  <span className="text-slate-500">Your Progress</span>
+                                  <span className="text-[#026fc3] font-black">{progressPct}%</span>
+                                </div>
+                                <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                                  <div className="bg-[#026fc3] h-full rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            {isTeacher ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/course-studio/${c.course_id}/analytics`)}
+                                  className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-slate-700 rounded-xl text-xs font-extrabold transition-all cursor-pointer"
+                                >
+                                  Analytics
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/course-studio/${c.course_id}`)}
+                                  className="px-3 py-1.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-2xs transition-all cursor-pointer"
+                                >
+                                  Edit Course
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/classes/${id}/courses/${c.course_id}/learn`)}
+                                className="w-full py-2 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                              >
+                                <span>{progressPct > 0 ? 'Continue Learning' : 'Start Course'}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
 
           </div>

@@ -4,15 +4,23 @@ import {
   GraduationCap,
   Plus,
   KeyRound,
-  Search
+  Search,
+  Sparkles,
+  Layers,
+  BookOpen,
+  ArrowRight
 } from 'lucide-react';
 import { Classroom, ClassroomStats as IClassroomStats } from '@/types/classroom';
 import { classroomService } from '@/services/classroomService';
+import { Course } from '@/types/courseStudio';
+import { courseStudioService } from '@/services/courseStudioService';
 import { useAuth } from '@/context/AuthContext';
 import { ClassroomCard } from '@/components/classes/ClassroomCard';
 import { CreateClassroomModal } from '@/components/classes/CreateClassroomModal';
 import { JoinClassroomModal } from '@/components/classes/JoinClassroomModal';
 import { ClassroomStats } from '@/components/classes/ClassroomStats';
+import { CreateCourseModal } from '@/components/course-studio/CreateCourseModal';
+import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 import {
   ClassroomHeroIllustration,
   BotanicalPaperCutFrame
@@ -23,6 +31,7 @@ export const ClassesPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [studioCourses, setStudioCourses] = useState<Course[]>([]);
   const [stats, setStats] = useState<IClassroomStats>({
     total_students: 0,
     total_assignments: 0,
@@ -36,6 +45,8 @@ export const ClassesPage: React.FC = () => {
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
+  const [createCourseModalOpen, setCreateCourseModalOpen] = useState(false);
+  const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -54,6 +65,15 @@ export const ClassesPage: React.FC = () => {
       ]);
       setClassrooms(classList);
       setStats(statsData);
+
+      if (isTeacher) {
+        try {
+          const courseList = await courseStudioService.getCourses();
+          setStudioCourses(courseList);
+        } catch {
+          // ignore if non-teacher or empty
+        }
+      }
     } catch (err) {
       console.error('Failed to load classrooms', err);
     } finally {
@@ -165,6 +185,111 @@ export const ClassesPage: React.FC = () => {
         {/* CLASSROOM STATISTICS (4 Horizontally Aligned Pastel Paper Cards)           */}
         {/* ========================================================================= */}
         <ClassroomStats stats={stats} />
+
+        {/* ========================================================================= */}
+        {/* TEACHER COURSE STUDIO COMMAND CENTER                                      */}
+        {/* ========================================================================= */}
+        {isTeacher && (
+          <section className="bg-white rounded-[28px] p-6 sm:p-8 border border-stone-200/80 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-5">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-50 text-[#026fc3] text-[11px] font-black uppercase tracking-wider border border-sky-100">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Teacher-Level Course Studio</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  Course Studio
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-xl">
+                  Create once. Teach across classrooms. Track every learner.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setCreateCourseModalOpen(true)}
+                  className="px-4 py-2.5 bg-[#10b981] hover:bg-[#059669] text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Create Digital Course</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/course-studio')}
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Layers className="w-4 h-4 text-slate-500" />
+                  <span>Open Studio ({studioCourses.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Courses Cards Carousel / Grid */}
+            {studioCourses.length === 0 ? (
+              <div className="bg-[#f9f7f1] rounded-2xl p-6 text-center space-y-3 border border-stone-200/60">
+                <div className="w-12 h-12 rounded-2xl bg-sky-50 text-[#026fc3] flex items-center justify-center mx-auto">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900">No Digital Courses Built Yet</h4>
+                  <p className="text-xs text-slate-500 font-medium max-w-md mx-auto mt-0.5">
+                    Build interactive multi-day courses with AI lesson generation and deliver them across all your classrooms.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateCourseModalOpen(true)}
+                  className="px-4 py-2 bg-[#026fc3] text-white text-xs font-black rounded-xl shadow-xs"
+                >
+                  + Build First Course with AI
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {studioCourses.slice(0, 3).map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => navigate(`/course-studio/${c.id}`)}
+                    className="p-4 rounded-2xl bg-stone-50/80 hover:bg-sky-50/40 border border-stone-200/80 hover:border-sky-300 transition-all cursor-pointer space-y-3 flex flex-col justify-between group"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2 py-0.5 rounded-full bg-sky-100 text-[#026fc3] text-[10px] font-black">
+                          {c.subject}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            c.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-slate-600'
+                          }`}
+                        >
+                          {c.status}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-black text-slate-900 group-hover:text-[#026fc3] transition-colors mt-2 line-clamp-1">
+                        {c.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium line-clamp-2 mt-0.5">
+                        {c.short_description || 'Click to edit and manage lessons.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-200/60 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-500 font-bold">
+                        {c.assigned_classrooms_count || 0} classes • {c.units_count || 1} units
+                      </span>
+                      <span className="text-[#026fc3] font-black flex items-center gap-0.5 text-[11px]">
+                        <span>Manage</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* ========================================================================= */}
         {/* CLASS FILTER / SEARCH PANEL & CLASSROOMS GRID                             */}
@@ -310,6 +435,27 @@ export const ClassesPage: React.FC = () => {
           navigate(`/classes/${id}`);
         }}
       />
+
+      <CreateCourseModal
+        isOpen={createCourseModalOpen}
+        onClose={() => setCreateCourseModalOpen(false)}
+        onSuccess={(c) => {
+          loadData();
+          navigate(`/course-studio/${c.id}`);
+        }}
+      />
+
+      {publishTargetCourse && (
+        <CoursePublishModal
+          course={publishTargetCourse}
+          isOpen={Boolean(publishTargetCourse)}
+          onClose={() => setPublishTargetCourse(null)}
+          onSuccess={() => {
+            loadData();
+            setPublishTargetCourse(null);
+          }}
+        />
+      )}
 
     </div>
   );

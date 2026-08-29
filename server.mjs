@@ -48,13 +48,23 @@ import {
   buildExamAttachmentObjectKey,
   buildExamSubmissionObjectKey,
   buildExamReportObjectKey,
-  buildTeachingReportObjectKey
+  buildTeachingReportObjectKey,
+  buildCourseMediaObjectKey,
+  buildCourseCoverObjectKey
 } from './server/r2Service.mjs';
 import {
   getClassroomTeachingIntelligence,
   createThirtyDayReport,
   computeClassroomMetrics
 } from './server/teachingIntelligenceService.mjs';
+import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
+import {
+  buildLessonFromMaterial,
+  generateCourseQuestionsWithAI,
+  improveCourseContentWithAI,
+  compileCrossClassroomAnalytics,
+  calculateConceptMastery
+} from './server/courseStudioService.mjs';
 import {
   generateExam,
   validateGenerationPayload,
@@ -1661,8 +1671,64 @@ app.post('/api/classes/presign-upload', async (req, res) => {
 });
 
 // ============================================================================
-// AI TEACHING INTELLIGENCE & 30-DAY REPORTS API
+// CLASSROOM ANALYTICS & AI TEACHING INTELLIGENCE API (PHASE 2)
 // ============================================================================
+
+// GET /api/classes/:id/analytics - Retrieve pure deterministic classroom analytics
+app.get('/api/classes/:id/analytics', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const periodDays = req.query.periodDays ? parseInt(req.query.periodDays, 10) : 30;
+    const startDate = req.query.startDate || undefined;
+    const endDate = req.query.endDate || undefined;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database connection not initialized' });
+    }
+
+    // Verify teacher, student, or admin authorization for this classroom
+    const { data: membership } = await serverSupabase
+      .from('classroom_members')
+      .select('role')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', authData.user.id)
+      .maybeSingle();
+
+    const { data: classroom } = await serverSupabase
+      .from('classrooms')
+      .select('teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle();
+
+    const isTeacher = classroom?.teacher_id === authData.user.id || membership?.role === 'teacher' || authData.profile?.role === 'admin';
+    const isStudent = membership?.role === 'student';
+
+    if (!isTeacher && !isStudent) {
+      return res.status(403).json({ success: false, error: 'Access denied to classroom analytics.' });
+    }
+
+    const result = await computeClassroomAnalytics(serverSupabase, classroomId, {
+      periodDays,
+      startDate,
+      endDate
+    });
+
+    // Student privacy protection: students only see their own individual profile
+    if (isStudent && !isTeacher) {
+      result.students = result.students.filter(s => s.studentId === authData.user.id);
+    }
+
+    res.json({ success: true, analytics: result });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/analytics:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to compute classroom analytics' });
+  }
+});
 
 // GET /api/classes/:id/teaching-intelligence - Retrieve cached or fresh classroom intelligence
 app.get('/api/classes/:id/teaching-intelligence', async (req, res) => {
@@ -1809,6 +1875,1083 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/ai-feedback:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom report' });
+  }
+});
+
+// ============================================================================
+// EDTECHRA COURSE STUDIO API (TEACHER-LEVEL STUDIO & MULTI-CLASSROOM DELIVERY)
+// ============================================================================
+
+// 1. GET /api/course-studio/courses - List courses owned by teacher
+app.get('/api/course-studio/courses', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database connection uninitialized' });
+
+    const { data: courses, error } = await serverSupabase
+      .from('courses')
+      .select(`
+        *,
+        course_units(id, course_episodes(id)),
+        course_classroom_assignments(id, classroom_id)
+      `)
+      .eq('teacher_id', authData.user.id)
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+
+    const enriched = (courses || []).map(c => {
+      const units = c.course_units || [];
+      const episodesCount = units.reduce((sum, u) => sum + (u.course_episodes?.length || 0), 0);
+      const assignments = c.course_classroom_assignments || [];
+      return {
+        id: c.id,
+        teacher_id: c.teacher_id,
+        title: c.title,
+        short_description: c.short_description,
+        subject: c.subject,
+        grade_level: c.grade_level,
+        cover_image_url: c.cover_image_url,
+        course_type: c.course_type,
+        status: c.status,
+        units_count: units.length,
+        episodes_count: episodesCount,
+        assigned_classrooms_count: assignments.length,
+        created_at: c.created_at,
+        updated_at: c.updated_at
+      };
+    });
+
+    res.json({ success: true, courses: enriched });
+  } catch (err) {
+    console.error('Error in GET /api/course-studio/courses:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to list courses.' });
+  }
+});
+
+// 2. POST /api/course-studio/courses - Create a course
+app.post('/api/course-studio/courses', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      title,
+      short_description,
+      subject = 'English',
+      grade_level = 'All Grades',
+      cover_image_url,
+      cover_image_key,
+      course_type = 'full'
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, error: 'Course title is required.' });
+    }
+
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database uninitialized' });
+
+    const { data: course, error: cErr } = await serverSupabase
+      .from('courses')
+      .insert({
+        teacher_id: authData.user.id,
+        title: title.trim(),
+        short_description: short_description ? short_description.trim() : '',
+        subject: subject.trim(),
+        grade_level: grade_level.trim(),
+        cover_image_url: cover_image_url || null,
+        cover_image_key: cover_image_key || null,
+        course_type: course_type === 'quick' ? 'quick' : 'full',
+        status: 'draft'
+      })
+      .select()
+      .single();
+
+    if (cErr) throw cErr;
+
+    // Automatically provision Unit 1 and Episode 1 (Day 1)
+    const { data: unit, error: uErr } = await serverSupabase
+      .from('course_units')
+      .insert({
+        course_id: course.id,
+        title: course_type === 'quick' ? 'Unit 1' : 'Unit 1: Foundations',
+        description: 'Initial unit',
+        order_index: 0
+      })
+      .select()
+      .single();
+
+    if (uErr) throw uErr;
+
+    const { data: episode, error: eErr } = await serverSupabase
+      .from('course_episodes')
+      .insert({
+        unit_id: unit.id,
+        course_id: course.id,
+        title: course_type === 'quick' ? 'Lesson 1' : 'Day 1: Introduction',
+        episode_type: 'lesson',
+        order_index: 0,
+        estimated_minutes: 15
+      })
+      .select()
+      .single();
+
+    if (eErr) throw eErr;
+
+    res.json({
+      success: true,
+      course: {
+        ...course,
+        units: [{ ...unit, episodes: [episode] }]
+      }
+    });
+  } catch (err) {
+    console.error('Error in POST /api/course-studio/courses:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to create course.' });
+  }
+});
+
+// 3. GET /api/course-studio/courses/:id - Get full course detail
+app.get('/api/course-studio/courses/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database uninitialized' });
+
+    const { data: course, error: cErr } = await serverSupabase
+      .from('courses')
+      .select('*')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (cErr || !course) return res.status(404).json({ success: false, error: 'Course not found.' });
+
+    const { data: units } = await serverSupabase
+      .from('course_units')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+
+    const { data: episodes } = await serverSupabase
+      .from('course_episodes')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+
+    const { data: blocks } = await serverSupabase
+      .from('course_blocks')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+
+    const { data: questions } = await serverSupabase
+      .from('course_questions')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+
+    const { data: assignments } = await serverSupabase
+      .from('course_classroom_assignments')
+      .select(`
+        *,
+        classroom:classrooms(id, title, subject, grade)
+      `)
+      .eq('course_id', courseId);
+
+    const blocksByEpisode = new Map();
+    (blocks || []).forEach(b => {
+      if (!blocksByEpisode.has(b.episode_id)) blocksByEpisode.set(b.episode_id, []);
+      blocksByEpisode.get(b.episode_id).push(b);
+    });
+
+    const questionsByEpisode = new Map();
+    (questions || []).forEach(q => {
+      if (!questionsByEpisode.has(q.episode_id)) questionsByEpisode.set(q.episode_id, []);
+      questionsByEpisode.get(q.episode_id).push(q);
+    });
+
+    const episodesByUnit = new Map();
+    (episodes || []).forEach(e => {
+      const enrichedEp = {
+        ...e,
+        blocks: blocksByEpisode.get(e.id) || [],
+        questions: questionsByEpisode.get(e.id) || []
+      };
+      if (!episodesByUnit.has(e.unit_id)) episodesByUnit.set(e.unit_id, []);
+      episodesByUnit.get(e.unit_id).push(enrichedEp);
+    });
+
+    const enrichedUnits = (units || []).map(u => ({
+      ...u,
+      episodes: episodesByUnit.get(u.id) || []
+    }));
+
+    res.json({
+      success: true,
+      course: {
+        ...course,
+        units: enrichedUnits,
+        assignments: assignments || [],
+        assigned_classrooms_count: assignments?.length || 0
+      }
+    });
+  } catch (err) {
+    console.error('Error in GET /api/course-studio/courses/:id:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load course.' });
+  }
+});
+
+// 4. PUT /api/course-studio/courses/:id - Update course metadata
+app.put('/api/course-studio/courses/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { title, short_description, subject, grade_level, cover_image_url, cover_image_key, status } = req.body;
+
+    const updates = { updated_at: new Date().toISOString() };
+    if (title !== undefined) updates.title = title.trim();
+    if (short_description !== undefined) updates.short_description = short_description.trim();
+    if (subject !== undefined) updates.subject = subject.trim();
+    if (grade_level !== undefined) updates.grade_level = grade_level.trim();
+    if (cover_image_url !== undefined) updates.cover_image_url = cover_image_url;
+    if (cover_image_key !== undefined) updates.cover_image_key = cover_image_key;
+    if (status !== undefined) updates.status = status;
+
+    const { data: updated, error } = await serverSupabase
+      .from('courses')
+      .update(updates)
+      .eq('id', courseId)
+      .eq('teacher_id', authData.user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, course: updated });
+  } catch (err) {
+    console.error('Error in PUT /api/course-studio/courses/:id:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to update course.' });
+  }
+});
+
+// 5. DELETE /api/course-studio/courses/:id - Delete course
+app.delete('/api/course-studio/courses/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { error } = await serverSupabase
+      .from('courses')
+      .delete()
+      .eq('id', courseId)
+      .eq('teacher_id', authData.user.id);
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Course deleted successfully.' });
+  } catch (err) {
+    console.error('Error in DELETE /api/course-studio/courses/:id:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to delete course.' });
+  }
+});
+
+// 6. POST /api/course-studio/courses/:id/duplicate - Duplicate course
+app.post('/api/course-studio/courses/:id/duplicate', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+
+    const { data: orig, error: oErr } = await serverSupabase
+      .from('courses')
+      .select('*')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (oErr || !orig) return res.status(404).json({ success: false, error: 'Original course not found.' });
+
+    const { data: newCourse, error: nErr } = await serverSupabase
+      .from('courses')
+      .insert({
+        teacher_id: authData.user.id,
+        title: `${orig.title} (Copy)`,
+        short_description: orig.short_description,
+        subject: orig.subject,
+        grade_level: orig.grade_level,
+        cover_image_url: orig.cover_image_url,
+        cover_image_key: orig.cover_image_key,
+        course_type: orig.course_type,
+        status: 'draft'
+      })
+      .select()
+      .single();
+
+    if (nErr) throw nErr;
+
+    const { data: origUnits } = await serverSupabase
+      .from('course_units')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('order_index', { ascending: true });
+
+    for (const u of (origUnits || [])) {
+      const { data: newUnit } = await serverSupabase
+        .from('course_units')
+        .insert({
+          course_id: newCourse.id,
+          title: u.title,
+          description: u.description,
+          order_index: u.order_index
+        })
+        .select()
+        .single();
+
+      if (!newUnit) continue;
+
+      const { data: origEpisodes } = await serverSupabase
+        .from('course_episodes')
+        .select('*')
+        .eq('unit_id', u.id)
+        .order('order_index', { ascending: true });
+
+      for (const ep of (origEpisodes || [])) {
+        const { data: newEpisode } = await serverSupabase
+          .from('course_episodes')
+          .insert({
+            unit_id: newUnit.id,
+            course_id: newCourse.id,
+            title: ep.title,
+            episode_type: ep.episode_type,
+            order_index: ep.order_index,
+            estimated_minutes: ep.estimated_minutes
+          })
+          .select()
+          .single();
+
+        if (!newEpisode) continue;
+
+        const { data: origBlocks } = await serverSupabase
+          .from('course_blocks')
+          .select('*')
+          .eq('episode_id', ep.id)
+          .order('order_index', { ascending: true });
+
+        if (origBlocks && origBlocks.length > 0) {
+          const blocksToInsert = origBlocks.map(b => ({
+            episode_id: newEpisode.id,
+            course_id: newCourse.id,
+            block_type: b.block_type,
+            order_index: b.order_index,
+            content: b.content
+          }));
+          await serverSupabase.from('course_blocks').insert(blocksToInsert);
+        }
+
+        const { data: origQuestions } = await serverSupabase
+          .from('course_questions')
+          .select('*')
+          .eq('episode_id', ep.id)
+          .order('order_index', { ascending: true });
+
+        if (origQuestions && origQuestions.length > 0) {
+          const questionsToInsert = origQuestions.map(q => ({
+            episode_id: newEpisode.id,
+            course_id: newCourse.id,
+            question_text: q.question_text,
+            question_type: q.question_type,
+            options: q.options,
+            correct_answer: q.correct_answer,
+            explanation: q.explanation,
+            skill: q.skill,
+            concept: q.concept,
+            difficulty: q.difficulty,
+            points: q.points,
+            order_index: q.order_index
+          }));
+          await serverSupabase.from('course_questions').insert(questionsToInsert);
+        }
+      }
+    }
+
+    res.json({ success: true, course: newCourse });
+  } catch (err) {
+    console.error('Error in duplicate course:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to duplicate course.' });
+  }
+});
+
+// 7. POST /api/course-studio/courses/:id/units - Create unit
+app.post('/api/course-studio/courses/:id/units', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { title, description = '', order_index = 0 } = req.body;
+
+    const { data: unit, error } = await serverSupabase
+      .from('course_units')
+      .insert({
+        course_id: courseId,
+        title: title ? title.trim() : 'New Unit',
+        description: description ? description.trim() : '',
+        order_index
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const { data: ep } = await serverSupabase
+      .from('course_episodes')
+      .insert({
+        unit_id: unit.id,
+        course_id: courseId,
+        title: 'Day 1: Lesson',
+        episode_type: 'lesson',
+        order_index: 0,
+        estimated_minutes: 15
+      })
+      .select()
+      .single();
+
+    res.json({ success: true, unit: { ...unit, episodes: ep ? [ep] : [] } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to create unit.' });
+  }
+});
+
+// 8. PUT /api/course-studio/courses/:id/units/:unitId - Update unit
+app.put('/api/course-studio/courses/:id/units/:unitId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { unitId } = req.params;
+    const { title, description, order_index } = req.body;
+
+    const updates = { updated_at: new Date().toISOString() };
+    if (title !== undefined) updates.title = title.trim();
+    if (description !== undefined) updates.description = description.trim();
+    if (order_index !== undefined) updates.order_index = order_index;
+
+    const { data: unit, error } = await serverSupabase
+      .from('course_units')
+      .update(updates)
+      .eq('id', unitId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, unit });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to update unit.' });
+  }
+});
+
+// 9. DELETE /api/course-studio/courses/:id/units/:unitId - Delete unit
+app.delete('/api/course-studio/courses/:id/units/:unitId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { unitId } = req.params;
+    const { error } = await serverSupabase.from('course_units').delete().eq('id', unitId);
+    if (error) throw error;
+    res.json({ success: true, message: 'Unit deleted.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to delete unit.' });
+  }
+});
+
+// 10. POST /api/course-studio/courses/:id/episodes - Create episode/day
+app.post('/api/course-studio/courses/:id/episodes', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { unit_id, title = 'New Day', episode_type = 'lesson', order_index = 0, estimated_minutes = 15 } = req.body;
+
+    const { data: ep, error } = await serverSupabase
+      .from('course_episodes')
+      .insert({
+        unit_id,
+        course_id: courseId,
+        title: title.trim(),
+        episode_type,
+        order_index,
+        estimated_minutes
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, episode: { ...ep, blocks: [], questions: [] } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to create episode.' });
+  }
+});
+
+// 11. PUT /api/course-studio/courses/:id/episodes/:episodeId - Update episode
+app.put('/api/course-studio/courses/:id/episodes/:episodeId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { episodeId } = req.params;
+    const { title, episode_type, order_index, estimated_minutes } = req.body;
+
+    const updates = { updated_at: new Date().toISOString() };
+    if (title !== undefined) updates.title = title.trim();
+    if (episode_type !== undefined) updates.episode_type = episode_type;
+    if (order_index !== undefined) updates.order_index = order_index;
+    if (estimated_minutes !== undefined) updates.estimated_minutes = estimated_minutes;
+
+    const { data: ep, error } = await serverSupabase
+      .from('course_episodes')
+      .update(updates)
+      .eq('id', episodeId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, episode: ep });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to update episode.' });
+  }
+});
+
+// 12. DELETE /api/course-studio/courses/:id/episodes/:episodeId - Delete episode
+app.delete('/api/course-studio/courses/:id/episodes/:episodeId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { episodeId } = req.params;
+    const { error } = await serverSupabase.from('course_episodes').delete().eq('id', episodeId);
+    if (error) throw error;
+    res.json({ success: true, message: 'Episode deleted.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to delete episode.' });
+  }
+});
+
+// 13. POST /api/course-studio/courses/:id/episodes/:episodeId/blocks - Save/Sync blocks
+app.post('/api/course-studio/courses/:id/episodes/:episodeId/blocks', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { id: courseId, episodeId } = req.params;
+    const { blocks = [] } = req.body;
+
+    await serverSupabase.from('course_blocks').delete().eq('episode_id', episodeId);
+
+    if (blocks.length > 0) {
+      const toInsert = blocks.map((b, idx) => ({
+        episode_id: episodeId,
+        course_id: courseId,
+        block_type: b.block_type,
+        order_index: idx,
+        content: b.content || {}
+      }));
+
+      const { data: saved, error } = await serverSupabase
+        .from('course_blocks')
+        .insert(toInsert)
+        .select();
+
+      if (error) throw error;
+      return res.json({ success: true, blocks: saved });
+    }
+
+    res.json({ success: true, blocks: [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to save blocks.' });
+  }
+});
+
+// 14. POST /api/course-studio/courses/:id/questions - Save/Sync questions
+app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { episode_id, questions = [] } = req.body;
+
+    if (!episode_id) return res.status(400).json({ success: false, error: 'episode_id is required' });
+
+    await serverSupabase.from('course_questions').delete().eq('episode_id', episode_id);
+
+    if (questions.length > 0) {
+      const toInsert = questions.map((q, idx) => ({
+        episode_id,
+        course_id: courseId,
+        block_id: q.block_id || null,
+        question_text: q.question_text,
+        question_type: q.question_type || 'multiple_choice',
+        options: Array.isArray(q.options) ? q.options : [],
+        correct_answer: q.correct_answer,
+        explanation: q.explanation || '',
+        skill: q.skill || 'General',
+        concept: q.concept || 'General',
+        difficulty: q.difficulty || 'medium',
+        points: q.points || 10,
+        order_index: idx
+      }));
+
+      const { data: saved, error } = await serverSupabase
+        .from('course_questions')
+        .insert(toInsert)
+        .select();
+
+      if (error) throw error;
+      return res.json({ success: true, questions: saved });
+    }
+
+    res.json({ success: true, questions: [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to save questions.' });
+  }
+});
+
+// 15. POST /api/course-studio/courses/:id/publish-and-assign - Publish course & assign to classrooms
+app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const {
+      classroom_ids = [],
+      start_date = new Date().toISOString(),
+      due_date = null,
+      settings = {
+        sequential_unlock: false,
+        allow_retries: true,
+        track_mastery: true,
+        award_points: true
+      }
+    } = req.body;
+
+    const { data: updatedCourse, error: cErr } = await serverSupabase
+      .from('courses')
+      .update({ status: 'published', updated_at: new Date().toISOString() })
+      .eq('id', courseId)
+      .eq('teacher_id', authData.user.id)
+      .select()
+      .single();
+
+    if (cErr) throw cErr;
+
+    const { data: allEpisodes } = await serverSupabase
+      .from('course_episodes')
+      .select('id')
+      .eq('course_id', courseId);
+    const totalEpisodesCount = (allEpisodes || []).length;
+
+    const assignmentResults = [];
+    for (const classId of classroom_ids) {
+      const { data: assignment, error: aErr } = await serverSupabase
+        .from('course_classroom_assignments')
+        .upsert(
+          {
+            course_id: courseId,
+            classroom_id: classId,
+            assigned_by: authData.user.id,
+            start_date,
+            due_date,
+            status: 'active',
+            settings,
+            assigned_at: new Date().toISOString()
+          },
+          { onConflict: 'course_id,classroom_id' }
+        )
+        .select()
+        .single();
+
+      if (aErr || !assignment) continue;
+      assignmentResults.push(assignment);
+
+      const { data: members } = await serverSupabase
+        .from('classroom_members')
+        .select('profile_id')
+        .eq('classroom_id', classId)
+        .eq('role', 'student')
+        .eq('status', 'active');
+
+      if (members && members.length > 0) {
+        const enrollmentsToUpsert = members.map(m => ({
+          course_id: courseId,
+          classroom_id: classId,
+          classroom_assignment_id: assignment.id,
+          student_id: m.profile_id,
+          status: 'enrolled',
+          total_episodes_count: totalEpisodesCount
+        }));
+
+        await serverSupabase
+          .from('course_enrollments')
+          .upsert(enrollmentsToUpsert, { onConflict: 'classroom_assignment_id,student_id' });
+      }
+    }
+
+    res.json({
+      success: true,
+      course: updatedCourse,
+      assigned_count: assignmentResults.length,
+      assignments: assignmentResults
+    });
+  } catch (err) {
+    console.error('Error in publish-and-assign:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to publish and assign course.' });
+  }
+});
+
+// 16. GET /api/course-studio/courses/:id/analytics - Cross-Classroom Course Intelligence
+app.get('/api/course-studio/courses/:id/analytics', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const analytics = await compileCrossClassroomAnalytics(serverSupabase, courseId);
+    res.json({ success: true, analytics });
+  } catch (err) {
+    console.error('Error in course analytics:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load course analytics.' });
+  }
+});
+
+// 17. POST /api/course-studio/presign-upload - Secure R2 Presigned Upload
+app.post('/api/course-studio/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { courseId = 'general', filename = 'image.webp', contentType = 'image/webp', size, isCover = false } = req.body;
+
+    try {
+      validateClassroomUpload({ contentType, size });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const objectKey = isCover
+      ? buildCourseCoverObjectKey({ courseId, userId: authData.user.id, contentType })
+      : buildCourseMediaObjectKey({ courseId, userId: authData.user.id, filename, contentType });
+
+    const presigned = buildPresignedUpload({ objectKey, contentType });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (err) {
+    console.error('Error in course presign upload:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate upload URL.' });
+  }
+});
+
+// 18. POST /api/course-studio/ai/build-lesson - Build structured lesson from pasted material
+app.post('/api/course-studio/ai/build-lesson', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { raw_material, course_title, unit_title, subject, grade_level } = req.body;
+
+    const result = await buildLessonFromMaterial({
+      rawMaterial: raw_material,
+      courseTitle: course_title,
+      unitTitle: unit_title,
+      subject,
+      gradeLevel: grade_level,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in AI build lesson:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to build lesson with AI.' });
+  }
+});
+
+// 19. POST /api/course-studio/ai/generate-questions - Generate questions with concept metadata
+app.post('/api/course-studio/ai/generate-questions', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { content_text, question_types, question_count = 5, difficulty = 'medium', target_grade, subject, instructions } = req.body;
+
+    const result = await generateCourseQuestionsWithAI({
+      contentText: content_text,
+      questionTypes: question_types || ['multiple_choice'],
+      questionCount: parseInt(question_count, 10) || 5,
+      difficulty,
+      targetGrade: target_grade || 'Grade 8',
+      subject: subject || 'English',
+      instructions,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in AI generate questions:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate questions with AI.' });
+  }
+});
+
+// 20. POST /api/course-studio/ai/improve-content - Improve content text
+app.post('/api/course-studio/ai/improve-content', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { text, instruction } = req.body;
+    const result = await improveCourseContentWithAI({
+      text,
+      instruction,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to improve content.' });
+  }
+});
+
+// 21. GET /api/classes/:classroomId/courses - List courses assigned to a classroom
+app.get('/api/classes/:classroomId/courses', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { classroomId } = req.params;
+
+    const { data: assignments, error } = await serverSupabase
+      .from('course_classroom_assignments')
+      .select(`
+        *,
+        course:courses(
+          id,
+          title,
+          short_description,
+          subject,
+          grade_level,
+          cover_image_url,
+          course_type,
+          status,
+          updated_at
+        )
+      `)
+      .eq('classroom_id', classroomId)
+      .eq('status', 'active');
+
+    if (error) throw error;
+
+    const studentId = authData.user.id;
+    const { data: enrollments } = await serverSupabase
+      .from('course_enrollments')
+      .select('*')
+      .eq('classroom_id', classroomId)
+      .eq('student_id', studentId);
+
+    const enrollmentMap = new Map();
+    (enrollments || []).forEach(e => enrollmentMap.set(e.course_id, e));
+
+    const enriched = (assignments || []).map(a => ({
+      ...a,
+      enrollment: enrollmentMap.get(a.course_id) || null
+    }));
+
+    res.json({ success: true, courses: enriched });
+  } catch (err) {
+    console.error('Error in classroom courses:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load classroom courses.' });
+  }
+});
+
+// 22. POST /api/course-studio/student/progress - Update episode progress and calculate course progress
+app.post('/api/course-studio/student/progress', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { course_id, classroom_id, episode_id, score = 0, max_score = 0, time_spent_seconds = 0 } = req.body;
+    const student_id = authData.user.id;
+
+    const { data: enrollment } = await serverSupabase
+      .from('course_enrollments')
+      .select('*')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .eq('student_id', student_id)
+      .maybeSingle();
+
+    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment not found.' });
+
+    const percentage = max_score > 0 ? Number(((score / max_score) * 100).toFixed(1)) : 100;
+
+    await serverSupabase
+      .from('course_episode_progress')
+      .upsert(
+        {
+          enrollment_id: enrollment.id,
+          student_id,
+          course_id,
+          classroom_id,
+          episode_id,
+          status: 'completed',
+          score,
+          max_score,
+          percentage,
+          time_spent_seconds,
+          completed_at: new Date().toISOString()
+        },
+        { onConflict: 'enrollment_id,episode_id' }
+      );
+
+    const { data: completedEps } = await serverSupabase
+      .from('course_episode_progress')
+      .select('id')
+      .eq('enrollment_id', enrollment.id)
+      .eq('status', 'completed');
+
+    const completedCount = (completedEps || []).length;
+    const totalCount = Math.max(1, enrollment.total_episodes_count || 1);
+    const progressPercent = Math.min(100, Number(((completedCount / totalCount) * 100).toFixed(1)));
+    const status = progressPercent >= 100 ? 'completed' : 'in_progress';
+
+    const { data: updatedEnrollment } = await serverSupabase
+      .from('course_enrollments')
+      .update({
+        progress_percent: progressPercent,
+        completed_episodes_count: completedCount,
+        status,
+        current_episode_id: episode_id,
+        completed_at: progressPercent >= 100 ? new Date().toISOString() : null,
+        last_activity_at: new Date().toISOString()
+      })
+      .eq('id', enrollment.id)
+      .select()
+      .single();
+
+    await serverSupabase.from('course_learning_events').insert({
+      student_id,
+      course_id,
+      classroom_id,
+      episode_id,
+      event_type: 'episode_completed',
+      metadata: { score, max_score, percentage, progress_percent: progressPercent }
+    });
+
+    res.json({ success: true, enrollment: updatedEnrollment });
+  } catch (err) {
+    console.error('Error in student progress:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to update progress.' });
+  }
+});
+
+// 23. POST /api/course-studio/student/attempt - Record question attempt & calculate mastery
+app.post('/api/course-studio/student/attempt', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      course_id,
+      classroom_id,
+      episode_id,
+      question_id,
+      student_answer,
+      is_correct,
+      points_awarded = 0,
+      skill,
+      concept,
+      difficulty
+    } = req.body;
+
+    const student_id = authData.user.id;
+
+    const { data: enrollment } = await serverSupabase
+      .from('course_enrollments')
+      .select('id')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .eq('student_id', student_id)
+      .maybeSingle();
+
+    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment not found.' });
+
+    const { data: attempt, error: attErr } = await serverSupabase
+      .from('course_question_attempts')
+      .insert({
+        enrollment_id: enrollment.id,
+        student_id,
+        course_id,
+        classroom_id,
+        episode_id,
+        question_id,
+        student_answer: String(student_answer || ''),
+        is_correct: Boolean(is_correct),
+        points_awarded: Number(points_awarded) || 0,
+        skill: skill || 'General',
+        concept: concept || 'General',
+        difficulty: difficulty || 'medium'
+      })
+      .select()
+      .single();
+
+    if (attErr) throw attErr;
+
+    const { data: studentAttempts } = await serverSupabase
+      .from('course_question_attempts')
+      .select('is_correct')
+      .eq('enrollment_id', enrollment.id);
+
+    const totalAtts = (studentAttempts || []).length;
+    const correctAtts = (studentAttempts || []).filter(a => a.is_correct).length;
+    const accuracyPercent = totalAtts > 0 ? Number(((correctAtts / totalAtts) * 100).toFixed(1)) : 0;
+
+    await serverSupabase
+      .from('course_enrollments')
+      .update({
+        accuracy_percent: accuracyPercent,
+        mastery_percent: accuracyPercent,
+        last_activity_at: new Date().toISOString()
+      })
+      .eq('id', enrollment.id);
+
+    await serverSupabase.from('course_learning_events').insert({
+      student_id,
+      course_id,
+      classroom_id,
+      episode_id,
+      question_id,
+      event_type: is_correct ? 'question_correct' : 'question_wrong',
+      metadata: { student_answer, is_correct, concept, skill }
+    });
+
+    res.json({ success: true, attempt, accuracy_percent: accuracyPercent });
+  } catch (err) {
+    console.error('Error in question attempt:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to record attempt.' });
   }
 });
 

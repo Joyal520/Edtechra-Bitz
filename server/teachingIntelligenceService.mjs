@@ -16,6 +16,7 @@ import {
   sanitizeSegment,
   buildPublicUrl
 } from './r2Service.mjs';
+import { computeClassroomAnalytics } from './classroomAnalyticsService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,173 +35,90 @@ const CANDIDATE_GEMINI_MODELS = [
 
 export async function computeClassroomMetrics(serverSupabase, classroomId) {
   if (!serverSupabase || !classroomId) {
-    return buildDefaultMetrics();
+    return buildDefaultMetrics(classroomId);
   }
 
   try {
-    // 1. Fetch Classroom Info
-    const { data: classroom } = await serverSupabase
-      .from('classrooms')
-      .select('id, title, subject, grade, teacher_id, created_at')
-      .eq('id', classroomId)
-      .maybeSingle();
+    const analytics = await computeClassroomAnalytics(serverSupabase, classroomId);
 
-    // 2. Fetch Members (Students)
-    const { data: members } = await serverSupabase
-      .from('classroom_members')
-      .select('id, profile_id, role, status')
-      .eq('classroom_id', classroomId)
-      .eq('status', 'active');
+    // Map to ClassroomMetricsSummary
+    const totalStudents = analytics.overview.totalStudents || 1;
+    const activeStudents = analytics.overview.activeStudents || 0;
+    const overallScore = analytics.overview.averagePercentage != null
+      ? Math.round(analytics.overview.averagePercentage)
+      : 0;
 
-    const students = (members || []).filter(m => m.role === 'student');
-    const totalStudents = students.length || 1;
+    const scoreChange = analytics.trends.scoreChangePercentagePoints != null
+      ? analytics.trends.scoreChangePercentagePoints
+      : 0;
 
-    // 3. Fetch Tasks / Assignments & Submissions
-    const { data: assignments } = await serverSupabase
-      .from('assignments')
-      .select('id, title, category, points, questions, created_at')
-      .eq('classroom_id', classroomId)
-      .eq('is_deleted', false);
+    const taskCompletionRate = analytics.overview.completionRate != null
+      ? Math.round(analytics.overview.completionRate)
+      : 0;
 
-    const taskList = assignments || [];
-    const taskIds = taskList.map(t => t.id);
+    const engagementRate = totalStudents > 0
+      ? Math.min(100, Math.round((activeStudents / totalStudents) * 100))
+      : 0;
 
-    let taskSubmissions = [];
-    if (taskIds.length > 0) {
-      const { data: subs } = await serverSupabase
-        .from('assignment_submissions')
-        .select('id, assignment_id, student_id, final_score, percentage, status, created_at')
-        .in('assignment_id', taskIds);
-      taskSubmissions = subs || [];
-    }
+    const topicPerformance = analytics.topics.map(t => ({
+      topic: t.topic,
+      score: t.averagePercentage != null ? Math.round(t.averagePercentage) : 0,
+      change: t.scoreChangePercentagePoints != null ? t.scoreChangePercentagePoints : 0,
+      status: t.status
+    }));
 
-    // 4. Fetch Exams & Results
-    const { data: exams } = await serverSupabase
-      .from('classroom_exams')
-      .select('id, title, subject, total_marks, questions_json, created_at')
-      .eq('classroom_id', classroomId);
+    const studentsNeedingAttention = analytics.students
+      .filter(s => s.performanceCategory === 'AT_RISK' || s.performanceCategory === 'NEEDS_SUPPORT')
+      .slice(0, 5)
+      .map((s, idx) => ({
+        student_ref: s.fullName || `Student ${idx + 1}`,
+        issue: s.performanceCategory === 'AT_RISK'
+          ? `Performance score at ${s.averagePercentage || 0}% requires intervention`
+          : `Needs support to strengthen foundational concepts (current average ${s.averagePercentage || 0}%)`,
+        average_score: s.averagePercentage != null ? Math.round(s.averagePercentage) : undefined,
+        suggested_support: s.performanceCategory === 'AT_RISK'
+          ? 'Schedule targeted 1-on-1 review session and assign scaffolded practice tasks.'
+          : 'Assign topic review exercises and follow up on quiz feedback.'
+      }));
 
-    const examList = exams || [];
-    const examIds = examList.map(e => e.id);
-
-    let examResults = [];
-    if (examIds.length > 0) {
-      const { data: eResults } = await serverSupabase
-        .from('classroom_exam_results')
-        .select('id, exam_id, student_id, score, total_marks, percentage, passed, breakdown_json, created_at')
-        .in('exam_id', examIds);
-      examResults = eResults || [];
-    }
-
-    // 5. Fetch OCR Assessment Jobs
-    let ocrJobs = [];
-    try {
-      const { data: ocr } = await serverSupabase
-        .from('ocr_evaluations')
-        .select('id, student_id, score, max_score, percentage, category, created_at')
-        .eq('classroom_id', classroomId);
-      ocrJobs = ocr || [];
-    } catch {}
-
-    // 6. Fetch Competitions / AI Challenges
-    let challengeSubmissions = [];
-    try {
-      const { data: challenges } = await serverSupabase
-        .from('classroom_challenges')
-        .select('id, title, category')
-        .eq('classroom_id', classroomId);
-
-      if (challenges && challenges.length > 0) {
-        const { data: cSubs } = await serverSupabase
-          .from('classroom_challenge_submissions')
-          .select('id, challenge_id, student_id, score, max_score, percentage')
-          .in('challenge_id', challenges.map(c => c.id));
-        challengeSubmissions = cSubs || [];
-      }
-    } catch {}
-
-    // 7. Calculate Aggregates
-    const allPercentages = [
-      ...taskSubmissions.filter(s => s.percentage != null).map(s => Number(s.percentage)),
-      ...examResults.filter(r => r.percentage != null).map(r => Number(r.percentage)),
-      ...ocrJobs.filter(o => o.percentage != null).map(o => Number(o.percentage)),
-      ...challengeSubmissions.filter(c => c.percentage != null).map(c => Number(c.percentage))
-    ];
-
-    const overallScore = allPercentages.length > 0
-      ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
-      : 72;
-
-    const totalPossibleSubmissions = (taskList.length * totalStudents) || 1;
-    const taskCompletionRate = Math.min(100, Math.round((taskSubmissions.length / totalPossibleSubmissions) * 100));
-
-    // Active students participating in last 14 days
-    const activeStudentIds = new Set([
-      ...taskSubmissions.map(s => s.student_id),
-      ...examResults.map(r => r.student_id),
-      ...ocrJobs.map(o => o.student_id)
-    ]);
-    const activeStudents = Math.min(totalStudents, activeStudentIds.size || Math.round(totalStudents * 0.85));
-    const engagementRate = Math.min(100, Math.round((activeStudents / totalStudents) * 100));
-
-    // 8. Derive Topic & Skill Distributions from real assessment metadata
-    const topicPerformance = deriveTopicPerformance({
-      classroom,
-      taskList,
-      taskSubmissions,
-      examList,
-      examResults,
-      ocrJobs
-    });
-
-    // 9. Identify Students Needing Attention (Anonymized & Actionable)
-    const studentsNeedingAttention = deriveStudentsNeedingAttention({
-      students,
-      taskSubmissions,
-      examResults,
-      totalTasks: taskList.length
-    });
-
-    // 10. Compute deterministic fingerprint hash of data version
+    // Data hash for cache keying
     const hashPayload = [
       classroomId,
       totalStudents,
-      taskList.length,
-      taskSubmissions.length,
-      examList.length,
-      examResults.length,
-      ocrJobs.length,
-      challengeSubmissions.length,
-      taskSubmissions[0]?.created_at || '0',
-      examResults[0]?.created_at || '0'
+      analytics.overview.totalLearningEvents,
+      analytics.overview.completedActivitiesCount,
+      analytics.overview.averagePercentage || '0',
+      analytics.recentActivity[0]?.completedAt || '0'
     ].join(':');
 
     const dataHash = crypto.createHash('sha256').update(hashPayload).digest('hex').slice(0, 16);
 
     return {
       classroom: {
-        id: classroom?.id || classroomId,
-        title: classroom?.title || 'Classroom',
-        subject: classroom?.subject || 'General',
-        grade: classroom?.grade || 'Grade 8'
+        id: analytics.classroom.id,
+        title: analytics.classroom.title,
+        subject: analytics.classroom.subject,
+        grade: analytics.classroom.grade
       },
       class_summary: {
         total_students: totalStudents,
         active_students: activeStudents,
         overall_score: overallScore,
-        score_change: 8, // Estimated positive delta
+        score_change: scoreChange,
         task_completion_rate: taskCompletionRate,
         engagement_rate: engagementRate,
         assessments_count: {
-          tasks: taskList.length,
-          quizzes: taskList.filter(t => t.category === 'practice' || t.category === 'activity').length,
-          exams: examList.length,
-          ocr_assessments: ocrJobs.length,
-          competitions: challengeSubmissions.length
+          tasks: analytics.activityBreakdown.assignment?.eventCount || 0,
+          quizzes: analytics.activityBreakdown.live_quiz?.eventCount || 0,
+          exams: analytics.activityBreakdown.exam?.eventCount || 0,
+          ocr_assessments: analytics.activityBreakdown.ocr?.eventCount || 0,
+          competitions: analytics.activityBreakdown.ai_challenge?.eventCount || 0
         }
       },
-      topic_performance: topicPerformance,
-      students_needing_attention: studentsNeedingAttention,
+      topic_performance: topicPerformance.length > 0 ? topicPerformance : deriveTopicPerformance({ classroom: analytics.classroom }),
+      students_needing_attention: studentsNeedingAttention.length > 0 ? studentsNeedingAttention : [
+        { student_ref: 'Classroom', issue: 'All students are currently performing steadily.', suggested_support: 'Continue with planned curriculum units.' }
+      ],
       data_hash: dataHash,
       computed_at: new Date().toISOString()
     };
