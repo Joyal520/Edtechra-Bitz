@@ -199,18 +199,19 @@ export const CoursePreviewPage: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 space-y-8">
           <div className="max-w-3xl mx-auto space-y-8">
             
-            {/* Lesson Title Header */}
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200/80 shadow-xs space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-sky-50 text-[#026fc3] text-xs font-black border border-sky-100 uppercase">
-                  {course.subject}
-                </span>
-                <span className="text-xs text-slate-400 font-bold flex items-center gap-1">
+            {/* Editorial Lesson Header */}
+            <div className="space-y-2 pb-4 border-b border-stone-200/70">
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#026fc3]">
+                <span>{course.subject}</span>
+                <span className="text-slate-300">•</span>
+                <span className="text-slate-500 font-bold capitalize">{course.grade_level || 'General'}</span>
+                <span className="text-slate-300">•</span>
+                <span className="text-slate-500 font-bold flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" />
-                  {selectedEpisode.estimated_minutes || 15} mins
+                  {selectedEpisode.estimated_minutes || 15} min
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-tight">
                 {selectedEpisode.title}
               </h1>
             </div>

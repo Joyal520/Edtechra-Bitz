@@ -10,6 +10,8 @@ export type EpisodeType = 'lesson' | 'practice' | 'assessment' | 'revision';
 
 export type BlockType =
   | 'text'
+  | 'text_image'
+  | 'text_video'
   | 'image'
   | 'youtube_video'
   | 'youtube_short'
@@ -41,6 +43,34 @@ export interface TextBlockContent {
   title?: string;
 }
 
+export interface TextImageBlockContent {
+  title?: string;
+  text: string;
+  image?: {
+    url: string;
+    storage_key?: string;
+    caption?: string;
+    alt?: string;
+    position: 'left' | 'right' | 'above' | 'below';
+    size: 'small' | 'medium' | 'large';
+    width?: number;
+    height?: number;
+  };
+}
+
+export interface TextVideoBlockContent {
+  title?: string;
+  text: string;
+  video?: {
+    url: string;
+    video_id?: string;
+    title?: string;
+    is_short?: boolean;
+    position: 'left' | 'right' | 'above' | 'below';
+    size?: 'medium' | 'large';
+  };
+}
+
 export interface ImageBlockContent {
   url: string;
   storage_key?: string;
@@ -48,6 +78,8 @@ export interface ImageBlockContent {
   alt?: string;
   width?: number;
   height?: number;
+  position?: 'left' | 'right' | 'center';
+  size?: 'small' | 'medium' | 'large';
 }
 
 export interface YouTubeBlockContent {
@@ -56,6 +88,7 @@ export interface YouTubeBlockContent {
   title?: string;
   is_short: boolean;
   start_seconds?: number;
+  position?: 'left' | 'right' | 'center';
 }
 
 export interface QuestionSetBlockContent {
@@ -66,6 +99,8 @@ export interface QuestionSetBlockContent {
 
 export type BlockContent =
   | TextBlockContent
+  | TextImageBlockContent
+  | TextVideoBlockContent
   | ImageBlockContent
   | YouTubeBlockContent
   | QuestionSetBlockContent
