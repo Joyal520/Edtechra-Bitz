@@ -88,9 +88,12 @@ export const QuestionPlanModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
-  // Calculate lesson text word count
+  // Calculate lesson text word count & total interactive activities
   const wordCount = lessonText.trim() ? lessonText.trim().split(/\s+/).length : 0;
-  const totalPlanQuestions = planItems.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+  const totalPlanActivities = planItems.reduce((sum, item) => {
+    if (item.type === 'ordering' || item.type === 'matching') return sum + 1;
+    return sum + (Number(item.count) || 0);
+  }, 0);
 
   const handleAddPlanItem = () => {
     setPlanItems(prev => [
@@ -327,7 +330,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                    Question Sets ({planItems.length}) • Total Questions: {totalPlanQuestions}
+                    Question Sets ({planItems.length}) • Total Activities: {totalPlanActivities}
                   </span>
                   <button
                     type="button"
@@ -379,12 +382,14 @@ export const QuestionPlanModal: React.FC<Props> = ({
                           </select>
                         </div>
 
-                        {/* Question Count */}
+                        {/* Question / Sentence Count */}
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase">Count</label>
+                          <label className="text-[11px] font-bold text-slate-500 uppercase">
+                            {item.type === 'ordering' ? 'Sentences / Blocks' : item.type === 'matching' ? 'Pairs' : 'Question Count'}
+                          </label>
                           <input
                             type="number"
-                            min={1}
+                            min={2}
                             max={20}
                             value={item.count}
                             onChange={e => handleUpdatePlanItem(item.id, { count: Math.max(1, parseInt(e.target.value) || 1) })}
@@ -492,7 +497,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
                     Paste AI Generated JSON below:
                   </label>
                   <span className="text-[11px] font-bold text-slate-400">
-                    Expected: {totalPlanQuestions} questions
+                    Expected: {totalPlanActivities} activities
                   </span>
                 </div>
                 <textarea
@@ -534,16 +539,21 @@ export const QuestionPlanModal: React.FC<Props> = ({
                         <div className="font-bold text-slate-700 uppercase tracking-wider text-[10px] pb-1 border-b border-emerald-200">
                           Question Plan Breakdown
                         </div>
-                        {planItems.map(item => (
-                          <div key={item.id} className="flex items-center justify-between font-medium text-slate-800">
-                            <span>{QUESTION_TYPE_LABELS[item.type]}</span>
-                            <span className="font-bold text-emerald-700">
-                              {validationResult.summary.byType[item.type] || 0} / {item.count}
-                            </span>
-                          </div>
-                        ))}
+                        {planItems.map(item => {
+                          const isOrd = item.type === 'ordering';
+                          const isMatch = item.type === 'matching';
+                          const label = isOrd ? `${item.count} sentences (1 activity)` : isMatch ? `${item.count} pairs (1 activity)` : `${validationResult.summary.byType[item.type] || 0} / ${item.count}`;
+                          return (
+                            <div key={item.id} className="flex items-center justify-between font-medium text-slate-800">
+                              <span>{QUESTION_TYPE_LABELS[item.type]}</span>
+                              <span className="font-bold text-emerald-700">
+                                {label}
+                              </span>
+                            </div>
+                          );
+                        })}
                         <div className="pt-2 border-t border-emerald-200 flex items-center justify-between font-black text-slate-900">
-                          <span>Total Questions</span>
+                          <span>Total Activities</span>
                           <span className="text-emerald-800 font-extrabold text-sm">{validationResult.summary.totalQuestions}</span>
                         </div>
                       </div>

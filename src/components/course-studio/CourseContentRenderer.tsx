@@ -426,70 +426,56 @@ export const CourseContentRenderer: React.FC<Props> = ({
         })}
       </div>
 
-      {/* 2. REFINED INTERACTIVE PRACTICE SECTION */}
+      {/* 2. REFINED EDITORIAL INTERACTIVE PRACTICE SECTION */}
       {validQuestions.length > 0 && (
         <section className="w-full pt-10 sm:pt-16 border-t border-stone-200/80 dark:border-stone-800 space-y-8 sm:space-y-10">
           
-          {/* Practice Section Header & Real-Time Status Bar */}
-          <div className="bg-white/80 dark:bg-stone-900/80 rounded-3xl p-5 sm:p-6 border border-stone-200/90 dark:border-stone-800 shadow-xs space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[11px] font-black uppercase tracking-wider">
+          {/* Editorial Practice Section Header */}
+          <div className="bg-white/90 dark:bg-stone-900/90 rounded-3xl p-6 sm:p-8 border border-stone-200/90 dark:border-stone-800 shadow-xs space-y-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 text-sky-800 dark:text-sky-300 text-[11px] font-black uppercase tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
                   <span>Interactive Practice</span>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                   Think About the Story
                 </h3>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                  Check your understanding of the lesson.
+                </p>
               </div>
 
-              {/* Sound Toggle Control */}
+              {/* Subtle Sound Toggle Control */}
               <button
                 type="button"
                 onClick={handleToggleSound}
-                className="px-3.5 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                className="px-3.5 py-1.5 rounded-full bg-stone-100/80 hover:bg-stone-200/80 dark:bg-stone-800 dark:hover:bg-stone-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs border border-stone-200/60 dark:border-stone-700"
                 title="Toggle Question Sound Effects"
               >
-                {soundEnabled ? <Volume2 className="w-4 h-4 text-[#026fc3]" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#026fc3]" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
                 <span>{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
               </button>
             </div>
 
-            {/* Question Progress Tracker & Score Badge */}
-            <div className="pt-2 border-t border-stone-100 dark:border-stone-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-                  Progress:
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {validQuestions.map((q, idx) => {
-                    const fb = localFeedback[q.id];
-                    return (
-                      <div
-                        key={q.id || idx}
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${
-                          fb
-                            ? fb.isCorrect
-                              ? 'bg-emerald-500 text-white shadow-xs'
-                              : 'bg-rose-500 text-white shadow-xs'
-                            : 'bg-stone-100 dark:bg-stone-800 text-slate-400 border border-stone-200/80 dark:border-stone-700'
-                        }`}
-                        title={`Question ${idx + 1}: ${fb ? (fb.isCorrect ? 'Correct' : 'Incorrect') : 'Unanswered'}`}
-                      >
-                        {fb ? (fb.isCorrect ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />) : idx + 1}
-                      </div>
-                    );
-                  })}
+            {/* Refined Minimalist Progress Bar */}
+            <div className="pt-3 border-t border-stone-100 dark:border-stone-800/80 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                <span>{answeredTotal} of {validQuestions.length} completed</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[#026fc3] font-black">{Math.round((answeredTotal / validQuestions.length) * 100)}%</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black">
+                    {earnedPoints} / {totalPointsPossible} pts
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-slate-700 dark:text-slate-200">
-                  {answeredTotal} / {validQuestions.length} answered
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 font-black text-xs">
-                  {earnedPoints} / {totalPointsPossible} pts
-                </span>
+              {/* Smooth Progress Track */}
+              <div className="w-full h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${(answeredTotal / validQuestions.length) * 100}%` }}
+                />
               </div>
             </div>
           </div>
@@ -535,7 +521,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </div>
 
                   {/* Question Prompt */}
-                  <h4 className="text-base sm:text-lg md:text-[19px] font-bold text-slate-900 dark:text-white leading-snug text-left">
+                  <h4 className="text-lg sm:text-xl md:text-[22px] font-bold text-slate-900 dark:text-white leading-snug text-left">
                     {q.question_text}
                   </h4>
 

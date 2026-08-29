@@ -2519,7 +2519,21 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
     await serverSupabase.from('course_questions').delete().eq('episode_id', episode_id);
 
     if (questions.length > 0) {
-      const toInsert = questions.map((q, idx) => ({
+      // Server-side idempotent deduplication: prevent duplicate questions per episode
+      const seen = new Set();
+      const deduplicated = [];
+
+      questions.forEach((q) => {
+        const text = String(q.question_text || '').trim();
+        const type = String(q.question_type || 'multiple_choice').trim();
+        const key = `${type}_${text.toLowerCase()}`;
+        if (!seen.has(key) && text !== '' && text !== 'New practice question') {
+          seen.add(key);
+          deduplicated.push(q);
+        }
+      });
+
+      const toInsert = deduplicated.map((q, idx) => ({
         episode_id,
         course_id: courseId,
         block_id: q.block_id || null,

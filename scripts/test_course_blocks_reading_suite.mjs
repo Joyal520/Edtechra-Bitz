@@ -152,7 +152,7 @@ test('CourseContentRenderer and StudentCoursePlayerPage support reading-first bo
   const playerPath = path.join(ROOT_DIR, 'src/pages/classes/courses/StudentCoursePlayerPage.tsx');
   const playerContent = fs.readFileSync(playerPath, 'utf8');
 
-  assert(playerContent.includes('THEME_STYLES'), 'Must support reading themes (Ivory, Sepia, Dark, White)');
+  assert(playerContent.includes('getThemePreset') || playerContent.includes('THEME_STYLES'), 'Must support reading themes');
   assert(playerContent.includes('scrollProgress'), 'Must track subtle reading progress line');
   assert(playerContent.includes('Table of Contents'), 'Must have slide-over table of contents drawer');
 });

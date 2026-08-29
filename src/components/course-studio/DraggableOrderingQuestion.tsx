@@ -327,27 +327,69 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                 <span className="flex-1 font-medium break-words leading-relaxed text-left">
                   {item.text}
                 </span>
+
+                {/* Mobile & Desktop Accessible Move Up/Down Controls */}
+                {!isLocked && (
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-80 hover:opacity-100">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const nextItems = [...items];
+                        const temp = nextItems[index];
+                        nextItems[index] = nextItems[index - 1];
+                        nextItems[index - 1] = temp;
+                        setItems(nextItems);
+                        courseAudio.playSelectSound();
+                      }}
+                      aria-label="Move sentence up"
+                      className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-slate-500 disabled:opacity-20 cursor-pointer"
+                      title="Move sentence up"
+                    >
+                      <span className="text-xs font-bold leading-none">▲</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === items.length - 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const nextItems = [...items];
+                        const temp = nextItems[index];
+                        nextItems[index] = nextItems[index + 1];
+                        nextItems[index + 1] = temp;
+                        setItems(nextItems);
+                        courseAudio.playSelectSound();
+                      }}
+                      aria-label="Move sentence down"
+                      className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-slate-500 disabled:opacity-20 cursor-pointer"
+                      title="Move sentence down"
+                    >
+                      <span className="text-xs font-bold leading-none">▼</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* SUBMIT BUTTON (Available before locking) */}
+      {/* CHECK ORDER BUTTON (Available before locking) */}
       {!isLocked && (
-        <div className="pt-2 flex items-center justify-between">
-          <p className="text-[11px] text-slate-400 font-medium italic">
-            Make sure the story flows correctly before submitting.
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-400 font-medium italic text-center sm:text-left">
+            Drag cards or use ▲ ▼ arrows to arrange the story before checking.
           </p>
 
           <button
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmitOrder}
-            className="px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Submit Order</span>
+            <span>Check Order</span>
           </button>
         </div>
       )}

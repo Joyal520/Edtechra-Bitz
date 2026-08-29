@@ -1390,6 +1390,108 @@ export const CourseEditorPage: React.FC = () => {
                           </div>
                         )}
 
+                        {/* Ordering Sentence Blocks Editor (Canonical Order) */}
+                        {qType === 'ordering' && (
+                          <div className="pt-2 space-y-2.5">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              <span>Canonical Correct Story Order:</span>
+                              <span className="text-[#026fc3] font-semibold">{(q.options as string[])?.length || 0} Sentence Blocks</span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {((q.options as string[]) || []).map((sentence, sIdx) => {
+                                const isFirstBlock = sIdx === 0;
+                                const isLastBlock = sIdx === ((q.options as string[]) || []).length - 1;
+
+                                return (
+                                  <div
+                                    key={sIdx}
+                                    className="flex items-center gap-2 p-2.5 rounded-xl bg-white border border-stone-200 shadow-2xs hover:border-[#026fc3] transition-all"
+                                  >
+                                    {/* Number Badge */}
+                                    <span className="w-6 h-6 rounded-lg bg-stone-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0">
+                                      {String(sIdx + 1).padStart(2, '0')}
+                                    </span>
+
+                                    {/* Sentence Input */}
+                                    <input
+                                      type="text"
+                                      value={sentence}
+                                      onChange={e => {
+                                        const newOptions = [...((q.options as string[]) || [])];
+                                        newOptions[sIdx] = e.target.value;
+                                        handleUpdateQuestion(qIdx, 'options', newOptions);
+                                      }}
+                                      placeholder={`Sentence block ${sIdx + 1}...`}
+                                      className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-medium text-slate-800 focus:ring-1 focus:ring-[#026fc3]"
+                                    />
+
+                                    {/* Move Up / Down Controls */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        disabled={isFirstBlock}
+                                        onClick={() => {
+                                          const newOptions = [...((q.options as string[]) || [])];
+                                          const temp = newOptions[sIdx];
+                                          newOptions[sIdx] = newOptions[sIdx - 1];
+                                          newOptions[sIdx - 1] = temp;
+                                          handleUpdateQuestion(qIdx, 'options', newOptions);
+                                        }}
+                                        aria-label="Move sentence up"
+                                        className="p-1 rounded hover:bg-stone-100 text-slate-600 disabled:opacity-30 cursor-pointer"
+                                        title="Move sentence up"
+                                      >
+                                        <MoveUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isLastBlock}
+                                        onClick={() => {
+                                          const newOptions = [...((q.options as string[]) || [])];
+                                          const temp = newOptions[sIdx];
+                                          newOptions[sIdx] = newOptions[sIdx + 1];
+                                          newOptions[sIdx + 1] = temp;
+                                          handleUpdateQuestion(qIdx, 'options', newOptions);
+                                        }}
+                                        aria-label="Move sentence down"
+                                        className="p-1 rounded hover:bg-stone-100 text-slate-600 disabled:opacity-30 cursor-pointer"
+                                        title="Move sentence down"
+                                      >
+                                        <MoveDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newOptions = ((q.options as string[]) || []).filter((_, idx) => idx !== sIdx);
+                                          handleUpdateQuestion(qIdx, 'options', newOptions);
+                                        }}
+                                        aria-label="Delete sentence block"
+                                        className="p-1 rounded hover:bg-rose-100 text-rose-600 cursor-pointer"
+                                        title="Delete block"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newOptions = [...((q.options as string[]) || []), ''];
+                                handleUpdateQuestion(qIdx, 'options', newOptions);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-white hover:bg-stone-100 border border-dashed border-stone-300 text-[11px] font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3 text-[#026fc3]" />
+                              <span>Add Sentence Block</span>
+                            </button>
+                          </div>
+                        )}
+
                         {/* Fill in the Blank / Short Answer Correct Answer */}
                         {(qType === 'fill_blank' || qType === 'short_answer') && (
                           <div className="pt-1 space-y-1">
@@ -1520,15 +1622,35 @@ export const CourseEditorPage: React.FC = () => {
         hasVideo={hasVideoInLesson}
         hasImage={hasImageInLesson}
         onImportQuestions={(importedQuestions) => {
-          // Filter out any empty / default placeholder questions so they don't remain as Question 1
-          const realExistingQuestions = currentQuestions.filter(
-            q => q.question_text && q.question_text.trim() && q.question_text !== 'New practice question' && q.question_text !== 'Statement based on the lesson'
-          );
-          const combined = [...realExistingQuestions, ...importedQuestions].map((q, idx) => ({ ...q, order_index: idx }));
-          setCurrentQuestions(combined);
+          // Idempotent Question Import: Replace lesson practice questions with imported set
+          // Deduplicate by question_type + question_text
+          const seen = new Set<string>();
+          const deduplicated: CourseQuestion[] = [];
+
+          importedQuestions.forEach(q => {
+            const key = `${q.question_type}_${(q.question_text || '').trim().toLowerCase()}`;
+            if (!seen.has(key) && q.question_text && q.question_text.trim() && q.question_text !== 'New practice question' && q.question_text !== 'Statement based on the lesson') {
+              seen.add(key);
+              deduplicated.push(q);
+            }
+          });
+
+          const normalized = deduplicated.map((q, idx) => ({ ...q, order_index: idx }));
+          setCurrentQuestions(normalized);
           setSavingStatus('unsaved');
-          setSuccessBanner(`Successfully imported ${importedQuestions.length} practice questions.`);
-          setTimeout(() => setSuccessBanner(null), 3000);
+
+          // Summary counts for banner
+          const mcqCount = normalized.filter(q => q.question_type === 'multiple_choice').length;
+          const tfCount = normalized.filter(q => q.question_type === 'true_false').length;
+          const ordCount = normalized.filter(q => q.question_type === 'ordering').length;
+          
+          const parts: string[] = [];
+          if (mcqCount > 0) parts.push(`${mcqCount} Multiple Choice`);
+          if (tfCount > 0) parts.push(`${tfCount} True / False`);
+          if (ordCount > 0) parts.push(`${ordCount} Ordering Activity`);
+
+          setSuccessBanner(`✓ Lesson Imported: ${parts.join(', ')} (${normalized.length} Activities / Questions Imported)`);
+          setTimeout(() => setSuccessBanner(null), 4500);
         }}
       />
 

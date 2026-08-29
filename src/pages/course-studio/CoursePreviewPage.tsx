@@ -21,35 +21,8 @@ import { Course, CourseEpisode } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { CourseContentRenderer } from '@/components/course-studio/CourseContentRenderer';
 import { TextScale } from '@/utils/courseTextFormatting';
-
-type ReadingTheme = 'ivory' | 'sepia' | 'dark' | 'white';
-
-const THEME_STYLES: Record<ReadingTheme, { bg: string; text: string; barBg: string; border: string }> = {
-  ivory: {
-    bg: 'bg-[#fcfaf6]',
-    text: 'text-[#1c1917]',
-    barBg: 'bg-[#f7f4ed]/95',
-    border: 'border-stone-200/80'
-  },
-  sepia: {
-    bg: 'bg-[#f6f0e4]',
-    text: 'text-[#2d241e]',
-    barBg: 'bg-[#ede5d5]/95',
-    border: 'border-stone-300/80'
-  },
-  dark: {
-    bg: 'bg-[#121820]',
-    text: 'text-[#e2e8f0]',
-    barBg: 'bg-[#0b1017]/95',
-    border: 'border-slate-800'
-  },
-  white: {
-    bg: 'bg-[#ffffff]',
-    text: 'text-[#18181b]',
-    barBg: 'bg-white/95',
-    border: 'border-stone-200'
-  }
-};
+import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
+import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
 
 export const CoursePreviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -59,7 +32,7 @@ export const CoursePreviewPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
-  const [theme, setTheme] = useState<ReadingTheme>('ivory');
+  const [themeId, setThemeId] = useState<string>(DEFAULT_THEME_ID);
   const [textScale, setTextScale] = useState<TextScale>('md');
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -152,10 +125,10 @@ export const CoursePreviewPage: React.FC = () => {
     );
   }
 
-  const activeTheme = THEME_STYLES[theme];
+  const activeTheme = getThemePreset(themeId);
 
   return (
-    <div className={`w-full min-h-screen h-screen flex flex-col ${activeTheme.bg} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}>
+    <div className={`w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}>
       
       {/* 1. TOP READING PROGRESS LINE (Subtle 2px line) */}
       <div className="w-full h-0.5 bg-current/5 relative shrink-0">
@@ -166,7 +139,7 @@ export const CoursePreviewPage: React.FC = () => {
       </div>
 
       {/* 2. COMPACT EDITORIAL TOP BAR (Zero excessive vertical height) */}
-      <header className={`h-12 sm:h-14 ${activeTheme.barBg} backdrop-blur-md px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b ${activeTheme.border} transition-colors`}>
+      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b ${activeTheme.cardBorder} transition-colors`}>
         
         {/* Left: ← Course & Contents */}
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -227,27 +200,11 @@ export const CoursePreviewPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Theme Palette Switcher */}
-          <div className="flex items-center rounded-xl bg-current/5 p-1 border border-current/10 gap-1">
-            <button
-              type="button"
-              onClick={() => setTheme('ivory')}
-              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#fcfaf6] border transition-transform ${theme === 'ivory' ? 'scale-110 ring-2 ring-[#026fc3]' : 'border-stone-300'}`}
-              title="Ivory Paper Theme"
-            />
-            <button
-              type="button"
-              onClick={() => setTheme('sepia')}
-              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#f6f0e4] border transition-transform ${theme === 'sepia' ? 'scale-110 ring-2 ring-[#026fc3]' : 'border-stone-300'}`}
-              title="Warm Sepia Theme"
-            />
-            <button
-              type="button"
-              onClick={() => setTheme('dark')}
-              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#121820] border transition-transform ${theme === 'dark' ? 'scale-110 ring-2 ring-[#026fc3]' : 'border-stone-700'}`}
-              title="Night Dark Theme"
-            />
-          </div>
+          {/* 10 Gradient Presets Theme Switcher Popover */}
+          <ThemeSelectorPopover
+            activeThemeId={themeId}
+            onSelectTheme={setThemeId}
+          />
 
           {/* Bookmark Toggle */}
           <button
@@ -377,7 +334,7 @@ export const CoursePreviewPage: React.FC = () => {
           />
 
           {/* Drawer Panel */}
-          <div className={`relative w-80 max-w-[85vw] h-full ${activeTheme.bg} ${activeTheme.text} border-r ${activeTheme.border} p-5 sm:p-6 flex flex-col shadow-2xl z-10 animate-in slide-in-from-left duration-200 box-border`}>
+          <div className={`relative w-80 max-w-[85vw] h-full ${activeTheme.bgGradient} ${activeTheme.text} border-r ${activeTheme.cardBorder} p-5 sm:p-6 flex flex-col shadow-2xl z-10 animate-in slide-in-from-left duration-200 box-border`}>
             <div className="flex items-center justify-between pb-3 border-b border-current/15">
               <div className="space-y-0.5">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-[#026fc3]">Table of Contents</p>

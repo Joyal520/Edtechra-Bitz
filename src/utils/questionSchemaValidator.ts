@@ -193,7 +193,11 @@ export function buildAiQuestionPrompt(params: {
 
   plan.items.forEach((item, index) => {
     const label = QUESTION_TYPE_LABELS[item.type] || item.type;
-    prompt += `${index + 1}. ${label} — ${item.count} question${item.count > 1 ? 's' : ''} — Difficulty: ${item.difficulty.toUpperCase()}`;
+    if (item.type === 'ordering') {
+      prompt += `${index + 1}. Ordering — ONE activity containing ${item.count} sentence blocks — Difficulty: ${item.difficulty.toUpperCase()}`;
+    } else {
+      prompt += `${index + 1}. ${label} — ${item.count} question${item.count > 1 ? 's' : ''} — Difficulty: ${item.difficulty.toUpperCase()}`;
+    }
     if (item.instructions?.trim()) {
       prompt += ` (Instructions: ${item.instructions.trim()})`;
     }
@@ -210,11 +214,34 @@ export function buildAiQuestionPrompt(params: {
   prompt += `1. Generate ONLY the requested question types listed above. Do NOT include unused question types or empty question sets.\n`;
   prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0.\n`;
   prompt += `3. Do not include markdown code block backticks if possible, or wrap inside standard \`\`\`json block.\n`;
-  prompt += `4. Include exact question counts requested above (${plan.items.map(i => `${i.count} ${QUESTION_TYPE_LABELS[i.type]}`).join(', ')}).\n`;
+  prompt += `4. For Ordering: Create ONE ordering activity containing exactly the requested sentence count in the "items" array.\n`;
   prompt += `5. Provide a clear educational explanation for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
-  const exampleQuestionSets = plan.items.map(item => TYPE_EXAMPLE_TEMPLATES[item.type] || TYPE_EXAMPLE_TEMPLATES.multiple_choice);
+  const exampleQuestionSets = plan.items.map(item => {
+    if (item.type === 'ordering') {
+      return {
+        type: 'ordering',
+        questions: [
+          {
+            question: 'Arrange the story events in chronological order',
+            items: [
+              "The egg rolled away from the eagle's nest.",
+              "The egg reached a farm.",
+              "A chicken put the egg in her nest.",
+              "The eggs opened and the chicks came out.",
+              "The young bird flew higher and higher."
+            ],
+            explanation: 'The egg rolled away, hatched on the farm, and eventually learned to soar.',
+            difficulty: item.difficulty || 'medium',
+            points: 10
+          }
+        ]
+      };
+    }
+    return TYPE_EXAMPLE_TEMPLATES[item.type] || TYPE_EXAMPLE_TEMPLATES.multiple_choice;
+  });
+
   const exampleJson = {
     schema_version: '1.0',
     lesson: {
@@ -374,7 +401,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       } else if (typeKey === 'ordering') {
         if (!q.question) q.question = 'Arrange the story events in the correct order';
         if (!Array.isArray(q.items) || q.items.length < 2) {
-          errors.push(`${qNum}: Ordering question requires "items" array with at least 2 items.`);
+          errors.push(`${qNum}: Ordering question requires "items" array with at least 2 sentence blocks.`);
         }
       } else if (typeKey === 'short_answer') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
@@ -395,6 +422,17 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
       if (!seenTypes.has(planItem.type) || actualCount === 0) {
         errors.push(`Missing required question set: ${label} (Expected ${planItem.count} question${planItem.count > 1 ? 's' : ''}).`);
+      } else if (planItem.type === 'ordering') {
+        // For ordering, planItem.count is the number of sentences in the single ordering activity
+        const ordQuestions = parsed.question_sets.find((s: any) => s.type === 'ordering')?.questions || [];
+        if (ordQuestions.length !== 1) {
+          errors.push(`Ordering should contain 1 ordering activity (with ${planItem.count} sentences).`);
+        } else {
+          const itemCount = ordQuestions[0]?.items?.length || 0;
+          if (itemCount !== planItem.count) {
+            errors.push(`Ordering requires ${planItem.count} sentences, but JSON contains ${itemCount}. (Expected: ${planItem.count})`);
+          }
+        }
       } else if (actualCount !== planItem.count) {
         errors.push(`${label} requires ${planItem.count} questions, but JSON contains ${actualCount}. (Expected: ${planItem.count})`);
       }
