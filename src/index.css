@@ -281,3 +281,42 @@
   }
 }
 
+/* ========================================================================== */
+/* DARK THEME & COURSE PLAYER INPUT CONTRAST SYSTEM                           */
+/* Guarantees pure white typed text (#FFFFFF), visible caret, and light gray  */
+/* placeholders on all dark surfaces and browser autofill.                    */
+/* ========================================================================== */
+
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark [contenteditable="true"],
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] textarea {
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder,
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Chrome / Safari / Edge Autofill Dark Mode Correction */
+.dark input:-webkit-autofill,
+.dark textarea:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] textarea:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #182232 inset !important;
+  box-shadow: 0 0 0px 1000px #182232 inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+  caret-color: #ffffff !important;
+}
+
+

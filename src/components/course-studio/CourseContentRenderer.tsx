@@ -653,12 +653,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             }
                           }}
                           placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
-                          className={`flex-1 px-4 py-3 rounded-2xl border text-sm font-medium focus:ring-2 focus:ring-[#026fc3] focus:outline-none ${
+                          className={`flex-1 px-4 py-3 rounded-2xl border text-sm font-medium focus:ring-2 focus:ring-[#026fc3] focus:border-[#026fc3] focus:outline-none transition-all selection:bg-sky-500 selection:text-white ${
                             isLocked
                               ? feedback?.isCorrect
-                                ? 'bg-emerald-50 border-emerald-500 text-emerald-950'
-                                : 'bg-rose-50 border-rose-500 text-rose-950'
-                              : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700'
+                                ? 'bg-emerald-50 border-emerald-500 text-emerald-950 dark:bg-emerald-950/60 dark:border-emerald-500 dark:text-emerald-100'
+                                : 'bg-rose-50 border-rose-500 text-rose-950 dark:bg-rose-950/60 dark:border-rose-500 dark:text-rose-100'
+                              : 'bg-white text-slate-900 placeholder:text-stone-400 border-stone-200 dark:bg-[#182232] dark:text-white dark:placeholder:text-stone-400 dark:border-slate-700 caret-[#026fc3] dark:caret-white'
                           }`}
                         />
                         {!isLocked && (
