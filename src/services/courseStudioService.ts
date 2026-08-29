@@ -422,5 +422,20 @@ export const courseStudioService = {
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to record question attempt.');
     return json;
+  },
+
+  async getStudentQuestionAttempts(courseId: string, classroomId?: string, episodeId?: string) {
+    const headers = await getAuthHeader();
+    const params = new URLSearchParams();
+    if (courseId) params.append('course_id', courseId);
+    if (classroomId) params.append('classroom_id', classroomId);
+    if (episodeId) params.append('episode_id', episodeId);
+
+    const res = await fetch(`${API_BASE}/student/attempts?${params.toString()}`, {
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) return [];
+    return json.attempts || [];
   }
 };

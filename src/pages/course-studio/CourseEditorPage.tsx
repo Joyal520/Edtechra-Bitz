@@ -1520,7 +1520,12 @@ export const CourseEditorPage: React.FC = () => {
         hasVideo={hasVideoInLesson}
         hasImage={hasImageInLesson}
         onImportQuestions={(importedQuestions) => {
-          setCurrentQuestions(prev => [...prev, ...importedQuestions]);
+          // Filter out any empty / default placeholder questions so they don't remain as Question 1
+          const realExistingQuestions = currentQuestions.filter(
+            q => q.question_text && q.question_text.trim() && q.question_text !== 'New practice question' && q.question_text !== 'Statement based on the lesson'
+          );
+          const combined = [...realExistingQuestions, ...importedQuestions].map((q, idx) => ({ ...q, order_index: idx }));
+          setCurrentQuestions(combined);
           setSavingStatus('unsaved');
           setSuccessBanner(`Successfully imported ${importedQuestions.length} practice questions.`);
           setTimeout(() => setSuccessBanner(null), 3000);

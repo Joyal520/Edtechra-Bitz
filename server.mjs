@@ -2926,6 +2926,23 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment not found.' });
 
+    // Anti-Retry Protection: Reject duplicate submissions for the same question
+    const { data: existingAttempt } = await serverSupabase
+      .from('course_question_attempts')
+      .select('*')
+      .eq('enrollment_id', enrollment.id)
+      .eq('question_id', question_id)
+      .maybeSingle();
+
+    if (existingAttempt) {
+      return res.status(409).json({
+        success: false,
+        already_answered: true,
+        error: 'Question already answered.',
+        attempt: existingAttempt
+      });
+    }
+
     const { data: attempt, error: attErr } = await serverSupabase
       .from('course_question_attempts')
       .insert({
@@ -2979,6 +2996,34 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
   } catch (err) {
     console.error('Error in question attempt:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to record attempt.' });
+  }
+});
+
+// 23b. GET /api/course-studio/student/attempts - Get student question attempts for persistence
+app.get('/api/course-studio/student/attempts', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { course_id, classroom_id, episode_id } = req.query;
+    const student_id = authData.user.id;
+
+    let query = serverSupabase
+      .from('course_question_attempts')
+      .select('*')
+      .eq('student_id', student_id);
+
+    if (course_id) query = query.eq('course_id', course_id);
+    if (classroom_id) query = query.eq('classroom_id', classroom_id);
+    if (episode_id) query = query.eq('episode_id', episode_id);
+
+    const { data: attempts, error } = await query;
+    if (error) throw error;
+
+    res.json({ success: true, attempts: attempts || [] });
+  } catch (err) {
+    console.error('Error fetching student attempts:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch attempts.' });
   }
 });
 

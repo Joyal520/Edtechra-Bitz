@@ -72,6 +72,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [completingEpisode, setCompletingEpisode] = useState(false);
   const [userScore, setUserScore] = useState(0);
 
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
+  const [feedbackState, setFeedbackState] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
+
   const mainScrollRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -79,6 +82,34 @@ export const StudentCoursePlayerPage: React.FC = () => {
       loadCourseAndProgress(courseId, classroomId);
     }
   }, [courseId, classroomId]);
+
+  useEffect(() => {
+    if (courseId && classroomId && selectedEpisode) {
+      loadEpisodeAttempts(courseId, classroomId, selectedEpisode.id);
+    }
+  }, [courseId, classroomId, selectedEpisode?.id]);
+
+  const loadEpisodeAttempts = async (cId: string, clId: string, epId: string) => {
+    try {
+      const attempts = await courseStudioService.getStudentQuestionAttempts(cId, clId, epId);
+      const answersMap: Record<string, string> = {};
+      const feedbackMap: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }> = {};
+
+      attempts.forEach((att: any) => {
+        answersMap[att.question_id] = att.student_answer;
+        feedbackMap[att.question_id] = {
+          isCorrect: att.is_correct,
+          showExplanation: true,
+          selected: att.student_answer
+        };
+      });
+
+      setUserAnswers(answersMap);
+      setFeedbackState(feedbackMap);
+    } catch (err) {
+      console.error('Failed to load past attempts:', err);
+    }
+  };
 
   const loadCourseAndProgress = async (cId: string, clId: string) => {
     setLoading(true);
@@ -389,7 +420,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
             questions={selectedEpisode.questions || []}
             isStudentView={true}
             textScale={textScale}
+            userAnswers={userAnswers}
+            feedbackState={feedbackState}
             onQuestionAnswer={handleQuestionAnswer}
+            onCompleteLesson={handleCompleteEpisode}
           />
 
           {/* MINIMAL EDITORIAL LESSON FOOTER */}

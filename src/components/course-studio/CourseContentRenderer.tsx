@@ -1,23 +1,30 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: MOBILE-FIRST EDITORIAL CONTENT RENDERER
-// Apple Books & Kindle inspired reading-first digital lesson layout.
-// Standard 14px body reading typography with 700-800px max reading width.
-// Fully supports all 6 question types: Multiple Choice, True/False, Fill Blank,
-// Matching, Ordering, and Short Answer with instant interactive feedback.
+// EDTECHRA DIGITAL CLASSROOM: PREMIUM INTERACTIVE COURSE CONTENT RENDERER
+// Apple Books & Kindle inspired editorial reading typography (14px body)
+// paired with a Game-Quality, Rewarding Interactive Practice Question Engine.
+// Immediate 1-click evaluation, one-attempt locking, Web Audio chimes,
+// contained canvas confetti, and full support for all 6 question types.
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   XCircle,
   Sparkles,
   Check,
-  ArrowUpDown,
-  Send
+  X,
+  Volume2,
+  VolumeX,
+  ArrowRight,
+  Send,
+  Award
 } from 'lucide-react';
 import { CourseBlock, CourseQuestion, QuestionType } from '@/types/courseStudio';
 import { FormattedLessonText, TextScale } from '@/utils/courseTextFormatting';
 import { QUESTION_TYPE_LABELS } from '@/utils/questionSchemaValidator';
+import { courseAudio } from '@/utils/courseAudio';
+import { triggerConfettiBurst } from '@/utils/courseConfetti';
+import { DraggableOrderingQuestion } from '@/components/course-studio/DraggableOrderingQuestion';
 
 interface Props {
   blocks: CourseBlock[];
@@ -31,6 +38,7 @@ interface Props {
     pointsAwarded: number,
     question: CourseQuestion
   ) => void;
+  onCompleteLesson?: () => void;
   userAnswers?: Record<string, string>;
   feedbackState?: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>;
 }
@@ -40,17 +48,64 @@ export const CourseContentRenderer: React.FC<Props> = ({
   questions = [],
   textScale = 'md',
   onQuestionAnswer,
+  onCompleteLesson,
   userAnswers = {},
   feedbackState = {}
 }) => {
+  // Filter out any invalid / dummy placeholder questions from rendering
+  const validQuestions = questions.filter(
+    q => q && q.question_text && q.question_text.trim() && q.question_text !== 'New practice question' && q.question_text !== 'Statement based on the lesson'
+  );
+
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>(userAnswers);
   const [localFeedback, setLocalFeedback] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>(feedbackState);
+  const [submittingIds, setSubmittingIds] = useState<Set<string>>(new Set());
+  const [shakeId, setShakeId] = useState<string | null>(null);
+  
+  // Custom inputs for typed questions
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(courseAudio.isSoundEnabled());
 
-  const handleEvaluateAnswer = (question: CourseQuestion, studentAnswer: string) => {
+  // Sync external answers if component updates
+  useEffect(() => {
+    if (Object.keys(userAnswers).length > 0) {
+      setLocalAnswers(prev => ({ ...prev, ...userAnswers }));
+    }
+  }, [userAnswers]);
+
+  useEffect(() => {
+    if (Object.keys(feedbackState).length > 0) {
+      setLocalFeedback(prev => ({ ...prev, ...feedbackState }));
+    }
+  }, [feedbackState]);
+
+  const handleToggleSound = () => {
+    const next = courseAudio.toggleSound();
+    setSoundEnabled(next);
+  };
+
+  // --------------------------------------------------------------------------
+  // ONE ATTEMPT EVALUATION ENGINE
+  // --------------------------------------------------------------------------
+  const handleEvaluateAnswer = (
+    question: CourseQuestion,
+    studentAnswer: string,
+    targetElement?: HTMLElement | null
+  ) => {
+    const qId = question.id;
+
+    // CRITICAL: Strict anti-retry lock - once answered or currently submitting, reject!
+    if (localAnswers[qId] || localFeedback[qId] || submittingIds.has(qId)) {
+      return;
+    }
+
+    // Mark as submitting immediately to prevent rapid double-clicks
+    setSubmittingIds(prev => new Set(prev).add(qId));
+    courseAudio.playSelectSound();
+
     let isCorrect = false;
     const cleanStudent = studentAnswer.trim().toLowerCase();
-    const cleanCorrect = question.correct_answer.trim().toLowerCase();
+    const cleanCorrect = (question.correct_answer || '').trim().toLowerCase();
 
     if (question.question_type === 'multiple_choice' || question.question_type === 'true_false' || question.question_type === 'fill_blank') {
       isCorrect = cleanStudent === cleanCorrect;
@@ -59,24 +114,60 @@ export const CourseContentRenderer: React.FC<Props> = ({
         ? question.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || '').trim().toLowerCase())
         : [];
       isCorrect = cleanStudent === cleanCorrect || acceptable.includes(cleanStudent);
+    } else if (question.question_type === 'ordering') {
+      // Compare sequence
+      const correctSeq = Array.isArray(question.options) ? question.options.join('|||').toLowerCase() : '';
+      isCorrect = studentAnswer.toLowerCase() === correctSeq;
     } else {
       isCorrect = cleanStudent === cleanCorrect;
     }
 
     const pointsAwarded = isCorrect ? (question.points || 10) : 0;
 
-    setLocalAnswers(prev => ({ ...prev, [question.id]: studentAnswer }));
+    // Trigger audio and visual effects
+    if (isCorrect) {
+      setTimeout(() => {
+        courseAudio.playCorrectSound();
+        triggerConfettiBurst(targetElement, 36);
+      }, 50);
+    } else {
+      setShakeId(qId);
+      setTimeout(() => {
+        courseAudio.playIncorrectSound();
+      }, 50);
+      setTimeout(() => {
+        setShakeId(null);
+      }, 600);
+    }
+
+    // Permanently lock state in React memory
+    setLocalAnswers(prev => ({ ...prev, [qId]: studentAnswer }));
     setLocalFeedback(prev => ({
       ...prev,
-      [question.id]: {
+      [qId]: {
         isCorrect,
         showExplanation: true,
         selected: studentAnswer
       }
     }));
 
+    setSubmittingIds(prev => {
+      const next = new Set(prev);
+      next.delete(qId);
+      return next;
+    });
+
     if (onQuestionAnswer) {
-      onQuestionAnswer(question.id, studentAnswer, isCorrect, pointsAwarded, question);
+      onQuestionAnswer(qId, studentAnswer, isCorrect, pointsAwarded, question);
+    }
+
+    // Check if this was the last question in the set
+    const answeredCount = Object.keys(localAnswers).length + 1;
+    if (answeredCount >= validQuestions.length && validQuestions.length > 0) {
+      setTimeout(() => {
+        courseAudio.playCompleteSound();
+        triggerConfettiBurst(null, 50);
+      }, 800);
     }
   };
 
@@ -102,17 +193,26 @@ export const CourseContentRenderer: React.FC<Props> = ({
     return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`;
   };
 
+  // Progress metrics
+  const answeredTotal = Object.keys(localFeedback).length;
+  const correctTotal = Object.values(localFeedback).filter(f => f.isCorrect).length;
+  const incorrectTotal = answeredTotal - correctTotal;
+  const totalPointsPossible = validQuestions.reduce((sum, q) => sum + (q.points || 10), 0);
+  const earnedPoints = validQuestions.reduce((sum, q) => {
+    const fb = localFeedback[q.id];
+    return sum + (fb?.isCorrect ? (q.points || 10) : 0);
+  }, 0);
+  const isAllAnswered = validQuestions.length > 0 && answeredTotal >= validQuestions.length;
+
   return (
-    <div className="w-full max-w-[760px] mx-auto space-y-10 sm:space-y-14 py-2 antialiased font-sans text-inherit box-border overflow-x-hidden">
+    <div className="w-full max-w-[760px] mx-auto space-y-12 sm:space-y-16 py-4 antialiased font-sans text-inherit box-border overflow-x-hidden">
       
-      {/* 1. STORY & LESSON CONTENT STREAM */}
+      {/* 1. LESSON CONTENT STREAM */}
       <div className="w-full space-y-8 sm:space-y-12">
         {blocks.map((block, idx) => {
           const { block_type, content } = block;
 
-          // ------------------------------------------------------------------
           // A. PURE TEXT SECTION
-          // ------------------------------------------------------------------
           if (block_type === 'text' && !(content as any)?.image?.url && !(content as any)?.video?.url) {
             const textContent = content as any;
             const bodyText = textContent?.text || textContent?.markdown || '';
@@ -131,11 +231,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
-          // ------------------------------------------------------------------
-          // B. COMBINED TEXT + IMAGE SECTION (Editorial story illustration)
-          // On mobile (< md): Image is ALWAYS 100% width ABOVE the text!
-          // On desktop (>= md): Floats left/right or full-width above/below.
-          // ------------------------------------------------------------------
+          // B. COMBINED TEXT + IMAGE SECTION
           if (block_type === 'text_image' || (block_type === 'text' && (content as any)?.image?.url)) {
             const item = content as any;
             const img = item.image || {};
@@ -150,7 +246,6 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </h3>
                 )}
 
-                {/* Mobile-First Image: If above, or on mobile for left/right */}
                 {(pos === 'above' || pos === 'left' || pos === 'right') && img.url && (
                   <figure className={`w-full my-6 sm:my-8 ${
                     pos === 'left'
@@ -175,10 +270,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </figure>
                 )}
 
-                {/* Body Text */}
                 <FormattedLessonText text={bodyText} textScale={textScale} />
 
-                {/* Image Position: BELOW */}
                 {pos === 'below' && img.url && (
                   <figure className="w-full my-6 sm:my-8 max-w-[800px] mx-auto">
                     <div className="w-full rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-xs border border-black/5 dark:border-white/10">
@@ -200,9 +293,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
-          // ------------------------------------------------------------------
           // C. COMBINED TEXT + VIDEO SECTION
-          // ------------------------------------------------------------------
           if (block_type === 'text_video' || (block_type === 'text' && (content as any)?.video?.url)) {
             const item = content as any;
             const vid = item.video || {};
@@ -257,9 +348,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
-          // ------------------------------------------------------------------
           // D. STANDALONE IMAGE SECTION
-          // ------------------------------------------------------------------
           if (block_type === 'image') {
             const imgContent = content as any;
             if (!imgContent?.url) return null;
@@ -283,9 +372,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
-          // ------------------------------------------------------------------
-          // E. STANDALONE YOUTUBE / VIDEO (16:9)
-          // ------------------------------------------------------------------
+          // E. STANDALONE YOUTUBE VIDEO (16:9)
           if (block_type === 'youtube_video' || (block_type === 'video' && !(content as any)?.is_short)) {
             const yt = content as any;
             const embedUrl = getYouTubeEmbedUrl(yt?.url || yt?.video_id);
@@ -310,9 +397,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
-          // ------------------------------------------------------------------
-          // F. STANDALONE YOUTUBE SHORTS (9:16 Vertical Player)
-          // ------------------------------------------------------------------
+          // F. STANDALONE YOUTUBE SHORTS (9:16)
           if (block_type === 'youtube_short' || (block_type === 'video' && (content as any)?.is_short)) {
             const yt = content as any;
             const embedUrl = getYouTubeEmbedUrl(yt?.url || yt?.video_id);
@@ -341,30 +426,83 @@ export const CourseContentRenderer: React.FC<Props> = ({
         })}
       </div>
 
-      {/* 2. ACTIVITY TRANSITION (Seamless Editorial Book Transition) */}
-      {questions.length > 0 && (
-        <section className="w-full pt-8 sm:pt-14 border-t border-current/15 space-y-6 sm:space-y-8">
+      {/* 2. REFINED INTERACTIVE PRACTICE SECTION */}
+      {validQuestions.length > 0 && (
+        <section className="w-full pt-10 sm:pt-16 border-t border-stone-200/80 dark:border-stone-800 space-y-8 sm:space-y-10">
           
-          {/* Editorial Section Divider & Title */}
-          <div className="text-center space-y-1.5 pb-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-current/5 text-[11px] font-bold uppercase tracking-widest opacity-80">
-              <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
-              <span>Comprehension & Practice</span>
+          {/* Practice Section Header & Real-Time Status Bar */}
+          <div className="bg-white/80 dark:bg-stone-900/80 rounded-3xl p-5 sm:p-6 border border-stone-200/90 dark:border-stone-800 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[11px] font-black uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
+                  <span>Interactive Practice</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Think About the Story
+                </h3>
+              </div>
+
+              {/* Sound Toggle Control */}
+              <button
+                type="button"
+                onClick={handleToggleSound}
+                className="px-3.5 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                title="Toggle Question Sound Effects"
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4 text-[#026fc3]" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                <span>{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
+              </button>
             </div>
-            <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-inherit">
-              Think About the Story
-            </h3>
-            <p className="text-xs sm:text-sm opacity-75 max-w-md mx-auto font-serif italic">
-              Reflect on what you’ve read and check your understanding.
-            </p>
+
+            {/* Question Progress Tracker & Score Badge */}
+            <div className="pt-2 border-t border-stone-100 dark:border-stone-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                  Progress:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {validQuestions.map((q, idx) => {
+                    const fb = localFeedback[q.id];
+                    return (
+                      <div
+                        key={q.id || idx}
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${
+                          fb
+                            ? fb.isCorrect
+                              ? 'bg-emerald-500 text-white shadow-xs'
+                              : 'bg-rose-500 text-white shadow-xs'
+                            : 'bg-stone-100 dark:bg-stone-800 text-slate-400 border border-stone-200/80 dark:border-stone-700'
+                        }`}
+                        title={`Question ${idx + 1}: ${fb ? (fb.isCorrect ? 'Correct' : 'Incorrect') : 'Unanswered'}`}
+                      >
+                        {fb ? (fb.isCorrect ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />) : idx + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {answeredTotal} / {validQuestions.length} answered
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 font-black text-xs">
+                  {earnedPoints} / {totalPointsPossible} pts
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Interactive Editorial Questions */}
+          {/* Interactive Question Cards Stream */}
           <div className="w-full space-y-6 sm:space-y-8">
-            {questions.map((q, qIndex) => {
-              const feedback = localFeedback[q.id];
-              const selectedAnswer = localAnswers[q.id];
-              const isAnswered = Boolean(selectedAnswer);
+            {validQuestions.map((q, qIndex) => {
+              const qId = q.id;
+              const feedback = localFeedback[qId];
+              const selectedAnswer = localAnswers[qId];
+              const isLocked = Boolean(selectedAnswer || feedback);
+              const isSubmitting = submittingIds.has(qId);
+              const isShaking = shakeId === qId;
               const qType = (q.question_type || 'multiple_choice') as QuestionType;
 
               // Normalize options array
@@ -374,52 +512,63 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
               return (
                 <div
-                  key={q.id || qIndex}
-                  className="w-full rounded-2xl p-5 sm:p-6 bg-current/3 border border-current/10 space-y-4 transition-all box-border text-[14px]"
+                  key={qId || qIndex}
+                  id={`question-card-${qId}`}
+                  className={`w-full rounded-3xl p-6 sm:p-8 bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-sm space-y-5 transition-all box-border ${
+                    isShaking ? 'animate-shake ring-2 ring-rose-400' : ''
+                  }`}
                 >
-                  {/* Question Header */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#026fc3]">
-                          Question {qIndex + 1}
-                        </span>
-                        <span className="text-[10px] font-bold opacity-60 uppercase px-2 py-0.5 rounded bg-current/5">
-                          {QUESTION_TYPE_LABELS[qType] || qType}
-                        </span>
-                      </div>
-                      <h4 className="text-sm sm:text-base font-bold text-inherit leading-snug text-left">
-                        {q.question_text}
-                      </h4>
-                    </div>
-                    {q.points && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-bold shrink-0">
-                        {q.points} pts
+                  {/* Question Card Header */}
+                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3]">
+                        QUESTION {String(qIndex + 1).padStart(2, '0')}
                       </span>
-                    )}
+                      <span className="text-[10px] font-black opacity-60 uppercase px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300">
+                        {QUESTION_TYPE_LABELS[qType] || qType}
+                      </span>
+                    </div>
+
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-black shrink-0">
+                      {q.points || 10} POINTS
+                    </span>
                   </div>
 
+                  {/* Question Prompt */}
+                  <h4 className="text-base sm:text-lg md:text-[19px] font-bold text-slate-900 dark:text-white leading-snug text-left">
+                    {q.question_text}
+                  </h4>
+
                   {/* -------------------------------------------------------- */}
-                  {/* TYPE 1: MULTIPLE CHOICE                                  */}
+                  {/* 1. MULTIPLE CHOICE ANSWER CARDS                          */}
                   {/* -------------------------------------------------------- */}
                   {qType === 'multiple_choice' && (
-                    <div className="w-full space-y-2 pt-1">
+                    <div className="w-full space-y-3 pt-1">
                       {optionsList.map((optText, optIdx) => {
                         const letter = String.fromCharCode(65 + optIdx);
                         const isSelected = selectedAnswer === optText;
-                        const isCorrectAnswer = optText.trim().toLowerCase() === q.correct_answer.trim().toLowerCase();
+                        const isCorrectOption = optText.trim().toLowerCase() === (q.correct_answer || '').trim().toLowerCase();
 
-                        let btnStyle = 'bg-white/80 dark:bg-stone-800/80 border-current/15 hover:border-current/30 text-inherit hover:bg-white dark:hover:bg-stone-800';
+                        // Dynamic state styling
+                        let cardStyle = 'bg-white dark:bg-stone-900/90 border-stone-200/90 dark:border-stone-700/80 hover:border-[#026fc3] hover:bg-sky-50/30 dark:hover:bg-stone-800/80 text-slate-800 dark:text-slate-100 shadow-2xs';
+                        let badgeStyle = 'bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300 border border-stone-200/60 dark:border-stone-700';
 
-                        if (isAnswered) {
-                          if (isSelected && feedback?.isCorrect) {
-                            btnStyle = 'bg-emerald-500/15 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-bold';
-                          } else if (isSelected && !feedback?.isCorrect) {
-                            btnStyle = 'bg-rose-500/15 border-rose-600 text-rose-950 dark:text-rose-200 font-bold';
-                          } else if (isCorrectAnswer) {
-                            btnStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-900 dark:text-emerald-300';
+                        if (isLocked) {
+                          if (isSelected) {
+                            if (feedback?.isCorrect) {
+                              cardStyle = 'bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs ring-1 ring-emerald-400/20';
+                              badgeStyle = 'bg-emerald-600 text-white shadow-xs';
+                            } else {
+                              cardStyle = 'bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500 text-rose-950 dark:text-rose-100 shadow-xs ring-1 ring-rose-400/20';
+                              badgeStyle = 'bg-rose-600 text-white shadow-xs';
+                            }
+                          } else if (!feedback?.isCorrect && isCorrectOption) {
+                            // Reveal the correct option if the student was wrong
+                            cardStyle = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/70 text-emerald-900 dark:text-emerald-200';
+                            badgeStyle = 'bg-emerald-500/20 text-emerald-800 border border-emerald-500/40';
                           } else {
-                            btnStyle = 'opacity-40 border-current/10';
+                            cardStyle = 'opacity-40 border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/40';
+                            badgeStyle = 'bg-stone-100 text-stone-400 dark:bg-stone-800';
                           }
                         }
 
@@ -427,23 +576,30 @@ export const CourseContentRenderer: React.FC<Props> = ({
                           <button
                             key={optIdx}
                             type="button"
-                            onClick={() => handleEvaluateAnswer(q, optText)}
-                            className={`w-full p-3 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-center gap-3 cursor-pointer shadow-2xs box-border ${btnStyle}`}
+                            disabled={isLocked || isSubmitting}
+                            onClick={(e) => handleEvaluateAnswer(q, optText, e.currentTarget)}
+                            className={`w-full min-h-[54px] p-3.5 sm:p-4 rounded-2xl border text-left text-sm sm:text-[15px] transition-all flex items-center gap-3.5 box-border ${
+                              isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+                            } ${cardStyle}`}
                           >
-                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
-                              isSelected
-                                ? feedback?.isCorrect
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-rose-600 text-white'
-                                : 'bg-current/10 text-inherit'
-                            }`}>
+                            <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors ${badgeStyle}`}>
                               {isSelected ? (
-                                feedback?.isCorrect ? <Check className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />
+                                feedback?.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />
                               ) : (
                                 letter
                               )}
                             </span>
-                            <span className="flex-1 leading-relaxed break-words">{optText}</span>
+
+                            <span className="flex-1 leading-relaxed break-words font-medium">
+                              {optText}
+                            </span>
+
+                            {/* Correct Answer Badge when revealed */}
+                            {isLocked && !feedback?.isCorrect && isCorrectOption && (
+                              <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 uppercase px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50 shrink-0">
+                                Correct Answer
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -451,25 +607,28 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   )}
 
                   {/* -------------------------------------------------------- */}
-                  {/* TYPE 2: TRUE / FALSE                                     */}
+                  {/* 2. TRUE / FALSE ANSWER CARDS                             */}
                   {/* -------------------------------------------------------- */}
                   {qType === 'true_false' && (
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      {['True', 'False'].map((choice) => {
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {['True', 'False'].map(choice => {
                         const isSelected = selectedAnswer === choice;
-                        const isCorrectChoice = choice.toLowerCase() === q.correct_answer.toLowerCase();
+                        const isCorrectChoice = choice.toLowerCase() === (q.correct_answer || '').toLowerCase();
 
-                        let btnStyle = 'bg-white/80 dark:bg-stone-800/80 border-current/15 hover:border-current/30 text-inherit';
+                        let cardStyle = 'bg-white dark:bg-stone-900/90 border-stone-200/90 dark:border-stone-700/80 hover:border-[#026fc3] hover:bg-sky-50/30 text-slate-800 dark:text-slate-100';
+                        let icon = choice === 'True' ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-rose-500" />;
 
-                        if (isAnswered) {
-                          if (isSelected && feedback?.isCorrect) {
-                            btnStyle = 'bg-emerald-500/15 border-emerald-600 text-emerald-950 dark:text-emerald-200 font-bold';
-                          } else if (isSelected && !feedback?.isCorrect) {
-                            btnStyle = 'bg-rose-500/15 border-rose-600 text-rose-950 dark:text-rose-200 font-bold';
-                          } else if (isCorrectChoice) {
-                            btnStyle = 'bg-emerald-500/10 border-emerald-500/40 text-emerald-900 dark:text-emerald-300';
+                        if (isLocked) {
+                          if (isSelected) {
+                            if (feedback?.isCorrect) {
+                              cardStyle = 'bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs';
+                            } else {
+                              cardStyle = 'bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500 text-rose-950 dark:text-rose-100 shadow-xs';
+                            }
+                          } else if (!feedback?.isCorrect && isCorrectChoice) {
+                            cardStyle = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/70 text-emerald-900 dark:text-emerald-200';
                           } else {
-                            btnStyle = 'opacity-40 border-current/10';
+                            cardStyle = 'opacity-40 border-stone-200 dark:border-stone-800 bg-stone-50/50';
                           }
                         }
 
@@ -477,10 +636,14 @@ export const CourseContentRenderer: React.FC<Props> = ({
                           <button
                             key={choice}
                             type="button"
-                            onClick={() => handleEvaluateAnswer(q, choice)}
-                            className={`p-3.5 rounded-xl border text-center text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-2xs ${btnStyle}`}
+                            disabled={isLocked || isSubmitting}
+                            onClick={(e) => handleEvaluateAnswer(q, choice, e.currentTarget)}
+                            className={`p-4 rounded-2xl border text-center text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                              isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
+                            } ${cardStyle}`}
                           >
-                            {choice}
+                            <span>{icon}</span>
+                            <span className="uppercase tracking-wider">{choice}</span>
                           </button>
                         );
                       })}
@@ -488,33 +651,39 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   )}
 
                   {/* -------------------------------------------------------- */}
-                  {/* TYPE 3 & 6: FILL IN THE BLANK / SHORT ANSWER             */}
+                  {/* 3. FILL IN THE BLANK / SHORT ANSWER                      */}
                   {/* -------------------------------------------------------- */}
                   {(qType === 'fill_blank' || qType === 'short_answer') && (
-                    <div className="pt-1 space-y-2">
+                    <div className="pt-1 space-y-3">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
-                          disabled={isAnswered}
-                          value={textInputs[q.id] || selectedAnswer || ''}
-                          onChange={e => setTextInputs(prev => ({ ...prev, [q.id]: e.target.value }))}
+                          disabled={isLocked || isSubmitting}
+                          value={textInputs[qId] || selectedAnswer || ''}
+                          onChange={e => setTextInputs(prev => ({ ...prev, [qId]: e.target.value }))}
                           onKeyDown={e => {
-                            if (e.key === 'Enter' && textInputs[q.id]?.trim()) {
-                              handleEvaluateAnswer(q, textInputs[q.id]);
+                            if (e.key === 'Enter' && textInputs[qId]?.trim() && !isLocked) {
+                              handleEvaluateAnswer(q, textInputs[qId], e.currentTarget);
                             }
                           }}
                           placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
-                          className="flex-1 px-3.5 py-2.5 rounded-xl border border-current/20 bg-white/80 dark:bg-stone-800/80 text-xs sm:text-sm text-inherit focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
+                          className={`flex-1 px-4 py-3 rounded-2xl border text-sm font-medium focus:ring-2 focus:ring-[#026fc3] focus:outline-none ${
+                            isLocked
+                              ? feedback?.isCorrect
+                                ? 'bg-emerald-50 border-emerald-500 text-emerald-950'
+                                : 'bg-rose-50 border-rose-500 text-rose-950'
+                              : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700'
+                          }`}
                         />
-                        {!isAnswered && (
+                        {!isLocked && (
                           <button
                             type="button"
-                            disabled={!textInputs[q.id]?.trim()}
-                            onClick={() => handleEvaluateAnswer(q, textInputs[q.id] || '')}
-                            className="px-4 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                            disabled={!textInputs[qId]?.trim() || isSubmitting}
+                            onClick={(e) => handleEvaluateAnswer(q, textInputs[qId] || '', e.currentTarget)}
+                            className="px-5 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>Check</span>
+                            <span>Submit</span>
                           </button>
                         )}
                       </div>
@@ -522,63 +691,68 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   )}
 
                   {/* -------------------------------------------------------- */}
-                  {/* TYPE 4: MATCHING PAIRS                                   */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'matching' && (
-                    <div className="pt-1 space-y-2">
-                      <div className="p-3 rounded-xl bg-current/5 border border-current/10 text-xs space-y-1.5">
-                        <p className="font-bold opacity-80">Reference Matching Pairs:</p>
-                        <div className="space-y-1">
-                          {optionsList.map((pairStr, pIdx) => (
-                            <div key={pIdx} className="flex items-center justify-between p-2 rounded-lg bg-white/80 dark:bg-stone-800/80 border border-current/10 text-xs">
-                              <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
-                              <span className="text-[#026fc3] font-mono font-bold">⇄</span>
-                              <span className="opacity-90">{pairStr.split('->')[1]?.trim()}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* TYPE 5: ORDERING SEQUENCE                                */}
+                  {/* 4. ORDERING SEQUENCE (DRAG & ARRANGE SENTENCE BLOCKS)     */}
                   {/* -------------------------------------------------------- */}
                   {qType === 'ordering' && (
-                    <div className="pt-1 space-y-2">
-                      <div className="p-3 rounded-xl bg-current/5 border border-current/10 text-xs space-y-1.5">
-                        <p className="font-bold opacity-80 flex items-center gap-1">
-                          <ArrowUpDown className="w-3.5 h-3.5" />
-                          <span>Correct Sequence:</span>
-                        </p>
-                        <ol className="list-decimal pl-5 space-y-1 text-xs">
-                          {optionsList.map((itemStr, oIdx) => (
-                            <li key={oIdx} className="font-medium">{itemStr}</li>
-                          ))}
-                        </ol>
+                    <DraggableOrderingQuestion
+                      question={q}
+                      isLocked={isLocked}
+                      isSubmitting={isSubmitting}
+                      selectedAnswer={selectedAnswer}
+                      feedback={feedback}
+                      onEvaluateAnswer={handleEvaluateAnswer}
+                    />
+                  )}
+
+                  {/* -------------------------------------------------------- */}
+                  {/* 5. MATCHING PAIRS                                        */}
+                  {qType === 'matching' && (
+                    <div className="pt-1 space-y-3">
+                      <div className="space-y-2">
+                        {optionsList.map((pairStr, pIdx) => (
+                          <div key={pIdx} className="flex items-center justify-between p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 text-xs">
+                            <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
+                            <span className="text-[#026fc3] font-bold">⇄</span>
+                            <span className="font-medium">{pairStr.split('->')[1]?.trim()}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Immediate Explanation Callout */}
-                  {feedback?.showExplanation && (
+                  {/* -------------------------------------------------------- */}
+                  {/* REFINED EXPLANATION CARD (Locked state for standard Qs)  */}
+                  {/* -------------------------------------------------------- */}
+                  {qType !== 'ordering' && feedback?.showExplanation && (
                     <div
-                      className={`p-3.5 sm:p-4 rounded-xl text-xs leading-relaxed border transition-all animate-in fade-in duration-200 ${
+                      className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 ${
                         feedback.isCorrect
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200'
-                          : 'bg-rose-500/10 border-rose-500/30 text-rose-950 dark:text-rose-200'
+                          ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200'
+                          : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-200'
                       }`}
                     >
-                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                      <div className="flex items-center gap-2 font-black mb-1.5">
                         {feedback.isCorrect ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>✓ Correct! Excellent work.</span>
+                          </>
                         ) : (
-                          <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <>
+                            <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span>✕ Not quite.</span>
+                          </>
                         )}
-                        <span>{feedback.isCorrect ? 'Well done!' : 'Keep trying!'}</span>
                       </div>
-                      <p className="opacity-90">
-                        {q.explanation || (feedback.isCorrect ? 'Your answer is correct.' : `The correct answer is: ${q.correct_answer}.`)}
+
+                      {!feedback.isCorrect && q.correct_answer && (
+                        <p className="font-bold text-slate-900 dark:text-white mb-1">
+                          Correct Answer: <span className="text-emerald-700 dark:text-emerald-300">{q.correct_answer}</span>
+                        </p>
+                      )}
+
+                      <p className="opacity-90 leading-relaxed font-medium">
+                        {q.explanation || (feedback.isCorrect ? 'Your answer is correct based on the lesson.' : 'Review the lesson material to strengthen your understanding.')}
                       </p>
                     </div>
                   )}
@@ -586,6 +760,53 @@ export const CourseContentRenderer: React.FC<Props> = ({
               );
             })}
           </div>
+
+          {/* ---------------------------------------------------------------- */}
+          {/* LESSON PRACTICE COMPLETION CARD                                  */}
+          {/* ---------------------------------------------------------------- */}
+          {isAllAnswered && (
+            <div className="w-full bg-linear-to-b from-sky-50 to-white dark:from-stone-900 dark:to-stone-950 rounded-3xl p-6 sm:p-8 border border-sky-200 dark:border-slate-800 shadow-md text-center space-y-5 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-[#026fc3] text-white flex items-center justify-center mx-auto shadow-md">
+                <Award className="w-7 h-7" />
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3]">
+                  Lesson Practice Completed
+                </span>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                  Great job! You finished all practice questions.
+                </h3>
+              </div>
+
+              {/* Score Breakdown */}
+              <div className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
+                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Score</span>
+                  <span className="text-lg font-black text-slate-900 dark:text-white">{earnedPoints} / {totalPointsPossible}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Correct</span>
+                  <span className="text-lg font-black text-emerald-600">{correctTotal}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Incorrect</span>
+                  <span className="text-lg font-black text-rose-500">{incorrectTotal}</span>
+                </div>
+              </div>
+
+              {onCompleteLesson && (
+                <button
+                  type="button"
+                  onClick={onCompleteLesson}
+                  className="px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Continue to Next Lesson</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
 
         </section>
       )}

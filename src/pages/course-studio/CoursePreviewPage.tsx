@@ -293,12 +293,30 @@ export const CoursePreviewPage: React.FC = () => {
             )}
           </header>
 
+          {/* INCOMPLETE QUESTIONS PREVIEW NOTICE */}
+          {(selectedEpisode.questions || []).some(q => !q.question_text || !q.question_text.trim() || q.question_text === 'New practice question') && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs font-bold space-y-1">
+              <p className="font-black uppercase tracking-wider text-[11px] text-amber-700 dark:text-amber-400">
+                ⚠️ Teacher Notice: Incomplete Question Detected
+              </p>
+              <p className="font-medium opacity-90">
+                One or more questions in this lesson are missing prompt text and have been filtered out of student practice. Please edit or remove them before publishing.
+              </p>
+            </div>
+          )}
+
           {/* SHARED EDITORIAL CONTENT RENDERER */}
           <CourseContentRenderer
             blocks={selectedEpisode.blocks || []}
             questions={selectedEpisode.questions || []}
             isStudentView={false}
             textScale={textScale}
+            onCompleteLesson={() => {
+              if (nextItem) {
+                setSelectedEpisode(nextItem.episode);
+                mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }}
           />
 
           {/* MINIMAL EDITORIAL LESSON FOOTER */}
