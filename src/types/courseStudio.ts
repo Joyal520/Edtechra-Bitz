@@ -13,6 +13,7 @@ export type BlockType =
   | 'text_image'
   | 'text_video'
   | 'image'
+  | 'video'
   | 'youtube_video'
   | 'youtube_short'
   | 'question_set'

@@ -33,6 +33,9 @@ export const AppLayout: React.FC = () => {
 
   const isHomePage = location.pathname === '/';
   const isClassesPage = location.pathname.startsWith('/classes');
+  const isReaderPage =
+    location.pathname.includes('/courses/') ||
+    location.pathname.includes('/preview');
 
   const { user, profile, isAdmin, isLoading, signOut, requireAuth } = useAuth();
 
@@ -102,14 +105,15 @@ export const AppLayout: React.FC = () => {
       {/* ========================================================================= */}
       {/* FLOATING NAVIGATION HEADER                                                */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-50 pt-2 sm:pt-3 px-3 sm:px-6 shrink-0">
-        <div className={`max-w-5xl mx-auto rounded-2xl sm:rounded-full px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between transition-all ${
-          isHomePage
-            ? 'bg-[#031528]/85 backdrop-blur-md border border-sky-400/70 shadow-[0_0_25px_rgba(56,189,248,0.35)] text-white'
-            : isClassesPage
-            ? 'bg-[#071a2f] backdrop-blur-md border border-slate-800 shadow-xl text-white'
-            : 'bg-white/95 backdrop-blur-md border border-stone-200/80 shadow-xs text-slate-900'
-        }`}>
+      {!isReaderPage && (
+        <header className="sticky top-0 z-50 pt-2 sm:pt-3 px-3 sm:px-6 shrink-0">
+          <div className={`max-w-5xl mx-auto rounded-2xl sm:rounded-full px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between transition-all ${
+            isHomePage
+              ? 'bg-[#031528]/85 backdrop-blur-md border border-sky-400/70 shadow-[0_0_25px_rgba(56,189,248,0.35)] text-white'
+              : isClassesPage
+              ? 'bg-[#071a2f] backdrop-blur-md border border-slate-800 shadow-xl text-white'
+              : 'bg-white/95 backdrop-blur-md border border-stone-200/80 shadow-xs text-slate-900'
+          }`}>
           
           {/* Mobile Left: Hamburger */}
           <div className="flex md:hidden items-center">
@@ -418,10 +422,11 @@ export const AppLayout: React.FC = () => {
             </form>
           </div>
         )}
-      </header>
+        </header>
+      )}
 
       {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
+      {!isReaderPage && mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden bg-slate-900/60 backdrop-blur-xs flex flex-col justify-start p-4 pt-20 animate-in fade-in duration-150">
           <div className="bg-white text-slate-900 rounded-3xl p-5 shadow-2xl space-y-4 border border-slate-100">
             
@@ -600,8 +605,8 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {/* Footer (Rendered on all non-homepage routes) */}
-      {!isHomePage && (
+      {/* Footer (Rendered on all non-homepage & non-reader routes) */}
+      {!isHomePage && !isReaderPage && (
         <footer className="w-full border-t border-stone-200/70 bg-white/70 backdrop-blur-xs py-8 px-4 sm:px-6 mt-auto text-center space-y-3 shrink-0">
           <div className="flex items-center justify-center gap-2">
             <img

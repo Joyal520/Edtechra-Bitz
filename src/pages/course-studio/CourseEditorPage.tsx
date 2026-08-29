@@ -115,12 +115,24 @@ export const CourseEditorPage: React.FC = () => {
     }
   };
 
+  const normalizeBlocks = (blocks: CourseBlock[]): CourseBlock[] => {
+    return (blocks || []).map(b => {
+      if (b.block_type === 'text' && (b.content as any)?.image?.url) {
+        return { ...b, block_type: 'text_image' as BlockType };
+      }
+      if (b.block_type === 'text' && (b.content as any)?.video?.url) {
+        return { ...b, block_type: 'text_video' as BlockType };
+      }
+      return b;
+    });
+  };
+
   const selectEpisode = (ep: CourseEpisode, unitId: string) => {
     setSelectedUnitId(unitId);
     setSelectedEpisodeId(ep.id);
     setEpisodeTitle(ep.title);
     setEstimatedMinutes(ep.estimated_minutes || 15);
-    setCurrentBlocks(ep.blocks || []);
+    setCurrentBlocks(normalizeBlocks(ep.blocks || []));
     setCurrentQuestions(ep.questions || []);
     setAiReviewOutput(null);
   };
@@ -424,7 +436,8 @@ export const CourseEditorPage: React.FC = () => {
       });
 
       const savedBlocks = await courseStudioService.saveEpisodeBlocks(course.id, selectedEpisodeId, currentBlocks);
-      setCurrentBlocks(savedBlocks);
+      const normalizedBlocks = normalizeBlocks(savedBlocks);
+      setCurrentBlocks(normalizedBlocks);
 
       const savedQuestions = await courseStudioService.saveEpisodeQuestions(course.id, selectedEpisodeId, currentQuestions);
       setCurrentQuestions(savedQuestions);
@@ -435,7 +448,7 @@ export const CourseEditorPage: React.FC = () => {
           ...u,
           episodes: (u.episodes || []).map(ep => {
             if (ep.id === selectedEpisodeId) {
-              return { ...ep, title: episodeTitle, estimated_minutes: estimatedMinutes, blocks: savedBlocks, questions: savedQuestions };
+              return { ...ep, title: episodeTitle, estimated_minutes: estimatedMinutes, blocks: normalizedBlocks, questions: savedQuestions };
             }
             return ep;
           })
@@ -446,7 +459,10 @@ export const CourseEditorPage: React.FC = () => {
       setSavingStatus('saved');
     } catch (err: any) {
       setSavingStatus('unsaved');
-      setErrorBanner(err.message || 'Failed to save episode changes.');
+      const msg = err.message && (err.message.includes('check constraint') || err.message.includes('violates check'))
+        ? "Couldn't save this section. Please try again."
+        : (err.message || 'Failed to save episode changes.');
+      setErrorBanner(msg);
     }
   };
 
