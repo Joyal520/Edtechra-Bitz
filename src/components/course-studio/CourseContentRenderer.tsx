@@ -430,20 +430,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
       {/* 2. REFINED EDITORIAL INTERACTIVE PRACTICE SECTION */}
       {validQuestions.length > 0 && (
-        <section className="w-full pt-8 sm:pt-12 border-t border-sky-100 dark:border-slate-800 space-y-6 sm:space-y-8">
+        <section className="w-full pt-8 sm:pt-12 border-t border-[var(--theme-border-subtle)] space-y-6 sm:space-y-8">
           
           {/* Editorial Practice Section Header */}
           <div className="surface-practice-header rounded-3xl p-5 sm:p-7 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#026fc3]/10 text-[#026fc3] dark:text-sky-300 text-[11px] font-black uppercase tracking-wider reader-badge">
-                  <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black uppercase tracking-wider reader-badge">
+                  <Sparkles className="w-3.5 h-3.5 text-theme-accent" />
                   <span>Interactive Practice</span>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white reader-h2">
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-theme-primary reader-h2">
                   Think About the Story
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium reader-meta">
+                <p className="text-xs sm:text-sm text-theme-muted font-medium reader-meta">
                   Check your understanding with {validQuestions.length} practice activities.
                 </p>
               </div>
@@ -452,28 +452,28 @@ export const CourseContentRenderer: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleToggleSound}
-                className="px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs border border-sky-200/80 dark:border-slate-700 reader-button"
+                className="px-3.5 py-1.5 rounded-full btn-theme-subtle text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs reader-button"
                 title="Toggle Question Sound Effects"
               >
-                {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#026fc3]" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+                {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-theme-accent" /> : <VolumeX className="w-3.5 h-3.5 opacity-60" />}
                 <span>{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
               </button>
             </div>
 
             {/* Refined Minimalist Progress Bar */}
-            <div className="pt-3 border-t border-sky-100 dark:border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 reader-meta">
+            <div className="pt-3 border-t border-[var(--theme-border-subtle)] space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-theme-secondary reader-meta">
                 <span>{answeredTotal} of {validQuestions.length} completed</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-[#026fc3] font-black">{Math.round((answeredTotal / validQuestions.length) * 100)}%</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black border border-amber-200/60 dark:border-amber-900/60">
+                  <span className="text-theme-accent font-black">{Math.round((answeredTotal / validQuestions.length) * 100)}%</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black border border-[var(--theme-border-subtle)]">
                     {earnedPoints} / {totalPointsPossible} pts
                   </span>
                 </div>
               </div>
 
               {/* Smooth Progress Track */}
-              <div className="w-full h-2 bg-sky-100/70 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-[var(--theme-surface-subtle)] rounded-full overflow-hidden border border-[var(--theme-border-subtle)]">
                 <div
                   className="h-full bg-linear-to-r from-[#026fc3] via-[#0284c7] to-[#38bdf8] rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${(answeredTotal / validQuestions.length) * 100}%` }}
@@ -502,28 +502,28 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <div
                   key={qId || qIndex}
                   id={`question-card-${qId}`}
-                  className={`w-full rounded-3xl p-5 sm:p-7 surface-question-card space-y-4 transition-all box-border ${
+                  className={`w-full rounded-3xl p-5 sm:p-7 surface-card space-y-4 transition-all box-border ${
                     isShaking ? 'animate-shake ring-2 ring-rose-400' : ''
                   }`}
                 >
                   {/* Question Card Header */}
-                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-sky-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3] reader-badge">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge">
                         QUESTION {String(qIndex + 1).padStart(2, '0')}
                       </span>
-                      <span className="text-[10px] font-black opacity-70 uppercase px-2 py-0.5 rounded-md bg-sky-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-sky-200/60 dark:border-slate-700 reader-badge">
+                      <span className="text-[10px] font-black opacity-80 uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] reader-badge">
                         {QUESTION_TYPE_LABELS[qType] || qType}
                       </span>
                     </div>
 
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black shrink-0 border border-amber-200/60 dark:border-amber-900/60 reader-badge">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black shrink-0 border border-[var(--theme-border-subtle)] reader-badge">
                       {q.points || 10} PTS
                     </span>
                   </div>
 
                   {/* Question Prompt */}
-                  <h4 className="font-bold text-slate-900 dark:text-white leading-snug text-left reader-question">
+                  <h4 className="font-bold text-theme-primary leading-snug text-left reader-question">
                     {q.question_text}
                   </h4>
 
@@ -538,8 +538,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                         const isCorrectOption = optText.trim().toLowerCase() === (q.correct_answer || '').trim().toLowerCase();
 
                         // Dynamic state styling
-                        let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100 shadow-2xs';
-                        let badgeStyle = 'bg-sky-50 dark:bg-slate-800 text-[#026fc3] dark:text-sky-300 border border-sky-200/80 dark:border-slate-700';
+                        let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
+                        let badgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-accent border border-[var(--theme-border-subtle)]';
 
                         if (isLocked) {
                           if (isSelected) {
@@ -555,8 +555,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             cardStyle = 'surface-answer-revealed-correct';
                             badgeStyle = 'bg-emerald-500/20 text-emerald-800 border border-emerald-500/40';
                           } else {
-                            cardStyle = 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40';
-                            badgeStyle = 'bg-slate-100 text-slate-400 dark:bg-slate-800';
+                            cardStyle = 'opacity-40 border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)] text-theme-muted';
+                            badgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-muted';
                           }
                         }
 
@@ -578,7 +578,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                               )}
                             </span>
 
-                            <span className="flex-1 leading-relaxed break-words font-medium text-inherit reader-option">
+                            <span className="flex-1 leading-relaxed break-words font-medium reader-option">
                               {optText}
                             </span>
 
@@ -603,20 +603,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
                         const isSelected = selectedAnswer === choice;
                         const isCorrectChoice = choice.toLowerCase() === (q.correct_answer || '').toLowerCase();
 
-                        let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100';
-                        let icon = choice === 'True' ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-rose-500" />;
+                        let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
+                        let icon = choice === 'True' ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" /> : <X className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />;
 
                         if (isLocked) {
                           if (isSelected) {
                             if (feedback?.isCorrect) {
-                              cardStyle = 'surface-answer-selected-correct';
+                              cardStyle = 'surface-answer-selected-correct font-black';
                             } else {
-                              cardStyle = 'surface-answer-selected-incorrect';
+                              cardStyle = 'surface-answer-selected-incorrect font-black';
                             }
                           } else if (!feedback?.isCorrect && isCorrectChoice) {
-                            cardStyle = 'surface-answer-revealed-correct';
+                            cardStyle = 'surface-answer-revealed-correct font-black';
                           } else {
-                            cardStyle = 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50';
+                            cardStyle = 'opacity-40 border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)] text-theme-muted';
                           }
                         }
 
@@ -626,12 +626,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             type="button"
                             disabled={isLocked || isSubmitting}
                             onClick={(e) => handleEvaluateAnswer(q, choice, e.currentTarget)}
-                            className={`p-3.5 sm:p-4 rounded-2xl border text-center font-black transition-all flex items-center justify-center gap-2 reader-option ${
+                            className={`min-h-[54px] p-3.5 sm:p-4 rounded-2xl border text-center font-black transition-all flex items-center justify-center gap-2.5 reader-option ${
                               isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
                             } ${cardStyle}`}
                           >
                             <span>{icon}</span>
-                            <span className="uppercase tracking-wider">{choice}</span>
+                            <span className="uppercase tracking-wider font-extrabold text-sm sm:text-base">{choice}</span>
                           </button>
                         );
                       })}
@@ -655,12 +655,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             }
                           }}
                           placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
-                          className={`flex-1 px-4 py-3 rounded-2xl border reader-input font-medium focus:ring-2 focus:ring-[#026fc3] focus:border-[#026fc3] focus:outline-none transition-all selection:bg-sky-100 selection:text-slate-900 ${
+                          className={`flex-1 px-4 py-3 rounded-2xl border reader-input font-medium transition-all ${
                             isLocked
                               ? feedback?.isCorrect
-                                ? 'bg-emerald-50 border-emerald-500 text-emerald-950 dark:bg-emerald-950/60 dark:border-emerald-500 dark:text-emerald-100'
-                                : 'bg-rose-50 border-rose-500 text-rose-950 dark:bg-rose-950/60 dark:border-rose-500 dark:text-rose-100'
-                              : 'bg-white text-slate-900 placeholder:text-slate-400 border-slate-200 dark:bg-[#111b2b] dark:text-white dark:placeholder:text-slate-400 dark:border-slate-700 caret-[#026fc3] dark:caret-white'
+                                ? 'bg-[var(--theme-success-bg)] border-2 border-[var(--theme-success-border)] text-[var(--theme-success-text)] font-bold'
+                                : 'bg-[var(--theme-error-bg)] border-2 border-[var(--theme-error-border)] text-[var(--theme-error-text)] font-bold'
+                              : 'input-theme text-theme-primary'
                           }`}
                         />
                         {!isLocked && (
@@ -668,7 +668,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             type="button"
                             disabled={!textInputs[qId]?.trim() || isSubmitting}
                             onClick={(e) => handleEvaluateAnswer(q, textInputs[qId] || '', e.currentTarget)}
-                            className="min-h-[44px] px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs reader-button"
+                            className="min-h-[44px] px-6 py-3 rounded-2xl btn-theme-primary text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs reader-button"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>Submit</span>
@@ -699,10 +699,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     <div className="pt-1 space-y-2">
                       <div className="space-y-2">
                         {optionsList.map((pairStr, pIdx) => (
-                          <div key={pIdx} className="flex items-center justify-between p-3.5 rounded-2xl bg-sky-50/50 dark:bg-slate-800/60 border border-sky-100 dark:border-slate-700 text-xs reader-body">
-                            <span className="font-bold text-slate-900 dark:text-white">{pairStr.split('->')[0]?.trim()}</span>
-                            <span className="text-[#026fc3] font-bold text-base px-2">⇄</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300">{pairStr.split('->')[1]?.trim()}</span>
+                          <div key={pIdx} className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-primary)] text-theme-primary text-xs reader-body">
+                            <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
+                            <span className="text-theme-accent font-bold text-base px-2">⇄</span>
+                            <span className="font-medium text-theme-secondary">{pairStr.split('->')[1]?.trim()}</span>
                           </div>
                         ))}
                       </div>
@@ -744,33 +744,33 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     <div
                       className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 reader-explanation ${
                         feedback.isCorrect
-                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200'
-                          : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-200'
+                          ? 'bg-[var(--theme-success-bg)] border-[var(--theme-success-border)] text-[var(--theme-success-text)]'
+                          : 'bg-[var(--theme-error-bg)] border-[var(--theme-error-border)] text-[var(--theme-error-text)]'
                       }`}
                     >
                       <div className="flex items-center gap-2 font-black mb-1.5">
                         {feedback.isCorrect ? (
                           <>
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>✓ Correct! Excellent work.</span>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>✓ Correct! Great job!</span>
                           </>
                         ) : (
                           <>
-                            <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                            <span>✕ Not quite.</span>
+                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                            <span>✕ Incorrect</span>
                           </>
                         )}
                       </div>
 
-                      {!feedback.isCorrect && q.correct_answer && (
-                        <p className="font-bold text-slate-900 dark:text-white mb-1">
-                          Correct Answer: <span className="text-emerald-700 dark:text-emerald-300">{q.correct_answer}</span>
+                      {q.explanation ? (
+                        <p className="opacity-95 leading-relaxed font-medium">{q.explanation}</p>
+                      ) : (
+                        <p className="opacity-95 leading-relaxed font-medium">
+                          {feedback.isCorrect
+                            ? 'You got this right! Great job following the lesson.'
+                            : `The correct answer was: ${q.correct_answer || 'See lesson content above.'}`}
                         </p>
                       )}
-
-                      <p className="opacity-90 leading-relaxed font-medium">
-                        {q.explanation || (feedback.isCorrect ? 'Your answer is correct based on the lesson.' : 'Review the lesson material to strengthen your understanding.')}
-                      </p>
                     </div>
                   )}
                 </div>

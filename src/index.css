@@ -5,12 +5,71 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  :root,
+  [data-theme-mode="light"] {
     color-scheme: light;
 
     /* ======================================================================== */
-    /* EDTECHRA BRAND DESIGN TOKENS                                             */
+    /* EDTECHRA SEMANTIC THEME TOKENS (LIGHT MODE)                              */
     /* ======================================================================== */
+    --theme-page-bg: linear-gradient(180deg, #e8f3ff 0%, #f7faff 60%, #ffffff 100%);
+    --theme-text-primary: #0f172a;       /* Deep slate/navy - WCAG AAA 14:1+ */
+    --theme-text-secondary: #334155;     /* Slate 700 - WCAG AAA 9:1+ */
+    --theme-text-muted: #64748b;         /* Slate 500 - WCAG AA 4.8:1+ */
+    --theme-text-subtle: #94a3b8;        /* Slate 400 */
+
+    --theme-surface-page: #f8fafc;
+    --theme-surface-card: #ffffff;
+    --theme-surface-elevated: #ffffff;
+    --theme-surface-header: rgba(255, 255, 255, 0.96);
+    --theme-surface-practice-header: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+    --theme-surface-interactive: #ffffff;
+    --theme-surface-interactive-hover: #f0f7ff;
+    --theme-surface-interactive-selected: #e0f2fe;
+    --theme-surface-input: #ffffff;
+    --theme-surface-subtle: #f1f5f9;
+
+    --theme-border-primary: #cbd5e1;     /* Slate 300 */
+    --theme-border-subtle: #e2e8f0;      /* Slate 200 */
+    --theme-border-focus: #026fc3;
+    --theme-border-hover: #026fc3;
+
+    --theme-accent: #026fc3;             /* EdTechra Blue */
+    --theme-accent-hover: #02599c;
+    --theme-accent-contrast: #ffffff;    /* White text on accent */
+    --theme-accent-soft: #e0f2fe;        /* Sky 100 */
+    --theme-accent-badge-bg: #e0f2fe;
+    --theme-accent-badge-text: #026fc3;
+
+    --theme-input-bg: #ffffff;
+    --theme-input-text: #0f172a;
+    --theme-input-placeholder: #94a3b8;
+    --theme-input-border: #cbd5e1;
+    --theme-input-caret: #026fc3;
+
+    --theme-success-bg: #ecfdf5;         /* Emerald 50 */
+    --theme-success-surface: #ffffff;
+    --theme-success-text: #065f46;        /* Emerald 800 */
+    --theme-success-border: #10b981;      /* Emerald 500 */
+    --theme-success-badge: #10b981;
+
+    --theme-error-bg: #fef2f2;           /* Rose 50 */
+    --theme-error-surface: #ffffff;
+    --theme-error-text: #991b1b;          /* Rose 800 */
+    --theme-error-border: #ef4444;        /* Rose 500 */
+    --theme-error-badge: #ef4444;
+
+    --theme-warning-bg: #fffbeb;         /* Amber 50 */
+    --theme-warning-text: #92400e;        /* Amber 800 */
+    --theme-warning-border: #f59e0b;      /* Amber 500 */
+
+    --theme-shadow-card: 0 4px 20px -4px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(2, 111, 195, 0.03);
+    --theme-shadow-hover: 0 8px 28px -6px rgba(15, 23, 42, 0.09), 0 3px 10px -2px rgba(2, 111, 195, 0.06);
+    --theme-shadow-dropdown: 0 12px 32px -4px rgba(15, 23, 42, 0.15);
+
+    --theme-color-scheme: light;
+
+    /* Legacy compatibility aliases */
     --edtechra-blue: #026fc3;
     --edtechra-blue-dark: #02599c;
     --edtechra-blue-darker: #013d6b;
@@ -49,7 +108,7 @@
     --reader-line-height-body: calc(1.75 * (1 + (var(--reader-scale, 1) - 1) * 0.2));
     --reader-line-height-heading: 1.25;
 
-    /* Educational Typography System (Default: Medium) */
+    /* Educational Typography System */
     --learning-text-size: 14px;
     --learning-text-line-height: 1.55;
     --learning-word-size: 1.75rem;
@@ -58,6 +117,72 @@
     --learning-question-size: 1rem;
     --learning-option-size: 0.875rem;
     --learning-meta-size: 0.75rem;
+  }
+
+  /* ======================================================================== */
+  /* EDTECHRA SEMANTIC THEME TOKENS (DARK MODE / MIDNIGHT NAVY)               */
+  /* ======================================================================== */
+  [data-theme-mode="dark"],
+  [data-theme="night-dark"],
+  .dark {
+    color-scheme: dark;
+
+    --theme-page-bg: linear-gradient(180deg, #090e17 0%, #0d1522 50%, #131f32 100%);
+    --theme-text-primary: #f8fafc;       /* Crisp Slate 50 - WCAG AAA contrast */
+    --theme-text-secondary: #cbd5e1;     /* Slate 300 */
+    --theme-text-muted: #94a3b8;         /* Slate 400 */
+    --theme-text-subtle: #64748b;        /* Slate 500 */
+
+    --theme-surface-page: #090e17;
+    --theme-surface-card: #111b2b;       /* Elevated dark navy card */
+    --theme-surface-elevated: #182438;
+    --theme-surface-header: rgba(13, 21, 34, 0.96);
+    --theme-surface-practice-header: linear-gradient(180deg, #111b2b 0%, #152238 100%);
+    --theme-surface-interactive: #162235; /* Option cards on dark background */
+    --theme-surface-interactive-hover: #1e2f49;
+    --theme-surface-interactive-selected: #1e3a5f;
+    --theme-surface-input: #0d1522;
+    --theme-surface-subtle: #141f30;
+
+    --theme-border-primary: #2d3f5a;     /* Slate 700 tone */
+    --theme-border-subtle: #1e2d42;
+    --theme-border-focus: #38bdf8;
+    --theme-border-hover: #38bdf8;
+
+    --theme-accent: #38bdf8;             /* Radiant EdTechra Blue for dark mode */
+    --theme-accent-hover: #7dd3fc;
+    --theme-accent-contrast: #090e17;    /* High contrast text on accent */
+    --theme-accent-soft: rgba(56, 189, 248, 0.16);
+    --theme-accent-badge-bg: rgba(56, 189, 248, 0.16);
+    --theme-accent-badge-text: #38bdf8;
+
+    --theme-input-bg: #0d1522;
+    --theme-input-text: #f8fafc;
+    --theme-input-placeholder: #64748b;
+    --theme-input-border: #2d3f5a;
+    --theme-input-caret: #38bdf8;
+
+    --theme-success-bg: rgba(6, 78, 59, 0.45);
+    --theme-success-surface: #064e3b;
+    --theme-success-text: #6ee7b7;       /* Bright emerald */
+    --theme-success-border: #059669;
+    --theme-success-badge: #10b981;
+
+    --theme-error-bg: rgba(127, 29, 29, 0.45);
+    --theme-error-surface: #7f1d1d;
+    --theme-error-text: #fca5a5;         /* Bright rose */
+    --theme-error-border: #dc2626;
+    --theme-error-badge: #ef4444;
+
+    --theme-warning-bg: rgba(120, 53, 15, 0.45);
+    --theme-warning-text: #fcd34d;       /* Bright amber */
+    --theme-warning-border: #d97706;
+
+    --theme-shadow-card: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
+    --theme-shadow-hover: 0 8px 28px -6px rgba(0, 0, 0, 0.7);
+    --theme-shadow-dropdown: 0 12px 32px -4px rgba(0, 0, 0, 0.8);
+
+    --theme-color-scheme: dark;
   }
 
   /* Reader Scale Container Modifiers */
@@ -158,8 +283,8 @@
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #fbfbf7;
-    color: #0f172a;
+    background-color: var(--theme-surface-page, #fbfbf7);
+    color: var(--theme-text-primary, #0f172a);
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
     touch-action: manipulation;
@@ -236,64 +361,151 @@
 }
 
 /* ========================================================================== */
+/* EDTECHRA SEMANTIC TEXT UTILITIES                                           */
+/* ========================================================================== */
+
+.text-theme-primary {
+  color: var(--theme-text-primary) !important;
+}
+
+.text-theme-secondary {
+  color: var(--theme-text-secondary) !important;
+}
+
+.text-theme-muted {
+  color: var(--theme-text-muted) !important;
+}
+
+.text-theme-accent {
+  color: var(--theme-accent) !important;
+}
+
+/* ========================================================================== */
 /* EDTECHRA MULTI-SURFACE ELEVATION & SHADOW SYSTEM                           */
 /* ========================================================================== */
 
 .surface-lesson {
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--theme-surface-header);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(2, 111, 195, 0.08);
+  border: 1px solid var(--theme-border-subtle);
+  color: var(--theme-text-primary);
 }
 
 .surface-practice-header {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 247, 255, 0.85) 100%);
-  border: 1px solid rgba(2, 111, 195, 0.12);
-  box-shadow: 0 4px 20px -2px rgba(2, 111, 195, 0.05);
+  background: var(--theme-surface-practice-header) !important;
+  border: 1px solid var(--theme-border-primary) !important;
+  box-shadow: var(--theme-shadow-card) !important;
+  color: var(--theme-text-primary) !important;
 }
 
+.surface-card,
 .surface-question-card {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.04), 0 2px 6px -2px rgba(2, 111, 195, 0.03);
+  background-color: var(--theme-surface-card) !important;
+  border: 1px solid var(--theme-border-primary) !important;
+  box-shadow: var(--theme-shadow-card) !important;
+  color: var(--theme-text-primary) !important;
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .surface-question-card:hover {
-  box-shadow: 0 8px 28px -6px rgba(15, 23, 42, 0.06), 0 3px 10px -2px rgba(2, 111, 195, 0.05);
-  border-color: rgba(2, 111, 195, 0.18);
+  box-shadow: var(--theme-shadow-hover) !important;
+  border-color: var(--theme-border-focus) !important;
+}
+
+.surface-subtle {
+  background-color: var(--theme-surface-subtle) !important;
+  border: 1px solid var(--theme-border-subtle) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+.surface-elevated {
+  background-color: var(--theme-surface-elevated) !important;
+  border: 1px solid var(--theme-border-primary) !important;
+  box-shadow: var(--theme-shadow-dropdown) !important;
+  color: var(--theme-text-primary) !important;
 }
 
 .surface-answer-option {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  background-color: var(--theme-surface-interactive) !important;
+  border: 1px solid var(--theme-border-primary) !important;
+  color: var(--theme-text-primary) !important;
   transition: all 0.18s ease-in-out;
 }
 
 .surface-answer-option:hover:not(:disabled) {
-  border-color: #026fc3;
-  background: #f0f7ff;
+  border-color: var(--theme-accent) !important;
+  background-color: var(--theme-surface-interactive-hover) !important;
+  color: var(--theme-text-primary) !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px -2px rgba(2, 111, 195, 0.12);
 }
 
 .surface-answer-selected-correct {
-  background: #f0fdf4 !important;
-  border: 2px solid #10b981 !important;
-  color: #064e3b !important;
+  background-color: var(--theme-success-bg) !important;
+  border: 2px solid var(--theme-success-border) !important;
+  color: var(--theme-success-text) !important;
   box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.15) !important;
 }
 
 .surface-answer-selected-incorrect {
-  background: #fef2f2 !important;
-  border: 2px solid #ef4444 !important;
-  color: #7f1d1d !important;
+  background-color: var(--theme-error-bg) !important;
+  border: 2px solid var(--theme-error-border) !important;
+  color: var(--theme-error-text) !important;
   box-shadow: 0 4px 16px -2px rgba(239, 68, 68, 0.15) !important;
 }
 
 .surface-answer-revealed-correct {
-  background: #f0fdf4 !important;
-  border: 2px dashed #10b981 !important;
-  color: #064e3b !important;
+  background-color: var(--theme-success-bg) !important;
+  border: 2px dashed var(--theme-success-border) !important;
+  color: var(--theme-success-text) !important;
+}
+
+/* ========================================================================== */
+/* SEMANTIC FORM CONTROLS & BUTTONS                                           */
+/* ========================================================================== */
+
+.input-theme {
+  background-color: var(--theme-input-bg) !important;
+  color: var(--theme-input-text) !important;
+  caret-color: var(--theme-input-caret) !important;
+  border: 1px solid var(--theme-input-border) !important;
+  color-scheme: var(--theme-color-scheme) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-theme::placeholder {
+  color: var(--theme-input-placeholder) !important;
+  opacity: 1 !important;
+}
+
+.input-theme:focus {
+  border-color: var(--theme-border-focus) !important;
+  box-shadow: 0 0 0 3px var(--theme-accent-soft) !important;
+  outline: none !important;
+}
+
+.btn-theme-primary {
+  background-color: var(--theme-accent) !important;
+  color: var(--theme-accent-contrast) !important;
+  border: 1px solid var(--theme-accent) !important;
+  transition: all 0.15s ease;
+}
+
+.btn-theme-primary:hover:not(:disabled) {
+  background-color: var(--theme-accent-hover) !important;
+  border-color: var(--theme-accent-hover) !important;
+}
+
+.btn-theme-subtle {
+  background-color: var(--theme-surface-subtle) !important;
+  color: var(--theme-text-secondary) !important;
+  border: 1px solid var(--theme-border-subtle) !important;
+  transition: all 0.15s ease;
+}
+
+.btn-theme-subtle:hover:not(:disabled) {
+  background-color: var(--theme-accent) !important;
+  color: var(--theme-accent-contrast) !important;
+  border-color: var(--theme-accent) !important;
 }
 
 /* Custom scrollbar styling */

@@ -335,29 +335,31 @@ export const StudentCoursePlayerPage: React.FC = () => {
   return (
     <div
       data-scale={textScale}
-      className={`reader-scale-container w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}
+      data-theme={themeId}
+      data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
+      className={`reader-scale-container ${activeTheme.isDark ? 'dark' : ''} w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
       
       {/* 1. TOP READING PROGRESS LINE */}
       <div className="w-full h-1 bg-current/5 relative shrink-0">
         <div
-          className="h-full bg-[#026fc3] transition-all duration-150 shadow-xs"
+          className="h-full bg-[var(--theme-accent)] transition-all duration-150 shadow-xs"
           style={{ width: `${viewMode === 'roadmap' ? (roadmapData?.progressPercent || 0) : scrollProgress}%` }}
         />
       </div>
 
       {/* 2. COMPACT EDITORIAL TOP BAR */}
-      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b ${activeTheme.cardBorder} transition-colors`}>
+      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b border-[var(--theme-border-subtle)] text-theme-primary transition-colors`}>
         
         {/* Left: ← Class & Roadmap Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => navigate(`/classes/${classroomId}`)}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-current transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
             title="Back to Class"
           >
-            <ArrowLeft className="w-4 h-4 text-[#026fc3]" />
+            <ArrowLeft className="w-4 h-4 text-theme-accent" />
             <span className="hidden sm:inline">Class</span>
           </button>
 
@@ -367,8 +369,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
             onClick={() => setViewMode(viewMode === 'lesson' ? 'roadmap' : 'lesson')}
             className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-black ${
               viewMode === 'roadmap'
-                ? 'bg-[#026fc3] text-white shadow-2xs'
-                : 'hover:bg-current/10 text-current'
+                ? 'btn-theme-primary shadow-2xs'
+                : 'hover:bg-current/10 text-theme-primary'
             }`}
             title="Toggle Course Roadmap"
           >

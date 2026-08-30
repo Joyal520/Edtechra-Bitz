@@ -83,7 +83,7 @@ export const LessonCompletionModal: React.FC<Props> = ({
       {/* Modal Card - Mobile First */}
       <div
         id="celebration-modal-card"
-        className="bg-white dark:bg-stone-900 rounded-[28px] max-w-md w-full border border-stone-200 dark:border-stone-800 shadow-2xl overflow-hidden flex flex-col p-6 sm:p-8 text-center space-y-5 transition-all animate-in fade-in zoom-in-95 duration-200 box-border"
+        className="surface-elevated rounded-[28px] max-w-md w-full border border-[var(--theme-border-primary)] shadow-2xl overflow-hidden flex flex-col p-6 sm:p-8 text-center space-y-5 transition-all animate-in fade-in zoom-in-95 duration-200 box-border text-theme-primary"
       >
         {/* Top Close Button (Min 44x44px target) */}
         <div className="flex justify-end -mt-2 -mr-2">
@@ -91,7 +91,7 @@ export const LessonCompletionModal: React.FC<Props> = ({
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="w-11 h-11 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center transition-all cursor-pointer"
+            className="w-11 h-11 rounded-full text-theme-muted hover:text-theme-primary flex items-center justify-center transition-all cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -104,20 +104,20 @@ export const LessonCompletionModal: React.FC<Props> = ({
 
         {/* Header Greeting & Lesson Title */}
         <div className="space-y-1.5">
-          <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight break-words reader-title">
+          <h2 className="text-lg sm:text-xl font-black text-theme-primary tracking-tight break-words reader-title">
             {greeting}
           </h2>
-          <p className="text-xs sm:text-sm font-bold text-[#026fc3] dark:text-sky-400 truncate reader-meta">
+          <p className="text-xs sm:text-sm font-bold text-theme-accent truncate reader-meta">
             {lessonTitle} • Lesson {lessonPosition}
           </p>
         </div>
 
         {/* Specific Daily vs Normal Release Messaging */}
-        <div className="p-4 rounded-2xl bg-sky-50/70 dark:bg-slate-800/60 border border-sky-200/80 dark:border-slate-700 space-y-1.5 text-xs sm:text-sm">
-          <p className="font-extrabold text-slate-900 dark:text-white reader-h3">
+        <div className="p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] space-y-1.5 text-xs sm:text-sm">
+          <p className="font-extrabold text-theme-primary reader-h3">
             {dailyReleaseEnabled ? "You’ve completed today’s lesson!" : "You’ve completed this lesson!"}
           </p>
-          <p className="text-slate-600 dark:text-slate-300 font-medium leading-relaxed reader-body">
+          <p className="text-theme-secondary font-medium leading-relaxed reader-body">
             {encouragingMessage}
           </p>
         </div>
@@ -142,7 +142,7 @@ export const LessonCompletionModal: React.FC<Props> = ({
           <button
             type="button"
             onClick={onContinue}
-            className="w-full min-h-[48px] px-6 py-3.5 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white text-sm font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-98 reader-button"
+            className="w-full min-h-[48px] px-6 py-3.5 rounded-2xl btn-theme-primary text-sm font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-98 reader-button"
           >
             <span>{dailyReleaseEnabled ? 'Continue to Roadmap' : 'Continue Learning'}</span>
             <ArrowRight className="w-4 h-4" />

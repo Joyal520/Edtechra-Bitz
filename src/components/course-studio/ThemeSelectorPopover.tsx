@@ -53,20 +53,20 @@ export const ThemeSelectorPopover: React.FC<Props> = ({ activeThemeId, onSelectT
 
       {/* Popover Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-[320px] sm:w-[360px] p-4 rounded-2xl bg-white text-slate-900 shadow-2xl border border-stone-200 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
+        <div className="absolute right-0 top-full mt-2 w-[320px] sm:w-[360px] p-4 rounded-2xl surface-elevated text-theme-primary shadow-2xl border border-[var(--theme-border-primary)] z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--theme-border-subtle)] mb-3">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+              <h4 className="text-xs font-black uppercase tracking-wider text-theme-primary">
                 Reading Appearance
               </h4>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-theme-muted font-medium">
                 Select a subtle light gradient or midnight mode
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-stone-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+              className="p-1 rounded-lg hover:bg-current/10 text-theme-muted hover:text-theme-primary cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -87,17 +87,17 @@ export const ThemeSelectorPopover: React.FC<Props> = ({ activeThemeId, onSelectT
                   }}
                   className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 ${
                     isSelected
-                      ? 'border-[#026fc3] ring-2 ring-[#026fc3]/20 bg-sky-50/40 shadow-xs'
-                      : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50/70'
+                      ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/20 bg-[var(--theme-accent-soft)] shadow-xs'
+                      : 'border-[var(--theme-border-subtle)] hover:border-[var(--theme-border-primary)] hover:bg-current/5'
                   }`}
                 >
                   {/* Swatch Preview Box */}
                   <div
-                    className="w-full h-10 rounded-lg border border-black/5 shadow-2xs relative flex items-center justify-end p-1.5"
+                    className="w-full h-10 rounded-lg border border-black/10 shadow-2xs relative flex items-center justify-end p-1.5"
                     style={{ background: preset.previewCss }}
                   >
                     {isSelected && (
-                      <span className="w-4 h-4 rounded-full bg-[#026fc3] text-white flex items-center justify-center shadow-xs">
+                      <span className="w-4 h-4 rounded-full bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] flex items-center justify-center shadow-xs">
                         <Check className="w-2.5 h-2.5" />
                       </span>
                     )}
@@ -105,10 +105,10 @@ export const ThemeSelectorPopover: React.FC<Props> = ({ activeThemeId, onSelectT
 
                   {/* Preset Name & Tone */}
                   <div>
-                    <div className="text-xs font-bold text-slate-900 truncate">
+                    <div className="text-xs font-bold text-theme-primary truncate">
                       {preset.name}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-medium truncate">
+                    <div className="text-[10px] text-theme-muted font-medium truncate">
                       {preset.description}
                     </div>
                   </div>

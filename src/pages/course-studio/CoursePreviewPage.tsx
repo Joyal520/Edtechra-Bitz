@@ -197,29 +197,31 @@ export const CoursePreviewPage: React.FC = () => {
   return (
     <div
       data-scale={textScale}
-      className={`reader-scale-container w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}
+      data-theme={themeId}
+      data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
+      className={`reader-scale-container ${activeTheme.isDark ? 'dark' : ''} w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
       
       {/* 1. TOP READING PROGRESS LINE */}
       <div className="w-full h-1 bg-current/5 relative shrink-0">
         <div
-          className="h-full bg-[#026fc3] transition-all duration-150 shadow-xs"
+          className="h-full bg-[var(--theme-accent)] transition-all duration-150 shadow-xs"
           style={{ width: `${viewMode === 'roadmap' ? (roadmapData?.progressPercent || 0) : scrollProgress}%` }}
         />
       </div>
 
       {/* 2. COMPACT EDITORIAL TOP BAR */}
-      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b ${activeTheme.cardBorder} transition-colors`}>
+      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b border-[var(--theme-border-subtle)] text-theme-primary transition-colors`}>
         
         {/* Left: ← Course & Roadmap Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => navigate(`/course-studio/${course.id}`)}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-current transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
             title="Exit Preview"
           >
-            <ArrowLeft className="w-4 h-4 text-[#026fc3]" />
+            <ArrowLeft className="w-4 h-4 text-theme-accent" />
             <span className="hidden sm:inline">Editor</span>
           </button>
 
@@ -229,8 +231,8 @@ export const CoursePreviewPage: React.FC = () => {
             onClick={() => setViewMode(viewMode === 'lesson' ? 'roadmap' : 'lesson')}
             className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-black ${
               viewMode === 'roadmap'
-                ? 'bg-[#026fc3] text-white shadow-2xs'
-                : 'hover:bg-current/10 text-current'
+                ? 'btn-theme-primary shadow-2xs'
+                : 'hover:bg-current/10 text-theme-primary'
             }`}
             title="Toggle Course Roadmap"
           >
@@ -241,7 +243,7 @@ export const CoursePreviewPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowDrawer(true)}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-current/10 text-current transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
             title="Table of Contents"
           >
             <Menu className="w-4 h-4" />
@@ -251,7 +253,7 @@ export const CoursePreviewPage: React.FC = () => {
 
         {/* Center: Chapter Info */}
         <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
-          <p className="text-xs font-serif italic text-current/80 truncate">
+          <p className="text-xs font-serif italic text-theme-secondary truncate">
             {viewMode === 'roadmap'
               ? `${course.title} • Roadmap`
               : `Lesson ${currentInfo?.epIndex || 1} • ${selectedEpisode.title}`}
@@ -261,18 +263,18 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Right: Progress %, Font Size, Theme Popover, Bookmark */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Reading % Badge */}
-          <span className="text-[11px] font-mono font-bold opacity-75 px-1 py-0.5">
+          <span className="text-[11px] font-mono font-bold opacity-80 px-1 py-0.5 text-theme-primary">
             {viewMode === 'roadmap' ? `${roadmapData?.progressPercent || 0}%` : `${scrollProgress}%`}
           </span>
 
           {/* Font Size A- / A+ */}
           {viewMode === 'lesson' && (
-            <div className="flex items-center rounded-xl bg-current/5 p-0.5 border border-current/10">
+            <div className="flex items-center rounded-xl bg-[var(--theme-surface-subtle)] p-0.5 border border-[var(--theme-border-subtle)]">
               <button
                 type="button"
                 onClick={handleScaleDown}
                 disabled={textScale === 'sm'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer"
+                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer text-theme-primary"
                 title="Decrease Font Size"
               >
                 A−
@@ -281,7 +283,7 @@ export const CoursePreviewPage: React.FC = () => {
                 type="button"
                 onClick={handleScaleUp}
                 disabled={textScale === 'xl'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer"
+                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer text-theme-primary"
                 title="Increase Font Size"
               >
                 A+
@@ -299,7 +301,7 @@ export const CoursePreviewPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsBookmarked(!isBookmarked)}
-            className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer ${isBookmarked ? 'text-[#026fc3]' : 'text-current/60 hover:text-current'}`}
+            className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer ${isBookmarked ? 'text-theme-accent' : 'text-theme-muted hover:text-theme-primary'}`}
             title="Bookmark this page"
           >
             <Bookmark className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isBookmarked ? 'fill-current' : ''}`} />
