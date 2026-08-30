@@ -125,5 +125,51 @@ const MOCK_DATA = {
       minutes: 20
     }
   ],
+  teachingResources: [
+    {
+      id: "res_1",
+      title: "Present Simple Grammar",
+      originalFilename: "grammar_unit_01.pdf",
+      fileUrl: "https://pub-sample.r2.dev/projects/teacher/grammar_unit_01.pdf",
+      filePath: "projects/teacher/grammar_unit_01.pdf",
+      fileSize: 4404019,
+      fileType: "pdf",
+      mimeType: "application/pdf",
+      category: "Grammar",
+      resourceType: "PDF",
+      description: "Comprehensive guide and exercises for Present Simple tense.",
+      createdAt: "2026-08-28T10:30:00.000Z"
+    },
+    {
+      id: "res_2",
+      title: "Reading Practice Unit 2",
+      originalFilename: "reading_unit_02.pdf",
+      fileUrl: "https://pub-sample.r2.dev/projects/teacher/reading_unit_02.pdf",
+      filePath: "projects/teacher/reading_unit_02.pdf",
+      fileSize: 9122611,
+      fileType: "pdf",
+      mimeType: "application/pdf",
+      category: "Reading",
+      resourceType: "PDF",
+      description: "Reading comprehension passages with questions.",
+      createdAt: "2026-08-25T14:15:00.000Z"
+    },
+    {
+      id: "res_3",
+      title: "Vocabulary Worksheet",
+      originalFilename: "vocabulary.pdf",
+      fileUrl: "https://pub-sample.r2.dev/projects/teacher/vocabulary.pdf",
+      filePath: "projects/teacher/vocabulary.pdf",
+      fileSize: 2202009,
+      fileType: "pdf",
+      mimeType: "application/pdf",
+      category: "Vocabulary",
+      resourceType: "PDF",
+      description: "Weekly vocabulary building worksheet.",
+      createdAt: "2026-08-20T09:00:00.000Z"
+    }
+  ],
   aiFeedbackLogs: []
 };
+
+window.MOCK_DATA = MOCK_DATA;

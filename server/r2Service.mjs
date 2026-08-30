@@ -82,6 +82,31 @@ export function buildClassroomObjectKey({ classroomId, userId, filename = 'docum
   return `classrooms/${cleanClassroomId}/${cleanUserId}/${timestamp}_${randomSuffix}.${cleanExt}`;
 }
 
+export function buildTeacherMaterialObjectKey({ userId, filename = 'document.pdf', contentType = 'application/pdf' }) {
+  const cleanUserId = sanitizeSegment(userId) || 'teacher';
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  const rawExt = filename.split('.').pop() || 'pdf';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'pdf';
+  return `teachers/${cleanUserId}/materials/${timestamp}_${randomSuffix}.${cleanExt}`;
+}
+
+export function validateTeacherStorageQuota({ currentUsedBytes = 0, incomingSizeBytes = 0, maxBytes = 500 * 1024 * 1024 }) {
+  const current = Number(currentUsedBytes) || 0;
+  const incoming = Number(incomingSizeBytes) || 0;
+  const limit = Number(maxBytes) || 500 * 1024 * 1024;
+  const projected = current + incoming;
+
+  if (projected > limit) {
+    const remainingBytes = Math.max(0, limit - current);
+    const remainingMb = (remainingBytes / (1024 * 1024)).toFixed(1);
+    const incomingMb = (incoming / (1024 * 1024)).toFixed(1);
+    throw new Error(`Not enough cloud storage. You have ${remainingMb} MB remaining, but this file is ${incomingMb} MB.`);
+  }
+
+  return true;
+}
+
 export function buildCourseMediaObjectKey({ courseId, userId, filename = 'image.webp', contentType = 'image/webp' }) {
   const cleanCourseId = sanitizeSegment(courseId) || 'general';
   const cleanUserId = sanitizeSegment(userId) || 'teacher';

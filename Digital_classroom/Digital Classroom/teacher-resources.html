@@ -27,10 +27,16 @@
             <h1>My Teaching Resources</h1>
             <p class="subtitle">Your private and public classroom materials are saved here until you choose to assign them.</p>
           </div>
-          <a class="btn btn-primary btn-compact" href="#upload" data-resource-upload-link>Upload Resource</a>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-secondary btn-compact" type="button" data-open-cloud-bucket>
+              ☁️ Explore Cloud Bucket
+            </button>
+            <a class="btn btn-primary btn-compact" href="#upload" data-resource-upload-link>Upload Resource</a>
+          </div>
         </header>
 
         <section class="teacher-panel teaching-resources-panel">
+          <div id="teacher-storage-quota-widget"></div>
           <div class="teacher-panel-title panel-title-row">
             <span data-icon="assignment"></span>
             <h2>Resource Library</h2>

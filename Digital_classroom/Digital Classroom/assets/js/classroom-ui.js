@@ -701,6 +701,13 @@ class ClassroomUI {
       examCard.href = this.getRouteHref("exam", { classroomId: detectedClassroomId });
     }
 
+    document.querySelectorAll("[data-add-learning-material-btn]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        ClassroomUI.openAddLearningMaterialModal({ classroomId: detectedClassroomId });
+      });
+    });
+
     this.hydrateDashboardIcons(document);
     this.bindTeacherActionScroller();
     this.bindAssignmentForm(detectedClassroomId);
@@ -1361,7 +1368,14 @@ class ClassroomUI {
 
     document.querySelector('[data-hub-action="resources"]')?.setAttribute("href", this.getRootRouteHref("myUploads", { classroomId: detectedClassroomId }));
     document.querySelector('[data-hub-action="collections"]')?.setAttribute("href", this.getRootRouteHref("savedCollections", { classroomId: detectedClassroomId }));
-    document.querySelector('[data-hub-action="upload"]')?.setAttribute("href", this.getRootRouteHref("upload", { classroomId: detectedClassroomId }));
+    const uploadBtn = document.querySelector('[data-hub-action="upload"]');
+    if (uploadBtn) {
+      uploadBtn.setAttribute("href", "#");
+      uploadBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        ClassroomUI.openAddLearningMaterialModal({ classroomId: detectedClassroomId });
+      });
+    }
 
     const premiumLibrary = document.getElementById("premium-library-placeholder");
     const [premiumResources, dashboardData] = await Promise.all([
@@ -1423,11 +1437,51 @@ class ClassroomUI {
     const backLink = document.querySelector("[data-resources-back]");
     if (backLink) backLink.setAttribute("href", this.getRouteHref("dashboard"));
 
-    const [resources, dashboardData] = await Promise.all([
+    const [resources, dashboardData, quota] = await Promise.all([
       ClassroomAPI.getTeachingResources(detectedClassroomId),
-      ClassroomAPI.getTeacherDashboardData()
+      ClassroomAPI.getTeacherDashboardData(),
+      ClassroomAPI.getTeacherStorageUsage().catch(() => null)
     ]);
     const classrooms = dashboardData.classrooms || [];
+
+    // Render Quota Widget in Teacher Resources page
+    let quotaWidgetEl = document.getElementById("teacher-storage-quota-widget");
+    if (quota && resourcesList) {
+      const isNearLimit = quota.percentage >= 85;
+      const isFull = quota.percentage >= 100;
+      const quotaClass = isFull ? "is-danger" : (isNearLimit ? "is-warning" : "");
+
+      const quotaWidgetHtml = `
+        <div class="teacher-storage-quota-widget" id="teacher-storage-quota-widget">
+          <div class="quota-widget-header">
+            <span class="quota-widget-title">
+              <span class="quota-cloud-icon">☁️</span> Teacher Cloud Storage Allocation
+            </span>
+            <div class="quota-widget-actions">
+              <span class="quota-stat-text">
+                Storage Used: <strong>${quota.usedMb} MB</strong> / 500 MB (${quota.percentage}%) &bull; <strong>${quota.remainingMb} MB remaining</strong>
+              </span>
+              <button class="btn btn-secondary btn-small" type="button" id="btn-explore-cloud-bucket">
+                Explore Cloud Bucket
+              </button>
+            </div>
+          </div>
+          <div class="quota-progress-track">
+            <div class="quota-progress-fill ${quotaClass}" style="width: ${quota.percentage}%;"></div>
+          </div>
+        </div>
+      `;
+
+      if (quotaWidgetEl) {
+        quotaWidgetEl.outerHTML = quotaWidgetHtml;
+      } else {
+        resourcesList.parentElement.insertAdjacentHTML("afterbegin", quotaWidgetHtml);
+      }
+
+      document.getElementById("btn-explore-cloud-bucket")?.addEventListener("click", () => {
+        ClassroomUI.openCloudBucketModal({ classroomId: detectedClassroomId });
+      });
+    }
 
     if (resourcesList) {
       resourcesList.innerHTML = resources.length
@@ -1818,6 +1872,697 @@ class ClassroomUI {
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  static async openAddLearningMaterialModal({ classroomId = "" } = {}) {
+    const existing = document.getElementById("add-material-choice-modal");
+    if (existing) existing.remove();
+
+    const quota = await ClassroomAPI.getTeacherStorageUsage().catch(() => null);
+    const quotaText = quota
+      ? `${quota.usedMb} MB / ${quota.maxMb} MB used (${quota.percentage}%)`
+      : "500 MB cloud storage";
+
+    const modalHtml = `
+      <div class="cloud-modal-backdrop" id="add-material-choice-modal">
+        <div class="cloud-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="choice-modal-title">
+          <div class="cloud-modal-header">
+            <div class="cloud-modal-header-copy">
+              <h3 id="choice-modal-title">Add Learning Material</h3>
+              <p>Choose how you would like to add materials for your class</p>
+            </div>
+            <button class="cloud-modal-close" type="button" aria-label="Close modal">&times;</button>
+          </div>
+          <div class="cloud-modal-body">
+            <div class="cloud-action-choice-grid">
+              <div class="cloud-action-choice-card" role="button" tabindex="0" data-choice="device">
+                <div class="cloud-choice-icon is-upload">📤</div>
+                <div class="cloud-choice-copy">
+                  <h4>Upload from Device</h4>
+                  <p>Upload a new PDF or document from your computer/phone into your cloud storage.</p>
+                </div>
+                <span class="cloud-choice-badge">Upload &amp; Assign</span>
+              </div>
+              <div class="cloud-action-choice-card" role="button" tabindex="0" data-choice="cloud">
+                <div class="cloud-choice-icon">☁️</div>
+                <div class="cloud-choice-copy">
+                  <h4>Explore Your Cloud Bucket</h4>
+                  <p>Pick from files already saved in your 500 MB Cloudflare bucket without re-uploading.</p>
+                </div>
+                <span class="cloud-choice-badge is-instant">Instant &bull; 0 MB added</span>
+              </div>
+            </div>
+            <div style="margin-top: 14px; text-align: center; font-size: 0.8rem; color: var(--text-muted, #64748b);">
+              <span>Cloud Storage Quota: <strong>${quotaText}</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML("beforeend", modalHtml);
+    const modalEl = document.getElementById("add-material-choice-modal");
+
+    const closeModal = () => modalEl?.remove();
+    modalEl.querySelector(".cloud-modal-close")?.addEventListener("click", closeModal);
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) closeModal();
+    });
+
+    modalEl.querySelector('[data-choice="device"]')?.addEventListener("click", () => {
+      closeModal();
+      ClassroomUI.openUploadFromDeviceModal({ classroomId });
+    });
+
+    modalEl.querySelector('[data-choice="cloud"]')?.addEventListener("click", () => {
+      closeModal();
+      ClassroomUI.openCloudBucketModal({ classroomId });
+    });
+  }
+
+  static async openCloudBucketModal({ classroomId = "" } = {}) {
+    const existing = document.getElementById("cloud-bucket-modal");
+    if (existing) existing.remove();
+
+    const [materials, quota] = await Promise.all([
+      ClassroomAPI.getTeacherCloudMaterials(classroomId),
+      ClassroomAPI.getTeacherStorageUsage()
+    ]);
+
+    const isNearLimit = quota.percentage >= 85;
+    const isFull = quota.percentage >= 100;
+    const quotaClass = isFull ? "is-danger" : (isNearLimit ? "is-warning" : "");
+    const categories = Array.from(new Set(materials.map(m => m.category || m.resourceType || "General").filter(Boolean)));
+
+    const renderMaterialCard = (material) => {
+      const isAssigned = Boolean(material.isAssigned);
+      return `
+        <div class="cloud-material-card ${isAssigned ? "is-assigned" : ""}" data-material-id="${ClassroomUI.escape(material.id)}" data-category="${ClassroomUI.escape(material.category || material.resourceType || '')}" data-title="${ClassroomUI.escape(material.title)}" data-filename="${ClassroomUI.escape(material.originalFilename || '')}">
+          <input type="checkbox" class="cloud-material-checkbox" data-select-id="${ClassroomUI.escape(material.id)}" ${isAssigned ? "disabled checked" : ""} aria-label="Select ${ClassroomUI.escape(material.title)}">
+          <div class="cloud-material-pdf-badge">
+            <span>📄</span>
+            PDF
+          </div>
+          <div class="cloud-material-info">
+            <div class="cloud-material-title-row">
+              <span class="cloud-material-title">${ClassroomUI.escape(material.title)}</span>
+              ${material.category ? `<span class="cloud-material-tag">${ClassroomUI.escape(material.category)}</span>` : ""}
+              ${isAssigned ? `<span class="already-assigned-badge">✓ Already Assigned to this Class</span>` : ""}
+            </div>
+            <div class="cloud-material-meta">
+              <span class="file-name" title="${ClassroomUI.escape(material.originalFilename)}">${ClassroomUI.escape(material.originalFilename)}</span>
+              <span>&bull;</span>
+              <span>${ClassroomUI.escape(material.formattedSize || "0 B")}</span>
+              <span>&bull;</span>
+              <span>${ClassroomUI.formatDate(material.createdAt)}</span>
+            </div>
+          </div>
+          <div class="cloud-material-actions">
+            <button class="btn-preview-icon" type="button" data-preview-id="${ClassroomUI.escape(material.id)}" title="Preview PDF">
+              👁️ Preview
+            </button>
+          </div>
+        </div>
+      `;
+    };
+
+    const modalHtml = `
+      <div class="cloud-modal-backdrop" id="cloud-bucket-modal">
+        <div class="cloud-modal-dialog modal-large" role="dialog" aria-modal="true" aria-labelledby="bucket-modal-title">
+          <div class="cloud-modal-header">
+            <div class="cloud-modal-header-copy">
+              <h3 id="bucket-modal-title">YOUR CLOUD MATERIALS</h3>
+              <p>Select a material to assign to this class &bull; Reuses files in cloud storage without duplicate upload</p>
+            </div>
+            <button class="cloud-modal-close" type="button" aria-label="Close modal">&times;</button>
+          </div>
+          <div class="cloud-modal-body">
+            <!-- Quota Bar -->
+            <div class="teacher-storage-quota-widget" style="margin-bottom: 16px; padding: 12px 16px;">
+              <div class="quota-widget-header">
+                <span class="quota-widget-title" style="font-size: 0.88rem;">
+                  <span class="quota-cloud-icon">☁️</span> Cloud Storage Allocation
+                </span>
+                <span class="quota-stat-text">
+                  Storage Used: <strong>${quota.usedMb} MB</strong> / 500 MB (${quota.percentage}%) &bull; <strong>${quota.remainingMb} MB remaining</strong>
+                </span>
+              </div>
+              <div class="quota-progress-track">
+                <div class="quota-progress-fill ${quotaClass}" style="width: ${quota.percentage}%;"></div>
+              </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="cloud-bucket-toolbar">
+              <div class="cloud-bucket-search-wrap">
+                <span class="cloud-bucket-search-icon">🔍</span>
+                <input id="cloud-search-input" type="search" placeholder="Search materials by name or filename..." autocomplete="off">
+              </div>
+              <div class="cloud-bucket-filters">
+                <select id="cloud-category-select" class="cloud-bucket-select" aria-label="Filter by category">
+                  <option value="">All Categories</option>
+                  ${categories.map(cat => `<option value="${ClassroomUI.escape(cat)}">${ClassroomUI.escape(cat)}</option>`).join("")}
+                </select>
+                <select id="cloud-sort-select" class="cloud-bucket-select" aria-label="Sort materials">
+                  <option value="newest">Newest First</option>
+                  <option value="name">Name (A-Z)</option>
+                  <option value="size">Size (Largest)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Materials List -->
+            <div id="cloud-materials-container" class="cloud-materials-grid">
+              ${materials.length ? materials.map(renderMaterialCard).join("") : `
+                <div style="text-align: center; padding: 36px 16px;">
+                  <div style="font-size: 2.5rem; margin-bottom: 10px;">📦</div>
+                  <h4 style="margin: 0 0 6px;">No materials in your cloud bucket yet</h4>
+                  <p style="margin: 0 0 16px; color: var(--text-muted, #64748b); font-size: 0.88rem;">Upload your first PDF to start building your reusable cloud library.</p>
+                  <button class="btn btn-primary btn-small" type="button" data-switch-to-upload>Upload from Device</button>
+                </div>
+              `}
+            </div>
+          </div>
+          <div class="cloud-modal-footer">
+            <div style="font-size: 0.88rem; color: var(--text-muted, #64748b);">
+              <span id="cloud-selected-count">0 materials selected</span>
+              <span style="font-size: 0.78rem; opacity: 0.8; margin-left: 6px;">(0 MB added)</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary btn-small" type="button" data-bucket-cancel>Cancel</button>
+              <button class="btn btn-primary btn-small" type="button" id="btn-assign-cloud-materials" disabled>
+                Assign Selected Materials
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML("beforeend", modalHtml);
+    const modalEl = document.getElementById("cloud-bucket-modal");
+    const container = document.getElementById("cloud-materials-container");
+    const searchInput = document.getElementById("cloud-search-input");
+    const categorySelect = document.getElementById("cloud-category-select");
+    const sortSelect = document.getElementById("cloud-sort-select");
+    const assignBtn = document.getElementById("btn-assign-cloud-materials");
+    const countLabel = document.getElementById("cloud-selected-count");
+
+    const selectedIds = new Set();
+
+    const updateSelectionUI = () => {
+      const count = selectedIds.size;
+      countLabel.textContent = `${count} material${count === 1 ? "" : "s"} selected`;
+      assignBtn.disabled = count === 0;
+      assignBtn.textContent = count > 0 ? `Assign Selected Materials (${count})` : "Assign Selected Materials";
+    };
+
+    const bindListEvents = () => {
+      container.querySelectorAll(".cloud-material-card").forEach(card => {
+        const id = card.dataset.materialId;
+        const checkbox = card.querySelector(".cloud-material-checkbox");
+        if (!checkbox || checkbox.disabled) return;
+
+        card.addEventListener("click", (e) => {
+          if (e.target.closest(".btn-preview-icon")) return;
+          checkbox.checked = !checkbox.checked;
+          if (checkbox.checked) {
+            selectedIds.add(id);
+            card.classList.add("is-selected");
+          } else {
+            selectedIds.delete(id);
+            card.classList.remove("is-selected");
+          }
+          updateSelectionUI();
+        });
+
+        checkbox.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            selectedIds.add(id);
+            card.classList.add("is-selected");
+          } else {
+            selectedIds.delete(id);
+            card.classList.remove("is-selected");
+          }
+          updateSelectionUI();
+        });
+      });
+
+      container.querySelectorAll("[data-preview-id]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.previewId;
+          const item = materials.find(m => String(m.id) === String(id));
+          if (item) {
+            ClassroomUI.openPdfPreviewModal({
+              title: item.title,
+              url: item.previewUrl || item.fileUrl,
+              filename: item.originalFilename
+            });
+          }
+        });
+      });
+
+      modalEl.querySelector("[data-switch-to-upload]")?.addEventListener("click", () => {
+        closeModal();
+        ClassroomUI.openUploadFromDeviceModal({ classroomId });
+      });
+    };
+
+    bindListEvents();
+
+    const filterAndSort = () => {
+      const q = (searchInput?.value || "").toLowerCase().trim();
+      const cat = categorySelect?.value || "";
+      const sort = sortSelect?.value || "newest";
+
+      let filtered = materials.filter(m => {
+        const matchesQuery = !q ||
+          m.title.toLowerCase().includes(q) ||
+          (m.originalFilename && m.originalFilename.toLowerCase().includes(q)) ||
+          (m.description && m.description.toLowerCase().includes(q));
+        const matchesCategory = !cat || (m.category === cat || m.resourceType === cat);
+        return matchesQuery && matchesCategory;
+      });
+
+      if (sort === "name") {
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+      } else if (sort === "size") {
+        filtered.sort((a, b) => (b.fileSize || 0) - (a.fileSize || 0));
+      } else {
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
+
+      container.innerHTML = filtered.length
+        ? filtered.map(renderMaterialCard).join("")
+        : `<div style="text-align: center; padding: 24px; color: var(--text-muted, #64748b);">No materials match your search.</div>`;
+
+      filtered.forEach(m => {
+        if (selectedIds.has(m.id)) {
+          const card = container.querySelector(`[data-material-id="${m.id}"]`);
+          const cb = card?.querySelector(".cloud-material-checkbox");
+          if (card && cb && !cb.disabled) {
+            cb.checked = true;
+            card.classList.add("is-selected");
+          }
+        }
+      });
+
+      bindListEvents();
+    };
+
+    searchInput?.addEventListener("input", filterAndSort);
+    categorySelect?.addEventListener("change", filterAndSort);
+    sortSelect?.addEventListener("change", filterAndSort);
+
+    const closeModal = () => modalEl?.remove();
+    modalEl.querySelector(".cloud-modal-close")?.addEventListener("click", closeModal);
+    modalEl.querySelector("[data-bucket-cancel]")?.addEventListener("click", closeModal);
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) closeModal();
+    });
+
+    assignBtn.addEventListener("click", async () => {
+      if (selectedIds.size === 0) return;
+      assignBtn.disabled = true;
+      assignBtn.textContent = "Assigning Materials...";
+
+      try {
+        const resourceIds = Array.from(selectedIds);
+        await ClassroomAPI.assignCloudMaterialsToClassroom({
+          classroomId,
+          resourceIds
+        });
+
+        ClassroomUI.showToast(
+          resourceIds.length === 1
+            ? "Material assigned to class successfully!"
+            : `${resourceIds.length} materials assigned to class successfully!`,
+          "success"
+        );
+
+        closeModal();
+
+        if (classroomId) {
+          await ClassroomUI.refreshClassroomSections(classroomId);
+        } else {
+          await ClassroomUI.renderTeachingResources(classroomId);
+        }
+      } catch (err) {
+        console.error("[Digital Classroom] Cloud material assignment failed", err);
+        ClassroomUI.showToast(err?.message || "Could not assign materials. Please try again.", "error");
+        assignBtn.disabled = false;
+        updateSelectionUI();
+      }
+    });
+  }
+
+  static async openUploadFromDeviceModal({ classroomId = "", prefillFile = null } = {}) {
+    const existing = document.getElementById("upload-device-modal");
+    if (existing) existing.remove();
+
+    const quota = await ClassroomAPI.getTeacherStorageUsage().catch(() => null);
+    const isFull = quota && quota.percentage >= 100;
+
+    const modalHtml = `
+      <div class="cloud-modal-backdrop" id="upload-device-modal">
+        <div class="cloud-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-modal-title">
+          <div class="cloud-modal-header">
+            <div class="cloud-modal-header-copy">
+              <h3 id="upload-modal-title">Upload from Device</h3>
+              <p>Upload a PDF to your Cloudflare storage and assign it to class</p>
+            </div>
+            <button class="cloud-modal-close" type="button" aria-label="Close modal">&times;</button>
+          </div>
+          <div class="cloud-modal-body">
+            ${isFull ? `
+              <div class="duplicate-alert-card" style="background: #fef2f2; border-color: #fecaca;">
+                <div class="duplicate-alert-header" style="color: #991b1b;">
+                  <span>⚠️</span> Cloud Storage Full (500 MB reached)
+                </div>
+                <div class="duplicate-alert-info" style="color: #7f1d1d;">
+                  You have reached your 500 MB cloud storage allocation. You can still assign any of your existing cloud materials to this class without using any extra storage.
+                </div>
+                <div class="duplicate-alert-actions">
+                  <button class="btn btn-primary btn-small" type="button" data-switch-to-bucket>Explore Your Cloud Bucket</button>
+                </div>
+              </div>
+            ` : ""}
+
+            <form id="device-upload-form" ${isFull ? 'style="opacity: 0.5; pointer-events: none;"' : ""}>
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label class="form-label" for="device-file-input">Select File (PDF, Document) *</label>
+                <input id="device-file-input" class="form-control" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf" required>
+              </div>
+
+              <!-- Duplicate Alert Placeholder -->
+              <div id="duplicate-detection-container"></div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label class="form-label" for="material-name-input">Material Name *</label>
+                <input id="material-name-input" class="form-control" type="text" placeholder="e.g., Present Simple Grammar Guide" required>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label class="form-label" for="material-category-input">Category / Topic</label>
+                <input id="material-category-input" class="form-control" type="text" placeholder="e.g., Grammar, Reading, Unit 1">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label class="form-label" for="material-desc-input">Description / Student Instructions</label>
+                <textarea id="material-desc-input" class="form-control" rows="2" placeholder="Optional notes for students..."></textarea>
+              </div>
+
+              <!-- Upload Progress -->
+              <div id="upload-progress-container" class="cloud-upload-progress-wrap" hidden>
+                <div class="cloud-upload-progress-header">
+                  <span id="upload-status-text">Uploading to Cloud Storage...</span>
+                  <span id="upload-percent-text">0%</span>
+                </div>
+                <div class="quota-progress-track">
+                  <div id="upload-progress-bar" class="quota-progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+                <span style="font-size: 0.8rem; color: var(--text-muted, #64748b);">
+                  ${quota ? `Remaining storage: <strong>${quota.remainingMb} MB</strong>` : ""}
+                </span>
+                <div style="display: flex; gap: 10px;">
+                  <button class="btn btn-secondary btn-small" type="button" data-upload-cancel>Cancel</button>
+                  <button class="btn btn-primary btn-small" type="submit" id="btn-submit-upload">
+                    Upload &amp; Assign
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML("beforeend", modalHtml);
+    const modalEl = document.getElementById("upload-device-modal");
+    const form = document.getElementById("device-upload-form");
+    const fileInput = document.getElementById("device-file-input");
+    const nameInput = document.getElementById("material-name-input");
+    const categoryInput = document.getElementById("material-category-input");
+    const descInput = document.getElementById("material-desc-input");
+    const duplicateContainer = document.getElementById("duplicate-detection-container");
+    const progressContainer = document.getElementById("upload-progress-container");
+    const progressBar = document.getElementById("upload-progress-bar");
+    const statusText = document.getElementById("upload-status-text");
+    const percentText = document.getElementById("upload-percent-text");
+    const submitBtn = document.getElementById("btn-submit-upload");
+
+    let existingMatch = null;
+
+    modalEl.querySelector("[data-switch-to-bucket]")?.addEventListener("click", () => {
+      closeModal();
+      ClassroomUI.openCloudBucketModal({ classroomId });
+    });
+
+    const closeModal = () => modalEl?.remove();
+    modalEl.querySelector(".cloud-modal-close")?.addEventListener("click", closeModal);
+    modalEl.querySelector("[data-upload-cancel]")?.addEventListener("click", closeModal);
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) closeModal();
+    });
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      if (!nameInput.value.trim()) {
+        const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        nameInput.value = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+      }
+
+      duplicateContainer.innerHTML = "";
+      existingMatch = await ClassroomAPI.findMatchingCloudMaterial({
+        filename: file.name,
+        size: file.size
+      }).catch(() => null);
+
+      if (existingMatch) {
+        duplicateContainer.innerHTML = `
+          <div class="duplicate-alert-card">
+            <div class="duplicate-alert-header">
+              <span>⚠️</span> This material is already in your cloud storage.
+            </div>
+            <div class="duplicate-alert-info">
+              <strong>Existing file:</strong> "${ClassroomUI.escape(existingMatch.title)}"<br>
+              <span style="font-size: 0.8rem; opacity: 0.85;">
+                ${ClassroomUI.escape(existingMatch.originalFilename || file.name)} &bull; ${ClassroomUI.escape(existingMatch.formattedSize || '')} &bull; Uploaded ${ClassroomUI.formatDate(existingMatch.createdAt)}
+              </span>
+            </div>
+            <div class="duplicate-alert-actions">
+              <button class="btn btn-primary btn-small" type="button" id="btn-use-existing-file">
+                [ Use Existing File ]
+              </button>
+              <button class="btn btn-secondary btn-small" type="button" id="btn-upload-anyway" style="font-size: 0.78rem;">
+                Upload Anyway as New File
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.getElementById("btn-use-existing-file")?.addEventListener("click", async () => {
+          try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Assigning...";
+            await ClassroomAPI.assignCloudMaterialsToClassroom({
+              classroomId,
+              resourceIds: [existingMatch.id],
+              title: nameInput.value.trim() || existingMatch.title,
+              instructions: descInput.value.trim()
+            });
+
+            ClassroomUI.showToast(`Existing file "${existingMatch.title}" assigned successfully! (0 MB added)`, "success");
+            closeModal();
+            if (classroomId) await ClassroomUI.refreshClassroomSections(classroomId);
+          } catch (err) {
+            ClassroomUI.showToast(err?.message || "Could not assign existing file.", "error");
+            submitBtn.disabled = false;
+          }
+        });
+
+        document.getElementById("btn-upload-anyway")?.addEventListener("click", () => {
+          duplicateContainer.innerHTML = `
+            <div style="font-size: 0.8rem; color: var(--text-muted, #64748b); margin-bottom: 10px;">
+              ✓ Proceeding with new file upload.
+            </div>
+          `;
+          existingMatch = null;
+        });
+      }
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const title = nameInput.value.trim() || file.name;
+      const category = categoryInput.value.trim() || "General";
+      const description = descInput.value.trim();
+
+      submitBtn.disabled = true;
+      progressContainer.hidden = false;
+      progressBar.style.width = "20%";
+      percentText.textContent = "20%";
+      statusText.textContent = "Requesting secure cloud storage signature...";
+
+      try {
+        const submissionId = "sub_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        let uploadResult = null;
+
+        if (window.DigitalClassroomSupabase?.getSession) {
+          const session = await window.DigitalClassroomSupabase.getSession().catch(() => null);
+          if (session?.access_token) {
+            const signRes = await fetch("/api/r2?action=sign-upload", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({
+                submissionId,
+                assetType: "project",
+                filename: file.name,
+                contentType: file.type || "application/pdf",
+                size: file.size
+              })
+            });
+
+            if (!signRes.ok) {
+              const errJson = await signRes.json().catch(() => ({}));
+              throw new Error(errJson.error || "Could not sign upload.");
+            }
+
+            uploadResult = await signRes.json();
+          }
+        }
+
+        progressBar.style.width = "50%";
+        percentText.textContent = "50%";
+        statusText.textContent = "Uploading file to Cloudflare R2...";
+
+        let fileUrl = "";
+        let filePath = "";
+
+        if (uploadResult?.uploadUrl) {
+          const putRes = await fetch(uploadResult.uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type || "application/pdf"
+            },
+            body: file
+          });
+
+          if (!putRes.ok) {
+            throw new Error("Could not store file in cloud bucket.");
+          }
+
+          fileUrl = uploadResult.publicUrl || "";
+          filePath = uploadResult.objectKey || "";
+        } else {
+          fileUrl = URL.createObjectURL(file);
+          filePath = `projects/teacher/${file.name}`;
+        }
+
+        progressBar.style.width = "85%";
+        percentText.textContent = "85%";
+        statusText.textContent = "Saving resource record...";
+
+        const resource = await ClassroomAPI.createTeachingResource({
+          title,
+          originalFilename: file.name,
+          filename: file.name,
+          fileUrl,
+          filePath,
+          fileSize: file.size,
+          fileType: "pdf",
+          mimeType: file.type || "application/pdf",
+          category,
+          resourceType: "PDF",
+          description
+        });
+
+        progressBar.style.width = "100%";
+        percentText.textContent = "100%";
+        statusText.textContent = "Finalizing assignment...";
+
+        if (classroomId && resource) {
+          await ClassroomAPI.assignCloudMaterialsToClassroom({
+            classroomId,
+            resourceIds: [resource.id],
+            title,
+            instructions: description
+          });
+        }
+
+        ClassroomUI.showToast(`"${title}" uploaded to cloud and assigned successfully!`, "success");
+        closeModal();
+
+        if (classroomId) {
+          await ClassroomUI.refreshClassroomSections(classroomId);
+        } else {
+          await ClassroomUI.renderTeachingResources(classroomId);
+        }
+      } catch (err) {
+        console.error("[Digital Classroom] Device upload failed", err);
+        ClassroomUI.showToast(err?.message || "Upload failed. Please try again.", "error");
+        submitBtn.disabled = false;
+        progressContainer.hidden = true;
+      }
+    });
+  }
+
+  static openPdfPreviewModal({ title = "PDF Preview", url = "", filename = "" } = {}) {
+    const existing = document.getElementById("pdf-preview-modal");
+    if (existing) existing.remove();
+
+    const isSecure = /^https?:\/\//i.test(url) || url.startsWith("blob:");
+    const frameSrc = isSecure ? url : "";
+
+    const modalHtml = `
+      <div class="cloud-modal-backdrop" id="pdf-preview-modal">
+        <div class="cloud-modal-dialog pdf-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="pdf-preview-title">
+          <div class="cloud-modal-header">
+            <div class="cloud-modal-header-copy">
+              <h3 id="pdf-preview-title">📄 ${ClassroomUI.escape(title)}</h3>
+              <p>${ClassroomUI.escape(filename || "PDF Document Preview")}</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${url ? `<a class="btn btn-secondary btn-small" href="${ClassroomUI.escape(url)}" target="_blank" rel="noopener noreferrer" download>⬇️ Open / Download</a>` : ""}
+              <button class="cloud-modal-close" type="button" aria-label="Close preview">&times;</button>
+            </div>
+          </div>
+          <div style="flex: 1; min-height: 0; position: relative;">
+            ${frameSrc ? `
+              <iframe class="pdf-preview-frame" src="${ClassroomUI.escape(frameSrc)}" title="${ClassroomUI.escape(title)}"></iframe>
+            ` : `
+              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 32px; text-align: center;">
+                <p style="font-size: 1.1rem; font-weight: 600;">Preview unavailable</p>
+                <p style="color: var(--text-muted, #64748b); font-size: 0.88rem;">The file can still be opened directly or assigned to your students.</p>
+                ${url ? `<a class="btn btn-primary btn-small" href="${ClassroomUI.escape(url)}" target="_blank" rel="noopener">Open File Directly</a>` : ""}
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML("beforeend", modalHtml);
+    const modalEl = document.getElementById("pdf-preview-modal");
+
+    const closeModal = () => modalEl?.remove();
+    modalEl.querySelector(".cloud-modal-close")?.addEventListener("click", closeModal);
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) closeModal();
+    });
+  }
+
   static bindLearningSpreeForm(resources, classrooms, classroomId = "") {
     const form = document.getElementById("learning-spree-form");
     if (!form || form.dataset.bound === "true") return;
@@ -1978,6 +2723,12 @@ class ClassroomUI {
         });
       });
     }
+
+    document.querySelectorAll("[data-open-cloud-bucket]").forEach((button) => {
+      button.addEventListener("click", () => {
+        ClassroomUI.openCloudBucketModal({ classroomId: this.getCurrentClassroomId() });
+      });
+    });
 
     document.querySelectorAll("[data-assign-resource]").forEach((button) => {
       button.addEventListener("click", () => {

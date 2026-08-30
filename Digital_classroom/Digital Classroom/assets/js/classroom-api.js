@@ -105,11 +105,15 @@ const ClassroomLocalStore = {
         id: ClassroomState.createId("ass"),
         classroomId: assignmentData.classroomId,
         title: assignmentData.title.trim(),
-        instructions: assignmentData.instructions.trim(),
+        instructions: (assignmentData.instructions || "").trim(),
         dueDate: assignmentData.dueDate,
         points: Number(assignmentData.points),
         assignmentType: assignmentData.assignmentType || "assignment",
         resourceItems: Array.isArray(assignmentData.resourceItems) ? assignmentData.resourceItems : [],
+        resourceId: assignmentData.resourceId || (assignmentData.resourceItems?.[0]?.resourceId) || null,
+        resourceTitle: assignmentData.resourceTitle || (assignmentData.resourceItems?.[0]?.title) || "",
+        resourceUrl: assignmentData.resourceUrl || (assignmentData.resourceItems?.[0]?.resourceUrl) || "",
+        fileUrl: assignmentData.fileUrl || (assignmentData.resourceItems?.[0]?.fileUrl) || "",
         unlockMode: assignmentData.unlockMode || "open_access",
         startDate: assignmentData.startDate || "",
         timezone: assignmentData.timezone || "Asia/Colombo",
@@ -426,6 +430,160 @@ const ClassroomLocalStore = {
       message.updatedAt = now;
       return message;
     });
+  },
+
+  getTeachingResources() {
+    const data = ClassroomState.getData();
+    return (data.teachingResources || []).map((res) => ({
+      ...res,
+      formattedSize: ClassroomAPI.formatFileSize(res.fileSize || 0)
+    }));
+  },
+
+  createTeachingResource(resourceData) {
+    return ClassroomState.update((data) => {
+      const resource = {
+        id: ClassroomState.createId("res"),
+        title: (resourceData.title || resourceData.name || "Untitled Resource").trim(),
+        originalFilename: resourceData.originalFilename || resourceData.filename || `${(resourceData.title || "resource").toLowerCase().replace(/\s+/g, "_")}.pdf`,
+        fileUrl: resourceData.fileUrl || "",
+        filePath: resourceData.filePath || "",
+        fileSize: Number(resourceData.fileSize || resourceData.size || 0),
+        fileType: resourceData.fileType || "pdf",
+        mimeType: resourceData.mimeType || resourceData.contentType || "application/pdf",
+        category: resourceData.category || "General",
+        resourceType: resourceData.resourceType || "PDF",
+        description: (resourceData.description || "").trim(),
+        createdAt: new Date().toISOString()
+      };
+      if (!Array.isArray(data.teachingResources)) {
+        data.teachingResources = [];
+      }
+      data.teachingResources.unshift(resource);
+      return resource;
+    });
+  },
+
+  getTeacherCloudMaterials(classroomId = "") {
+    const data = ClassroomState.getData();
+    const resources = data.teachingResources || [];
+    const assignments = classroomId
+      ? data.assignments.filter((a) => a.classroomId === classroomId && !a.isDeleted && !a.deletedAt)
+      : [];
+
+    return resources.map((resource) => {
+      const isAssigned = assignments.some((a) => {
+        if (a.resourceId === resource.id) return true;
+        if (Array.isArray(a.resourceItems)) {
+          return a.resourceItems.some((item) => item.resourceId === resource.id || item.id === resource.id);
+        }
+        return false;
+      });
+
+      return {
+        ...resource,
+        formattedSize: ClassroomAPI.formatFileSize(resource.fileSize || 0),
+        isAssigned
+      };
+    });
+  },
+
+  getTeacherStorageUsage() {
+    const data = ClassroomState.getData();
+    const resources = data.teachingResources || [];
+    const usedBytes = resources.reduce((sum, item) => sum + Number(item.fileSize || 0), 0);
+    const maxBytes = 500 * 1024 * 1024;
+    const remainingBytes = Math.max(0, maxBytes - usedBytes);
+    const usedMb = Number((usedBytes / (1024 * 1024)).toFixed(1));
+    const maxMb = 500;
+    const remainingMb = Number((remainingBytes / (1024 * 1024)).toFixed(1));
+    const percentage = Math.min(100, Math.round((usedBytes / maxBytes) * 100));
+
+    return {
+      usedBytes,
+      maxBytes,
+      usedMb,
+      maxMb,
+      remainingBytes,
+      remainingMb,
+      percentage,
+      fileCount: resources.length
+    };
+  },
+
+  findMatchingCloudMaterial({ filename, size }) {
+    const data = ClassroomState.getData();
+    const resources = data.teachingResources || [];
+    const targetName = String(filename || "").trim().toLowerCase();
+    const targetSize = Number(size) || 0;
+
+    return resources.find((res) => {
+      const resFilename = String(res.originalFilename || "").trim().toLowerCase();
+      const resTitle = String(res.title || "").trim().toLowerCase();
+      if (targetName && (resFilename === targetName || `${resTitle}.pdf` === targetName)) {
+        return true;
+      }
+      if (targetSize > 0 && res.fileSize === targetSize && targetName && resFilename.endsWith(targetName.split(".").pop() || "")) {
+        return true;
+      }
+      return false;
+    }) || null;
+  },
+
+  isMaterialAssignedToClass(resourceId, classroomId) {
+    if (!resourceId || !classroomId) return false;
+    const data = ClassroomState.getData();
+    const assignments = data.assignments.filter((a) => a.classroomId === classroomId && !a.isDeleted && !a.deletedAt);
+    return assignments.some((a) => {
+      if (a.resourceId === resourceId) return true;
+      if (Array.isArray(a.resourceItems)) {
+        return a.resourceItems.some((item) => item.resourceId === resourceId || item.id === resourceId);
+      }
+      return false;
+    });
+  },
+
+  assignCloudMaterialsToClassroom({ classroomId, resourceIds = [], title, instructions = "", dueDate, points = 100 }) {
+    const data = ClassroomState.getData();
+    const resources = data.teachingResources || [];
+    const selected = resourceIds.map((id) => resources.find((r) => r.id === id)).filter(Boolean);
+
+    if (!selected.length) {
+      throw new Error("No materials selected to assign.");
+    }
+
+    const createdAssignments = [];
+    selected.forEach((res, index) => {
+      const assignmentTitle = selected.length === 1 ? (title || res.title) : (title ? `${title}: ${res.title}` : res.title);
+      const resUrl = res.fileUrl || "";
+      const assignment = ClassroomLocalStore.createAssignment({
+        classroomId,
+        title: assignmentTitle,
+        instructions: instructions || res.description || "",
+        dueDate: dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+        points: Number(points) || 100,
+        assignmentType: "assignment",
+        resourceItems: [{
+          id: `${res.id}:${index + 1}`,
+          resourceId: res.id,
+          title: res.title,
+          resourceType: res.resourceType || "PDF",
+          fileUrl: resUrl,
+          resourceUrl: resUrl,
+          previewUrl: res.previewUrl || resUrl,
+          fileSize: res.fileSize || 0,
+          originalFilename: res.originalFilename || ""
+        }],
+        resourceId: res.id,
+        resourceTitle: res.title,
+        resourceUrl: resUrl,
+        fileUrl: resUrl,
+        status: "published"
+      });
+      createdAssignments.push(assignment);
+    });
+
+    return createdAssignments;
   }
 };
 
@@ -1010,18 +1168,30 @@ const ClassroomSupabaseStore = {
   },
 
   normalizeTeachingResource(row) {
-    const resourceType = row.resource_type || row.category || row.content_type || "resource";
+    const resourceType = row.resource_type || row.category || row.content_type || "PDF";
     const metadata = this.parseJsonObject(row.metadata);
     const downloadUrl = row.file_url || row.image_url || row.thumbnail_url || "";
-    const previewUrl = this.resolveTeachingResourcePreviewUrl(row, metadata);
+    const previewUrl = this.resolveTeachingResourcePreviewUrl(row, metadata) || downloadUrl;
     const isWebProject = this.isWebProjectResource(row);
+    const rawPath = String(row.file_path || "").trim();
+    const originalFilename = metadata.originalFilename || metadata.original_filename || metadata.filename ||
+      (rawPath ? rawPath.split("/").pop() : "") ||
+      (downloadUrl ? downloadUrl.split("/").pop()?.split("?")[0] : "") ||
+      `${row.title || "resource"}.pdf`;
+    const fileSize = Number(row.file_size || metadata.file_size || metadata.size || 0);
+
     return {
       id: row.id,
-      ownerId: row.owner_id || row.author_id || null,
+      ownerId: row.owner_id || row.author_id || row.teacher_id || null,
       title: row.title || "Untitled resource",
       description: row.description || "",
       resourceType,
       category: row.category || resourceType,
+      originalFilename,
+      fileSize,
+      formattedSize: ClassroomAPI.formatFileSize(fileSize),
+      fileType: row.file_type || "pdf",
+      mimeType: row.mime_type || metadata.contentType || "application/pdf",
       fileUrl: downloadUrl,
       downloadUrl,
       previewUrl,
@@ -2675,6 +2845,8 @@ const ClassroomAPI = {
           "updated_at"
         ];
         const optionalColumns = [
+          "file_size",
+          "storage_provider",
           "project_url",
           "preview_url",
           "metadata",
@@ -3206,6 +3378,169 @@ const ClassroomAPI = {
       ).length,
       totalPoints
     };
+  },
+
+  formatFileSize(bytes = 0) {
+    const num = Number(bytes) || 0;
+    if (num <= 0) return "0 B";
+    if (num < 1024) return `${num} B`;
+    if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
+    return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+  },
+
+  async getTeacherCloudMaterials(classroomId = "") {
+    return ClassroomSupabaseStore.withFallback(
+      "submissions",
+      async (context) => {
+        const [materials, assignments] = await Promise.all([
+          ClassroomAPI.getTeachingResources(""),
+          classroomId ? ClassroomAPI.getAssignmentsByClassroom(classroomId) : Promise.resolve([])
+        ]);
+
+        return materials.map((material) => {
+          const isAssigned = assignments.some((a) => {
+            if (String(a.resourceId || "") === String(material.id)) return true;
+            if (Array.isArray(a.resourceItems)) {
+              return a.resourceItems.some((item) => String(item.resourceId || item.id) === String(material.id));
+            }
+            return false;
+          });
+
+          return {
+            ...material,
+            isAssigned
+          };
+        });
+      },
+      () => ClassroomLocalStore.getTeacherCloudMaterials(classroomId),
+      { requireAuth: true }
+    );
+  },
+
+  async getTeacherStorageUsage() {
+    return ClassroomSupabaseStore.withFallback(
+      "submissions",
+      async (context) => {
+        try {
+          const stats = await ClassroomSupabaseStore.callServerApi("/api/teacher/storage-usage", { method: "GET" });
+          if (stats && stats.data && typeof stats.data.usedBytes === "number") {
+            return stats.data;
+          }
+          if (stats && typeof stats.usedBytes === "number") {
+            return stats;
+          }
+        } catch (apiErr) {
+          // Fallback to calculating from submissions
+        }
+
+        const resources = await ClassroomAPI.getTeachingResources("");
+        const usedBytes = resources.reduce((sum, item) => sum + Number(item.fileSize || 0), 0);
+        const maxBytes = 500 * 1024 * 1024;
+        const remainingBytes = Math.max(0, maxBytes - usedBytes);
+        const usedMb = Number((usedBytes / (1024 * 1024)).toFixed(1));
+        const maxMb = 500;
+        const remainingMb = Number((remainingBytes / (1024 * 1024)).toFixed(1));
+        const percentage = Math.min(100, Math.round((usedBytes / maxBytes) * 100));
+
+        return {
+          usedBytes,
+          maxBytes,
+          usedMb,
+          maxMb,
+          remainingBytes,
+          remainingMb,
+          percentage,
+          fileCount: resources.length
+        };
+      },
+      () => ClassroomLocalStore.getTeacherStorageUsage(),
+      { requireAuth: true }
+    );
+  },
+
+  async findMatchingCloudMaterial({ filename, size }) {
+    const materials = await this.getTeacherCloudMaterials();
+    const targetName = String(filename || "").trim().toLowerCase();
+    const targetSize = Number(size) || 0;
+
+    return materials.find((res) => {
+      const resFilename = String(res.originalFilename || "").trim().toLowerCase();
+      const resTitle = String(res.title || "").trim().toLowerCase();
+      if (targetName && (resFilename === targetName || `${resTitle}.pdf` === targetName || resTitle === targetName)) {
+        return true;
+      }
+      if (targetSize > 0 && res.fileSize === targetSize && targetName && resFilename.endsWith(targetName.split(".").pop() || "")) {
+        return true;
+      }
+      return false;
+    }) || null;
+  },
+
+  async isMaterialAssignedToClass(resourceId, classroomId) {
+    if (!resourceId || !classroomId) return false;
+    const assignments = await this.getAssignmentsByClassroom(classroomId);
+    return assignments.some((a) => {
+      if (String(a.resourceId || "") === String(resourceId)) return true;
+      if (Array.isArray(a.resourceItems)) {
+        return a.resourceItems.some((item) => String(item.resourceId || item.id) === String(resourceId));
+      }
+      return false;
+    });
+  },
+
+  async assignCloudMaterialsToClassroom({ classroomId, resourceIds = [], title, instructions = "", dueDate, points = 100 }) {
+    return ClassroomSupabaseStore.withFallback(
+      "assignments",
+      async (context) => {
+        const allMaterials = await ClassroomAPI.getTeachingResources("");
+        const selected = resourceIds.map((id) => allMaterials.find((r) => String(r.id) === String(id))).filter(Boolean);
+
+        if (!selected.length) {
+          throw new Error("No materials selected to assign.");
+        }
+
+        const createdAssignments = [];
+        for (let index = 0; index < selected.length; index++) {
+          const res = selected[index];
+          const assignmentTitle = selected.length === 1 ? (title || res.title) : (title ? `${title}: ${res.title}` : res.title);
+          const resUrl = res.previewUrl || res.fileUrl || "";
+
+          const assignment = await ClassroomAPI.createAssignment({
+            classroomId,
+            title: assignmentTitle,
+            instructions: instructions || res.description || "",
+            dueDate: dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+            points: Number(points) || 100,
+            assignmentType: "assignment",
+            resourceItems: [{
+              id: `${res.id}:${index + 1}`,
+              resourceId: res.id,
+              title: res.title,
+              resourceType: res.resourceType || "PDF",
+              fileUrl: res.fileUrl || "",
+              resourceUrl: resUrl,
+              previewUrl: res.previewUrl || resUrl,
+              fileSize: res.fileSize || 0,
+              originalFilename: res.originalFilename || ""
+            }],
+            resourceId: res.id,
+            resourceTitle: res.title,
+            resourceUrl: resUrl,
+            fileUrl: res.fileUrl || "",
+            status: "published"
+          });
+          createdAssignments.push(assignment);
+        }
+
+        return createdAssignments;
+      },
+      () => ClassroomLocalStore.assignCloudMaterialsToClassroom({ classroomId, resourceIds, title, instructions, dueDate, points }),
+      { requireAuth: true }
+    );
+  },
+
+  async createTeachingResource(resourceData) {
+    return ClassroomLocalStore.createTeachingResource(resourceData);
   }
 };
 

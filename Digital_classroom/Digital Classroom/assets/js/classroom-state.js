@@ -9,6 +9,7 @@ class ClassroomState {
     "spreeItemProgress",
     "contentItems",
     "classroomMessages",
+    "teachingResources",
     "aiFeedbackLogs"
   ];
 

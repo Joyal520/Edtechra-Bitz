@@ -330,3 +330,34 @@ export interface OCREvaluation {
   };
 }
 
+export interface TeacherCloudMaterial {
+  id: string;
+  title: string;
+  name: string;
+  original_filename: string;
+  originalFilename: string;
+  file_url: string;
+  fileUrl: string;
+  file_size: number;
+  fileSize: number;
+  formattedSize: string;
+  mime_type: string;
+  category?: string;
+  description?: string;
+  created_at: string;
+  createdAt: string;
+  is_assigned?: boolean;
+  isAssigned?: boolean;
+}
+
+export interface TeacherStorageUsage {
+  usedBytes: number;
+  maxBytes: number;
+  usedMb: number;
+  maxMb: number;
+  remainingBytes: number;
+  remainingMb: number;
+  percentage: number;
+  fileCount: number;
+}
+

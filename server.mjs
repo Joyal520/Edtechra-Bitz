@@ -50,7 +50,9 @@ import {
   buildExamReportObjectKey,
   buildTeachingReportObjectKey,
   buildCourseMediaObjectKey,
-  buildCourseCoverObjectKey
+  buildCourseCoverObjectKey,
+  buildTeacherMaterialObjectKey,
+  validateTeacherStorageQuota
 } from './server/r2Service.mjs';
 import {
   getClassroomTeachingIntelligence,
@@ -1668,6 +1670,538 @@ app.post('/api/classes/presign-upload', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/presign-upload:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom upload URL' });
+  }
+});
+
+// ============================================================================
+// TEACHER CLOUD MATERIALS & REUSABLE CLOUDFLARE R2 BUCKET SYSTEM (500 MB QUOTA)
+// ============================================================================
+
+// Internal Helper: Idempotently assign a master cloud material to a classroom bucket
+async function assignMaterialToClassroomInternal({ classroomId, resourceId, materialTitle, materialUrl, bucketId, teacherId }) {
+  if (!serverSupabase || !classroomId || !resourceId) return null;
+
+  try {
+    // 1. Resolve target bucket ID
+    let targetBucketId = bucketId;
+    if (!targetBucketId) {
+      const { data: buckets } = await serverSupabase
+        .from('content_buckets')
+        .select('id')
+        .eq('classroom_id', classroomId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      if (buckets && buckets.length > 0) {
+        targetBucketId = buckets[0].id;
+      } else {
+        const { data: newBucket } = await serverSupabase
+          .from('content_buckets')
+          .insert({
+            classroom_id: classroomId,
+            title: 'Classroom Resources',
+            description: 'Assigned learning materials and study guides',
+            created_by: teacherId
+          })
+          .select('id')
+          .single();
+
+        if (newBucket) targetBucketId = newBucket.id;
+      }
+    }
+
+    if (!targetBucketId) return null;
+
+    // 2. Prevent duplicate bucket item assignment
+    const { data: existing } = await serverSupabase
+      .from('bucket_items')
+      .select('id, bucket_id, classroom_id, title, item_type, content_id, content_url')
+      .eq('bucket_id', targetBucketId)
+      .eq('content_id', resourceId)
+      .maybeSingle();
+
+    if (existing) {
+      return existing;
+    }
+
+    // 3. Insert reference to master cloud resource (Zero duplicate storage)
+    const { data: item, error } = await serverSupabase
+      .from('bucket_items')
+      .insert({
+        bucket_id: targetBucketId,
+        classroom_id: classroomId,
+        title: materialTitle || 'Learning Material',
+        item_type: 'document',
+        content_id: resourceId,
+        content_url: materialUrl || null,
+        sort_order: 0
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('[assignMaterialToClassroomInternal] Insert warning:', error.message);
+      return null;
+    }
+
+    return item;
+  } catch (err) {
+    console.error('[assignMaterialToClassroomInternal] Error:', err);
+    return null;
+  }
+}
+
+// GET /api/teacher/materials - List authenticated teacher's cloud material library
+app.get(['/api/teacher/materials', '/api/classes/materials'], async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to view cloud materials.' });
+    }
+
+    const teacherId = authData.user.id;
+    const classroomId = req.query.classroomId || '';
+
+    let materials = [];
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('submissions')
+          .select('*')
+          .or(`author_id.eq.${teacherId},teacher_id.eq.${teacherId}`)
+          .eq('resource_purpose', 'teaching_resource')
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          materials = data;
+        }
+      } catch (dbErr) {
+        console.warn('[GET /api/teacher/materials] DB query warning:', dbErr.message);
+      }
+    }
+
+    // Determine assigned status if classroomId is provided
+    const assignedResourceIds = new Set();
+    if (classroomId && serverSupabase) {
+      try {
+        const [{ data: bucketItems }, { data: classroomAssignments }] = await Promise.all([
+          serverSupabase
+            .from('bucket_items')
+            .select('content_id')
+            .eq('classroom_id', classroomId),
+          serverSupabase
+            .from('assignments')
+            .select('id, attachment_urls')
+            .eq('classroom_id', classroomId)
+            .eq('is_deleted', false)
+        ]);
+
+        (bucketItems || []).forEach(item => {
+          if (item.content_id) assignedResourceIds.add(String(item.content_id));
+        });
+
+        (classroomAssignments || []).forEach(a => {
+          const attachments = Array.isArray(a.attachment_urls) ? a.attachment_urls : [];
+          attachments.forEach(att => {
+            if (att.resource_id) assignedResourceIds.add(String(att.resource_id));
+            if (att.id) assignedResourceIds.add(String(att.id));
+          });
+        });
+      } catch (checkErr) {
+        console.warn('[GET /api/teacher/materials] Assignment check warning:', checkErr.message);
+      }
+    }
+
+    const formatted = materials.map((m) => {
+      const sizeNum = Number(m.file_size || 0);
+      let formattedSize = '0 B';
+      if (sizeNum > 0) {
+        if (sizeNum < 1024) formattedSize = `${sizeNum} B`;
+        else if (sizeNum < 1024 * 1024) formattedSize = `${(sizeNum / 1024).toFixed(1)} KB`;
+        else formattedSize = `${(sizeNum / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      return {
+        id: m.id,
+        title: m.title || m.name || 'Untitled Material',
+        name: m.title || m.name || 'Untitled Material',
+        original_filename: m.file_path || m.original_filename || `${m.title || 'document'}.pdf`,
+        originalFilename: m.file_path || m.original_filename || `${m.title || 'document'}.pdf`,
+        file_url: m.file_url,
+        fileUrl: m.file_url,
+        file_size: sizeNum,
+        fileSize: sizeNum,
+        formattedSize,
+        mime_type: m.mime_type || 'application/pdf',
+        category: m.category || m.resource_type || 'General',
+        description: m.description || '',
+        created_at: m.created_at,
+        createdAt: m.created_at,
+        is_assigned: assignedResourceIds.has(String(m.id)),
+        isAssigned: assignedResourceIds.has(String(m.id))
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formatted
+    });
+  } catch (error) {
+    console.error('Error in GET /api/teacher/materials:', error);
+    res.status(500).json({ success: false, error: 'Failed to load cloud materials.' });
+  }
+});
+
+// GET /api/teacher/storage-usage - Calculate teacher storage consumption against 500 MB quota
+app.get('/api/teacher/storage-usage', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const teacherId = authData.user.id;
+    let usedBytes = 0;
+    let fileCount = 0;
+
+    if (serverSupabase) {
+      try {
+        const { data, error } = await serverSupabase
+          .from('submissions')
+          .select('file_size')
+          .or(`author_id.eq.${teacherId},teacher_id.eq.${teacherId}`)
+          .eq('resource_purpose', 'teaching_resource')
+          .eq('is_deleted', false);
+
+        if (!error && Array.isArray(data)) {
+          fileCount = data.length;
+          usedBytes = data.reduce((sum, row) => sum + Number(row.file_size || 0), 0);
+        }
+      } catch (err) {
+        console.warn('[GET /api/teacher/storage-usage] DB query warning:', err.message);
+      }
+    }
+
+    const maxBytes = 500 * 1024 * 1024; // 500 MB
+    const remainingBytes = Math.max(0, maxBytes - usedBytes);
+    const usedMb = Number((usedBytes / (1024 * 1024)).toFixed(1));
+    const maxMb = 500;
+    const remainingMb = Number((remainingBytes / (1024 * 1024)).toFixed(1));
+    const percentage = Math.min(100, Math.round((usedBytes / maxBytes) * 100));
+
+    res.json({
+      success: true,
+      data: {
+        usedBytes,
+        maxBytes,
+        usedMb,
+        maxMb,
+        remainingBytes,
+        remainingMb,
+        percentage,
+        fileCount
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/teacher/storage-usage:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve storage usage.' });
+  }
+});
+
+// POST /api/teacher/materials/presign-upload - Check quota and generate presigned R2 upload URL
+app.post('/api/teacher/materials/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required for upload.' });
+    }
+
+    const { filename = 'document.pdf', contentType = 'application/pdf', size = 0 } = req.body;
+    const teacherId = authData.user.id;
+
+    // Check teacher storage quota before granting upload URL
+    let currentUsedBytes = 0;
+    if (serverSupabase) {
+      const { data } = await serverSupabase
+        .from('submissions')
+        .select('file_size')
+        .or(`author_id.eq.${teacherId},teacher_id.eq.${teacherId}`)
+        .eq('resource_purpose', 'teaching_resource')
+        .eq('is_deleted', false);
+
+      if (Array.isArray(data)) {
+        currentUsedBytes = data.reduce((sum, row) => sum + Number(row.file_size || 0), 0);
+      }
+    }
+
+    try {
+      validateTeacherStorageQuota({
+        currentUsedBytes,
+        incomingSizeBytes: size,
+        maxBytes: 500 * 1024 * 1024
+      });
+    } catch (quotaErr) {
+      return res.status(400).json({ success: false, error: quotaErr.message });
+    }
+
+    const objectKey = buildTeacherMaterialObjectKey({
+      userId: teacherId,
+      filename,
+      contentType
+    });
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in /api/teacher/materials/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate upload URL.' });
+  }
+});
+
+// POST /api/teacher/materials - Create master material record and optionally attach to class
+app.post('/api/teacher/materials', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const {
+      title,
+      description = '',
+      category = 'General',
+      fileUrl,
+      objectKey,
+      filename,
+      fileSize = 0,
+      mimeType = 'application/pdf',
+      classroomId,
+      bucketId
+    } = req.body;
+
+    if (!title?.trim()) {
+      return res.status(400).json({ success: false, error: 'Material name is required.' });
+    }
+    if (!fileUrl) {
+      return res.status(400).json({ success: false, error: 'File URL is required.' });
+    }
+
+    const teacherId = authData.user.id;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database connection not initialized.' });
+    }
+
+    // Insert master material record
+    const { data: material, error } = await serverSupabase
+      .from('submissions')
+      .insert({
+        author_id: teacherId,
+        teacher_id: teacherId,
+        owner_id: teacherId,
+        owner_role: 'teacher',
+        resource_purpose: 'teaching_resource',
+        title: title.trim(),
+        description: (description || '').trim(),
+        category: (category || 'General').trim(),
+        resource_type: (category || 'General').trim(),
+        content_type: mimeType || 'application/pdf',
+        mime_type: mimeType || 'application/pdf',
+        file_url: fileUrl,
+        file_path: filename || objectKey || `${title.trim()}.pdf`,
+        file_size: Number(fileSize) || 0,
+        storage_provider: 'r2',
+        upload_context: classroomId ? 'classroom' : 'global',
+        source: 'digital_classroom',
+        visibility: 'private',
+        status: 'published',
+        is_deleted: false
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // If classroomId is provided, attach to classroom bucket without duplicate storage
+    if (classroomId && material) {
+      await assignMaterialToClassroomInternal({
+        classroomId,
+        resourceId: material.id,
+        materialTitle: material.title,
+        materialUrl: material.file_url,
+        bucketId,
+        teacherId
+      });
+    }
+
+    res.json({
+      success: true,
+      data: material
+    });
+  } catch (error) {
+    console.error('Error in POST /api/teacher/materials:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to save material.' });
+  }
+});
+
+// POST /api/classes/:classroomId/assign-materials - Reusable multi-class assignment (0 MB added)
+app.post('/api/classes/:classroomId/assign-materials', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    const { resourceIds = [], bucketId } = req.body;
+
+    if (!classroomId || !Array.isArray(resourceIds) || resourceIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Classroom ID and resource IDs are required.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const teacherId = authData.user.id;
+    const assignedItems = [];
+
+    for (const resId of resourceIds) {
+      const { data: material } = await serverSupabase
+        .from('submissions')
+        .select('*')
+        .eq('id', resId)
+        .maybeSingle();
+
+      if (!material) continue;
+
+      const item = await assignMaterialToClassroomInternal({
+        classroomId,
+        resourceId: material.id,
+        materialTitle: material.title,
+        materialUrl: material.file_url,
+        bucketId,
+        teacherId
+      });
+
+      if (item) assignedItems.push(item);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        assignedCount: assignedItems.length,
+        items: assignedItems
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:classroomId/assign-materials:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to assign materials.' });
+  }
+});
+
+// GET /api/teacher/materials/:id/preview - Secure preview retrieval for teacher or classroom member
+app.get('/api/teacher/materials/:id/preview', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database connection error.' });
+    }
+
+    const { data: material, error } = await serverSupabase
+      .from('submissions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !material) {
+      return res.status(404).json({ success: false, error: 'Material not found.' });
+    }
+
+    const isOwner = material.author_id === authData.user.id || material.teacher_id === authData.user.id || authData.profile?.role === 'admin';
+    if (!isOwner) {
+      const { data: assignments } = await serverSupabase
+        .from('bucket_items')
+        .select('classroom_id')
+        .eq('content_id', id);
+
+      const classroomIds = (assignments || []).map(a => a.classroom_id);
+      let isMember = false;
+      if (classroomIds.length > 0) {
+        const { data: membership } = await serverSupabase
+          .from('classroom_members')
+          .select('id')
+          .in('classroom_id', classroomIds)
+          .eq('profile_id', authData.user.id)
+          .maybeSingle();
+        if (membership) isMember = true;
+      }
+
+      if (!isMember) {
+        return res.status(403).json({ success: false, error: 'Not authorized to preview this material.' });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: material.id,
+        title: material.title,
+        fileUrl: material.file_url,
+        mimeType: material.mime_type || 'application/pdf',
+        originalFilename: material.file_path || `${material.title}.pdf`
+      }
+    });
+  } catch (err) {
+    console.error('Error in /api/teacher/materials/:id/preview:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate preview.' });
+  }
+});
+
+// DELETE /api/teacher/materials/:id - Soft-delete teacher material
+app.delete('/api/teacher/materials/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { id } = req.params;
+    const teacherId = authData.user.id;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database connection error.' });
+    }
+
+    const { error } = await serverSupabase
+      .from('submissions')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .or(`author_id.eq.${teacherId},teacher_id.eq.${teacherId}`);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Material deleted successfully.' });
+  } catch (err) {
+    console.error('Error in DELETE /api/teacher/materials/:id:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete material.' });
   }
 });
 
