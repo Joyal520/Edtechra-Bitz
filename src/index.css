@@ -1,3 +1,5 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,9 +7,47 @@
 @layer base {
   :root {
     color-scheme: light;
+
+    /* ======================================================================== */
+    /* EDTECHRA BRAND DESIGN TOKENS                                             */
+    /* ======================================================================== */
+    --edtechra-blue: #026fc3;
+    --edtechra-blue-dark: #02599c;
+    --edtechra-blue-darker: #013d6b;
+    --edtechra-blue-light: #38bdf8;
+    --edtechra-blue-soft: #e0f2fe;
+    --edtechra-blue-subtle: #f0f7ff;
+    --edtechra-gradient: linear-gradient(135deg, #026fc3 0%, #0284c7 50%, #38bdf8 100%);
+    --edtechra-gradient-subtle: linear-gradient(180deg, #e8f3ff 0%, #f7faff 60%, #ffffff 100%);
+
     --paper-cream: #fbfbf7;
     --brand-blue: #026fc3;
-    --brand-green: #22c55e;
+    --brand-green: #10b981;
+    --brand-green-soft: #ecfdf5;
+    --brand-red: #ef4444;
+    --brand-red-soft: #fef2f2;
+    --brand-amber: #f59e0b;
+
+    /* Base reader scale (1.0 = Default) */
+    --reader-scale: 1;
+
+    /* Derived Reader Typography Scale Tokens */
+    --font-reader-title: calc(2.25rem * var(--reader-scale, 1));
+    --font-reader-h1: calc(1.75rem * var(--reader-scale, 1));
+    --font-reader-h2: calc(1.35rem * var(--reader-scale, 1));
+    --font-reader-h3: calc(1.15rem * var(--reader-scale, 1));
+    --font-reader-body: calc(0.9375rem * var(--reader-scale, 1));
+    --font-reader-quote: calc(1rem * var(--reader-scale, 1));
+    --font-reader-question: calc(1.15rem * var(--reader-scale, 1));
+    --font-reader-option: calc(0.9375rem * var(--reader-scale, 1));
+    --font-reader-input: calc(0.9375rem * var(--reader-scale, 1));
+    --font-reader-button: calc(0.875rem * var(--reader-scale, 1));
+    --font-reader-meta: calc(0.75rem * var(--reader-scale, 1));
+    --font-reader-caption: calc(0.8125rem * var(--reader-scale, 1));
+    --font-reader-explanation: calc(0.875rem * var(--reader-scale, 1));
+    --font-reader-badge: calc(0.7rem * var(--reader-scale, 1));
+    --reader-line-height-body: calc(1.75 * (1 + (var(--reader-scale, 1) - 1) * 0.2));
+    --reader-line-height-heading: 1.25;
 
     /* Educational Typography System (Default: Medium) */
     --learning-text-size: 14px;
@@ -18,6 +58,23 @@
     --learning-question-size: 1rem;
     --learning-option-size: 0.875rem;
     --learning-meta-size: 0.75rem;
+  }
+
+  /* Reader Scale Container Modifiers */
+  .reader-scale-container[data-scale="sm"] {
+    --reader-scale: 0.875;
+  }
+
+  .reader-scale-container[data-scale="md"] {
+    --reader-scale: 1;
+  }
+
+  .reader-scale-container[data-scale="lg"] {
+    --reader-scale: 1.15;
+  }
+
+  .reader-scale-container[data-scale="xl"] {
+    --reader-scale: 1.30;
   }
 
   [data-text-size="small"] {
@@ -107,6 +164,136 @@
     min-height: 100vh;
     touch-action: manipulation;
   }
+}
+
+/* ========================================================================== */
+/* GLOBAL READER TYPOGRAPHY UTILITY CLASSES                                   */
+/* ========================================================================== */
+
+.reader-title {
+  font-size: var(--font-reader-title) !important;
+  line-height: var(--reader-line-height-heading) !important;
+}
+
+.reader-h1 {
+  font-size: var(--font-reader-h1) !important;
+  line-height: var(--reader-line-height-heading) !important;
+}
+
+.reader-h2 {
+  font-size: var(--font-reader-h2) !important;
+  line-height: var(--reader-line-height-heading) !important;
+}
+
+.reader-h3 {
+  font-size: var(--font-reader-h3) !important;
+  line-height: var(--reader-line-height-heading) !important;
+}
+
+.reader-body {
+  font-size: var(--font-reader-body) !important;
+  line-height: var(--reader-line-height-body) !important;
+}
+
+.reader-quote {
+  font-size: var(--font-reader-quote) !important;
+  line-height: var(--reader-line-height-body) !important;
+}
+
+.reader-question {
+  font-size: var(--font-reader-question) !important;
+  line-height: 1.35 !important;
+}
+
+.reader-option {
+  font-size: var(--font-reader-option) !important;
+  line-height: 1.45 !important;
+}
+
+.reader-input {
+  font-size: var(--font-reader-input) !important;
+}
+
+.reader-button {
+  font-size: var(--font-reader-button) !important;
+}
+
+.reader-meta {
+  font-size: var(--font-reader-meta) !important;
+}
+
+.reader-caption {
+  font-size: var(--font-reader-caption) !important;
+}
+
+.reader-explanation {
+  font-size: var(--font-reader-explanation) !important;
+  line-height: 1.5 !important;
+}
+
+.reader-badge {
+  font-size: var(--font-reader-badge) !important;
+}
+
+/* ========================================================================== */
+/* EDTECHRA MULTI-SURFACE ELEVATION & SHADOW SYSTEM                           */
+/* ========================================================================== */
+
+.surface-lesson {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(2, 111, 195, 0.08);
+}
+
+.surface-practice-header {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 247, 255, 0.85) 100%);
+  border: 1px solid rgba(2, 111, 195, 0.12);
+  box-shadow: 0 4px 20px -2px rgba(2, 111, 195, 0.05);
+}
+
+.surface-question-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.04), 0 2px 6px -2px rgba(2, 111, 195, 0.03);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.surface-question-card:hover {
+  box-shadow: 0 8px 28px -6px rgba(15, 23, 42, 0.06), 0 3px 10px -2px rgba(2, 111, 195, 0.05);
+  border-color: rgba(2, 111, 195, 0.18);
+}
+
+.surface-answer-option {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  transition: all 0.18s ease-in-out;
+}
+
+.surface-answer-option:hover:not(:disabled) {
+  border-color: #026fc3;
+  background: #f0f7ff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgba(2, 111, 195, 0.12);
+}
+
+.surface-answer-selected-correct {
+  background: #f0fdf4 !important;
+  border: 2px solid #10b981 !important;
+  color: #064e3b !important;
+  box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.15) !important;
+}
+
+.surface-answer-selected-incorrect {
+  background: #fef2f2 !important;
+  border: 2px solid #ef4444 !important;
+  color: #7f1d1d !important;
+  box-shadow: 0 4px 16px -2px rgba(239, 68, 68, 0.15) !important;
+}
+
+.surface-answer-revealed-correct {
+  background: #f0fdf4 !important;
+  border: 2px dashed #10b981 !important;
+  color: #064e3b !important;
 }
 
 /* Custom scrollbar styling */

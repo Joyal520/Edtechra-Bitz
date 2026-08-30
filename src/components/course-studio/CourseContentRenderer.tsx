@@ -207,10 +207,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const isAllAnswered = validQuestions.length > 0 && answeredTotal >= validQuestions.length;
 
   return (
-    <div className="w-full max-w-[760px] mx-auto space-y-12 sm:space-y-16 py-4 antialiased font-sans text-inherit box-border overflow-x-hidden">
+    <div className="container-fluid px-0 max-w-[760px] mx-auto space-y-10 sm:space-y-14 py-2 antialiased font-sans text-inherit box-border overflow-x-hidden">
       
       {/* 1. LESSON CONTENT STREAM */}
-      <div className="w-full space-y-8 sm:space-y-12">
+      <div className="w-full space-y-6 sm:space-y-10">
         {blocks.map((block, idx) => {
           const { block_type, content } = block;
 
@@ -222,9 +222,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
             if (!bodyText.trim() && !textContent?.title) return null;
 
             return (
-              <section key={block.id || idx} className="w-full space-y-3">
+              <section key={block.id || idx} className="w-full space-y-2">
                 {textContent?.title && (
-                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left reader-h2">
                     {textContent.title}
                   </h3>
                 )}
@@ -241,22 +241,22 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const pos = img.position || 'above';
 
             return (
-              <section key={block.id || idx} className="w-full space-y-5 clear-both">
+              <section key={block.id || idx} className="w-full space-y-4 clear-both">
                 {item.title && (
-                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left reader-h2">
                     {item.title}
                   </h3>
                 )}
 
                 {(pos === 'above' || pos === 'left' || pos === 'right') && img.url && (
-                  <figure className={`w-full my-6 sm:my-8 ${
+                  <figure className={`w-full my-4 sm:my-6 ${
                     pos === 'left'
                       ? 'md:float-left md:w-[42%] md:max-w-[320px] md:mr-8 md:mb-6'
                       : pos === 'right'
                       ? 'md:float-right md:w-[42%] md:max-w-[320px] md:ml-8 md:mb-6'
                       : 'max-w-[800px] mx-auto'
                   }`}>
-                    <div className="w-full rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-xs border border-black/5 dark:border-white/10">
+                    <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border border-sky-100 dark:border-slate-700">
                       <img
                         src={img.url}
                         alt={img.alt || img.caption || 'Story illustration'}
@@ -265,7 +265,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       />
                     </div>
                     {img.caption && (
-                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif">
+                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif reader-caption">
                         {img.caption}
                       </figcaption>
                     )}
@@ -275,8 +275,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <FormattedLessonText text={bodyText} textScale={textScale} />
 
                 {pos === 'below' && img.url && (
-                  <figure className="w-full my-6 sm:my-8 max-w-[800px] mx-auto">
-                    <div className="w-full rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-xs border border-black/5 dark:border-white/10">
+                  <figure className="w-full my-4 sm:my-6 max-w-[800px] mx-auto">
+                    <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border border-sky-100 dark:border-slate-700">
                       <img
                         src={img.url}
                         alt={img.alt || img.caption || 'Story illustration'}
@@ -285,7 +285,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       />
                     </div>
                     {img.caption && (
-                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif">
+                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif reader-caption">
                         {img.caption}
                       </figcaption>
                     )}
@@ -304,22 +304,22 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const embedUrl = getYouTubeEmbedUrl(vid.url || vid.video_id);
 
             return (
-              <section key={block.id || idx} className="w-full space-y-5 clear-both">
+              <section key={block.id || idx} className="w-full space-y-4 clear-both">
                 {item.title && (
-                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left">
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-inherit pt-2 pb-1 border-b border-current/10 opacity-90 text-left reader-h2">
                     {item.title}
                   </h3>
                 )}
 
                 {(pos === 'above' || pos === 'left' || pos === 'right') && embedUrl && (
-                  <div className={`w-full my-6 sm:my-8 ${
+                  <div className={`w-full my-4 sm:my-6 ${
                     pos === 'left'
                       ? 'md:float-left md:w-[48%] md:max-w-[360px] md:mr-8 md:mb-6'
                       : pos === 'right'
                       ? 'md:float-right md:w-[48%] md:max-w-[360px] md:ml-8 md:mb-6'
                       : 'max-w-2xl mx-auto'
                   }`}>
-                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-black/10">
+                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-slate-200 dark:border-slate-800">
                       <iframe
                         src={embedUrl}
                         title={vid.title || 'Lesson Video'}
@@ -334,8 +334,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <FormattedLessonText text={bodyText} textScale={textScale} />
 
                 {pos === 'below' && embedUrl && (
-                  <div className="w-full my-6 sm:my-8 max-w-2xl mx-auto">
-                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-black/10">
+                  <div className="w-full my-4 sm:my-6 max-w-2xl mx-auto">
+                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-slate-200 dark:border-slate-800">
                       <iframe
                         src={embedUrl}
                         title={vid.title || 'Lesson Video'}
@@ -356,8 +356,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
             if (!imgContent?.url) return null;
 
             return (
-              <figure key={block.id || idx} className="w-full my-8 sm:my-12 overflow-hidden text-center">
-                <div className="w-full rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-xs max-w-2xl mx-auto border border-black/5 dark:border-white/10">
+              <figure key={block.id || idx} className="w-full my-6 sm:my-8 overflow-hidden text-center">
+                <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs max-w-2xl mx-auto border border-sky-100 dark:border-slate-700">
                   <img
                     src={imgContent.url}
                     alt={imgContent.alt || imgContent.caption || 'Course visual material'}
@@ -366,7 +366,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {imgContent.caption && (
-                  <figcaption className="text-xs text-center mt-2 italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center mt-2 italic opacity-75 font-serif reader-caption">
                     {imgContent.caption}
                   </figcaption>
                 )}
@@ -380,8 +380,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const embedUrl = getYouTubeEmbedUrl(yt?.url || yt?.video_id);
 
             return (
-              <figure key={block.id || idx} className="w-full my-8 sm:my-12 space-y-2.5">
-                <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video max-w-2xl mx-auto border border-black/10">
+              <figure key={block.id || idx} className="w-full my-6 sm:my-8 space-y-2">
+                <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video max-w-2xl mx-auto border border-slate-200 dark:border-slate-800">
                   <iframe
                     src={embedUrl}
                     title={yt.title || 'Lesson Video'}
@@ -391,7 +391,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {yt.title && (
-                  <figcaption className="text-xs text-center italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center italic opacity-75 font-serif reader-caption">
                     {yt.title}
                   </figcaption>
                 )}
@@ -405,8 +405,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const embedUrl = getYouTubeEmbedUrl(yt?.url || yt?.video_id);
 
             return (
-              <figure key={block.id || idx} className="w-full my-8 sm:my-12 flex flex-col items-center">
-                <div className="rounded-2xl overflow-hidden bg-black border-2 border-stone-800 shadow-lg w-full max-w-[260px] sm:max-w-[280px] aspect-[9/16]">
+              <figure key={block.id || idx} className="w-full my-6 sm:my-8 flex flex-col items-center">
+                <div className="rounded-2xl overflow-hidden bg-black border-2 border-slate-800 shadow-lg w-full max-w-[260px] sm:max-w-[280px] aspect-[9/16]">
                   <iframe
                     src={embedUrl}
                     title={yt.title || 'YouTube Short Lesson'}
@@ -416,7 +416,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   />
                 </div>
                 {yt.title && (
-                  <figcaption className="text-xs text-center mt-2.5 italic opacity-75 font-serif">
+                  <figcaption className="text-xs text-center mt-2.5 italic opacity-75 font-serif reader-caption">
                     {yt.title}
                   </figcaption>
                 )}
@@ -430,21 +430,21 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
       {/* 2. REFINED EDITORIAL INTERACTIVE PRACTICE SECTION */}
       {validQuestions.length > 0 && (
-        <section className="w-full pt-10 sm:pt-16 border-t border-stone-200/80 dark:border-stone-800 space-y-8 sm:space-y-10">
+        <section className="w-full pt-8 sm:pt-12 border-t border-sky-100 dark:border-slate-800 space-y-6 sm:space-y-8">
           
           {/* Editorial Practice Section Header */}
-          <div className="bg-white/90 dark:bg-stone-900/90 rounded-3xl p-6 sm:p-8 border border-stone-200/90 dark:border-stone-800 shadow-xs space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 text-sky-800 dark:text-sky-300 text-[11px] font-black uppercase tracking-wider">
+          <div className="surface-practice-header rounded-3xl p-5 sm:p-7 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#026fc3]/10 text-[#026fc3] dark:text-sky-300 text-[11px] font-black uppercase tracking-wider reader-badge">
                   <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
                   <span>Interactive Practice</span>
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white reader-h2">
                   Think About the Story
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Check your understanding of the lesson.
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium reader-meta">
+                  Check your understanding with {validQuestions.length} practice activities.
                 </p>
               </div>
 
@@ -452,7 +452,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleToggleSound}
-                className="px-3.5 py-1.5 rounded-full bg-stone-100/80 hover:bg-stone-200/80 dark:bg-stone-800 dark:hover:bg-stone-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs border border-stone-200/60 dark:border-stone-700"
+                className="px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-sky-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs border border-sky-200/80 dark:border-slate-700 reader-button"
                 title="Toggle Question Sound Effects"
               >
                 {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#026fc3]" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
@@ -461,21 +461,21 @@ export const CourseContentRenderer: React.FC<Props> = ({
             </div>
 
             {/* Refined Minimalist Progress Bar */}
-            <div className="pt-3 border-t border-stone-100 dark:border-stone-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+            <div className="pt-3 border-t border-sky-100 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 reader-meta">
                 <span>{answeredTotal} of {validQuestions.length} completed</span>
                 <div className="flex items-center gap-3">
                   <span className="text-[#026fc3] font-black">{Math.round((answeredTotal / validQuestions.length) * 100)}%</span>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black border border-amber-200/60 dark:border-amber-900/60">
                     {earnedPoints} / {totalPointsPossible} pts
                   </span>
                 </div>
               </div>
 
               {/* Smooth Progress Track */}
-              <div className="w-full h-2 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-sky-100/70 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full transition-all duration-500 ease-out"
+                  className="h-full bg-linear-to-r from-[#026fc3] via-[#0284c7] to-[#38bdf8] rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${(answeredTotal / validQuestions.length) * 100}%` }}
                 />
               </div>
@@ -502,28 +502,28 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <div
                   key={qId || qIndex}
                   id={`question-card-${qId}`}
-                  className={`w-full rounded-3xl p-6 sm:p-8 bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-sm space-y-5 transition-all box-border ${
+                  className={`w-full rounded-3xl p-5 sm:p-7 surface-question-card space-y-4 transition-all box-border ${
                     isShaking ? 'animate-shake ring-2 ring-rose-400' : ''
                   }`}
                 >
                   {/* Question Card Header */}
-                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-stone-100 dark:border-stone-800">
+                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-sky-100 dark:border-slate-800">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3]">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3] reader-badge">
                         QUESTION {String(qIndex + 1).padStart(2, '0')}
                       </span>
-                      <span className="text-[10px] font-black opacity-60 uppercase px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300">
+                      <span className="text-[10px] font-black opacity-70 uppercase px-2 py-0.5 rounded-md bg-sky-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-sky-200/60 dark:border-slate-700 reader-badge">
                         {QUESTION_TYPE_LABELS[qType] || qType}
                       </span>
                     </div>
 
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-black shrink-0">
-                      {q.points || 10} POINTS
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-black shrink-0 border border-amber-200/60 dark:border-amber-900/60 reader-badge">
+                      {q.points || 10} PTS
                     </span>
                   </div>
 
                   {/* Question Prompt */}
-                  <h4 className="text-lg sm:text-xl md:text-[22px] font-bold text-slate-900 dark:text-white leading-snug text-left">
+                  <h4 className="font-bold text-slate-900 dark:text-white leading-snug text-left reader-question">
                     {q.question_text}
                   </h4>
 
@@ -531,32 +531,32 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   {/* 1. MULTIPLE CHOICE ANSWER CARDS                          */}
                   {/* -------------------------------------------------------- */}
                   {qType === 'multiple_choice' && (
-                    <div className="w-full space-y-3 pt-1">
+                    <div className="w-full space-y-2.5 pt-1">
                       {optionsList.map((optText, optIdx) => {
                         const letter = String.fromCharCode(65 + optIdx);
                         const isSelected = selectedAnswer === optText;
                         const isCorrectOption = optText.trim().toLowerCase() === (q.correct_answer || '').trim().toLowerCase();
 
                         // Dynamic state styling
-                        let cardStyle = 'bg-white dark:bg-stone-900/90 border-stone-200/90 dark:border-stone-700/80 hover:border-[#026fc3] hover:bg-sky-50/30 dark:hover:bg-stone-800/80 text-slate-800 dark:text-slate-100 shadow-2xs';
-                        let badgeStyle = 'bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300 border border-stone-200/60 dark:border-stone-700';
+                        let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100 shadow-2xs';
+                        let badgeStyle = 'bg-sky-50 dark:bg-slate-800 text-[#026fc3] dark:text-sky-300 border border-sky-200/80 dark:border-slate-700';
 
                         if (isLocked) {
                           if (isSelected) {
                             if (feedback?.isCorrect) {
-                              cardStyle = 'bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs ring-1 ring-emerald-400/20';
-                              badgeStyle = 'bg-emerald-600 text-white shadow-xs';
+                              cardStyle = 'surface-answer-selected-correct';
+                              badgeStyle = 'bg-emerald-600 text-white shadow-xs border-0';
                             } else {
-                              cardStyle = 'bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500 text-rose-950 dark:text-rose-100 shadow-xs ring-1 ring-rose-400/20';
-                              badgeStyle = 'bg-rose-600 text-white shadow-xs';
+                              cardStyle = 'surface-answer-selected-incorrect';
+                              badgeStyle = 'bg-rose-600 text-white shadow-xs border-0';
                             }
                           } else if (!feedback?.isCorrect && isCorrectOption) {
                             // Reveal the correct option if the student was wrong
-                            cardStyle = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/70 text-emerald-900 dark:text-emerald-200';
+                            cardStyle = 'surface-answer-revealed-correct';
                             badgeStyle = 'bg-emerald-500/20 text-emerald-800 border border-emerald-500/40';
                           } else {
-                            cardStyle = 'opacity-40 border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/40';
-                            badgeStyle = 'bg-stone-100 text-stone-400 dark:bg-stone-800';
+                            cardStyle = 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40';
+                            badgeStyle = 'bg-slate-100 text-slate-400 dark:bg-slate-800';
                           }
                         }
 
@@ -566,7 +566,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             type="button"
                             disabled={isLocked || isSubmitting}
                             onClick={(e) => handleEvaluateAnswer(q, optText, e.currentTarget)}
-                            className={`w-full min-h-[54px] p-3.5 sm:p-4 rounded-2xl border text-left text-sm sm:text-[15px] transition-all flex items-center gap-3.5 box-border ${
+                            className={`w-full min-h-[52px] p-3.5 sm:p-4 rounded-2xl border text-left reader-option transition-all flex items-center gap-3.5 box-border ${
                               isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
                             } ${cardStyle}`}
                           >
@@ -578,13 +578,13 @@ export const CourseContentRenderer: React.FC<Props> = ({
                               )}
                             </span>
 
-                            <span className="flex-1 leading-relaxed break-words font-medium">
+                            <span className="flex-1 leading-relaxed break-words font-medium text-inherit reader-option">
                               {optText}
                             </span>
 
                             {/* Correct Answer Badge when revealed */}
                             {isLocked && !feedback?.isCorrect && isCorrectOption && (
-                              <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 uppercase px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50 shrink-0">
+                              <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 uppercase px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50 shrink-0 border border-emerald-300/80 reader-badge">
                                 Correct Answer
                               </span>
                             )}
@@ -603,20 +603,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
                         const isSelected = selectedAnswer === choice;
                         const isCorrectChoice = choice.toLowerCase() === (q.correct_answer || '').toLowerCase();
 
-                        let cardStyle = 'bg-white dark:bg-stone-900/90 border-stone-200/90 dark:border-stone-700/80 hover:border-[#026fc3] hover:bg-sky-50/30 text-slate-800 dark:text-slate-100';
+                        let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100';
                         let icon = choice === 'True' ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-rose-500" />;
 
                         if (isLocked) {
                           if (isSelected) {
                             if (feedback?.isCorrect) {
-                              cardStyle = 'bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs';
+                              cardStyle = 'surface-answer-selected-correct';
                             } else {
-                              cardStyle = 'bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500 text-rose-950 dark:text-rose-100 shadow-xs';
+                              cardStyle = 'surface-answer-selected-incorrect';
                             }
                           } else if (!feedback?.isCorrect && isCorrectChoice) {
-                            cardStyle = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/70 text-emerald-900 dark:text-emerald-200';
+                            cardStyle = 'surface-answer-revealed-correct';
                           } else {
-                            cardStyle = 'opacity-40 border-stone-200 dark:border-stone-800 bg-stone-50/50';
+                            cardStyle = 'opacity-40 border-slate-200 dark:border-slate-800 bg-slate-50/50';
                           }
                         }
 
@@ -626,7 +626,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             type="button"
                             disabled={isLocked || isSubmitting}
                             onClick={(e) => handleEvaluateAnswer(q, choice, e.currentTarget)}
-                            className={`p-4 rounded-2xl border text-center text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                            className={`p-3.5 sm:p-4 rounded-2xl border text-center font-black transition-all flex items-center justify-center gap-2 reader-option ${
                               isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
                             } ${cardStyle}`}
                           >
@@ -643,7 +643,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   {/* -------------------------------------------------------- */}
                   {(qType === 'fill_blank' || qType === 'short_answer') && (
                     <div className="pt-1 space-y-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <input
                           type="text"
                           disabled={isLocked || isSubmitting}
@@ -655,12 +655,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             }
                           }}
                           placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
-                          className={`flex-1 px-4 py-3 rounded-2xl border text-sm font-medium focus:ring-2 focus:ring-[#026fc3] focus:border-[#026fc3] focus:outline-none transition-all selection:bg-sky-500 selection:text-white ${
+                          className={`flex-1 px-4 py-3 rounded-2xl border reader-input font-medium focus:ring-2 focus:ring-[#026fc3] focus:border-[#026fc3] focus:outline-none transition-all selection:bg-sky-100 selection:text-slate-900 ${
                             isLocked
                               ? feedback?.isCorrect
                                 ? 'bg-emerald-50 border-emerald-500 text-emerald-950 dark:bg-emerald-950/60 dark:border-emerald-500 dark:text-emerald-100'
                                 : 'bg-rose-50 border-rose-500 text-rose-950 dark:bg-rose-950/60 dark:border-rose-500 dark:text-rose-100'
-                              : 'bg-white text-slate-900 placeholder:text-stone-400 border-stone-200 dark:bg-[#182232] dark:text-white dark:placeholder:text-stone-400 dark:border-slate-700 caret-[#026fc3] dark:caret-white'
+                              : 'bg-white text-slate-900 placeholder:text-slate-400 border-slate-200 dark:bg-[#111b2b] dark:text-white dark:placeholder:text-slate-400 dark:border-slate-700 caret-[#026fc3] dark:caret-white'
                           }`}
                         />
                         {!isLocked && (
@@ -668,7 +668,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                             type="button"
                             disabled={!textInputs[qId]?.trim() || isSubmitting}
                             onClick={(e) => handleEvaluateAnswer(q, textInputs[qId] || '', e.currentTarget)}
-                            className="px-5 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
+                            className="min-h-[44px] px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs reader-button"
                           >
                             <Send className="w-3.5 h-3.5" />
                             <span>Submit</span>
@@ -694,14 +694,15 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
                   {/* -------------------------------------------------------- */}
                   {/* 5. MATCHING PAIRS                                        */}
+                  {/* -------------------------------------------------------- */}
                   {qType === 'matching' && (
-                    <div className="pt-1 space-y-3">
+                    <div className="pt-1 space-y-2">
                       <div className="space-y-2">
                         {optionsList.map((pairStr, pIdx) => (
-                          <div key={pIdx} className="flex items-center justify-between p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 text-xs">
-                            <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
-                            <span className="text-[#026fc3] font-bold">⇄</span>
-                            <span className="font-medium">{pairStr.split('->')[1]?.trim()}</span>
+                          <div key={pIdx} className="flex items-center justify-between p-3.5 rounded-2xl bg-sky-50/50 dark:bg-slate-800/60 border border-sky-100 dark:border-slate-700 text-xs reader-body">
+                            <span className="font-bold text-slate-900 dark:text-white">{pairStr.split('->')[0]?.trim()}</span>
+                            <span className="text-[#026fc3] font-bold text-base px-2">⇄</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">{pairStr.split('->')[1]?.trim()}</span>
                           </div>
                         ))}
                       </div>
@@ -741,10 +742,10 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   {/* -------------------------------------------------------- */}
                   {qType !== 'ordering' && qType !== 'cloze_passage' && qType !== 'essay' && feedback?.showExplanation && (
                     <div
-                      className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 ${
+                      className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 reader-explanation ${
                         feedback.isCorrect
-                          ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200'
-                          : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-200'
+                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200'
+                          : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-200'
                       }`}
                     >
                       <div className="flex items-center gap-2 font-black mb-1.5">
@@ -781,33 +782,33 @@ export const CourseContentRenderer: React.FC<Props> = ({
           {/* LESSON PRACTICE COMPLETION CARD                                  */}
           {/* ---------------------------------------------------------------- */}
           {isAllAnswered && (
-            <div className="w-full bg-linear-to-b from-sky-50 to-white dark:from-stone-900 dark:to-stone-950 rounded-3xl p-6 sm:p-8 border border-sky-200 dark:border-slate-800 shadow-md text-center space-y-5 animate-in fade-in zoom-in-95 duration-300">
+            <div className="w-full bg-linear-to-b from-sky-50/80 to-white dark:from-slate-900 dark:to-slate-950 rounded-3xl p-6 sm:p-8 border border-sky-200 dark:border-slate-800 shadow-md text-center space-y-5 animate-in fade-in zoom-in-95 duration-300">
               <div className="w-14 h-14 rounded-2xl bg-[#026fc3] text-white flex items-center justify-center mx-auto shadow-md">
                 <Award className="w-7 h-7" />
               </div>
 
               <div className="space-y-1">
-                <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3]">
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3] reader-badge">
                   Lesson Practice Completed
                 </span>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white">
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white reader-h2">
                   Great job! You finished all practice questions.
                 </h3>
               </div>
 
               {/* Score Breakdown */}
               <div className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
-                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Score</span>
-                  <span className="text-lg font-black text-slate-900 dark:text-white">{earnedPoints} / {totalPointsPossible}</span>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Score</span>
+                  <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white reader-body">{earnedPoints} / {totalPointsPossible}</span>
                 </div>
-                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Correct</span>
-                  <span className="text-lg font-black text-emerald-600">{correctTotal}</span>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Correct</span>
+                  <span className="text-base sm:text-lg font-black text-emerald-600 reader-body">{correctTotal}</span>
                 </div>
-                <div className="p-3 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Incorrect</span>
-                  <span className="text-lg font-black text-rose-500">{incorrectTotal}</span>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Incorrect</span>
+                  <span className="text-base sm:text-lg font-black text-rose-500 reader-body">{incorrectTotal}</span>
                 </div>
               </div>
 
@@ -815,7 +816,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={onCompleteLesson}
-                  className="px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+                  className="min-h-[44px] px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-98 reader-button"
                 >
                   <span>Continue to Next Lesson</span>
                   <ArrowRight className="w-4 h-4" />

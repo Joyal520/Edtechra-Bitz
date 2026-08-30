@@ -139,7 +139,7 @@ export const FormattedLessonText: React.FC<{
         elements.push(
           <p
             key={`p-${elements.length}`}
-            className={`${scale.body} font-normal text-current antialiased my-4 sm:my-5 first:mt-0 last:mb-0 text-left selection:bg-amber-200/60 selection:text-slate-950`}
+            className={`${scale.body} reader-body font-normal text-current antialiased my-4 sm:my-5 first:mt-0 last:mb-0 text-left selection:bg-sky-100 selection:text-slate-950`}
           >
             {formatInlineText(paragraphText)}
           </p>
@@ -153,7 +153,7 @@ export const FormattedLessonText: React.FC<{
     if (currentListItems.length > 0) {
       if (isNumberedList) {
         elements.push(
-          <ol key={`ol-${elements.length}`} className={`list-decimal pl-6 sm:pl-7 space-y-2 ${scale.body} font-normal text-current my-4 sm:my-5 text-left`}>
+          <ol key={`ol-${elements.length}`} className={`list-decimal pl-6 sm:pl-7 space-y-2 ${scale.body} reader-body font-normal text-current my-4 sm:my-5 text-left`}>
             {currentListItems.map((item, idx) => (
               <li key={idx} className="pl-1">{formatInlineText(item)}</li>
             ))}
@@ -161,7 +161,7 @@ export const FormattedLessonText: React.FC<{
         );
       } else {
         elements.push(
-          <ul key={`ul-${elements.length}`} className={`list-disc pl-6 sm:pl-7 space-y-2 ${scale.body} font-normal text-current my-4 sm:my-5 text-left`}>
+          <ul key={`ul-${elements.length}`} className={`list-disc pl-6 sm:pl-7 space-y-2 ${scale.body} reader-body font-normal text-current my-4 sm:my-5 text-left`}>
             {currentListItems.map((item, idx) => (
               <li key={idx} className="pl-1">{formatInlineText(item)}</li>
             ))}
@@ -188,10 +188,10 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <div key={`div-${elements.length}`} className="flex items-center justify-center gap-3 my-6 sm:my-8 text-stone-300 dark:text-stone-700 select-none">
-          <span className="w-12 h-px bg-stone-300/80 dark:bg-stone-700/80" />
-          <span className="text-xs">✦</span>
-          <span className="w-12 h-px bg-stone-300/80 dark:bg-stone-700/80" />
+        <div key={`div-${elements.length}`} className="flex items-center justify-center gap-3 my-6 sm:my-8 text-sky-200 dark:text-slate-700 select-none">
+          <span className="w-12 h-px bg-sky-200/80 dark:bg-slate-700/80" />
+          <span className="text-xs text-[#026fc3]">✦</span>
+          <span className="w-12 h-px bg-sky-200/80 dark:bg-slate-700/80" />
         </div>
       );
       continue;
@@ -202,7 +202,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h4 key={`h4-${elements.length}`} className={`${scale.h3} font-bold text-current tracking-tight pt-4 pb-1 text-left`}>
+        <h4 key={`h4-${elements.length}`} className={`${scale.h3} reader-h3 font-bold text-current tracking-tight pt-4 pb-1 text-left`}>
           {formatInlineText(line.slice(4))}
         </h4>
       );
@@ -214,7 +214,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h3 key={`h3-${elements.length}`} className={`${scale.h2} font-bold text-current tracking-tight pt-5 pb-1.5 text-left`}>
+        <h3 key={`h3-${elements.length}`} className={`${scale.h2} reader-h2 font-bold text-current tracking-tight pt-5 pb-1.5 text-left`}>
           {formatInlineText(line.slice(3))}
         </h3>
       );
@@ -226,7 +226,7 @@ export const FormattedLessonText: React.FC<{
       flushParagraph();
       flushList();
       elements.push(
-        <h2 key={`h2-${elements.length}`} className={`${scale.h1} font-bold text-current tracking-tight pt-6 pb-2 text-left`}>
+        <h2 key={`h2-${elements.length}`} className={`${scale.h1} reader-h1 font-bold text-current tracking-tight pt-6 pb-2 text-left`}>
           {formatInlineText(line.slice(2))}
         </h2>
       );
@@ -240,7 +240,7 @@ export const FormattedLessonText: React.FC<{
       elements.push(
         <blockquote
           key={`quote-${elements.length}`}
-          className={`border-l-2 sm:border-l-3 border-[#026fc3]/80 pl-4 sm:pl-5 my-4 sm:my-6 italic ${scale.quote} font-serif leading-relaxed text-current/90 text-left`}
+          className={`border-l-3 border-[#026fc3] pl-4 sm:pl-5 my-4 sm:my-6 italic ${scale.quote} reader-quote font-serif leading-relaxed text-current/90 text-left bg-[#026fc3]/5 py-2 pr-3 rounded-r-xl`}
         >
           {formatInlineText(line.slice(2))}
         </blockquote>

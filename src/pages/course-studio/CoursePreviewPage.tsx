@@ -195,12 +195,15 @@ export const CoursePreviewPage: React.FC = () => {
   const isEpisodeCompleted = completedEpisodeIds.has(selectedEpisode.id);
 
   return (
-    <div className={`w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}>
+    <div
+      data-scale={textScale}
+      className={`reader-scale-container w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} ${activeTheme.text} font-sans antialiased overflow-hidden transition-colors duration-300`}
+    >
       
       {/* 1. TOP READING PROGRESS LINE */}
-      <div className="w-full h-0.5 bg-current/5 relative shrink-0">
+      <div className="w-full h-1 bg-current/5 relative shrink-0">
         <div
-          className="h-full bg-[#026fc3] transition-all duration-150"
+          className="h-full bg-[#026fc3] transition-all duration-150 shadow-xs"
           style={{ width: `${viewMode === 'roadmap' ? (roadmapData?.progressPercent || 0) : scrollProgress}%` }}
         />
       </div>
@@ -216,7 +219,7 @@ export const CoursePreviewPage: React.FC = () => {
             className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-current transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
             title="Exit Preview"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 text-[#026fc3]" />
             <span className="hidden sm:inline">Editor</span>
           </button>
 
@@ -248,7 +251,7 @@ export const CoursePreviewPage: React.FC = () => {
 
         {/* Center: Chapter Info */}
         <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
-          <p className="text-xs font-serif italic text-current/75 truncate">
+          <p className="text-xs font-serif italic text-current/80 truncate">
             {viewMode === 'roadmap'
               ? `${course.title} • Roadmap`
               : `Lesson ${currentInfo?.epIndex || 1} • ${selectedEpisode.title}`}
@@ -258,7 +261,7 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Right: Progress %, Font Size, Theme Popover, Bookmark */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Reading % Badge */}
-          <span className="text-[11px] font-mono font-bold opacity-65 px-1 py-0.5">
+          <span className="text-[11px] font-mono font-bold opacity-75 px-1 py-0.5">
             {viewMode === 'roadmap' ? `${roadmapData?.progressPercent || 0}%` : `${scrollProgress}%`}
           </span>
 
@@ -306,7 +309,7 @@ export const CoursePreviewPage: React.FC = () => {
 
       {/* Non-blocking Toast Message */}
       {toastMessage && (
-        <div className="bg-amber-500 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-md z-30 animate-in fade-in duration-150">
+        <div className="bg-amber-500 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-md z-30 animate-in fade-in duration-150 reader-meta">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4" />
             <span>{toastMessage}</span>
@@ -339,13 +342,13 @@ export const CoursePreviewPage: React.FC = () => {
             
             {/* EDITORIAL LESSON HEADER */}
             <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3]">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta">
                 <span>LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}</span>
                 <span className="opacity-40">•</span>
                 <span className="opacity-80 text-current">{currentInfo?.unitTitle || 'Unit 1'}</span>
                 <span className="opacity-40">•</span>
                 <span className="opacity-80 text-current flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
+                  <Clock className="w-3 h-3 text-[#026fc3]" />
                   {selectedEpisode.estimated_minutes || 15} min read
                 </span>
                 {isEpisodeCompleted && (
@@ -355,12 +358,12 @@ export const CoursePreviewPage: React.FC = () => {
                 )}
               </div>
 
-              <h1 className="text-[30px] sm:text-[34px] md:text-[42px] font-extrabold tracking-tight text-inherit leading-[1.15] text-left">
+              <h1 className="font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title">
                 {selectedEpisode.title}
               </h1>
 
               {course.short_description && (
-                <p className="text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl">
+                <p className="text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl reader-quote">
                   “{course.short_description}”
                 </p>
               )}

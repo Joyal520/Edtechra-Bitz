@@ -239,53 +239,56 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full space-y-5 select-none"
+      className="w-full space-y-4 select-none"
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {/* Visual Subtitle / Hint */}
+      {/* Subtitle / Hint Header */}
       {!isLocked && (
-        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-bold px-1">
-          <span className="uppercase tracking-wider text-[11px] text-[#026fc3]">
-            Your Story Arrangement
-          </span>
-          <span className="text-[11px] font-medium opacity-80">
-            Drag cards to arrange chronologically
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#026fc3]" />
+            <span className="uppercase tracking-wider text-[11px] font-bold text-[#026fc3] reader-meta">
+              Arrange the Story in Chronological Order
+            </span>
+          </div>
+          <span className="text-[11px] opacity-80 reader-meta">
+            Drag cards or tap <span className="font-bold text-[#026fc3]">↑ / ↓</span> to order
           </span>
         </div>
       )}
 
-      {/* DRAGGABLE SENTENCE BLOCKS STREAM */}
+      {/* DRAGGABLE & ACCESSIBLE SENTENCE BLOCKS */}
       <div className="w-full space-y-2.5">
         {items.map((item, index) => {
           const isBeingDragged = draggedIndex === index;
           const isDropTarget = dropTargetIndex === index && draggedIndex !== index;
 
-          let cardStyle = 'bg-white dark:bg-stone-900 border-stone-200/90 dark:border-stone-700/80 hover:border-[#026fc3] text-slate-800 dark:text-slate-100 shadow-2xs';
-          let numBadgeStyle = 'bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300';
+          let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100 shadow-2xs';
+          let numBadgeStyle = 'bg-sky-50 dark:bg-slate-800 text-[#026fc3] dark:text-sky-300 border border-sky-200/80 dark:border-slate-700';
 
           if (isLocked) {
             if (feedback?.isCorrect) {
-              cardStyle = 'bg-emerald-50/80 dark:bg-emerald-950/30 border-2 border-emerald-500 text-emerald-950 dark:text-emerald-100 shadow-xs';
-              numBadgeStyle = 'bg-emerald-600 text-white';
+              cardStyle = 'surface-answer-selected-correct';
+              numBadgeStyle = 'bg-emerald-600 text-white border-0';
             } else {
-              cardStyle = 'bg-rose-50/70 dark:bg-rose-950/30 border-2 border-rose-400/80 text-rose-950 dark:text-rose-100 shadow-xs';
-              numBadgeStyle = 'bg-rose-600 text-white';
+              cardStyle = 'surface-answer-selected-incorrect';
+              numBadgeStyle = 'bg-rose-600 text-white border-0';
             }
           } else if (isBeingDragged) {
             cardStyle = 'bg-sky-50 dark:bg-sky-950/50 border-2 border-[#026fc3] shadow-lg scale-[1.01] ring-2 ring-[#026fc3]/20';
-            numBadgeStyle = 'bg-[#026fc3] text-white';
+            numBadgeStyle = 'bg-[#026fc3] text-white border-0';
           }
 
           return (
-            <div key={item.id} className="relative">
+            <div key={item.id} className="relative transition-all duration-150">
               
               {/* Drop Target Indicator Line */}
               {isDropTarget && (
                 <div className="w-full py-1.5 flex items-center justify-center gap-2 animate-pulse">
                   <div className="h-0.5 flex-1 bg-[#026fc3] rounded-full" />
-                  <span className="text-[10px] font-black uppercase text-[#026fc3] px-2 py-0.5 bg-sky-50 rounded-full border border-sky-200">
+                  <span className="text-[10px] font-black uppercase text-[#026fc3] px-2.5 py-0.5 bg-sky-50 rounded-full border border-sky-200 shadow-2xs">
                     Drop Here
                   </span>
                   <div className="h-0.5 flex-1 bg-[#026fc3] rounded-full" />
@@ -303,19 +306,19 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                 tabIndex={isLocked ? -1 : 0}
                 onKeyDown={e => handleKeyDown(e, index)}
                 aria-label={`Event ${index + 1}: ${item.text}`}
-                className={`w-full min-h-[56px] p-3.5 sm:p-4 rounded-2xl border text-left text-sm sm:text-[14px] leading-relaxed transition-all flex items-center gap-3.5 box-border ${
+                className={`w-full min-h-[58px] p-3 sm:p-4 rounded-2xl border text-left reader-option leading-relaxed transition-all flex items-center gap-3 box-border ${
                   isLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:shadow-xs'
                 } ${cardStyle}`}
               >
                 {/* Grip Handle Indicator */}
                 {!isLocked && (
-                  <div className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 touch-none">
-                    <GripVertical className="w-4 h-4" />
+                  <div className="text-slate-300 hover:text-[#026fc3] dark:hover:text-sky-400 shrink-0 touch-none cursor-grab" title="Drag to rearrange">
+                    <GripVertical className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
                 )}
 
                 {/* Position Number Badge (01, 02, 03...) */}
-                <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors ${numBadgeStyle}`}>
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors shadow-2xs ${numBadgeStyle}`}>
                   {isLocked ? (
                     feedback?.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />
                   ) : (
@@ -324,13 +327,13 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                 </span>
 
                 {/* Sentence Block Text */}
-                <span className="flex-1 font-medium break-words leading-relaxed text-left">
+                <span className="flex-1 font-medium break-words leading-relaxed text-left reader-option text-inherit">
                   {item.text}
                 </span>
 
-                {/* Mobile & Desktop Accessible Move Up/Down Controls */}
+                {/* Prominent, Touch-Friendly Move Up / Move Down Controls */}
                 {!isLocked && (
-                  <div className="flex items-center gap-0.5 shrink-0 opacity-80 hover:opacity-100">
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
                     <button
                       type="button"
                       disabled={index === 0}
@@ -343,11 +346,11 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                         setItems(nextItems);
                         courseAudio.playSelectSound();
                       }}
-                      aria-label="Move sentence up"
-                      className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-slate-500 disabled:opacity-20 cursor-pointer"
-                      title="Move sentence up"
+                      aria-label="Move item up"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-[#026fc3] hover:text-white dark:hover:bg-[#026fc3] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-20 disabled:hover:bg-slate-50 disabled:hover:text-slate-600 cursor-pointer flex items-center justify-center transition-all shadow-2xs active:scale-95 reader-button"
+                      title="Move up"
                     >
-                      <span className="text-xs font-bold leading-none">▲</span>
+                      <span className="text-sm font-black leading-none">▲</span>
                     </button>
                     <button
                       type="button"
@@ -361,11 +364,11 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                         setItems(nextItems);
                         courseAudio.playSelectSound();
                       }}
-                      aria-label="Move sentence down"
-                      className="p-1.5 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-slate-500 disabled:opacity-20 cursor-pointer"
-                      title="Move sentence down"
+                      aria-label="Move item down"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-[#026fc3] hover:text-white dark:hover:bg-[#026fc3] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-20 disabled:hover:bg-slate-50 disabled:hover:text-slate-600 cursor-pointer flex items-center justify-center transition-all shadow-2xs active:scale-95 reader-button"
+                      title="Move down"
                     >
-                      <span className="text-xs font-bold leading-none">▼</span>
+                      <span className="text-sm font-black leading-none">▼</span>
                     </button>
                   </div>
                 )}
@@ -378,15 +381,15 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
       {/* CHECK ORDER BUTTON (Available before locking) */}
       {!isLocked && (
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[11px] text-slate-400 font-medium italic text-center sm:text-left">
-            Drag cards or use ▲ ▼ arrows to arrange the story before checking.
+          <p className="text-[11px] text-slate-400 font-medium italic text-center sm:text-left reader-meta">
+            Drag cards or use ▲ ▼ buttons to arrange before submitting.
           </p>
 
           <button
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmitOrder}
-            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white text-xs font-black shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-98 reader-button"
           >
             <Send className="w-3.5 h-3.5" />
             <span>Check Order</span>
@@ -394,23 +397,23 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
         </div>
       )}
 
-      {/* POST-SUBMISSION SIDE-BY-SIDE EDUCATIONAL FEEDBACK */}
+      {/* POST-SUBMISSION EDUCATIONAL FEEDBACK */}
       {isLocked && feedback?.showExplanation && (
-        <div className="space-y-4 pt-2">
+        <div className="space-y-3 pt-2">
           
           {/* Main Feedback Banner */}
           <div
-            className={`p-4 sm:p-5 rounded-2xl border text-xs sm:text-sm leading-relaxed transition-all animate-in fade-in duration-200 ${
+            className={`p-4 sm:p-5 rounded-2xl border text-xs sm:text-sm leading-relaxed transition-all animate-in fade-in duration-200 reader-explanation ${
               feedback.isCorrect
-                ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 text-emerald-950 dark:text-emerald-200'
-                : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 text-rose-950 dark:text-rose-200'
+                ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 text-emerald-950 dark:text-emerald-200'
+                : 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 text-rose-950 dark:text-rose-200'
             }`}
           >
             <div className="flex items-center gap-2 font-black mb-1">
               {feedback.isCorrect ? (
                 <>
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <span>✓ Correct! Excellent work. You arranged the events in the correct order.</span>
+                  <span>✓ Correct! Excellent work. You arranged the events in the right order.</span>
                 </>
               ) : (
                 <>
@@ -427,9 +430,9 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
 
           {/* If Incorrect: Show the Canonical Correct Order clearly */}
           {!feedback.isCorrect && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border-2 border-emerald-500/60 space-y-3">
-              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/60 dark:bg-sky-950/20 border-2 border-sky-200/80 dark:border-sky-800/60 space-y-3">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3] dark:text-sky-300 flex items-center gap-1.5 reader-meta">
+                <CheckCircle2 className="w-4 h-4 text-[#026fc3]" />
                 <span>Correct Chronological Order</span>
               </span>
 
@@ -437,12 +440,12 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                 {canonicalItems.map((correctSentence, cIdx) => (
                   <li
                     key={cIdx}
-                    className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/80 dark:bg-stone-900/80 border border-emerald-500/20"
+                    className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-sky-100 dark:border-slate-800 reader-body"
                   >
-                    <span className="w-5 h-5 rounded-md bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="w-5 h-5 rounded-md bg-[#026fc3] text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                       {cIdx + 1}
                     </span>
-                    <span className="flex-1 font-medium leading-relaxed">
+                    <span className="flex-1 font-medium leading-relaxed text-inherit">
                       {correctSentence}
                     </span>
                   </li>

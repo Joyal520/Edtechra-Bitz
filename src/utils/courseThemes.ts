@@ -1,7 +1,7 @@
 // ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: 10 LIGHT PREMIUM GRADIENT THEME PRESETS
-// Editorial, Apple Books & Kindle inspired subtle light gradients with
-// high contrast reading typography, soft paper textures, and visual preview cards.
+// EDTECHRA DIGITAL CLASSROOM: LIGHT PREMIUM GRADIENT THEME PRESETS
+// Editorial, high-contrast, light gradient reading palettes built around the
+// signature EdTechra Blue brand identity.
 // ============================================================================
 
 export interface ThemePreset {
@@ -17,146 +17,158 @@ export interface ThemePreset {
   cardBorder: string;
   headerBg: string;
   accent: string;
+  badgeBg: string;
   isDark?: boolean;
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
+    id: 'edtechra-sky',
+    name: 'EdTechra Sky',
+    description: 'Signature soft sky blue to pure white',
+    bgGradient: 'bg-gradient-to-b from-[#e8f3ff] via-[#f7faff] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #e8f3ff 0%, #f7faff 60%, #ffffff 100%)',
+    text: 'text-[#0f172a]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-sky-200/70',
+    headerBg: 'bg-[#e8f3ff]/95 backdrop-blur-md',
+    accent: '#026fc3',
+    badgeBg: 'bg-[#026fc3]/10 text-[#026fc3]'
+  },
+  {
     id: 'morning-mist',
     name: 'Morning Mist',
-    description: 'Soft ivory to pale sky blue',
-    bgGradient: 'bg-gradient-to-b from-[#fcfbf9] via-[#f7f9fc] to-[#f0f4f8]',
-    previewCss: 'linear-gradient(to bottom, #fcfbf9, #f7f9fc, #f0f4f8)',
-    text: 'text-[#1c1917]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-stone-200/90',
-    headerBg: 'bg-[#fcfbf9]/95 backdrop-blur-md',
-    accent: '#026fc3'
+    description: 'Soft ivory to pale whisper blue',
+    bgGradient: 'bg-gradient-to-b from-[#eaf5ff] via-[#f4f8fc] to-[#fffdf8]',
+    previewCss: 'linear-gradient(135deg, #eaf5ff 0%, #f4f8fc 60%, #fffdf8 100%)',
+    text: 'text-[#1e293b]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-slate-200/80',
+    headerBg: 'bg-[#eaf5ff]/95 backdrop-blur-md',
+    accent: '#026fc3',
+    badgeBg: 'bg-sky-500/10 text-[#026fc3]'
   },
   {
-    id: 'aurora',
-    name: 'Aurora',
-    description: 'Soft blue to gentle lavender',
-    bgGradient: 'bg-gradient-to-b from-[#f4f7fc] via-[#f5f2fb] to-[#f5f0fb]',
-    previewCss: 'linear-gradient(to bottom, #f4f7fc, #f5f2fb, #f5f0fb)',
-    text: 'text-[#1c1924]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-indigo-100/90',
-    headerBg: 'bg-[#f4f7fc]/95 backdrop-blur-md',
-    accent: '#5046e5'
+    id: 'pearl-blue',
+    name: 'Pearl Blue',
+    description: 'Luminous pearl to crystalline white',
+    bgGradient: 'bg-gradient-to-b from-[#f3f8ff] via-[#f8fbff] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #f3f8ff 0%, #f8fbff 50%, #ffffff 100%)',
+    text: 'text-[#0f172a]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-sky-100/90',
+    headerBg: 'bg-[#f3f8ff]/95 backdrop-blur-md',
+    accent: '#026fc3',
+    badgeBg: 'bg-sky-500/10 text-[#026fc3]'
   },
   {
-    id: 'peach-cloud',
-    name: 'Peach Cloud',
-    description: 'Warm cream to soft peach',
-    bgGradient: 'bg-gradient-to-b from-[#fdfbf7] via-[#fdf6f0] to-[#fef2eb]',
-    previewCss: 'linear-gradient(to bottom, #fdfbf7, #fdf6f0, #fef2eb)',
-    text: 'text-[#2a1d18]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-orange-100/90',
-    headerBg: 'bg-[#fdfbf7]/95 backdrop-blur-md',
-    accent: '#d9531e'
-  },
-  {
-    id: 'sage-garden',
-    name: 'Sage Garden',
-    description: 'Ivory to pale serene sage',
-    bgGradient: 'bg-gradient-to-b from-[#fcfbf7] via-[#f5f8f5] to-[#f0f5f0]',
-    previewCss: 'linear-gradient(to bottom, #fcfbf7, #f5f8f5, #f0f5f0)',
-    text: 'text-[#1c241c]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-emerald-100/90',
-    headerBg: 'bg-[#fcfbf7]/95 backdrop-blur-md',
-    accent: '#059669'
-  },
-  {
-    id: 'lavender-paper',
-    name: 'Lavender Paper',
-    description: 'Ivory to soft delicate lavender',
-    bgGradient: 'bg-gradient-to-b from-[#faf8fc] via-[#f6f2fa] to-[#f3ecf8]',
-    previewCss: 'linear-gradient(to bottom, #faf8fc, #f6f2fa, #f3ecf8)',
-    text: 'text-[#201828]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-purple-100/90',
-    headerBg: 'bg-[#faf8fc]/95 backdrop-blur-md',
-    accent: '#7c3aed'
+    id: 'soft-blue-mist',
+    name: 'Soft Blue Mist',
+    description: 'Gentle airy cyan to pure white',
+    bgGradient: 'bg-gradient-to-b from-[#eef6ff] via-[#f8fbff] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #eef6ff 0%, #f8fbff 60%, #ffffff 100%)',
+    text: 'text-[#0f172a]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-sky-200/70',
+    headerBg: 'bg-[#eef6ff]/95 backdrop-blur-md',
+    accent: '#0284c7',
+    badgeBg: 'bg-sky-500/10 text-[#0284c7]'
   },
   {
     id: 'ocean-breeze',
     name: 'Ocean Breeze',
-    description: 'Pale cyan to clear soft blue',
-    bgGradient: 'bg-gradient-to-b from-[#f2fafb] via-[#f0f7fb] to-[#eef4fc]',
-    previewCss: 'linear-gradient(to bottom, #f2fafb, #f0f7fb, #eef4fc)',
-    text: 'text-[#14202c]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-sky-100/90',
-    headerBg: 'bg-[#f2fafb]/95 backdrop-blur-md',
-    accent: '#0284c7'
-  },
-  {
-    id: 'sunset-cream',
-    name: 'Sunset Cream',
-    description: 'Warm cream to muted peach',
-    bgGradient: 'bg-gradient-to-b from-[#fcf9f2] via-[#fef5ee] to-[#fdf1ea]',
-    previewCss: 'linear-gradient(to bottom, #fcf9f2, #fef5ee, #fdf1ea)',
-    text: 'text-[#2a221a]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-amber-100/90',
-    headerBg: 'bg-[#fcf9f2]/95 backdrop-blur-md',
-    accent: '#c2410c'
-  },
-  {
-    id: 'rose-paper',
-    name: 'Rose Paper',
-    description: 'Ivory to very pale rose',
-    bgGradient: 'bg-gradient-to-b from-[#fcf8f8] via-[#fbf2f4] to-[#fcedef]',
-    previewCss: 'linear-gradient(to bottom, #fcf8f8, #fbf2f4, #fcedef)',
-    text: 'text-[#28181c]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-rose-100/90',
-    headerBg: 'bg-[#fcf8f8]/95 backdrop-blur-md',
-    accent: '#e11d48'
-  },
-  {
-    id: 'sky-glass',
-    name: 'Sky Glass',
-    description: 'Pure white to crystalline pale blue',
-    bgGradient: 'bg-gradient-to-b from-[#ffffff] via-[#f7faff] to-[#f0f6fc]',
-    previewCss: 'linear-gradient(to bottom, #ffffff, #f7faff, #f0f6fc)',
-    text: 'text-[#161c24]',
+    description: 'Pale sea-salt to fresh soft cyan',
+    bgGradient: 'bg-gradient-to-b from-[#edf8fa] via-[#f2f9fd] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #edf8fa 0%, #f2f9fd 60%, #ffffff 100%)',
+    text: 'text-[#132330]',
     cardBg: 'bg-white/95',
-    cardBorder: 'border-slate-200/90',
-    headerBg: 'bg-white/95 backdrop-blur-md',
-    accent: '#026fc3'
+    cardBorder: 'border-cyan-200/60',
+    headerBg: 'bg-[#edf8fa]/95 backdrop-blur-md',
+    accent: '#0284c7',
+    badgeBg: 'bg-cyan-500/10 text-[#0284c7]'
   },
   {
-    id: 'sand-sage',
-    name: 'Sand & Sage',
-    description: 'Warm ivory to muted pale sage',
-    bgGradient: 'bg-gradient-to-b from-[#fbf9f4] via-[#f5f6ee] to-[#eef4ee]',
-    previewCss: 'linear-gradient(to bottom, #fbf9f4, #f5f6ee, #eef4ee)',
-    text: 'text-[#22261e]',
-    cardBg: 'bg-white/90',
-    cardBorder: 'border-stone-200/90',
-    headerBg: 'bg-[#fbf9f4]/95 backdrop-blur-md',
-    accent: '#16a34a'
+    id: 'lavender-dawn',
+    name: 'Lavender Dawn',
+    description: 'Soft blue to delicate lilac dawn',
+    bgGradient: 'bg-gradient-to-b from-[#f0f4ff] via-[#f5f2fb] to-[#faf8ff]',
+    previewCss: 'linear-gradient(135deg, #f0f4ff 0%, #f5f2fb 60%, #faf8ff 100%)',
+    text: 'text-[#1e1b2e]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-indigo-100/90',
+    headerBg: 'bg-[#f0f4ff]/95 backdrop-blur-md',
+    accent: '#6366f1',
+    badgeBg: 'bg-indigo-500/10 text-[#6366f1]'
+  },
+  {
+    id: 'sage-mist',
+    name: 'Sage Mist',
+    description: 'Clean alabaster to pale herbal sage',
+    bgGradient: 'bg-gradient-to-b from-[#edf7f2] via-[#f6faf7] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #edf7f2 0%, #f6faf7 60%, #ffffff 100%)',
+    text: 'text-[#14261c]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-emerald-100/90',
+    headerBg: 'bg-[#edf7f2]/95 backdrop-blur-md',
+    accent: '#059669',
+    badgeBg: 'bg-emerald-500/10 text-[#059669]'
+  },
+  {
+    id: 'warm-ivory',
+    name: 'Warm Ivory',
+    description: 'Refined parchment ivory to warm linen',
+    bgGradient: 'bg-gradient-to-b from-[#fdfbf7] via-[#fcf8f0] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #fdfbf7 0%, #fcf8f0 60%, #ffffff 100%)',
+    text: 'text-[#29221b]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-amber-100/90',
+    headerBg: 'bg-[#fdfbf7]/95 backdrop-blur-md',
+    accent: '#d97706',
+    badgeBg: 'bg-amber-500/10 text-[#d97706]'
+  },
+  {
+    id: 'rose-cloud',
+    name: 'Rose Cloud',
+    description: 'Soft ivory to delicate blush rose',
+    bgGradient: 'bg-gradient-to-b from-[#fdf2f4] via-[#fcf6f7] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #fdf2f4 0%, #fcf6f7 60%, #ffffff 100%)',
+    text: 'text-[#2a171d]',
+    cardBg: 'bg-white/95',
+    cardBorder: 'border-rose-100/90',
+    headerBg: 'bg-[#fdf2f4]/95 backdrop-blur-md',
+    accent: '#e11d48',
+    badgeBg: 'bg-rose-500/10 text-[#e11d48]'
+  },
+  {
+    id: 'arctic-light',
+    name: 'Arctic Light',
+    description: 'Crystalline white to frosty glacier mist',
+    bgGradient: 'bg-gradient-to-b from-[#f0f7ff] via-[#f8fbff] to-[#ffffff]',
+    previewCss: 'linear-gradient(135deg, #f0f7ff 0%, #f8fbff 60%, #ffffff 100%)',
+    text: 'text-[#0f172a]',
+    cardBg: 'bg-white/98',
+    cardBorder: 'border-sky-200/80',
+    headerBg: 'bg-[#f0f7ff]/95 backdrop-blur-md',
+    accent: '#026fc3',
+    badgeBg: 'bg-sky-500/10 text-[#026fc3]'
   },
   {
     id: 'night-dark',
-    name: 'Night Dark',
-    description: 'Sophisticated deep midnight',
-    bgGradient: 'bg-[#101722]',
-    previewCss: '#101722',
+    name: 'Midnight Navy',
+    description: 'Deep sophisticated blue-black with high contrast',
+    bgGradient: 'bg-gradient-to-b from-[#090e17] via-[#0d1522] to-[#131f32]',
+    previewCss: 'linear-gradient(135deg, #090e17 0%, #0d1522 50%, #131f32 100%)',
     text: 'text-[#e2e8f0]',
-    cardBg: 'bg-[#182232]',
-    cardBorder: 'border-slate-800',
-    headerBg: 'bg-[#0e141e]/95 backdrop-blur-md',
+    cardBg: 'bg-[#111b2b]/95',
+    cardBorder: 'border-slate-700/70',
+    headerBg: 'bg-[#090e17]/95 backdrop-blur-md',
     accent: '#38bdf8',
+    badgeBg: 'bg-[#38bdf8]/15 text-[#38bdf8]',
     isDark: true
   }
 ];
 
-export const DEFAULT_THEME_ID = 'morning-mist';
+export const DEFAULT_THEME_ID = 'edtechra-sky';
 
 export function getThemePreset(id?: string): ThemePreset {
   if (!id) return THEME_PRESETS[0];

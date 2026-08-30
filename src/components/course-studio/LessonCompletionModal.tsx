@@ -104,34 +104,34 @@ export const LessonCompletionModal: React.FC<Props> = ({
 
         {/* Header Greeting & Lesson Title */}
         <div className="space-y-1.5">
-          <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight break-words">
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight break-words reader-title">
             {greeting}
           </h2>
-          <p className="text-xs sm:text-sm font-bold text-[#026fc3] dark:text-sky-400 truncate">
+          <p className="text-xs sm:text-sm font-bold text-[#026fc3] dark:text-sky-400 truncate reader-meta">
             {lessonTitle} • Lesson {lessonPosition}
           </p>
         </div>
 
         {/* Specific Daily vs Normal Release Messaging */}
-        <div className="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-200/80 dark:border-sky-800/60 space-y-2 text-xs sm:text-sm">
-          <p className="font-extrabold text-slate-900 dark:text-white">
+        <div className="p-4 rounded-2xl bg-sky-50/70 dark:bg-slate-800/60 border border-sky-200/80 dark:border-slate-700 space-y-1.5 text-xs sm:text-sm">
+          <p className="font-extrabold text-slate-900 dark:text-white reader-h3">
             {dailyReleaseEnabled ? "You’ve completed today’s lesson!" : "You’ve completed this lesson!"}
           </p>
-          <p className="text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+          <p className="text-slate-600 dark:text-slate-300 font-medium leading-relaxed reader-body">
             {encouragingMessage}
           </p>
         </div>
 
         {/* Points & Progress Pill */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
           {pointsEarned > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-black border border-amber-300 dark:border-amber-800">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-black border border-amber-200 dark:border-amber-800 reader-badge">
               <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>+{pointsEarned} POINTS</span>
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 text-xs font-black border border-emerald-300 dark:border-emerald-800">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 text-xs font-black border border-emerald-200 dark:border-emerald-800 reader-badge">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>{completedLessonsCount} / {totalLessonsCount} Completed ({progressPercent}%)</span>
           </div>
@@ -142,7 +142,7 @@ export const LessonCompletionModal: React.FC<Props> = ({
           <button
             type="button"
             onClick={onContinue}
-            className="w-full min-h-[48px] px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#026fc3] to-sky-600 hover:from-[#03589e] hover:to-sky-700 text-white text-sm font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+            className="w-full min-h-[48px] px-6 py-3.5 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white text-sm font-black transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-98 reader-button"
           >
             <span>{dailyReleaseEnabled ? 'Continue to Roadmap' : 'Continue Learning'}</span>
             <ArrowRight className="w-4 h-4" />
