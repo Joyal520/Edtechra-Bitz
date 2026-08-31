@@ -60,22 +60,22 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
       <div
-        className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden my-auto"
+        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/90 backdrop-blur-md">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-white">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-2xl">
+            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl border border-amber-200">
               <Bookmark className="w-5 h-5 fill-current stroke-[2.2]" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-stone-950 dark:text-white">
+              <h2 className="text-lg font-black text-[#0a213c]">
                 My Saved Knowledge
               </h2>
-              <p className="text-xs text-stone-600 dark:text-stone-300 font-semibold">
+              <p className="text-xs text-slate-600 font-semibold">
                 Your personal library of bookmarked Knowledge Bitz.
               </p>
             </div>
@@ -84,7 +84,7 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-[#0a213c] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -93,19 +93,19 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
         {/* Saved List */}
         <div className="p-6 max-h-[68vh] overflow-y-auto">
           {loading ? (
-            <div className="py-12 flex flex-col items-center justify-center text-stone-500">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+            <div className="py-12 flex flex-col items-center justify-center text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin text-[#026fc3] mb-2" />
               <span className="text-xs font-bold">Loading saved knowledge...</span>
             </div>
           ) : savedBitz.length === 0 ? (
             <div className="py-12 flex flex-col items-center justify-center text-center">
-              <div className="p-4 bg-stone-100 dark:bg-stone-800 rounded-2xl text-stone-500 mb-3">
+              <div className="p-4 bg-slate-100 rounded-2xl text-slate-400 mb-3">
                 <Bookmark className="w-8 h-8 stroke-[2.2]" />
               </div>
-              <h3 className="text-base font-black text-stone-950 dark:text-white mb-1">
+              <h3 className="text-base font-black text-[#0a213c] mb-1">
                 No saved Bitz yet
               </h3>
-              <p className="text-xs text-stone-600 dark:text-stone-300 font-medium max-w-sm">
+              <p className="text-xs text-slate-600 font-medium max-w-sm">
                 Tap the bookmark icon on any Knowledge Bitz card in Explore to save it here for later review.
               </p>
             </div>
@@ -121,10 +121,10 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
                       onClose();
                       onOpenReader(bitz);
                     }}
-                    className="group relative bg-white dark:bg-stone-850 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 hover:border-blue-400 dark:hover:border-blue-600 shadow-xs hover:shadow-md transition-all cursor-pointer select-none"
+                    className="group relative bg-white p-4 rounded-2xl border border-slate-200 hover:border-[#026fc3] shadow-xs hover:shadow-md transition-all cursor-pointer select-none"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-stone-800 dark:text-stone-200 uppercase tracking-wide">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-slate-800 uppercase tracking-wide">
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: topic.color }}
@@ -135,27 +135,27 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleUnsave(e, bitz.id)}
-                        className="p-1 text-stone-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                         title="Remove from saved"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    <h4 className="text-sm font-black text-stone-950 dark:text-white leading-snug line-clamp-2 mb-1.5 group-hover:text-[#026fc3] transition-colors">
+                    <h4 className="text-sm font-black text-[#0a213c] leading-snug line-clamp-2 mb-1.5 group-hover:text-[#026fc3] transition-colors">
                       {bitz.title}
                     </h4>
 
-                    <p className="text-xs text-stone-700 dark:text-stone-300 line-clamp-2 leading-relaxed font-medium">
+                    <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed font-medium">
                       {bitz.short_fact}
                     </p>
 
-                    <div className="mt-3 pt-2.5 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between text-[11px] text-stone-500 font-semibold">
+                    <div className="mt-3 pt-2.5 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-semibold">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-amber-500" />
                         {bitz.reading_time_sec || 30}s
                       </span>
-                      <span className="text-[#026fc3] dark:text-blue-400 font-black group-hover:underline flex items-center gap-0.5">
+                      <span className="text-[#026fc3] font-black group-hover:underline flex items-center gap-0.5">
                         Read <ExternalLink className="w-2.5 h-2.5" />
                       </span>
                     </div>
@@ -167,11 +167,11 @@ export const SavedBitzModal: React.FC<SavedBitzModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70 flex justify-end">
+        <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-stone-950 dark:bg-stone-100 hover:bg-stone-800 text-white dark:text-stone-900 text-xs font-black rounded-xl transition-all cursor-pointer"
+            className="px-5 py-2 bg-[#0a213c] hover:bg-slate-800 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
           >
             Close
           </button>

@@ -381,47 +381,47 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Metrics Dashboard */}
+      {/* Top Metrics Cards */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-stone-600 dark:text-stone-300 font-bold uppercase tracking-wider">Total Bitz</div>
-            <div className="text-2xl font-black text-stone-950 dark:text-white mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Facts</div>
+            <div className="text-2xl font-black text-[#0a213c] mt-1">
               {stats.totalBitz}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">Published</div>
-            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-emerald-700 font-bold uppercase tracking-wider">Published</div>
+            <div className="text-2xl font-black text-emerald-600 mt-1">
               {stats.publishedCount}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-blue-700 dark:text-blue-400 font-bold uppercase tracking-wider">Images Ready</div>
-            <div className="text-2xl font-black text-[#026fc3] dark:text-blue-400 mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-blue-700 font-bold uppercase tracking-wider">Images Ready</div>
+            <div className="text-2xl font-black text-[#026fc3] mt-1">
               {stats.readyImageCount}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider">Missing Images</div>
-            <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-amber-700 font-bold uppercase tracking-wider">Missing Images</div>
+            <div className="text-2xl font-black text-amber-600 mt-1">
               {stats.missingImageCount}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-purple-700 dark:text-purple-400 font-bold uppercase tracking-wider">Completions</div>
-            <div className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-purple-700 font-bold uppercase tracking-wider">Completions</div>
+            <div className="text-2xl font-black text-purple-600 mt-1">
               {stats.totalCompletions}
             </div>
           </div>
 
-          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
-            <div className="text-xs text-rose-700 dark:text-rose-400 font-bold uppercase tracking-wider">Total Likes</div>
-            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="text-xs text-rose-700 font-bold uppercase tracking-wider">Total Likes</div>
+            <div className="text-2xl font-black text-rose-600 mt-1">
               {stats.totalLikes}
             </div>
           </div>
@@ -429,12 +429,12 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       )}
 
       {/* Primary Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={() => setAiWizardOpen(true)}
-            className="flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/20 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/20 transition-all active:scale-95 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 stroke-[2.5]" />
             <span>+ Create with AI</span>
@@ -447,7 +447,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               setBulkJsonText('');
               setBulkImportOpen(true);
             }}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 border-2 border-stone-300 dark:border-stone-700 hover:border-purple-500 text-stone-900 dark:text-white text-xs font-extrabold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border-2 border-slate-300 hover:border-purple-500 text-[#0a213c] text-xs font-black rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer"
           >
             <FileJson className="w-4 h-4 text-purple-600 stroke-[2.5]" />
             <span>Bulk Import (1,000+)</span>
@@ -456,7 +456,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 border border-stone-300 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-[#0a213c] text-xs font-extrabold rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
           >
             <Plus className="w-4 h-4" />
             <span>+ Single Fact</span>
@@ -466,7 +466,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <button
           type="button"
           onClick={() => loadAdminBitz()}
-          className="p-2 text-stone-600 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
+          className="p-2 text-slate-600 hover:text-[#0a213c] hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
           title="Refresh Catalogue"
         >
           <RefreshCw className="w-4 h-4" />
@@ -474,16 +474,16 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       </div>
 
       {/* Responsive Filter & Search Grid (5-Column Responsive Layout) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-stone-100/80 dark:bg-stone-850 p-3 rounded-2xl border border-stone-300 dark:border-stone-750">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-100/90 p-3 rounded-2xl border border-slate-200">
         {/* Search Input */}
         <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500 dark:text-stone-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search title, fact, code..."
-            className="w-full pl-9 pr-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-semibold text-stone-950 dark:text-white placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+            className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-[#0a213c] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
           />
         </div>
 
@@ -491,7 +491,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <select
           value={selectedTopic}
           onChange={(e) => setSelectedTopic(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
           <option value="all">All Topics</option>
           {ALL_BITZ_TOPICS.map((t) => (
@@ -505,7 +505,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <select
           value={selectedCefrLevel}
           onChange={(e) => setSelectedCefrLevel(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
           <option value="all">All English Levels</option>
           {CEFR_LEVELS.map((c) => (
@@ -519,7 +519,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <select
           value={selectedVisualStatus}
           onChange={(e) => setSelectedVisualStatus(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
           <option value="all">All Images</option>
           <option value="ready">Images Ready</option>
@@ -532,7 +532,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <select
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value)}
-          className="w-full px-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
           <option value="all">All Statuses</option>
           <option value="published">Published</option>
@@ -544,29 +544,29 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
       {/* Error Message Banner */}
       {errorMessage && (
-        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 font-bold rounded-xl text-xs flex items-center gap-2">
+        <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 font-bold rounded-xl text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {/* Catalogue Table */}
-      <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-300 dark:border-stone-800 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         {loading ? (
-          <div className="p-16 flex flex-col items-center justify-center text-stone-500">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+          <div className="p-16 flex flex-col items-center justify-center text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-[#026fc3] mb-2" />
             <span className="text-xs font-bold">Loading catalogue...</span>
           </div>
         ) : bitzList.length === 0 ? (
-          <div className="p-16 text-center bg-stone-50/50 dark:bg-stone-900/50 space-y-4">
-            <div className="w-14 h-14 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+          <div className="p-16 text-center bg-white space-y-4">
+            <div className="w-14 h-14 bg-blue-50 text-[#026fc3] border border-blue-100 rounded-2xl flex items-center justify-center mx-auto shadow-2xs">
               <Layers className="w-7 h-7" />
             </div>
             <div>
-              <h4 className="text-base font-black text-stone-950 dark:text-white">
+              <h4 className="text-base font-black text-[#0a213c]">
                 No Knowledge Bitz Found
               </h4>
-              <p className="text-xs font-semibold text-stone-700 dark:text-stone-300 max-w-sm mx-auto mt-1 leading-relaxed">
+              <p className="text-xs font-semibold text-slate-600 max-w-sm mx-auto mt-1 leading-relaxed">
                 {searchQuery || selectedTopic !== 'all' || selectedStatus !== 'all' || selectedVisualStatus !== 'all' || selectedCefrLevel !== 'all'
                   ? 'No facts match your current search and filter criteria.'
                   : 'Start building your microlearning catalogue by creating facts with AI or bulk importing records.'}
@@ -576,7 +576,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setAiWizardOpen(true)}
-                className="px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 stroke-[2.5]" />
                 <span>+ Create with AI</span>
@@ -588,7 +588,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   setBulkJsonText('');
                   setBulkImportOpen(true);
                 }}
-                className="px-4 py-2.5 bg-white dark:bg-stone-800 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white text-xs font-extrabold rounded-xl hover:bg-stone-50 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 bg-white hover:bg-slate-50 border-2 border-slate-300 text-[#0a213c] text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <FileJson className="w-4 h-4 text-purple-600 stroke-[2.5]" />
                 <span>Bulk Import</span>
@@ -596,7 +596,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               <button
                 type="button"
                 onClick={handleOpenCreate}
-                className="px-4 py-2.5 bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-[#0a213c] text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Single Fact</span>
@@ -606,7 +606,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-stone-100 dark:bg-stone-800 border-b border-stone-300 dark:border-stone-700 text-stone-800 dark:text-stone-200 uppercase tracking-wider font-black">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wider font-black text-[11px]">
                 <tr>
                   <th className="p-3.5">Code</th>
                   <th className="p-3.5">Image</th>
@@ -618,20 +618,20 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200 dark:divide-stone-800">
+              <tbody className="divide-y divide-slate-100">
                 {bitzList.map((bitz) => {
                   const topic = getTopicById(bitz.topic_id);
 
                   return (
-                    <tr key={bitz.id} className="hover:bg-stone-50/90 dark:hover:bg-stone-800/50 transition-colors">
-                      <td className="p-3.5 font-mono font-bold text-stone-800 dark:text-stone-200">
+                    <tr key={bitz.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3.5 font-mono font-bold text-slate-800">
                         {bitz.bitz_code}
                       </td>
 
                       {/* Image Thumbnail & Status */}
                       <td className="p-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 shrink-0 border border-stone-300 dark:border-stone-700">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
                             {bitz.visual_url ? (
                               <img
                                 src={bitz.visual_url}
@@ -639,7 +639,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-stone-400 dark:text-stone-500">
+                              <div className="w-full h-full flex items-center justify-center text-slate-400">
                                 <ImageIcon className="w-5 h-5" />
                               </div>
                             )}
@@ -647,11 +647,11 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
                           <div className="space-y-1">
                             {bitz.visual_status === 'ready' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
                                 <Check className="w-3 h-3 stroke-[2.5]" /> Ready
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-100 dark:bg-amber-950/70 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
                                 <AlertCircle className="w-3 h-3 stroke-[2.5]" /> Missing
                               </span>
                             )}
@@ -661,17 +661,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
                       {/* Title & Short Fact */}
                       <td className="p-3.5 max-w-sm">
-                        <div className="font-extrabold text-stone-950 dark:text-white line-clamp-1">
+                        <div className="font-black text-[#0a213c] line-clamp-1 text-xs">
                           {bitz.title}
                         </div>
-                        <div className="text-[11px] font-medium text-stone-600 dark:text-stone-300 line-clamp-2 mt-0.5 leading-relaxed">
+                        <div className="text-[11px] font-medium text-slate-600 line-clamp-2 mt-0.5 leading-relaxed">
                           {bitz.short_fact}
                         </div>
                       </td>
 
                       {/* Topic */}
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-stone-200/80 dark:bg-stone-800 text-stone-900 dark:text-white border border-stone-300 dark:border-stone-700">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-slate-100 text-slate-900 border border-slate-200">
                           <span
                             className="w-2 h-2 rounded-full shrink-0"
                             style={{ backgroundColor: topic.color }}
@@ -682,14 +682,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
                       {/* CEFR Level */}
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 dark:bg-blue-950/70 text-[#026fc3] dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-[#026fc3] border border-blue-200">
                           {bitz.cefr_level || 'B1'}
                         </span>
                       </td>
 
                       {/* Difficulty */}
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 uppercase">
+                        <span className="text-[11px] font-bold text-slate-700 uppercase">
                           {bitz.difficulty}
                         </span>
                       </td>
@@ -704,7 +704,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1 cursor-pointer ${
                             bitz.status === 'published'
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                              : 'bg-stone-200 hover:bg-stone-300 dark:bg-stone-700 dark:hover:bg-stone-600 text-stone-800 dark:text-stone-100'
+                              : 'bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800'
                           }`}
                         >
                           {bitz.status === 'published' ? '✓ Published' : 'Draft'}
@@ -718,7 +718,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setPreviewBitz(bitz)}
-                            className="p-1.5 text-stone-700 hover:text-blue-600 hover:bg-blue-50 dark:text-stone-300 dark:hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-600 hover:text-[#026fc3] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                             title="Preview Discovery Card & Reader"
                           >
                             <Eye className="w-4 h-4 stroke-[2.2]" />
@@ -728,14 +728,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenGeminiModal(bitz)}
-                            className="p-1.5 text-purple-700 hover:text-purple-900 hover:bg-purple-100 dark:text-purple-400 dark:hover:bg-purple-950/60 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-purple-700 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
                             title="Generate AI Image with Gemini"
                           >
                             <Sparkles className="w-4 h-4 stroke-[2.2]" />
                           </button>
 
                           {/* Upload Direct Image */}
-                          <label className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-950/60 rounded-lg cursor-pointer transition-colors" title="Upload Image (R2)">
+                          <label className="p-1.5 text-[#026fc3] hover:text-blue-900 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors" title="Upload Image (R2)">
                             <Upload className="w-4 h-4 stroke-[2.2]" />
                             <input
                               type="file"
@@ -749,7 +749,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(bitz)}
-                            className="p-1.5 text-stone-700 hover:text-amber-700 hover:bg-amber-100 dark:text-stone-300 dark:hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
                             title="Edit Bitz"
                           >
                             <Edit className="w-4 h-4 stroke-[2.2]" />
@@ -759,7 +759,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleDeleteBitz(bitz.id)}
-                            className="p-1.5 text-stone-500 hover:text-rose-600 hover:bg-rose-100 dark:text-stone-400 dark:hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                             title="Delete Bitz"
                           >
                             <Trash2 className="w-4 h-4 stroke-[2.2]" />
@@ -777,19 +777,19 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
       {/* CREATE / EDIT BITZ MODAL */}
       {createModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
           <div
-            className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-300 dark:border-stone-800 overflow-hidden my-auto"
+            className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/90">
-              <h3 className="text-base font-black text-stone-950 dark:text-white">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+              <h3 className="text-base font-black text-[#0a213c]">
                 {editingBitz ? 'Edit Knowledge Bitz' : 'Create Knowledge Bitz'}
               </h3>
               <button
                 type="button"
                 onClick={() => setCreateModalOpen(false)}
-                className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white rounded-full transition-colors"
+                className="p-1.5 text-slate-500 hover:text-[#0a213c] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -797,7 +797,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
             <form onSubmit={handleSaveBitz} className="p-6 max-h-[75vh] overflow-y-auto space-y-4">
               <div>
-                <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                   Title / Hook *
                 </label>
                 <input
@@ -806,12 +806,12 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
                   placeholder="e.g. Why Mars Appears Red: Planetary Rust"
-                  className="w-full px-3.5 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-semibold text-stone-950 dark:text-white focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                   Short Fact (Discovery Card) *
                 </label>
                 <textarea
@@ -820,19 +820,19 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={formShortFact}
                   onChange={(e) => setFormShortFact(e.target.value)}
                   placeholder="1-2 sentences shown on the card before reader opens"
-                  className="w-full px-3.5 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase">
+                  <label className="block text-xs font-black text-[#0a213c] uppercase">
                     100-Word Reading Explanation *
                   </label>
                   <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
                     formReadingText.trim().split(/\s+/).filter(Boolean).length >= 70 && formReadingText.trim().split(/\s+/).filter(Boolean).length <= 130
-                      ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
-                      : 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800'
+                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-900 border border-amber-200'
                   }`}>
                     {formReadingText.trim().split(/\s+/).filter(Boolean).length} words (Recommended: 80–120)
                   </span>
@@ -843,19 +843,19 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={formReadingText}
                   onChange={(e) => setFormReadingText(e.target.value)}
                   placeholder="Clear, simple English paragraph explaining the insight (80-120 words)"
-                  className="w-full px-3.5 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                  <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                     Topic
                   </label>
                   <select
                     value={formTopicId}
                     onChange={(e) => setFormTopicId(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
                     {ALL_BITZ_TOPICS.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -866,13 +866,13 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                  <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                     CEFR Level
                   </label>
                   <select
                     value={formCefrLevel}
                     onChange={(e) => setFormCefrLevel(e.target.value as BitzCefrLevel)}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
                     {CEFR_LEVELS.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -883,13 +883,13 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                  <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                     Difficulty
                   </label>
                   <select
                     value={formDifficulty}
                     onChange={(e) => setFormDifficulty(e.target.value as BitzDifficulty)}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
                     <option value="Easy">Easy</option>
                     <option value="Medium">Medium</option>
@@ -898,13 +898,13 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                  <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                     Status
                   </label>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as BitzPublishStatus)}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
                     <option value="draft">Draft</option>
                     <option value="published">Published</option>
@@ -915,7 +915,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                   Source Citation
                 </label>
                 <input
@@ -923,13 +923,13 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={formSource}
                   onChange={(e) => setFormSource(e.target.value)}
                   placeholder="e.g. NASA Planetary Science Division"
-                  className="w-full px-3.5 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
                 />
               </div>
 
               {/* Optional Quiz Section */}
-              <div className="p-4 bg-stone-100/80 dark:bg-stone-800/80 rounded-2xl border border-stone-300 dark:border-stone-700 space-y-3">
-                <span className="text-xs font-black uppercase text-stone-800 dark:text-stone-200">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <span className="text-xs font-black uppercase text-[#0a213c]">
                   Optional Quiz Question (+10 XP)
                 </span>
                 <input
@@ -937,7 +937,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={formQuizQuestion}
                   onChange={(e) => setFormQuizQuestion(e.target.value)}
                   placeholder="Question text..."
-                  className="w-full px-3.5 py-2 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400"
                 />
 
                 <div className="grid grid-cols-2 gap-2">
@@ -952,7 +952,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                         setFormQuizOptions(next);
                       }}
                       placeholder={`Option ${String.fromCharCode(65 + idx)}`}
-                      className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white"
+                      className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400"
                     />
                   ))}
                 </div>
@@ -963,30 +963,30 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                     value={formQuizCorrect}
                     onChange={(e) => setFormQuizCorrect(e.target.value)}
                     placeholder="Exact correct answer string..."
-                    className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white"
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400"
                   />
                   <input
                     type="text"
                     value={formQuizExplanation}
                     onChange={(e) => setFormQuizExplanation(e.target.value)}
                     placeholder="Short 1-sentence explanation..."
-                    className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white"
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-200 dark:border-stone-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setCreateModalOpen(false)}
-                  className="px-4 py-2.5 text-xs font-bold text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors"
+                  className="px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading === 'save'}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
                 >
                   {actionLoading === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Save Bitz</span>}
                 </button>
@@ -998,24 +998,24 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
       {/* BULK IMPORT MODAL */}
       {bulkImportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
           <div
-            className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-300 dark:border-stone-800 overflow-hidden my-auto"
+            className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/90">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
               <div>
-                <h3 className="text-base font-black text-stone-950 dark:text-white">
+                <h3 className="text-base font-black text-[#0a213c]">
                   Bulk Fact Import (1,000+ Facts)
                 </h3>
-                <p className="text-xs text-stone-600 dark:text-stone-300 font-semibold">
+                <p className="text-xs text-slate-600 font-semibold mt-0.5">
                   Paste JSON array of fact objects with validation diagnostics.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setBulkImportOpen(false)}
-                className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white rounded-full transition-colors"
+                className="p-1.5 text-slate-500 hover:text-[#0a213c] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1036,17 +1036,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     "source_citation": "American Chemical Society"
   }
 ]`}
-                className="w-full font-mono text-xs p-3 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-stone-950 dark:text-white focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                className="w-full font-mono text-xs p-3 bg-white border border-slate-300 rounded-xl text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
               />
 
               {bulkImportResult && (
-                <div className="p-4 bg-stone-100/90 dark:bg-stone-800 rounded-2xl border border-stone-300 dark:border-stone-700 space-y-2">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                   <div className="flex items-center gap-4 text-xs font-black">
-                    <span className="text-emerald-700 dark:text-emerald-300">Imported: {bulkImportResult.importedCount}</span>
-                    <span className="text-rose-700 dark:text-rose-300">Failed: {bulkImportResult.failedCount}</span>
+                    <span className="text-emerald-700">Imported: {bulkImportResult.importedCount}</span>
+                    <span className="text-rose-700">Failed: {bulkImportResult.failedCount}</span>
                   </div>
                   {bulkImportResult.errors.length > 0 && (
-                    <div className="text-xs text-rose-700 dark:text-rose-300 max-h-32 overflow-y-auto space-y-1 font-medium">
+                    <div className="text-xs text-rose-700 max-h-32 overflow-y-auto space-y-1 font-medium">
                       {bulkImportResult.errors.map((err, i) => (
                         <div key={i}>
                           #{err.index} {err.title}: {err.reason}
@@ -1061,7 +1061,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setBulkImportOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-xl cursor-pointer"
                 >
                   Close
                 </button>
@@ -1081,36 +1081,36 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
       {/* GEMINI AI IMAGE GENERATOR MODAL */}
       {geminiModalOpen && activeGeminiBitz && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
           <div
-            className="relative w-full max-w-xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-300 dark:border-stone-800 overflow-hidden my-auto"
+            className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/90">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600 stroke-[2.5]" />
-                <h3 className="text-base font-black text-stone-950 dark:text-white">
+                <h3 className="text-base font-black text-[#0a213c]">
                   Gemini AI Image Generator
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setGeminiModalOpen(false)}
-                className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white rounded-full transition-colors"
+                className="p-1.5 text-slate-500 hover:text-[#0a213c] hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="text-xs bg-purple-100/90 dark:bg-purple-950/60 p-3.5 rounded-xl border border-purple-300 dark:border-purple-900 text-purple-950 dark:text-purple-100 font-medium">
-                <strong className="font-black">Fact:</strong> {activeGeminiBitz.title} ({activeGeminiBitz.category})
+              <div className="text-xs bg-purple-50 p-3.5 rounded-xl border border-purple-200 text-purple-950 font-semibold">
+                <strong className="font-black text-purple-900">Fact:</strong> {activeGeminiBitz.title} ({activeGeminiBitz.category})
               </div>
 
               {/* Image Preview Container */}
-              <div className="w-full aspect-[16/10] bg-stone-100 dark:bg-stone-800 rounded-2xl overflow-hidden border border-stone-300 dark:border-stone-700 flex items-center justify-center relative shadow-inner">
+              <div className="w-full aspect-[16/10] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center relative shadow-inner">
                 {geminiGenerating ? (
-                  <div className="flex flex-col items-center justify-center text-purple-700 dark:text-purple-300">
+                  <div className="flex flex-col items-center justify-center text-purple-700">
                     <Loader2 className="w-10 h-10 animate-spin mb-2" />
                     <span className="text-xs font-black">Generating paper-cut artwork with Gemini...</span>
                   </div>
@@ -1121,8 +1121,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="text-center text-stone-500 dark:text-stone-400 text-xs font-medium">
-                    <ImageIcon className="w-10 h-10 mx-auto mb-1 text-stone-400" />
+                  <div className="text-center text-slate-500 text-xs font-medium">
+                    <ImageIcon className="w-10 h-10 mx-auto mb-1 text-slate-400" />
                     <span>Click Generate to produce visual with Gemini</span>
                   </div>
                 )}
@@ -1130,7 +1130,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
               {/* Custom Prompt Override */}
               <div>
-                <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
                   Custom Prompt (Optional)
                 </label>
                 <textarea
@@ -1138,17 +1138,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   value={geminiCustomPrompt}
                   onChange={(e) => setGeminiCustomPrompt(e.target.value)}
                   placeholder="Leave blank for automatic paper-cut art prompt..."
-                  className="w-full px-3 py-2 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-medium text-stone-950 dark:text-white"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] placeholder:text-slate-400"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2 border-t border-stone-200 dark:border-stone-800">
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                 <button
                   type="button"
                   disabled={geminiGenerating}
                   onClick={handleGenerateGemini}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold rounded-xl shadow-md disabled:opacity-50 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl shadow-md disabled:opacity-50 transition-all active:scale-95 cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4" />
                   <span>{geminiPreviewUrl ? 'Regenerate' : 'Generate Image'}</span>
