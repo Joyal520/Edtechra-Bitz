@@ -43,38 +43,52 @@ export interface ValidationIssue {
 }
 
 /**
- * Validate short_fact: must be 20–30 words.
+ * Validate short_fact: target is 20–30 words.
  */
 export function validateShortFact(text: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (!text || typeof text !== 'string' || text.trim().length < 5) {
-    issues.push({ type: 'error', field: 'short_fact', message: 'Short fact is missing or too short.' });
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    issues.push({ type: 'error', field: 'short_fact', message: 'Short fact is missing or empty.' });
     return issues;
   }
   const wc = countWords(text);
-  if (wc < 20) {
-    issues.push({ type: 'error', field: 'short_fact', message: `Short fact has ${wc} words. Required: 20–30 words.` });
-  } else if (wc > 30) {
-    issues.push({ type: 'error', field: 'short_fact', message: `Short fact has ${wc} words. Required: 20–30 words.` });
+  if (wc < 18 || wc > 35) {
+    issues.push({
+      type: 'error',
+      field: 'short_fact',
+      message: `Short fact has ${wc} words. Required: approximately 20–30 words.`
+    });
+  } else if (wc < 20 || wc > 30) {
+    issues.push({
+      type: 'warning',
+      field: 'short_fact',
+      message: `Short fact has ${wc} words. Target is 20–30 words.`
+    });
   }
   return issues;
 }
 
 /**
- * Validate reading: must be EXACTLY 100 words.
+ * Validate reading: target is 90–110 words (~100 words).
  */
 export function validateReading(text: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (!text || typeof text !== 'string' || text.trim().length < 10) {
-    issues.push({ type: 'error', field: 'reading_text', message: 'Reading text is missing.' });
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    issues.push({ type: 'error', field: 'reading_text', message: 'Reading text (reading_text) is missing or empty (received 0 words).' });
     return issues;
   }
   const wc = countWords(text);
-  if (wc !== 100) {
+  if (wc < 80 || wc > 125) {
     issues.push({
-      type: wc >= 95 && wc <= 105 ? 'warning' : 'error',
+      type: 'error',
       field: 'reading_text',
-      message: `Reading word count: ${wc}. Required: exactly 100 words.`
+      message: `Reading word count: ${wc} words. Required: approximately 100 words (90–110 words target).`
+    });
+  } else if (wc < 90 || wc > 110) {
+    issues.push({
+      type: 'warning',
+      field: 'reading_text',
+      message: `Reading word count: ${wc} words. Target is 90–110 words.`
     });
   }
   return issues;
@@ -97,9 +111,9 @@ export function validateQuizArray(quiz: any): ValidationIssue[] {
 
   if (quizArr.length !== 5) {
     issues.push({
-      type: 'error',
+      type: quizArr.length >= 1 ? 'warning' : 'error',
       field: 'quiz',
-      message: `Quiz count: ${quizArr.length}. Required: exactly 5 quiz questions.`
+      message: `Quiz count: ${quizArr.length}/5. Required: exactly 5 quiz questions.`
     });
   }
 
@@ -117,29 +131,30 @@ export function validateQuizArray(quiz: any): ValidationIssue[] {
     }
 
     // Options
-    if (!Array.isArray(q.options) || q.options.length !== 4) {
-      issues.push({ type: 'error', field: `${prefix}.options`, message: `Question ${i + 1}: must have exactly 4 options. Found: ${Array.isArray(q.options) ? q.options.length : 0}.` });
+    const options = q.options || q.choices;
+    if (!Array.isArray(options) || options.length !== 4) {
+      issues.push({ type: 'error', field: `${prefix}.options`, message: `Question ${i + 1}: must have exactly 4 options. Found: ${Array.isArray(options) ? options.length : 0}.` });
     } else {
       // Check for empty options
-      q.options.forEach((opt: any, j: number) => {
+      options.forEach((opt: any, j: number) => {
         if (!opt || typeof opt !== 'string' || opt.trim().length === 0) {
           issues.push({ type: 'error', field: `${prefix}.options[${j}]`, message: `Question ${i + 1}, Option ${j + 1}: is empty.` });
         }
       });
 
       // Check for duplicate options
-      const uniqueOpts = new Set(q.options.map((o: string) => (o || '').trim().toLowerCase()));
-      if (uniqueOpts.size < q.options.length) {
+      const uniqueOpts = new Set(options.map((o: string) => (o || '').trim().toLowerCase()));
+      if (uniqueOpts.size < options.length) {
         issues.push({ type: 'warning', field: `${prefix}.options`, message: `Question ${i + 1}: has duplicate options.` });
       }
     }
 
     // Correct answer
-    const correctAns = q.correct_answer || q.correctAnswer;
+    const correctAns = q.correct_answer || q.correctAnswer || q.answer;
     if (!correctAns || typeof correctAns !== 'string' || correctAns.trim().length === 0) {
       issues.push({ type: 'error', field: `${prefix}.correct_answer`, message: `Question ${i + 1}: correct_answer is missing.` });
-    } else if (Array.isArray(q.options) && q.options.length === 4) {
-      const matchesOption = q.options.some((opt: string) => (opt || '').trim() === correctAns.trim());
+    } else if (Array.isArray(options) && options.length === 4) {
+      const matchesOption = options.some((opt: string) => (opt || '').trim() === correctAns.trim());
       if (!matchesOption) {
         issues.push({ type: 'error', field: `${prefix}.correct_answer`, message: `Question ${i + 1}: correct_answer does not match any of the 4 options.` });
       }
@@ -159,67 +174,145 @@ export function validateQuizArray(quiz: any): ValidationIssue[] {
 // FULL RECORD VALIDATOR
 // ============================================================================
 
+export interface BitzValidationMetrics {
+  title: string;
+  category: string;
+  subtopic: string;
+  cefrLevel: string;
+  shortFactWords: number;
+  readingWords: number;
+  quizCount: number;
+  totalXp: number;
+}
+
 export interface ValidatedBitzRecord {
   original: any;
+  canonical: any;
   status: 'valid' | 'warning' | 'error';
   issues: ValidationIssue[];
+  metrics: BitzValidationMetrics;
 }
 
 /**
- * Validate a single Knowledge Bitz record.
+ * Validate a single Knowledge Bitz record and normalize it into canonical form.
  */
 export function validateBitzRecord(record: any, index: number): ValidatedBitzRecord {
   const issues: ValidationIssue[] = [];
 
-  // Title
-  if (!record.title || typeof record.title !== 'string' || record.title.trim().length < 5) {
+  // 1. Title
+  const title = String(record.title || '').trim();
+  if (!title || title.length < 5) {
     issues.push({ type: 'error', field: 'title', message: `Fact #${index + 1}: Title is missing or less than 5 characters.` });
   }
 
-  // Short fact (20-30 words)
-  issues.push(...validateShortFact(record.short_fact).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
+  // 2. Short fact (20-30 words)
+  const shortFact = String(record.short_fact || record.shortFact || record.summary || record.fact || '').trim();
+  issues.push(...validateShortFact(shortFact).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
 
-  // Reading text (exactly 100 words)
-  const readingText = record.reading_text || record.reading;
+  // 3. Reading text (approximately 100 words: 90–110 target)
+  const readingText = String(record.reading_text || record.reading || record.reading_content || record.content || '').trim();
   issues.push(...validateReading(readingText).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
 
-  // Category validation
-  const categoryId = record.category_id || record.category;
-  if (!categoryId) {
+  // 4. Category validation
+  const rawCat = record.category || record.category_id || record.categoryGroup || '';
+  let resolvedCategory = String(rawCat).trim();
+  if (!resolvedCategory) {
     issues.push({ type: 'error', field: 'category', message: `Fact #${index + 1}: Category is missing.` });
-  } else if (!VALID_CATEGORIES.includes(categoryId) && !BITZ_CATEGORY_MAP[categoryId]) {
-    // Allow category names too (for AI-generated content)
+    resolvedCategory = 'Science & Nature';
+  } else if (!VALID_CATEGORIES.includes(resolvedCategory) && !BITZ_CATEGORY_MAP[resolvedCategory]) {
     const matchByName = Object.values(BITZ_CATEGORY_MAP).find(
-      (c) => c.name.toLowerCase() === String(categoryId).toLowerCase()
+      (c) => c.name.toLowerCase() === resolvedCategory.toLowerCase()
     );
-    if (!matchByName) {
-      issues.push({ type: 'warning', field: 'category', message: `Fact #${index + 1}: Category '${categoryId}' is not one of the 10 main categories.` });
+    if (matchByName) {
+      resolvedCategory = matchByName.name;
+    } else {
+      issues.push({ type: 'warning', field: 'category', message: `Fact #${index + 1}: Category '${resolvedCategory}' is not one of the 10 main categories. Will use 'Science & Nature'.` });
     }
+  } else if (BITZ_CATEGORY_MAP[resolvedCategory]) {
+    resolvedCategory = BITZ_CATEGORY_MAP[resolvedCategory].name;
   }
 
-  // Subtopic validation
-  const subtopic = record.subtopic || record.sub_topic;
+  // 5. Subtopic validation
+  const subtopic = String(record.subtopic || record.sub_topic || '').trim();
   if (!subtopic) {
     issues.push({ type: 'warning', field: 'subtopic', message: `Fact #${index + 1}: Subtopic is missing. Will use 'General'.` });
-  } else if (categoryId && !isValidSubtopicForCategory(categoryId, subtopic)) {
-    // Subtopic generated by AI is acceptable as custom tag
+  } else if (resolvedCategory && !isValidSubtopicForCategory(resolvedCategory, subtopic)) {
+    // Info/warning for non-standard subtopic
   }
 
-  // CEFR level
-  const cefr = record.cefr_level || record.level;
-  if (!cefr || !VALID_CEFR_LEVELS.includes(cefr)) {
-    issues.push({ type: 'error', field: 'cefr_level', message: `Fact #${index + 1}: CEFR level '${cefr || 'missing'}' is invalid. Must be one of: ${VALID_CEFR_LEVELS.join(', ')}.` });
+  // 6. CEFR level
+  const rawCefr = String(record.cefr_level || record.level || record.cefrLevel || 'B1').toUpperCase().trim();
+  const cefrLevel = VALID_CEFR_LEVELS.includes(rawCefr) ? rawCefr : 'B1';
+  if (!record.cefr_level && !record.level && !record.cefrLevel) {
+    issues.push({ type: 'warning', field: 'cefr_level', message: `Fact #${index + 1}: CEFR level missing. Defaulting to B1.` });
+  } else if (!VALID_CEFR_LEVELS.includes(rawCefr)) {
+    issues.push({ type: 'error', field: 'cefr_level', message: `Fact #${index + 1}: CEFR level '${rawCefr}' is invalid. Must be one of: ${VALID_CEFR_LEVELS.join(', ')}.` });
   }
 
-  // Quiz validation (5 questions, 4 options, 2 XP)
-  issues.push(...validateQuizArray(record.quiz).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
+  // 7. Quiz validation (5 questions, 4 options, 2 XP each = 10 XP)
+  const rawQuiz = record.quiz;
+  issues.push(...validateQuizArray(rawQuiz).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
 
-  // Determine overall status
+  // Normalize quiz array
+  let normalizedQuiz = null;
+  if (Array.isArray(rawQuiz)) {
+    normalizedQuiz = rawQuiz.map((q: any) => ({
+      question: String(q?.question || '').trim(),
+      options: (q?.options || q?.choices || []).map((o: any) => String(o || '').trim()),
+      correct_answer: String(q?.correct_answer || q?.correctAnswer || q?.answer || (q?.options || [])[0] || '').trim(),
+      explanation: String(q?.explanation || 'Verified answer.').trim(),
+      xp: 2
+    }));
+  } else if (rawQuiz && typeof rawQuiz === 'object' && rawQuiz.question) {
+    normalizedQuiz = [{
+      question: String(rawQuiz.question).trim(),
+      options: (rawQuiz.options || rawQuiz.choices || []).map((o: any) => String(o || '').trim()),
+      correct_answer: String(rawQuiz.correct_answer || rawQuiz.correctAnswer || rawQuiz.answer || (rawQuiz.options || [])[0] || '').trim(),
+      explanation: String(rawQuiz.explanation || 'Verified answer.').trim(),
+      xp: 2
+    }];
+  }
+
+  const shortFactWords = countWords(shortFact);
+  const readingWords = countWords(readingText);
+  const quizCount = normalizedQuiz ? normalizedQuiz.length : 0;
+  const totalXp = quizCount * 2;
+
+  // Build canonical record
+  const canonical = {
+    title,
+    short_fact: shortFact,
+    reading_text: readingText,
+    category: resolvedCategory,
+    sub_topic: subtopic || 'General',
+    difficulty: ['Easy', 'Medium', 'Hard'].includes(record.difficulty) ? record.difficulty : 'Easy',
+    cefr_level: cefrLevel,
+    source_citation: record.source_citation || record.sourceCitation || record.source || null,
+    quiz: normalizedQuiz,
+    xp_value: 10,
+    status: 'draft'
+  };
+
   const hasErrors = issues.some((i) => i.type === 'error');
   const hasWarnings = issues.some((i) => i.type === 'warning');
   const status: 'valid' | 'warning' | 'error' = hasErrors ? 'error' : hasWarnings ? 'warning' : 'valid';
 
-  return { original: record, status, issues };
+  return {
+    original: record,
+    canonical,
+    status,
+    issues,
+    metrics: {
+      title: title || 'Untitled Record',
+      category: resolvedCategory,
+      subtopic: subtopic || 'General',
+      cefrLevel,
+      shortFactWords,
+      readingWords,
+      quizCount,
+      totalXp
+    }
+  };
 }
 
 /**
@@ -243,16 +336,16 @@ export function validateBitzBatch(records: any[]): {
     const result = validateBitzRecord(records[i], i);
 
     // Check for duplicate titles within batch
-    const title = (records[i].title || '').trim().toLowerCase();
-    if (title && seenTitles.has(title)) {
+    const titleKey = result.canonical.title.toLowerCase();
+    if (titleKey && seenTitles.has(titleKey)) {
       result.issues.push({
         type: 'error',
         field: 'title',
-        message: `Fact #${i + 1}: Duplicate title '${records[i].title}' found within this batch.`
+        message: `Fact #${i + 1}: Duplicate title '${result.canonical.title}' found within this batch.`
       });
-      if (result.status !== 'error') result.status = 'error';
+      result.status = 'error';
     }
-    if (title) seenTitles.add(title);
+    if (titleKey) seenTitles.add(titleKey);
 
     results.push(result);
   }

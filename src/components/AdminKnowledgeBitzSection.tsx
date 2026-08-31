@@ -12,6 +12,7 @@ import {
   Image as ImageIcon,
   Search,
   AlertCircle,
+  AlertTriangle,
   Eye,
   Trash2,
   Edit,
@@ -37,6 +38,10 @@ import {
   getSubtopicsForCategory,
   type BitzSubtopic
 } from '@/utils/bitzTopicsConfig';
+import {
+  validateBitzBatch,
+  type ValidatedBitzRecord
+} from '@/utils/bitzContentValidator';
 import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
 import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
@@ -94,6 +99,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
   // Bulk Import Form State
   const [bulkJsonText, setBulkJsonText] = useState<string>('');
+  const [bulkValidatedRecords, setBulkValidatedRecords] = useState<ValidatedBitzRecord[]>([]);
+  const [bulkJsonError, setBulkJsonError] = useState<string | null>(null);
   const [bulkImportResult, setBulkImportResult] = useState<BitzBulkImportResult | null>(null);
   const [bulkImporting, setBulkImporting] = useState<boolean>(false);
 
@@ -194,12 +201,6 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   // Quick 1-Click Publish / Unpublish Toggle
   const handleTogglePublish = async (bitz: KnowledgeBitzItem) => {
     const nextStatus: BitzPublishStatus = bitz.status === 'published' ? 'draft' : 'published';
-    if (nextStatus === 'published') {
-      if (bitz.visual_status !== 'ready' || !bitz.visual_url) {
-        alert('Cannot publish Knowledge Bitz without a ready image. Generate with Gemini or upload an image first.');
-        return;
-      }
-    }
     setActionLoading(`toggle-${bitz.id}`);
     try {
       await knowledgeBitzService.updateBitz(bitz.id, { status: nextStatus }, token);
@@ -216,14 +217,6 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     e.preventDefault();
     setActionLoading('save');
     try {
-      if (formStatus === 'published') {
-        const hasImage = editingBitz ? (editingBitz.visual_status === 'ready' && Boolean(editingBitz.visual_url)) : false;
-        if (!hasImage) {
-          alert('Cannot publish Knowledge Bitz without a ready image. Please save as Draft first, then attach an image.');
-          setActionLoading(null);
-          return;
-        }
-      }
 
       const quizPayload = formQuizQuestion.trim()
         ? {
@@ -372,26 +365,50 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     }
   };
 
+  // Handle bulk JSON input change with live validation
+  const handleBulkJsonChange = (text: string) => {
+    setBulkJsonText(text);
+    setBulkImportResult(null);
+
+    if (!text.trim()) {
+      setBulkJsonError(null);
+      setBulkValidatedRecords([]);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(text.trim());
+      const items = Array.isArray(parsed) ? parsed : parsed.bitz || parsed.facts || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        setBulkJsonError('JSON must contain an array of fact objects (e.g. [ ... ] or { "bitz": [ ... ] }).');
+        setBulkValidatedRecords([]);
+        return;
+      }
+      setBulkJsonError(null);
+      const { results } = validateBitzBatch(items);
+      setBulkValidatedRecords(results);
+    } catch (e: any) {
+      setBulkJsonError(`Invalid JSON syntax: ${e.message}`);
+      setBulkValidatedRecords([]);
+    }
+  };
+
   // Bulk Fact Import Submission
   const handleBulkImport = async () => {
-    if (!bulkJsonText.trim()) return;
+    const importableRecords = bulkValidatedRecords
+      .filter((r) => r.status !== 'error')
+      .map((r) => r.canonical);
+
+    if (importableRecords.length === 0) {
+      alert('No valid records to import. Please resolve the validation errors first.');
+      return;
+    }
+
     setBulkImporting(true);
     setBulkImportResult(null);
 
     try {
-      let parsed: any;
-      try {
-        parsed = JSON.parse(bulkJsonText.trim());
-      } catch (e: any) {
-        throw new Error(`Invalid JSON syntax: ${e.message}`);
-      }
-
-      const items = Array.isArray(parsed) ? parsed : parsed.facts || parsed.bitz || [];
-      if (!Array.isArray(items) || items.length === 0) {
-        throw new Error('JSON must contain an array of fact objects.');
-      }
-
-      const res = await knowledgeBitzService.bulkImport(items, token);
+      const res = await knowledgeBitzService.bulkImport(importableRecords, token);
       setBulkImportResult(res);
       await loadAdminBitz();
     } catch (err: any) {
@@ -1063,7 +1080,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       {bulkImportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
           <div
-            className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
+            className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
@@ -1072,7 +1089,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   Bulk Fact Import (1,000+ Facts)
                 </h3>
                 <p className="text-xs text-slate-600 font-semibold mt-0.5">
-                  Paste JSON array of fact objects with validation diagnostics.
+                  Paste JSON array of fact objects with live validation diagnostics.
                 </p>
               </div>
               <button
@@ -1085,28 +1102,155 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <textarea
-                rows={10}
-                value={bulkJsonText}
-                onChange={(e) => setBulkJsonText(e.target.value)}
-                placeholder={`[
+              <div>
+                <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
+                  Knowledge Bitz JSON Input
+                </label>
+                <textarea
+                  rows={6}
+                  value={bulkJsonText}
+                  onChange={(e) => handleBulkJsonChange(e.target.value)}
+                  placeholder={`[
   {
-    "title": "Why Does Popcorn Pop?",
-    "short_fact": "Pressurized steam bursts the kernel hull.",
-    "reading_text": "Each kernel holds a droplet of water...",
-    "topic_id": "physics",
-    "difficulty": "Easy",
-    "source_citation": "American Chemical Society"
+    "title": "Why Mars Looks Red",
+    "short_fact": "Mars appears distinctly red in the night sky because its surface rocks and soil are saturated with oxidized iron minerals.",
+    "reading_text": "Mars looks reddish because its surface is covered in iron oxide, which is the same chemical compound found in everyday rust...",
+    "category": "Science & Nature",
+    "subtopic": "Space & Astronomy",
+    "cefr_level": "A2",
+    "quiz": [ ... 5 questions ... ]
   }
 ]`}
-                className="w-full font-mono text-xs p-3 bg-white border border-slate-300 rounded-xl text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
-              />
+                  className="w-full font-mono text-xs p-3 bg-white border border-slate-300 rounded-xl text-[#0a213c] placeholder:text-slate-400 focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3]"
+                />
+              </div>
 
+              {/* JSON Error Banner */}
+              {bulkJsonError && (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 font-bold rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{bulkJsonError}</span>
+                </div>
+              )}
+
+              {/* Live Validation Summary */}
+              {bulkValidatedRecords.length > 0 && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs font-black">
+                    <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200">
+                      <div className="text-slate-500 text-[10px] uppercase">Detected</div>
+                      <div className="text-base text-[#0a213c] font-black">{bulkValidatedRecords.length}</div>
+                    </div>
+                    <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                      <div className="text-emerald-700 text-[10px] uppercase">Valid</div>
+                      <div className="text-base text-emerald-700 font-black">
+                        {bulkValidatedRecords.filter((r) => r.status === 'valid').length}
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                      <div className="text-amber-800 text-[10px] uppercase">Warnings</div>
+                      <div className="text-base text-amber-800 font-black">
+                        {bulkValidatedRecords.filter((r) => r.status === 'warning').length}
+                      </div>
+                    </div>
+                    <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                      <div className="text-rose-800 text-[10px] uppercase">Errors</div>
+                      <div className="text-base text-rose-800 font-black">
+                        {bulkValidatedRecords.filter((r) => r.status === 'error').length}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Record Diagnostics List */}
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {bulkValidatedRecords.map((rec, i) => (
+                      <div
+                        key={i}
+                        className={`p-3 rounded-xl border text-xs ${
+                          rec.status === 'valid'
+                            ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                            : rec.status === 'warning'
+                            ? 'bg-amber-50/60 border-amber-200 text-amber-950'
+                            : 'bg-rose-50/60 border-rose-200 text-rose-950'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 font-black text-sm text-[#0a213c]">
+                            {rec.status === 'valid' && <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />}
+                            {rec.status === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600 stroke-[2.5]" />}
+                            {rec.status === 'error' && <AlertCircle className="w-4 h-4 text-rose-600 stroke-[2.5]" />}
+                            <span>#{i + 1} {rec.metrics.title}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              rec.status === 'valid'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : rec.status === 'warning'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}
+                          >
+                            {rec.status === 'error' ? 'INVALID' : 'READY TO IMPORT'}
+                          </span>
+                        </div>
+
+                        {/* Metric Badges */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px] font-bold">
+                          <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                            Category: <strong>{rec.metrics.category}</strong>
+                          </span>
+                          <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                            Level: <strong>{rec.metrics.cefrLevel}</strong>
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md border font-extrabold ${
+                            rec.metrics.shortFactWords >= 18 && rec.metrics.shortFactWords <= 35
+                              ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-100 text-rose-800 border-rose-200'
+                          }`}>
+                            Short fact: {rec.metrics.shortFactWords} words {rec.metrics.shortFactWords >= 18 && rec.metrics.shortFactWords <= 35 ? '✓' : '✗'}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md border font-extrabold ${
+                            rec.metrics.readingWords >= 80 && rec.metrics.readingWords <= 125
+                              ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-100 text-rose-800 border-rose-200'
+                          }`}>
+                            Reading: {rec.metrics.readingWords} words {rec.metrics.readingWords >= 80 && rec.metrics.readingWords <= 125 ? '✓' : '✗'}
+                          </span>
+                          <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                            Quizzes: {rec.metrics.quizCount}/5 {rec.metrics.quizCount === 5 ? '✓' : ''}
+                          </span>
+                          <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                            XP: {rec.metrics.totalXp} ✓
+                          </span>
+                        </div>
+
+                        {/* Issues List */}
+                        {rec.issues.length > 0 && (
+                          <div className="mt-2 text-[11px] font-semibold space-y-0.5">
+                            {rec.issues.map((iss, j) => (
+                              <div
+                                key={j}
+                                className={iss.type === 'error' ? 'text-rose-700' : 'text-amber-800'}
+                              >
+                                • {iss.message}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Import Result Banner */}
               {bulkImportResult && (
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
                   <div className="flex items-center gap-4 text-xs font-black">
-                    <span className="text-emerald-700">Imported: {bulkImportResult.importedCount}</span>
-                    <span className="text-rose-700">Failed: {bulkImportResult.failedCount}</span>
+                    <span className="text-emerald-700">✓ Successfully Imported: {bulkImportResult.importedCount}</span>
+                    {bulkImportResult.failedCount > 0 && (
+                      <span className="text-rose-700">Failed: {bulkImportResult.failedCount}</span>
+                    )}
                   </div>
                   {bulkImportResult.errors.length > 0 && (
                     <div className="text-xs text-rose-700 max-h-32 overflow-y-auto space-y-1 font-medium">
@@ -1120,7 +1264,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setBulkImportOpen(false)}
@@ -1130,11 +1274,20 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  disabled={bulkImporting || !bulkJsonText.trim()}
+                  disabled={
+                    bulkImporting ||
+                    bulkValidatedRecords.filter((r) => r.status !== 'error').length === 0
+                  }
                   onClick={handleBulkImport}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl shadow-md disabled:opacity-50 transition-all active:scale-95 cursor-pointer"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md disabled:opacity-50 transition-all active:scale-95 cursor-pointer"
                 >
-                  {bulkImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Start Import</span>}
+                  {bulkImporting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <span>
+                      Import Valid Records ({bulkValidatedRecords.filter((r) => r.status !== 'error').length})
+                    </span>
+                  )}
                 </button>
               </div>
             </div>

@@ -126,7 +126,7 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
     setIsImporting(true);
     const validRecords = validatedRecords
       .filter((r) => r.status !== 'error')
-      .map((r) => r.original);
+      .map((r) => r.canonical || r.original);
     
     try {
       const result = await knowledgeBitzService.bulkImport(validRecords, token, selectedCefr);
@@ -404,16 +404,54 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
                       {record.status === 'error' && <AlertCircle className="text-rose-600" size={18} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-[10px] font-mono bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md">#{idx + 1}</span>
-                        <h4 className="font-black text-[#0a213c] truncate text-sm">
-                          {record.original?.title || 'Untitled Record'}
-                        </h4>
-                        {record.original?.subtopic && (
-                          <span className="text-[10px] bg-blue-50 text-[#026fc3] font-bold px-2 py-0.5 rounded-full border border-blue-100">
-                            {record.original.subtopic}
-                          </span>
-                        )}
+                      <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-md">#{idx + 1}</span>
+                          <h4 className="font-black text-[#0a213c] truncate text-sm">
+                            {record.metrics.title}
+                          </h4>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            record.status === 'valid'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : record.status === 'warning'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-rose-100 text-rose-800 border border-rose-300'
+                          }`}
+                        >
+                          {record.status === 'error' ? 'INVALID' : 'READY TO IMPORT'}
+                        </span>
+                      </div>
+
+                      {/* Metric Badges */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[11px] font-bold">
+                        <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                          Category: <strong>{record.metrics.category}</strong>
+                        </span>
+                        <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                          Level: <strong>{record.metrics.cefrLevel}</strong>
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md border font-extrabold ${
+                          record.metrics.shortFactWords >= 18 && record.metrics.shortFactWords <= 35
+                            ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border-rose-200'
+                        }`}>
+                          Short fact: {record.metrics.shortFactWords} words {record.metrics.shortFactWords >= 18 && record.metrics.shortFactWords <= 35 ? '✓' : '✗'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md border font-extrabold ${
+                          record.metrics.readingWords >= 80 && record.metrics.readingWords <= 125
+                            ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border-rose-200'
+                        }`}>
+                          Reading: {record.metrics.readingWords} words {record.metrics.readingWords >= 80 && record.metrics.readingWords <= 125 ? '✓' : '✗'}
+                        </span>
+                        <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                          Quizzes: {record.metrics.quizCount}/5 {record.metrics.quizCount === 5 ? '✓' : ''}
+                        </span>
+                        <span className="bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                          XP: {record.metrics.totalXp} ✓
+                        </span>
                       </div>
                       
                       {record.issues.length > 0 && (
@@ -449,26 +487,27 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
                   
                   <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar max-h-[360px]">
                     {validatedRecords.filter((r) => r.status !== 'error').map((record, idx) => {
-                      const quizList = Array.isArray(record.original.quiz) ? record.original.quiz : [];
+                      const canonical = record.canonical || record.original;
+                      const quizList = Array.isArray(canonical.quiz) ? canonical.quiz : [];
                       return (
                         <div key={idx} className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-2">
                           <div className="flex items-start justify-between gap-3">
-                            <h4 className="font-black text-base text-[#0a213c] leading-tight">{record.original.title}</h4>
+                            <h4 className="font-black text-base text-[#0a213c] leading-tight">{canonical.title}</h4>
                             <span className="shrink-0 text-[10px] font-black uppercase tracking-wider bg-blue-50 text-[#026fc3] border border-blue-100 px-2.5 py-0.5 rounded-full">
-                              {record.original.category || selectedCategoryId}
+                              {canonical.category || selectedCategoryId}
                             </span>
                           </div>
                           <p className="text-xs text-slate-600 font-medium line-clamp-2">
-                            {record.original.short_fact}
+                            {canonical.short_fact}
                           </p>
                           <div className="flex items-center gap-3 text-[11px] text-slate-500 font-semibold pt-1">
-                            <span>CEFR: <strong>{record.original.cefr_level || selectedCefr}</strong></span>
+                            <span>CEFR: <strong>{canonical.cefr_level || selectedCefr}</strong></span>
                             <span>•</span>
-                            <span>Quizzes: <strong>{quizList.length} questions (10 XP)</strong></span>
-                            {record.original.subtopic && (
+                            <span>Quizzes: <strong>{quizList.length} questions ({quizList.length * 2} XP)</strong></span>
+                            {canonical.sub_topic && (
                               <>
                                 <span>•</span>
-                                <span>Subtopic: <strong>{record.original.subtopic}</strong></span>
+                                <span>Subtopic: <strong>{canonical.sub_topic}</strong></span>
                               </>
                             )}
                           </div>

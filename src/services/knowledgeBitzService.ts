@@ -57,23 +57,41 @@ export const knowledgeBitzService = {
         let sbQuery = supabase
           .from('knowledge_bitz')
           .select('*')
-          .eq('status', 'published');
-
-        if (params.topic && params.topic !== 'all') {
-          sbQuery = sbQuery.eq('topic_id', params.topic);
-        }
-        if (params.difficulty && params.difficulty !== 'all') {
-          sbQuery = sbQuery.eq('difficulty', params.difficulty);
-        }
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
 
         const { data, error } = await sbQuery;
         if (!error && Array.isArray(data)) {
           let items = data as KnowledgeBitzItem[];
+
+          // Flexible topic/category matching
+          if (params.topic && params.topic !== 'all') {
+            const t = params.topic.toLowerCase().trim();
+            const norm = (s: string) => s.replace(/[^a-z0-9]/g, '');
+            const tN = norm(t);
+            items = items.filter(b => {
+              const bCat = (b.category || '').toLowerCase().trim();
+              const bTopic = (b.topic_id || '').toLowerCase().trim();
+              const bSub = (b.sub_topic || '').toLowerCase().trim();
+              if (bCat === t || bTopic === t || bSub === t) return true;
+              const bCatN = norm(bCat);
+              const bTopicN = norm(bTopic);
+              const bSubN = norm(bSub);
+              return bCatN === tN || bTopicN === tN || bSubN === tN || bCatN.includes(tN) || tN.includes(bCatN);
+            });
+          }
+
+          if (params.difficulty && params.difficulty !== 'all') {
+            items = items.filter(b => (b.difficulty || '').toLowerCase() === params.difficulty?.toLowerCase());
+          }
+
           if (params.search) {
             const q = params.search.toLowerCase();
             items = items.filter(b => 
               b.title?.toLowerCase().includes(q) ||
-              b.short_fact?.toLowerCase().includes(q)
+              b.short_fact?.toLowerCase().includes(q) ||
+              b.reading_text?.toLowerCase().includes(q) ||
+              b.category?.toLowerCase().includes(q)
             );
           }
           const page = params.page || 1;

@@ -312,8 +312,39 @@ export const ExploreFeed: React.FC = () => {
               <span>Retry</span>
             </button>
           </div>
-        ) : (bitzList.length === 0 || allLearnedNotice) ? (
-          // Premium Completion State
+        ) : (bitzList.length === 0 && !allLearnedNotice) ? (
+          // Empty State (No published facts in database for this filter)
+          <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-4 shadow-xs max-w-xl mx-auto">
+            <div className="w-16 h-16 bg-blue-50 text-[#026fc3] border border-blue-200 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
+              <Sparkles className="w-8 h-8 stroke-[2.5]" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl sm:text-2xl font-black text-[#0a213c] tracking-tight">
+                No Knowledge Bitz available yet.
+              </h3>
+              <p className="text-sm font-semibold text-slate-700 max-w-md mx-auto leading-relaxed">
+                There are currently no published facts in this category. Check back soon or explore other topics!
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTopic('all');
+                  setSearchQuery('');
+                  fetchFeed(1, false);
+                }}
+                className="px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 stroke-[2.5]" />
+                <span>Explore All Topics</span>
+              </button>
+            </div>
+          </div>
+        ) : allLearnedNotice ? (
+          // Premium Completion State (User has mastered all facts in selection)
           <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-5 shadow-xs max-w-xl mx-auto">
             <div className="w-16 h-16 bg-blue-50 text-[#026fc3] border border-blue-200 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />

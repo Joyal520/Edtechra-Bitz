@@ -29,247 +29,8 @@ try {
   // Read-only filesystem (e.g. Vercel serverless environment)
 }
 
-// Initial default seed Bitz for instantaneous local availability
-const INITIAL_SEED_BITZ = [
-  {
-    id: 'a0000001-0000-0000-0000-000000000001',
-    bitz_code: 'B000001',
-    title: 'Octopuses Have Three Hearts and Blue Blood',
-    short_fact: 'Two hearts pump blood to the gills, while a third circulates it to the body. Their blood is blue because it uses copper instead of iron.',
-    reading_text: 'An octopus has three distinct hearts that work in harmony. Two branchial hearts pump blood through each of the animal\'s two gills, where oxygen is absorbed. The third systemic heart pumps oxygenated blood throughout the rest of the body. Interestingly, when an octopus swims, the systemic heart stops beating, which is why octopuses tire quickly and prefer crawling along the sea floor. Furthermore, octopus blood is copper-based (using hemocyanin) rather than iron-based (hemoglobin), making their blood blue and highly efficient in cold, low-oxygen ocean waters.',
-    topic_id: 'biology',
-    category: 'Science & Nature',
-    sub_topic: 'Biology',
-    difficulty: 'Easy',
-    reading_time_sec: 30,
-    visual_url: '/assets/ChatGPT Image May 14, 2026, 08_52_51 PM (1).png',
-    visual_status: 'ready',
-    source_citation: 'Smithsonian National Zoo & Marine Biology Institute',
-    xp_value: 10,
-    likes_count: 142,
-    saves_count: 89,
-    shares_count: 24,
-    views_count: 890,
-    completions_count: 65,
-    quiz: {
-      question: 'Why is octopus blood blue instead of red?',
-      options: ['It contains copper-based hemocyanin', 'It contains high levels of nitrogen', 'It has zero red blood cells', 'It absorbs blue light underwater'],
-      correct_answer: 'It contains copper-based hemocyanin',
-      explanation: 'Octopus blood uses hemocyanin, a copper-rich protein, to transport oxygen in cold and deep water, giving it a distinctive blue tint.'
-    },
-    vocabulary: [
-      { word: 'Hemocyanin', definition: 'A copper-containing protein that carries oxygen in the blood of mollusks and crustaceans.' },
-      { word: 'Branchial', definition: 'Relating to the gills of aquatic animals.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 24 * 3).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000002',
-    bitz_code: 'B000002',
-    title: 'Why Mars Appears Red: Planetary Rust',
-    short_fact: 'Mars looks red because its surface soil contains vast amounts of iron oxide — the exact same chemical compound found in household rust.',
-    reading_text: 'The iconic reddish-orange glow of the Red Planet is caused by iron oxide, commonly known as rust. Billions of years ago, when Mars had liquid water and a denser atmosphere, iron contained in surface basaltic rocks reacted with atmospheric oxygen and moisture. Over geological epochs, solar ultraviolet radiation broke down trace water vapor, creating oxygen molecules that oxidized the iron. Today, relentless Martian dust storms continually grind these oxidized rocks into fine particles and loft them into the thin atmosphere, cloaking the entire planet in an ethereal rusty veil.',
-    topic_id: 'space',
-    category: 'Science & Nature',
-    sub_topic: 'Space & Astronomy',
-    difficulty: 'Easy',
-    reading_time_sec: 30,
-    visual_url: '/assets/ChatGPT Image May 17, 2026, 09_51_10 PM.webp',
-    visual_status: 'ready',
-    source_citation: 'NASA Planetary Science Division',
-    xp_value: 10,
-    likes_count: 198,
-    saves_count: 120,
-    shares_count: 45,
-    views_count: 1240,
-    completions_count: 94,
-    quiz: {
-      question: 'What chemical compound gives Mars its distinctive reddish color?',
-      options: ['Copper sulfate', 'Iron oxide (rust)', 'Methane crystals', 'Sulfur dioxide'],
-      correct_answer: 'Iron oxide (rust)',
-      explanation: 'Iron oxide on the Martian surface absorbs blue and green wavelengths of sunlight and reflects red wavelengths, giving Mars its color.'
-    },
-    vocabulary: [
-      { word: 'Oxidation', definition: 'The chemical reaction between a substance and oxygen, often forming oxides like rust.' },
-      { word: 'Basaltic', definition: 'Relating to dark, dense igneous rock formed from the cooling of lava.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 24 * 2).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000003',
-    bitz_code: 'B000003',
-    title: 'Why Does Popcorn Pop? Steam Pressure Explosion',
-    short_fact: 'Each popcorn kernel holds a tiny droplet of water sealed inside a hard starch hull. When heated, the water explodes into steam, flipping the kernel inside out.',
-    reading_text: 'Unlike standard sweet corn, popcorn kernels possess a unique, hard, moisture-sealed outer hull (pericarp) surrounding a core of dense starch and about 14% water. When the kernel is heated past 180°C (356°F), the trapped water turns into superheated pressurized steam, turning the hard starch into a molten, gelatinous mass. The pressure inside climbs to over 135 pounds per square inch (psi) until the hull violently ruptures. As the steam escapes instantly, the gelatinized starch expands into a frothy white foam that cools almost immediately into a crispy puff.',
-    topic_id: 'physics',
-    category: 'Science & Nature',
-    sub_topic: 'Physics & Chemistry',
-    difficulty: 'Easy',
-    reading_time_sec: 30,
-    visual_url: '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png',
-    visual_status: 'ready',
-    source_citation: 'American Chemical Society',
-    xp_value: 10,
-    likes_count: 165,
-    saves_count: 94,
-    shares_count: 32,
-    views_count: 980,
-    completions_count: 78,
-    quiz: {
-      question: 'What causes the popcorn kernel to suddenly pop?',
-      options: ['Pressurized steam bursting the hull', 'Chemical fermentation of corn oil', 'Rapid freezing of internal sugars', 'Melting of the outer kernel skin'],
-      correct_answer: 'Pressurized steam bursting the hull',
-      explanation: 'Superheated water trapped inside the kernel turns into high-pressure steam, forcing the hard hull to burst and releasing expanded starch.'
-    },
-    vocabulary: [
-      { word: 'Pericarp', definition: 'The hard outer wall or hull of a plant seed kernel.' },
-      { word: 'Gelatinize', definition: 'To transform starch into a soft, jelly-like form through heat and moisture.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 24 * 2).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000004',
-    bitz_code: 'B000004',
-    title: 'The Zeigarnik Effect: Why Your Brain Hates Unfinished Tasks',
-    short_fact: 'Our brains remember unfinished or interrupted tasks far better than completed ones, creating mental tension until they are resolved.',
-    reading_text: 'In the late 1920s, psychologist Bluma Zeigarnik noticed that restaurant waiters had flawless memory of unpaid, active orders, but completely forgot the details once the bill was settled. Her subsequent laboratory experiments proved that when an individual starts a task, the human brain creates a state of cognitive tension. This tension keeps the information readily accessible in working memory. Once the task is completed, the cognitive tension dissipates. Writers and filmmakers intentionally use this psychological phenomenon through cliffhangers, and students can harness it to combat procrastination by simply starting for five minutes.',
-    topic_id: 'psychology',
-    category: 'People & Society',
-    sub_topic: 'Psychology',
-    difficulty: 'Medium',
-    reading_time_sec: 35,
-    visual_url: '/assets/ChatGPT Image Aug 23, 2026, 08_44_06 PM.png',
-    visual_status: 'ready',
-    source_citation: 'Journal of Experimental Psychology',
-    xp_value: 10,
-    likes_count: 210,
-    saves_count: 156,
-    shares_count: 67,
-    views_count: 1560,
-    completions_count: 112,
-    quiz: {
-      question: 'What does the Zeigarnik Effect describe in human psychology?',
-      options: ['Better memory retention of unfinished tasks', 'Forgetting names immediately after introductions', 'Fear of public speaking in large crowds', 'Decreased productivity under high stress'],
-      correct_answer: 'Better memory retention of unfinished tasks',
-      explanation: 'The Zeigarnik effect states that uncompleted actions create cognitive tension that keeps them active in working memory until resolved.'
-    },
-    vocabulary: [
-      { word: 'Cognitive', definition: 'Relating to conscious mental activities such as thinking, remembering, and learning.' },
-      { word: 'Dissipate', definition: 'To gradually disappear, scatter, or diminish in strength.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 24 * 1).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000005',
-    bitz_code: 'B000005',
-    title: 'Neural Networks: How AI Learns from Connections',
-    short_fact: 'Artificial neural networks mimic the human brain by adjusting mathematical connection weights between layers of artificial neurons.',
-    reading_text: 'Modern Artificial Intelligence models are built on artificial neural networks inspired by biological brains. In a neural network, input data (like pixels of an image or words in a sentence) is passed through multiple interconnected layers of mathematical nodes called neurons. Each connection between nodes has a numerical weight that determines its importance. During training, the network makes predictions, measures its mistakes via a loss function, and uses an algorithm called backpropagation to adjust millions of weights backwards through the network. Over millions of iterations, the network becomes exceptionally accurate at recognizing patterns.',
-    topic_id: 'ai',
-    category: 'Technology & Future',
-    sub_topic: 'Artificial Intelligence',
-    difficulty: 'Medium',
-    reading_time_sec: 35,
-    visual_url: '/assets/ChatGPT Image May 14, 2026, 08_52_51 PM (1).png',
-    visual_status: 'ready',
-    source_citation: 'Stanford Artificial Intelligence Laboratory',
-    xp_value: 10,
-    likes_count: 284,
-    saves_count: 180,
-    shares_count: 82,
-    views_count: 1980,
-    completions_count: 145,
-    quiz: {
-      question: 'What algorithm is used to calculate and update weights backwards in a neural network?',
-      options: ['Backpropagation', 'Binary search tree', 'Breadth-first search', 'Bubble sorting algorithm'],
-      correct_answer: 'Backpropagation',
-      explanation: 'Backpropagation calculates the gradient of the error function with respect to the network weights, allowing neural networks to learn from mistakes.'
-    },
-    vocabulary: [
-      { word: 'Backpropagation', definition: 'An algorithm used to train neural networks by propagating errors backwards to tune weights.' },
-      { word: 'Iteration', definition: 'A single cycle of running a process or calculation.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000006',
-    bitz_code: 'B000006',
-    title: 'Why Oxford Has Older Roots Than the Aztec Empire',
-    short_fact: 'Teaching at Oxford University existed by 1096 CE, centuries before the Aztec Empire was founded in 1428 CE.',
-    reading_text: 'While we often perceive the Aztec civilization as ancient history and European universities as modern institutions, historical timelines challenge our intuition. Records show that active teaching at the University of Oxford in England was already taking place as early as 1096 CE, and it rapidly expanded after King Henry II banned English students from attending the University of Paris in 1167. In contrast, the Aztec Empire was founded with the Triple Alliance of Tenochtitlan, Texcoco, and Tlacopan in 1428 CE — more than 330 years after Oxford professors were already lecturing students.',
-    topic_id: 'history',
-    category: 'People & Society',
-    sub_topic: 'History',
-    difficulty: 'Easy',
-    reading_time_sec: 30,
-    visual_url: '/assets/ChatGPT Image May 17, 2026, 09_51_10 PM.webp',
-    visual_status: 'ready',
-    source_citation: 'Oxford Historical Society & Britannica',
-    xp_value: 10,
-    likes_count: 315,
-    saves_count: 210,
-    shares_count: 105,
-    views_count: 2400,
-    completions_count: 180,
-    quiz: {
-      question: 'When did documented teaching begin at the University of Oxford?',
-      options: ['1096 CE', '1492 CE', '1776 CE', '1850 CE'],
-      correct_answer: '1096 CE',
-      explanation: 'Documented teaching at Oxford dates back to 1096 CE, making it the oldest university in the English-speaking world and older than the Aztec Empire.'
-    },
-    vocabulary: [
-      { word: 'Alliance', definition: 'A union or association formed for mutual benefit between countries or organizations.' },
-      { word: 'Intuition', definition: 'The ability to understand something instinctively without the need for conscious reasoning.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: 'a0000001-0000-0000-0000-000000000007',
-    bitz_code: 'B000007',
-    title: 'Serendipity: The Art of Happy Accidents',
-    short_fact: 'Serendipity means finding valuable or agreeable things not sought for — like the accidental discovery of penicillin or microwave ovens.',
-    reading_text: 'The word "serendipity" was coined by English writer Horace Walpole in a 1754 letter, inspired by the Persian fairy tale "The Three Princes of Serendip." In the story, the heroes were always making discoveries by accident and sagacity of things they were not in quest of. In scientific history, serendipity has driven some of humanity\'s greatest breakthroughs: Alexander Fleming discovered penicillin when mold contaminated his petri dish, Percy Spencer invented the microwave after a radar magnetron melted a chocolate bar in his pocket, and post-it notes arose from an adhesive deemed too weak.',
-    topic_id: 'english',
-    category: 'English',
-    sub_topic: 'Vocabulary & Etymology',
-    difficulty: 'Easy',
-    reading_time_sec: 30,
-    visual_url: '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png',
-    visual_status: 'ready',
-    source_citation: 'Oxford English Dictionary Etymology Archives',
-    xp_value: 10,
-    likes_count: 180,
-    saves_count: 135,
-    shares_count: 48,
-    views_count: 1120,
-    completions_count: 88,
-    quiz: {
-      question: 'What does the word "Serendipity" describe?',
-      options: ['Finding valuable things by pleasant accident', 'A severe and continuous headache', 'Extreme physical strength under pressure', 'Fear of deep and dark water'],
-      correct_answer: 'Finding valuable things by pleasant accident',
-      explanation: 'Serendipity refers to the occurrence and development of events by chance in a happy or beneficial way.'
-    },
-    vocabulary: [
-      { word: 'Serendipity', definition: 'The occurrence of discovering valuable or agreeable things by chance.' },
-      { word: 'Sagacity', definition: 'The quality of having or showing keen mental discernment and good judgment.' }
-    ],
-    status: 'published',
-    created_at: new Date(Date.now() - 3600000 * 6).toISOString(),
-    updated_at: new Date().toISOString()
-  }
-];
+// Production clean initialization: No mock/demo facts. Supabase is source of truth.
+const INITIAL_SEED_BITZ = [];
 
 // In-memory memory store for serverless/read-only filesystems
 const inMemoryStore = new Map();
@@ -302,26 +63,22 @@ function writeJson(file, data) {
   }
 }
 
-// Initialize seed data if cache file is empty
+// Initialize clean empty cache if not exists
 try {
   if (!fs.existsSync(BITZ_CACHE_FILE)) {
-    writeJson(BITZ_CACHE_FILE, INITIAL_SEED_BITZ);
+    writeJson(BITZ_CACHE_FILE, []);
   }
 } catch (e) {
-  inMemoryStore.set(BITZ_CACHE_FILE, INITIAL_SEED_BITZ);
+  inMemoryStore.set(BITZ_CACHE_FILE, []);
 }
 
 class KnowledgeBitzService {
   /**
-   * Retrieves all local Bitz from cache or initializes them
+   * Retrieves all local Bitz from cache
    */
   getLocalBitz() {
-    let items = readJson(BITZ_CACHE_FILE, []);
-    if (!Array.isArray(items) || items.length === 0) {
-      items = [...INITIAL_SEED_BITZ];
-      writeJson(BITZ_CACHE_FILE, items);
-    }
-    return items;
+    const items = readJson(BITZ_CACHE_FILE, []);
+    return Array.isArray(items) ? items : [];
   }
 
   saveLocalBitz(items) {
@@ -592,9 +349,32 @@ class KnowledgeBitzService {
     tab = 'for_you',
     supabaseClient = null
   }) {
-    // 1. Get user preferences and learned IDs
+    // 1. Get user preferences and learned IDs from Supabase
     const userPref = await this.getUserPreferences(userId, supabaseClient);
-    const learnedIds = this.getUserLearnedBitzIds(userId);
+    
+    let learnedIds = new Set();
+    if (supabaseClient && userId && userId !== 'guest') {
+      try {
+        const { data: learnedRows } = await supabaseClient
+          .from('bitz_learning_history')
+          .select('bitz_id')
+          .eq('user_id', userId)
+          .eq('status', 'learned');
+
+        if (Array.isArray(learnedRows)) {
+          learnedRows.forEach(r => {
+            if (r.bitz_id) learnedIds.add(r.bitz_id);
+          });
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase learned history fetch notice:', e.message);
+      }
+    }
+    
+    // Also include local cache history for guest/local mode
+    const localLearned = this.getUserLearnedBitzIds(userId);
+    localLearned.forEach(id => learnedIds.add(id));
+
     const userHistory = this.getUserHistoryMap(userId);
     const likesMap = readJson(LIKES_CACHE_FILE, {});
     const bookmarksMap = readJson(BOOKMARKS_CACHE_FILE, {});
@@ -606,75 +386,87 @@ class KnowledgeBitzService {
     // 2. Fetch candidate Bitz (Supabase or Local)
     if (supabaseClient) {
       try {
-        let query = supabaseClient
+        const { data, error } = await supabaseClient
           .from('knowledge_bitz')
           .select('*')
-          .eq('status', 'published');
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
 
-        if (topic && topic !== 'all') {
-          query = query.eq('topic_id', topic);
-        } else if (!userPref.isAllTopicsSelected && userPref.selectedTopics.length > 0) {
-          query = query.in('topic_id', userPref.selectedTopics);
-        }
-
-        if (difficulty && difficulty !== 'all') {
-          query = query.eq('difficulty', difficulty);
-        }
-
-        const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           pool = data;
+        } else if (error) {
+          console.error('[KnowledgeBitzService] Supabase get feed query error:', error);
         }
       } catch (e) {
         console.warn('[KnowledgeBitzService] Supabase get feed notice:', e.message);
       }
-    }
-
-    if (pool.length === 0) {
+    } else {
+      // Local fallback ONLY when supabaseClient is completely absent
       pool = this.getLocalBitz().filter(b => b.status === 'published');
-      if (topic && topic !== 'all') {
-        pool = pool.filter(b => b.topic_id === topic || b.category?.toLowerCase() === topic.toLowerCase());
-      } else if (!userPref.isAllTopicsSelected && userPref.selectedTopics.length > 0) {
-        const allowed = new Set(userPref.selectedTopics);
-        pool = pool.filter(b => allowed.has(b.topic_id));
-      }
-
-      if (difficulty && difficulty !== 'all') {
-        pool = pool.filter(b => b.difficulty?.toLowerCase() === difficulty.toLowerCase());
-      }
     }
 
-    // 3. Search Filter
+    // 3. Robust Topic & Category Matching Helper
+    const matchesTopicOrCategory = (b, targetTopic) => {
+      if (!targetTopic || targetTopic === 'all') return true;
+      const t = targetTopic.toLowerCase().trim();
+      const bCat = (b.category || '').toLowerCase().trim();
+      const bTopic = (b.topic_id || '').toLowerCase().trim();
+      const bSub = (b.sub_topic || '').toLowerCase().trim();
+
+      if (bCat === t || bTopic === t || bSub === t) return true;
+
+      // Normalized comparison (remove punctuation, spaces, underscores, ampersands)
+      const norm = (str) => str.replace(/[^a-z0-9]/g, '');
+      const tN = norm(t);
+      const bCatN = norm(bCat);
+      const bTopicN = norm(bTopic);
+      const bSubN = norm(bSub);
+
+      if (bCatN === tN || bTopicN === tN || bSubN === tN) return true;
+      if (bCatN.includes(tN) || tN.includes(bCatN)) return true;
+      if (bTopicN.includes(tN) || tN.includes(bTopicN)) return true;
+
+      return false;
+    };
+
+    // Filter by Topic Rail Selection
+    if (topic && topic !== 'all') {
+      pool = pool.filter(b => matchesTopicOrCategory(b, topic));
+    } else if (!userPref.isAllTopicsSelected && Array.isArray(userPref.selectedTopics) && userPref.selectedTopics.length > 0) {
+      pool = pool.filter(b => userPref.selectedTopics.some(sel => matchesTopicOrCategory(b, sel)));
+    }
+
+    // Filter by Difficulty
+    if (difficulty && difficulty !== 'all') {
+      pool = pool.filter(b => (b.difficulty || '').toLowerCase() === difficulty.toLowerCase());
+    }
+
+    // 4. Search Filter
     if (search && search.trim() !== '') {
       const q = search.trim().toLowerCase();
       pool = pool.filter(b => 
-        b.title?.toLowerCase().includes(q) ||
-        b.short_fact?.toLowerCase().includes(q) ||
-        b.reading_text?.toLowerCase().includes(q) ||
-        b.topic_id?.toLowerCase().includes(q) ||
-        b.category?.toLowerCase().includes(q) ||
-        b.sub_topic?.toLowerCase().includes(q)
+        (b.title || '').toLowerCase().includes(q) ||
+        (b.short_fact || '').toLowerCase().includes(q) ||
+        (b.reading_text || '').toLowerCase().includes(q) ||
+        (b.category || '').toLowerCase().includes(q) ||
+        (b.sub_topic || '').toLowerCase().includes(q) ||
+        (b.topic_id || '').toLowerCase().includes(q)
       );
     }
 
-    // 4. CRITICAL PRODUCT RULE: NEVER SHOW LEARNED FACTS AGAIN
+    // 5. CRITICAL PRODUCT RULE: NEVER SHOW LEARNED FACTS AGAIN FOR THIS USER
     const unlearnedPool = pool.filter(b => !learnedIds.has(b.id) && !learnedIds.has(b.bitz_code));
-
-    // Check if user has learned everything available in their selection
     const allLearnedNotice = unlearnedPool.length === 0 && pool.length > 0;
 
-    // 5. Score & Rank Unlearned Candidates
+    // 6. Score & Rank Unlearned Candidates
     const scoredPool = unlearnedPool.map(b => {
       let score = 0;
-      // Freshness (0 - 40 pts)
       const ageHours = (Date.now() - new Date(b.created_at || Date.now()).getTime()) / 3600000;
       score += Math.max(0, 40 - ageHours * 0.5);
 
-      // Popularity (0 - 30 pts)
       const pop = (Number(b.likes_count) || 0) * 1.5 + (Number(b.saves_count) || 0) * 2.5;
       score += Math.min(30, pop);
 
-      // Unseen bonus (+25 pts if never seen or opened)
       const hist = userHistory[b.id];
       if (!hist) {
         score += 25;
@@ -684,7 +476,6 @@ class KnowledgeBitzService {
         score += 10;
       }
 
-      // Tab modifier
       if (tab === 'trending') {
         score = pop * 2 + Math.max(0, 30 - ageHours);
       } else if (tab === 'new') {
@@ -703,10 +494,10 @@ class KnowledgeBitzService {
 
     scoredPool.sort((a, b) => b._score - a._score);
 
-    // 6. Topic Diversity Interleaving (Prevent Science -> Science -> Science clustering)
+    // 7. Topic Diversity Interleaving (Prevent Science -> Science -> Science clustering)
     const diversePool = this.applyTopicDiversity(scoredPool);
 
-    // 7. Paginate
+    // 8. Paginate
     const startIndex = (page - 1) * limit;
     const paginatedItems = diversePool.slice(startIndex, startIndex + limit);
     const total = diversePool.length;
@@ -1389,13 +1180,6 @@ STRICT RESTRICTIONS:
         : (updates.visual_status !== undefined ? updates.visual_status : current.visual_status);
       const effectiveVisualUrl = updates.visual_url !== undefined ? updates.visual_url : current.visual_url;
 
-      // Strict validation: Bitz without ready image CANNOT be published
-      if (targetStatus === 'published') {
-        if (effectiveVisualStatus !== 'ready' || !effectiveVisualUrl) {
-          throw new Error('Cannot publish Knowledge Bitz without a ready image. Attach an image first.');
-        }
-      }
-
       const cleanUpdates = {
         ...updates,
         visual_status: effectiveVisualStatus,
@@ -1429,12 +1213,6 @@ STRICT RESTRICTIONS:
       ? 'ready' 
       : (updates.visual_status !== undefined ? updates.visual_status : current.visual_status);
     const effectiveVisualUrl = updates.visual_url !== undefined ? updates.visual_url : current.visual_url;
-
-    if (targetStatus === 'published') {
-      if (effectiveVisualStatus !== 'ready' || !effectiveVisualUrl) {
-        throw new Error('Cannot publish Knowledge Bitz without a ready image. Attach an image first.');
-      }
-    }
 
     const updated = {
       ...current,
@@ -1477,7 +1255,13 @@ STRICT RESTRICTIONS:
    * Bulk Fact Import supporting 1,000+ records with rigorous validation & failure diagnostics
    * All imported records default strictly to DRAFT
    */
-  async bulkImportBitz(items = [], userId = null, supabaseClient = null, cefrLevel = null) {
+  async bulkImportBitz(arg1 = [], arg2 = null, arg3 = null, arg4 = null) {
+    const isOptionsObj = typeof arg1 === 'object' && !Array.isArray(arg1) && arg1 !== null;
+    const items = isOptionsObj ? (arg1.items || []) : (Array.isArray(arg1) ? arg1 : []);
+    const userId = isOptionsObj ? arg1.userId : arg2;
+    const supabaseClient = isOptionsObj ? arg1.supabaseClient : arg3;
+    const cefrLevel = isOptionsObj ? arg1.cefrLevel : arg4;
+
     if (!Array.isArray(items) || items.length === 0) {
       return { totalSubmitted: 0, importedCount: 0, failedCount: 0, errors: [], imported: [] };
     }
@@ -1513,34 +1297,45 @@ STRICT RESTRICTIONS:
         continue;
       }
 
-      if (!row.title || String(row.title).trim().length < 5) {
-        errors.push({ index: i + 1, title: 'Missing Title', reason: 'Title must be at least 5 characters.' });
+      const title = String(row.title || '').trim();
+      if (!title || title.length < 5) {
+        errors.push({ index: i + 1, title: title || 'Missing Title', reason: 'Title must be at least 5 characters.' });
         continue;
       }
 
-      if (!row.short_fact || String(row.short_fact).trim().length < 10) {
-        errors.push({ index: i + 1, title: row.title, reason: 'Short fact must be at least 10 characters.' });
+      const shortFact = String(row.short_fact || row.shortFact || row.summary || row.fact || '').trim();
+      if (!shortFact || shortFact.length < 10) {
+        errors.push({ index: i + 1, title, reason: 'Short fact (short_fact) is missing or too short.' });
         continue;
       }
 
-      const readingText = String(row.reading_text || '').trim();
-      const wordCount = readingText.split(/\s+/).filter(Boolean).length;
-      if (wordCount < 40 || wordCount > 250) {
+      const readingText = String(row.reading_text || row.reading || row.reading_content || row.content || '').trim();
+      if (!readingText || readingText.length < 10) {
         errors.push({
           index: i + 1,
-          title: row.title,
-          reason: `Reading length must be ~80-120 words (received ${wordCount} words).`
+          title,
+          reason: 'Reading text (reading_text) is missing or empty (received 0 words).'
         });
         continue;
       }
 
-      const hashInput = `${String(row.title).trim().toLowerCase()}|${String(row.short_fact).trim().toLowerCase()}`;
+      const wordCount = readingText.split(/\s+/).filter(token => /[a-zA-Z0-9]/.test(token)).length;
+      if (wordCount < 60 || wordCount > 200) {
+        errors.push({
+          index: i + 1,
+          title,
+          reason: `Reading length must be approximately 100 words (90–110 words target, received ${wordCount} words).`
+        });
+        continue;
+      }
+
+      const hashInput = `${title.toLowerCase()}|${shortFact.toLowerCase()}`;
       const contentHash = await this._computeHash(hashInput);
 
       if (existingHashes.has(contentHash) || batchHashes.has(contentHash)) {
         errors.push({
           index: i + 1,
-          title: row.title,
+          title,
           reason: 'Duplicate content detected — this Bitz already exists or appears earlier in this batch.'
         });
         continue;
@@ -1548,25 +1343,44 @@ STRICT RESTRICTIONS:
       batchHashes.add(contentHash);
 
       const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-      const recordCefr = row.cefr_level && validCefr.includes(row.cefr_level) ? row.cefr_level : null;
+      const rawCefr = String(row.cefr_level || row.level || row.cefrLevel || '').toUpperCase().trim();
+      const recordCefr = rawCefr && validCefr.includes(rawCefr) ? rawCefr : null;
       const resolvedCefr = recordCefr || (cefrLevel && validCefr.includes(cefrLevel) ? cefrLevel : 'B1');
 
       let normalizedQuiz = null;
       if (Array.isArray(row.quiz)) {
-        normalizedQuiz = row.quiz.filter(q => q && q.question && Array.isArray(q.options));
+        normalizedQuiz = row.quiz.filter(q => q && q.question && (Array.isArray(q.options) || Array.isArray(q.choices))).map(q => {
+          const options = (q.options || q.choices).map(opt => String(opt || '').trim());
+          const correct = String(q.correct_answer || q.correctAnswer || q.answer || options[0] || '').trim();
+          return {
+            question: String(q.question).trim(),
+            options,
+            correct_answer: correct,
+            explanation: String(q.explanation || 'Verified answer.').trim(),
+            xp: 2
+          };
+        });
         if (normalizedQuiz.length === 0) normalizedQuiz = null;
       } else if (row.quiz && row.quiz.question && Array.isArray(row.quiz.options)) {
-        normalizedQuiz = [row.quiz];
+        const options = row.quiz.options.map(opt => String(opt || '').trim());
+        const correct = String(row.quiz.correct_answer || row.quiz.correctAnswer || row.quiz.answer || options[0] || '').trim();
+        normalizedQuiz = [{
+          question: String(row.quiz.question).trim(),
+          options,
+          correct_answer: correct,
+          explanation: String(row.quiz.explanation || 'Verified answer.').trim(),
+          xp: 2
+        }];
       }
 
       const newBitz = {
         id: crypto.randomUUID(),
-        title: String(row.title).trim(),
-        short_fact: String(row.short_fact).trim(),
+        title,
+        short_fact: shortFact,
         reading_text: readingText,
         topic_id: String(row.topic_id || 'science').toLowerCase().trim(),
-        category: row.category || 'Science & Nature',
-        sub_topic: row.sub_topic || row.subtopic || '',
+        category: row.category || row.category_id || row.categoryGroup || 'Science & Nature',
+        sub_topic: row.sub_topic || row.subtopic || 'General',
         difficulty: ['Easy', 'Medium', 'Hard'].includes(row.difficulty) ? row.difficulty : 'Easy',
         cefr_level: resolvedCefr,
         content_hash: contentHash,
@@ -1574,10 +1388,10 @@ STRICT RESTRICTIONS:
         visual_url: row.visual_url || null,
         visual_object_key: row.visual_object_key || null,
         visual_status: row.visual_url ? 'ready' : 'missing',
-        source_citation: row.source_citation || null,
+        source_citation: row.source_citation || row.sourceCitation || row.source || null,
         quiz: normalizedQuiz,
         vocabulary: Array.isArray(row.vocabulary) ? row.vocabulary : [],
-        xp_value: 10,
+        xp_value: normalizedQuiz ? normalizedQuiz.length * 2 : 10,
         likes_count: 0,
         saves_count: 0,
         shares_count: 0,
