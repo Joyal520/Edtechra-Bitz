@@ -144,6 +144,21 @@ function cleanEnv(value) {
   return (value || '').replace(/^\uFEFF/, '').trim();
 }
 
+// Health & Environment Diagnostic Endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasSupabaseServiceKey: Boolean(cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY)),
+      hasSupabaseAnonKey: Boolean(cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY)),
+      hasServerSupabase: Boolean(serverSupabase),
+      nodeEnv: process.env.NODE_ENV || 'unknown'
+    }
+  });
+});
+
 // Initialize server-side Supabase client
 const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY);
@@ -14384,6 +14399,8 @@ app.post('/api/score-analysis', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
+});
+
 // ============================================================================
 // EDTECHRA-BITZ: Knowledge Bitz Discovery, Learning & Admin Endpoints
 // ============================================================================

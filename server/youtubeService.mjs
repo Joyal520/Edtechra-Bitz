@@ -61,8 +61,12 @@ export function getServerSupabaseClient(userToken = null) {
 }
 
 // Ensure cache directory exists
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Read-only serverless filesystem
 }
 
 // In-Memory & Persistent Sync Status
