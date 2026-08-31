@@ -179,6 +179,7 @@ export const knowledgeBitzService = {
     bitzId: string,
     status: 'seen' | 'opened' | 'read' | 'learned',
     selectedOption?: string,
+    questionIndex?: number,
     token?: string | null
   ): Promise<BitzLearningStateResult> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -188,7 +189,7 @@ export const knowledgeBitzService = {
       const res = await fetch(`${API_BASE}/interact`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ bitzId, status, selectedOption })
+        body: JSON.stringify({ bitzId, status, selectedOption, questionIndex })
       });
       if (res.ok) return await res.json();
     } catch (e) {}
@@ -204,11 +205,12 @@ export const knowledgeBitzService = {
   },
 
   /**
-   * Submits Quiz Check for a Bitz
+   * Submits Quiz Check for a Bitz (supports multi-question by questionIndex)
    */
   async submitQuizAttempt(
     bitzId: string,
     selectedOption: string,
+    questionIndex?: number,
     token?: string | null
   ): Promise<BitzLearningStateResult> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -218,7 +220,7 @@ export const knowledgeBitzService = {
       const res = await fetch(`${API_BASE}/${bitzId}/quiz-attempt`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ selectedOption })
+        body: JSON.stringify({ selectedOption, questionIndex })
       });
       if (res.ok) return await res.json();
     } catch (e) {}
@@ -228,8 +230,9 @@ export const knowledgeBitzService = {
       bitzId,
       status: 'learned',
       isCorrect: true,
-      xpAwarded: 10,
-      alreadyLearned: false
+      xpAwarded: 2,
+      alreadyLearned: false,
+      questionIndex
     };
   },
 
@@ -291,6 +294,8 @@ export const knowledgeBitzService = {
   async getAdminBitz(filters: {
     search?: string;
     topic?: string;
+    category?: string;
+    subtopic?: string;
     status?: string;
     visualStatus?: string;
     cefrLevel?: string;
@@ -305,6 +310,8 @@ export const knowledgeBitzService = {
     const query = new URLSearchParams();
     if (filters.search) query.set('search', filters.search);
     if (filters.topic) query.set('topic', filters.topic);
+    if (filters.category && filters.category !== 'all') query.set('category', filters.category);
+    if (filters.subtopic && filters.subtopic !== 'all') query.set('subtopic', filters.subtopic);
     if (filters.status) query.set('status', filters.status);
     if (filters.visualStatus) query.set('visualStatus', filters.visualStatus);
     if (filters.cefrLevel && filters.cefrLevel !== 'all') query.set('cefrLevel', filters.cefrLevel);

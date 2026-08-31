@@ -432,21 +432,27 @@ class KnowledgeBitzService {
     return history[userId] || {};
   }
 
-  async recordLearningState({ userId, bitzId, status, selectedOption = null, supabaseClient = null }) {
+  async recordLearningState({ userId, bitzId, status, selectedOption = null, questionIndex = null, supabaseClient = null }) {
     if (!bitzId) throw new Error('bitzId is required');
 
     let isCorrect = null;
     let xpAwarded = 0;
     let alreadyLearned = false;
+    let explanation = undefined;
 
     // 1. Try Supabase RPC if available
     if (supabaseClient && userId && userId !== 'guest') {
       try {
-        const { data, error } = await supabaseClient.rpc('record_bitz_learning_state', {
+        const rpcParams = {
           p_bitz_id: bitzId,
           p_new_status: status,
           p_selected_quiz_option: selectedOption
-        });
+        };
+        if (questionIndex !== null && questionIndex !== undefined) {
+          rpcParams.p_question_index = parseInt(questionIndex, 10);
+        }
+
+        const { data, error } = await supabaseClient.rpc('record_bitz_learning_state', rpcParams);
 
         if (!error && data && data.success) {
           // Sync to local cache
@@ -464,17 +470,46 @@ class KnowledgeBitzService {
     if (!bitz) throw new Error('Knowledge Bitz not found');
 
     const history = readJson(HISTORY_CACHE_FILE, {});
+    let totalAnswered = 0;
+
     if (userId) {
       if (!history[userId]) history[userId] = {};
       const userEntry = history[userId][bitz.id] || {};
       alreadyLearned = Boolean(userEntry.status === 'learned');
+      const quizAnswers = userEntry.quiz_answers || {};
+
+      const isQuizArray = Array.isArray(bitz.quiz);
+      const qIdx = questionIndex !== null && questionIndex !== undefined ? parseInt(questionIndex, 10) : null;
 
       if (selectedOption && bitz.quiz) {
-        const correctAns = bitz.quiz.correct_answer || bitz.quiz.correctAnswer;
-        isCorrect = selectedOption.trim() === String(correctAns).trim();
-        if (isCorrect && !alreadyLearned) {
-          xpAwarded = bitz.xp_value || 10;
-          status = 'learned';
+        if (isQuizArray && qIdx !== null && bitz.quiz[qIdx]) {
+          const qObj = bitz.quiz[qIdx];
+          const correctAns = qObj.correct_answer || qObj.correctAnswer;
+          explanation = qObj.explanation;
+          isCorrect = selectedOption.trim().toLowerCase() === String(correctAns).trim().toLowerCase();
+
+          // If not previously answered this specific question
+          if (!quizAnswers[String(qIdx)]) {
+            quizAnswers[String(qIdx)] = isCorrect;
+            if (isCorrect && !alreadyLearned) {
+              xpAwarded = 2; // 2 XP per correct answer
+            }
+          }
+
+          totalAnswered = Object.keys(quizAnswers).length;
+          if (totalAnswered >= bitz.quiz.length && !alreadyLearned) {
+            status = 'learned';
+          }
+        } else {
+          // Legacy single quiz
+          const quizObj = isQuizArray ? bitz.quiz[0] : bitz.quiz;
+          const correctAns = quizObj?.correct_answer || quizObj?.correctAnswer;
+          explanation = quizObj?.explanation;
+          isCorrect = selectedOption.trim().toLowerCase() === String(correctAns).trim().toLowerCase();
+          if (isCorrect && !alreadyLearned) {
+            xpAwarded = bitz.xp_value || 10;
+            status = 'learned';
+          }
         }
       } else if (status === 'learned' && !alreadyLearned) {
         xpAwarded = bitz.xp_value || 10;
@@ -487,6 +522,7 @@ class KnowledgeBitzService {
         opened_at: status === 'opened' || status === 'read' || status === 'learned' ? (userEntry.opened_at || new Date().toISOString()) : userEntry.opened_at,
         read_at: status === 'read' || status === 'learned' ? (userEntry.read_at || new Date().toISOString()) : userEntry.read_at,
         learned_at: status === 'learned' ? (userEntry.learned_at || new Date().toISOString()) : userEntry.learned_at,
+        quiz_answers: quizAnswers,
         xp_awarded: (userEntry.xp_awarded || 0) + xpAwarded,
         updated_at: new Date().toISOString()
       };
@@ -494,7 +530,7 @@ class KnowledgeBitzService {
       writeJson(HISTORY_CACHE_FILE, history);
     }
 
-    if (xpAwarded > 0) {
+    if (xpAwarded > 0 && status === 'learned' && !alreadyLearned) {
       bitz.completions_count = (bitz.completions_count || 0) + 1;
       this.saveLocalBitz(allBitz);
     }
@@ -506,7 +542,9 @@ class KnowledgeBitzService {
       isCorrect,
       xpAwarded,
       alreadyLearned,
-      explanation: bitz.quiz?.explanation
+      questionIndex,
+      totalQuestionsAnswered: totalAnswered,
+      explanation
     };
   }
 
@@ -1047,6 +1085,10 @@ STRICT RESTRICTIONS:
     const rawCefrLevel = params.cefrLevel ?? params.cefr_level ?? 'all';
 
     const topic = (rawTopic && rawTopic !== 'all') ? String(rawTopic).trim() : null;
+    const rawCategory = params.category ?? 'all';
+    const category = (rawCategory && rawCategory !== 'all') ? String(rawCategory).trim() : null;
+    const rawSubtopic = params.subtopic ?? params.sub_topic ?? 'all';
+    const subtopic = (rawSubtopic && rawSubtopic !== 'all') ? String(rawSubtopic).trim() : null;
     const status = (rawStatus && rawStatus !== 'all') ? String(rawStatus).trim() : null;
     const visualStatus = (rawVisualStatus && rawVisualStatus !== 'all') ? String(rawVisualStatus).trim() : null;
     const cefrLevel = (rawCefrLevel && rawCefrLevel !== 'all') ? String(rawCefrLevel).trim() : null;
@@ -1066,8 +1108,14 @@ STRICT RESTRICTIONS:
           query = query.eq('status', status);
         }
 
-        if (topic) {
-          query = query.eq('topic_id', topic);
+        if (category) {
+          query = query.eq('category', category);
+        } else if (topic) {
+          query = query.or(`topic_id.eq.${topic},category.ilike.%${topic}%`);
+        }
+
+        if (subtopic) {
+          query = query.eq('sub_topic', subtopic);
         }
 
         if (visualStatus) {
@@ -1166,8 +1214,14 @@ STRICT RESTRICTIONS:
       );
     }
 
-    if (topic && topic !== 'all') {
-      items = items.filter(b => b.topic_id === topic);
+    if (category && category !== 'all') {
+      items = items.filter(b => b.category === category);
+    } else if (topic && topic !== 'all') {
+      items = items.filter(b => b.topic_id === topic || b.category?.toLowerCase() === topic.toLowerCase());
+    }
+
+    if (subtopic && subtopic !== 'all') {
+      items = items.filter(b => b.sub_topic === subtopic);
     }
 
     if (status && status !== 'all') {
@@ -1497,6 +1551,14 @@ STRICT RESTRICTIONS:
       const recordCefr = row.cefr_level && validCefr.includes(row.cefr_level) ? row.cefr_level : null;
       const resolvedCefr = recordCefr || (cefrLevel && validCefr.includes(cefrLevel) ? cefrLevel : 'B1');
 
+      let normalizedQuiz = null;
+      if (Array.isArray(row.quiz)) {
+        normalizedQuiz = row.quiz.filter(q => q && q.question && Array.isArray(q.options));
+        if (normalizedQuiz.length === 0) normalizedQuiz = null;
+      } else if (row.quiz && row.quiz.question && Array.isArray(row.quiz.options)) {
+        normalizedQuiz = [row.quiz];
+      }
+
       const newBitz = {
         id: crypto.randomUUID(),
         title: String(row.title).trim(),
@@ -1504,7 +1566,7 @@ STRICT RESTRICTIONS:
         reading_text: readingText,
         topic_id: String(row.topic_id || 'science').toLowerCase().trim(),
         category: row.category || 'Science & Nature',
-        sub_topic: row.sub_topic || '',
+        sub_topic: row.sub_topic || row.subtopic || '',
         difficulty: ['Easy', 'Medium', 'Hard'].includes(row.difficulty) ? row.difficulty : 'Easy',
         cefr_level: resolvedCefr,
         content_hash: contentHash,
@@ -1513,7 +1575,7 @@ STRICT RESTRICTIONS:
         visual_object_key: row.visual_object_key || null,
         visual_status: row.visual_url ? 'ready' : 'missing',
         source_citation: row.source_citation || null,
-        quiz: row.quiz && row.quiz.question && Array.isArray(row.quiz.options) ? row.quiz : null,
+        quiz: normalizedQuiz,
         vocabulary: Array.isArray(row.vocabulary) ? row.vocabulary : [],
         xp_value: 10,
         likes_count: 0,

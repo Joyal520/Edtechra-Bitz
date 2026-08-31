@@ -1,133 +1,346 @@
 // ============================================================================
-// EDTECHRA-BITZ: Centralized Knowledge Bitz Topics & Categories Configuration
-// Standardized source of truth for Explore Feed, Topic Selector, and Admin
+// EDTECHRA-BITZ: Centralized Knowledge Bitz Categories & Subtopics Configuration
+// 10 Main Categories — User-facing feed exposes ONLY the 10 broad categories.
+// Subtopics are used for admin content creation and internal categorization.
 // ============================================================================
 
-export interface BitzTopicItem {
+export interface BitzSubtopic {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface BitzCategoryItem {
   id: string;
   name: string;
   slug: string;
-  icon: string; // Lucide icon identifier
-  color: string;
-  bgGradient: string;
-  description?: string;
-  categoryGroup: string;
-}
-
-export interface BitzCategoryGroup {
-  id: string;
-  name: string;
   icon: string;
   color: string;
-  topics: BitzTopicItem[];
+  bgGradient: string;
+  description: string;
+  subtopics: BitzSubtopic[];
 }
 
-export const BITZ_CATEGORY_GROUPS: BitzCategoryGroup[] = [
+/**
+ * The ONLY 10 user-facing main categories.
+ * Subtopics are used internally for admin content creation & filtering.
+ */
+export const BITZ_CATEGORIES: BitzCategoryItem[] = [
   {
     id: 'science_nature',
     name: 'Science & Nature',
+    slug: 'science-nature',
     icon: 'Atom',
     color: '#059669',
-    topics: [
-      { id: 'science', name: 'Science', slug: 'science', icon: 'Sparkles', color: '#059669', bgGradient: 'from-emerald-600 to-teal-700', categoryGroup: 'Science & Nature' },
-      { id: 'biology', name: 'Biology', slug: 'biology', icon: 'Dna', color: '#10b981', bgGradient: 'from-emerald-500 to-green-600', categoryGroup: 'Science & Nature' },
-      { id: 'physics', name: 'Physics', slug: 'physics', icon: 'Zap', color: '#3b82f6', bgGradient: 'from-blue-600 to-cyan-600', categoryGroup: 'Science & Nature' },
-      { id: 'chemistry', name: 'Chemistry', slug: 'chemistry', icon: 'FlaskConical', color: '#8b5cf6', bgGradient: 'from-purple-600 to-indigo-600', categoryGroup: 'Science & Nature' },
-      { id: 'space', name: 'Space & Astronomy', slug: 'space', icon: 'Orbit', color: '#6366f1', bgGradient: 'from-indigo-600 to-purple-800', categoryGroup: 'Science & Nature' },
-      { id: 'nature', name: 'Environment & Nature', slug: 'nature', icon: 'Trees', color: '#059669', bgGradient: 'from-teal-600 to-emerald-700', categoryGroup: 'Science & Nature' },
-      { id: 'wildlife', name: 'Animals & Wildlife', slug: 'wildlife', icon: 'Bug', color: '#d97706', bgGradient: 'from-amber-600 to-orange-700', categoryGroup: 'Science & Nature' },
-      { id: 'geography', name: 'Earth & Geography', slug: 'geography', icon: 'Globe', color: '#0284c7', bgGradient: 'from-sky-600 to-blue-700', categoryGroup: 'Science & Nature' }
+    bgGradient: 'from-emerald-600 to-teal-700',
+    description: 'Explore the wonders of physics, biology, chemistry, and the natural world.',
+    subtopics: [
+      { id: 'general_science', name: 'General Science' },
+      { id: 'biology', name: 'Biology & Life Sciences' },
+      { id: 'physics', name: 'Physics' },
+      { id: 'chemistry', name: 'Chemistry' },
+      { id: 'space', name: 'Space & Astronomy' },
+      { id: 'environment', name: 'Environment & Ecology' },
+      { id: 'animals', name: 'Animals & Wildlife' }
     ]
   },
   {
-    id: 'people_society',
-    name: 'People & Society',
-    icon: 'Users',
+    id: 'people_psychology',
+    name: 'People & Psychology',
+    slug: 'people-psychology',
+    icon: 'Brain',
+    color: '#db2777',
+    bgGradient: 'from-pink-600 to-rose-700',
+    description: 'Understand the human mind, behaviour, emotions, and social dynamics.',
+    subtopics: [
+      { id: 'psychology', name: 'Psychology' },
+      { id: 'sociology', name: 'Sociology & Society' },
+      { id: 'philosophy', name: 'Philosophy & Ethics' },
+      { id: 'human_behaviour', name: 'Human Behaviour' }
+    ]
+  },
+  {
+    id: 'history_culture',
+    name: 'History & Culture',
+    slug: 'history-culture',
+    icon: 'Landmark',
     color: '#7c3aed',
-    topics: [
-      { id: 'psychology', name: 'Psychology', slug: 'psychology', icon: 'Brain', color: '#db2777', bgGradient: 'from-pink-600 to-rose-700', categoryGroup: 'People & Society' },
-      { id: 'sociology', name: 'Sociology', slug: 'sociology', icon: 'UserCheck', color: '#9333ea', bgGradient: 'from-purple-600 to-fuchsia-700', categoryGroup: 'People & Society' },
-      { id: 'history', name: 'History', slug: 'history', icon: 'Landmark', color: '#7c3aed', bgGradient: 'from-violet-600 to-purple-800', categoryGroup: 'People & Society' },
-      { id: 'culture', name: 'Culture & Society', slug: 'culture', icon: 'Smile', color: '#c026d3', bgGradient: 'from-fuchsia-600 to-pink-600', categoryGroup: 'People & Society' },
-      { id: 'languages', name: 'Languages & Communication', slug: 'languages', icon: 'MessageSquare', color: '#0284c7', bgGradient: 'from-sky-600 to-indigo-600', categoryGroup: 'People & Society' },
-      { id: 'civics', name: 'Politics & Civics', slug: 'civics', icon: 'Scale', color: '#475569', bgGradient: 'from-slate-600 to-slate-800', categoryGroup: 'People & Society' },
-      { id: 'philosophy', name: 'Philosophy', slug: 'philosophy', icon: 'Compass', color: '#b45309', bgGradient: 'from-amber-700 to-yellow-800', categoryGroup: 'People & Society' }
+    bgGradient: 'from-violet-600 to-purple-800',
+    description: 'Journey through time — from ancient civilizations to legendary myths and unsolved mysteries.',
+    subtopics: [
+      { id: 'world_history', name: 'World History', description: 'The fall of empires, important historical events, famous historical people.' },
+      { id: 'ancient_civilizations', name: 'Ancient Civilizations', description: 'Ancient Egypt, Maya, Roman, Greek, Indus Valley, and more.' },
+      { id: 'myths_legends', name: 'Myths & Legends', description: 'King Arthur, Atlantis, legendary creatures, and famous myths.' },
+      { id: 'mysteries_unsolved', name: 'Mysteries & Unsolved', description: 'Bermuda Triangle, Voynich Manuscript, unexplained discoveries.' },
+      { id: 'culture_traditions', name: 'Culture & Traditions', description: 'Festivals, traditional customs, food traditions, and social traditions.' }
     ]
   },
   {
-    id: 'technology_future',
-    name: 'Technology & Future',
+    id: 'technology_ai',
+    name: 'Technology & AI',
+    slug: 'technology-ai',
     icon: 'Cpu',
     color: '#2563eb',
-    topics: [
-      { id: 'ai', name: 'Artificial Intelligence', slug: 'ai', icon: 'Sparkles', color: '#2563eb', bgGradient: 'from-blue-600 to-indigo-700', categoryGroup: 'Technology & Future' },
-      { id: 'tech', name: 'Technology', slug: 'tech', icon: 'Laptop', color: '#0284c7', bgGradient: 'from-sky-600 to-cyan-700', categoryGroup: 'Technology & Future' },
-      { id: 'coding', name: 'Programming & Coding', slug: 'coding', icon: 'Code', color: '#059669', bgGradient: 'from-emerald-600 to-teal-700', categoryGroup: 'Technology & Future' },
-      { id: 'innovation', name: 'Future & Innovation', slug: 'innovation', icon: 'Rocket', color: '#7c3aed', bgGradient: 'from-purple-600 to-indigo-600', categoryGroup: 'Technology & Future' },
-      { id: 'cybersecurity', name: 'Cybersecurity', slug: 'cybersecurity', icon: 'Shield', color: '#dc2626', bgGradient: 'from-rose-600 to-red-700', categoryGroup: 'Technology & Future' },
-      { id: 'robotics', name: 'Engineering & Robotics', slug: 'robotics', icon: 'Bot', color: '#ea580c', bgGradient: 'from-orange-600 to-amber-700', categoryGroup: 'Technology & Future' }
+    bgGradient: 'from-blue-600 to-indigo-700',
+    description: 'Discover how technology, AI, coding, and innovation shape our future.',
+    subtopics: [
+      { id: 'artificial_intelligence', name: 'Artificial Intelligence' },
+      { id: 'general_technology', name: 'Technology & Gadgets' },
+      { id: 'programming', name: 'Programming & Coding' },
+      { id: 'cybersecurity', name: 'Cybersecurity' },
+      { id: 'robotics', name: 'Engineering & Robotics' },
+      { id: 'innovation', name: 'Future & Innovation' }
     ]
   },
   {
-    id: 'life_career',
-    name: 'Life & Career',
-    icon: 'Briefcase',
+    id: 'business_economics',
+    name: 'Business & Economics',
+    slug: 'business-economics',
+    icon: 'TrendingUp',
     color: '#d97706',
-    topics: [
-      { id: 'business', name: 'Business & Entrepreneurship', slug: 'business', icon: 'TrendingUp', color: '#d97706', bgGradient: 'from-amber-600 to-yellow-700', categoryGroup: 'Life & Career' },
-      { id: 'economics', name: 'Economics & Money', slug: 'economics', icon: 'Coins', color: '#16a34a', bgGradient: 'from-green-600 to-emerald-700', categoryGroup: 'Life & Career' },
-      { id: 'productivity', name: 'Productivity', slug: 'productivity', icon: 'CheckCircle2', color: '#0284c7', bgGradient: 'from-sky-600 to-blue-700', categoryGroup: 'Life & Career' },
-      { id: 'life-skills', name: 'Life Skills', slug: 'life-skills', icon: 'Heart', color: '#e11d48', bgGradient: 'from-rose-600 to-pink-600', categoryGroup: 'Life & Career' },
-      { id: 'learning', name: 'Education & Learning', slug: 'learning', icon: 'GraduationCap', color: '#4f46e5', bgGradient: 'from-indigo-600 to-blue-700', categoryGroup: 'Life & Career' }
+    bgGradient: 'from-amber-600 to-yellow-700',
+    description: 'Learn about money, markets, entrepreneurship, and global economics.',
+    subtopics: [
+      { id: 'business', name: 'Business & Entrepreneurship' },
+      { id: 'economics', name: 'Economics & Finance' },
+      { id: 'productivity', name: 'Productivity & Management' }
     ]
   },
   {
-    id: 'culture_fun',
-    name: 'Culture & Fun',
-    icon: 'Film',
-    color: '#db2777',
-    topics: [
-      { id: 'sports', name: 'Sports', slug: 'sports', icon: 'Trophy', color: '#ea580c', bgGradient: 'from-orange-600 to-amber-600', categoryGroup: 'Culture & Fun' },
-      { id: 'entertainment', name: 'Movies & Entertainment', slug: 'entertainment', icon: 'Clapperboard', color: '#e11d48', bgGradient: 'from-rose-600 to-pink-600', categoryGroup: 'Culture & Fun' },
-      { id: 'art', name: 'Art & Design', slug: 'art', icon: 'Palette', color: '#9333ea', bgGradient: 'from-purple-600 to-indigo-600', categoryGroup: 'Culture & Fun' },
-      { id: 'literature', name: 'Literature & Books', slug: 'literature', icon: 'BookOpen', color: '#b45309', bgGradient: 'from-amber-700 to-orange-800', categoryGroup: 'Culture & Fun' },
-      { id: 'food', name: 'Food & Culture', slug: 'food', icon: 'Utensils', color: '#16a34a', bgGradient: 'from-green-600 to-teal-700', categoryGroup: 'Culture & Fun' },
-      { id: 'travel', name: 'Travel & Places', slug: 'travel', icon: 'MapPin', color: '#0284c7', bgGradient: 'from-sky-600 to-cyan-700', categoryGroup: 'Culture & Fun' },
-      { id: 'weird-facts', name: 'Weird Facts & Mysteries', slug: 'weird-facts', icon: 'HelpCircle', color: '#db2777', bgGradient: 'from-pink-600 to-rose-700', categoryGroup: 'Culture & Fun' }
+    id: 'health_body',
+    name: 'Health & Human Body',
+    slug: 'health-body',
+    icon: 'HeartPulse',
+    color: '#e11d48',
+    bgGradient: 'from-rose-600 to-red-700',
+    description: 'Understand human anatomy, nutrition, medicine, and wellness.',
+    subtopics: [
+      { id: 'anatomy', name: 'Human Anatomy' },
+      { id: 'nutrition', name: 'Nutrition & Diet' },
+      { id: 'medicine', name: 'Medicine & Health' },
+      { id: 'wellness', name: 'Mental & Physical Wellness' }
     ]
   },
   {
-    id: 'english_learning',
-    name: 'English',
-    icon: 'BookA',
+    id: 'world_geography',
+    name: 'World & Geography',
+    slug: 'world-geography',
+    icon: 'Globe',
+    color: '#0284c7',
+    bgGradient: 'from-sky-600 to-blue-700',
+    description: 'Travel the world through facts about countries, oceans, mountains, and climates.',
+    subtopics: [
+      { id: 'geography', name: 'Earth & Geography' },
+      { id: 'countries', name: 'Countries & Cultures' },
+      { id: 'travel', name: 'Travel & Places' },
+      { id: 'oceans', name: 'Oceans & Climate' }
+    ]
+  },
+  {
+    id: 'arts_entertainment',
+    name: 'Arts, Books & Entertainment',
+    slug: 'arts-entertainment',
+    icon: 'Palette',
+    color: '#9333ea',
+    bgGradient: 'from-purple-600 to-indigo-600',
+    description: 'Dive into art, literature, cinema, music, and the creative world.',
+    subtopics: [
+      { id: 'art', name: 'Art & Design' },
+      { id: 'literature', name: 'Literature & Books' },
+      { id: 'entertainment', name: 'Movies & Entertainment' },
+      { id: 'music', name: 'Music' },
+      { id: 'food_culture', name: 'Food & Culture' }
+    ]
+  },
+  {
+    id: 'sports_games',
+    name: 'Sports & Games',
+    slug: 'sports-games',
+    icon: 'Trophy',
+    color: '#ea580c',
+    bgGradient: 'from-orange-600 to-amber-600',
+    description: 'Explore the world of sports, games, competition, and athletics.',
+    subtopics: [
+      { id: 'sports', name: 'Sports' },
+      { id: 'olympics', name: 'Olympics & World Records' },
+      { id: 'board_games', name: 'Games & Puzzles' }
+    ]
+  },
+  {
+    id: 'life_skills_english',
+    name: 'Life Skills & English',
+    slug: 'life-skills-english',
+    icon: 'BookOpen',
     color: '#026fc3',
-    topics: [
-      { id: 'english', name: 'English Vocabulary & Idioms', slug: 'english', icon: 'BookA', color: '#026fc3', bgGradient: 'from-blue-600 to-indigo-700', categoryGroup: 'English' }
+    bgGradient: 'from-blue-600 to-indigo-700',
+    description: 'Practical life skills, vocabulary, idioms, and English language mastery.',
+    subtopics: [
+      { id: 'english_vocabulary', name: 'English Vocabulary & Idioms' },
+      { id: 'life_skills', name: 'Life Skills' },
+      { id: 'education', name: 'Education & Learning' },
+      { id: 'communication', name: 'Languages & Communication' }
     ]
   }
 ];
 
-// Flat array of all topics
-export const ALL_BITZ_TOPICS: BitzTopicItem[] = BITZ_CATEGORY_GROUPS.flatMap((g) => g.topics);
+// ============================================================================
+// Flat lookups — used across the app
+// ============================================================================
 
-// All valid topic IDs
-export const ALL_BITZ_TOPIC_IDS: string[] = ALL_BITZ_TOPICS.map((t) => t.id);
+/** All 10 main category IDs */
+export const ALL_BITZ_CATEGORY_IDS: string[] = BITZ_CATEGORIES.map((c) => c.id);
 
-// Map lookup by topic ID
-export const BITZ_TOPIC_MAP: Record<string, BitzTopicItem> = ALL_BITZ_TOPICS.reduce((acc, topic) => {
-  acc[topic.id] = topic;
-  return acc;
-}, {} as Record<string, BitzTopicItem>);
+/** Flat array of all subtopics across all categories */
+export const ALL_BITZ_SUBTOPICS: { categoryId: string; subtopicId: string; subtopicName: string }[] =
+  BITZ_CATEGORIES.flatMap((cat) =>
+    cat.subtopics.map((st) => ({
+      categoryId: cat.id,
+      subtopicId: st.id,
+      subtopicName: st.name
+    }))
+  );
 
-export function getTopicById(id?: string | null): BitzTopicItem {
-  if (!id) return ALL_BITZ_TOPICS[0];
-  return BITZ_TOPIC_MAP[id] || {
+/** Map: category ID → BitzCategoryItem */
+export const BITZ_CATEGORY_MAP: Record<string, BitzCategoryItem> = Object.fromEntries(
+  BITZ_CATEGORIES.map((c) => [c.id, c])
+);
+
+/** Map: subtopic ID → parent category ID */
+export const SUBTOPIC_TO_CATEGORY_MAP: Record<string, string> = Object.fromEntries(
+  ALL_BITZ_SUBTOPICS.map((st) => [st.subtopicId, st.categoryId])
+);
+
+/** Get category by ID with safe fallback */
+export function getCategoryById(id?: string | null): BitzCategoryItem {
+  if (!id) return BITZ_CATEGORIES[0];
+  return BITZ_CATEGORY_MAP[id] || {
     id: id,
-    name: id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, ' '),
+    name: id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]/g, ' '),
     slug: id,
     icon: 'Sparkles',
     color: '#026fc3',
     bgGradient: 'from-blue-600 to-indigo-700',
-    categoryGroup: 'General'
+    description: '',
+    subtopics: []
   };
 }
+
+/** Get subtopics for a given category ID */
+export function getSubtopicsForCategory(categoryId: string): BitzSubtopic[] {
+  const cat = BITZ_CATEGORY_MAP[categoryId];
+  return cat?.subtopics || [];
+}
+
+/** Validate that a subtopic belongs to its claimed category */
+export function isValidSubtopicForCategory(categoryId: string, subtopicId: string): boolean {
+  const cat = BITZ_CATEGORY_MAP[categoryId];
+  if (!cat) return false;
+  return cat.subtopics.some((st) => st.id === subtopicId);
+}
+
+// ============================================================================
+// BACKWARD COMPATIBILITY — Map old topic_id values → new category IDs
+// Old system had 28 subtopics stored as topic_id; map them to the 10 categories.
+// ============================================================================
+
+export const LEGACY_TOPIC_TO_CATEGORY_MAP: Record<string, string> = {
+  // Science & Nature
+  science: 'science_nature',
+  biology: 'science_nature',
+  physics: 'science_nature',
+  chemistry: 'science_nature',
+  space: 'science_nature',
+  nature: 'science_nature',
+  wildlife: 'science_nature',
+  // People & Psychology
+  psychology: 'people_psychology',
+  sociology: 'people_psychology',
+  philosophy: 'people_psychology',
+  // History & Culture
+  history: 'history_culture',
+  culture: 'history_culture',
+  civics: 'history_culture',
+  // Technology & AI
+  ai: 'technology_ai',
+  tech: 'technology_ai',
+  coding: 'technology_ai',
+  innovation: 'technology_ai',
+  cybersecurity: 'technology_ai',
+  robotics: 'technology_ai',
+  // Business & Economics
+  business: 'business_economics',
+  economics: 'business_economics',
+  productivity: 'business_economics',
+  // World & Geography
+  geography: 'world_geography',
+  travel: 'world_geography',
+  // Arts, Books & Entertainment
+  entertainment: 'arts_entertainment',
+  art: 'arts_entertainment',
+  literature: 'arts_entertainment',
+  food: 'arts_entertainment',
+  // Sports & Games
+  sports: 'sports_games',
+  'weird-facts': 'arts_entertainment',
+  // Life Skills & English
+  'life-skills': 'life_skills_english',
+  learning: 'life_skills_english',
+  english: 'life_skills_english',
+  languages: 'life_skills_english'
+};
+
+/**
+ * Resolve any topic_id or category value to a valid main category ID.
+ * Works for both new category IDs and legacy topic_id strings.
+ */
+export function resolveCategoryId(value?: string | null): string {
+  if (!value) return 'science_nature';
+  // Already a valid new category ID
+  if (BITZ_CATEGORY_MAP[value]) return value;
+  // Legacy topic_id → new category
+  if (LEGACY_TOPIC_TO_CATEGORY_MAP[value]) return LEGACY_TOPIC_TO_CATEGORY_MAP[value];
+  // Try matching by category name
+  const match = BITZ_CATEGORIES.find(
+    (c) => c.name.toLowerCase() === value.toLowerCase() || c.slug === value
+  );
+  if (match) return match.id;
+  return 'science_nature';
+}
+
+// ============================================================================
+// BACKWARD COMPAT EXPORTS — Keep old names working for existing imports
+// These are used by existing components that import these symbols.
+// ============================================================================
+
+/** @deprecated Use BITZ_CATEGORIES instead */
+export const BITZ_CATEGORY_GROUPS = BITZ_CATEGORIES;
+
+/** @deprecated Use BITZ_CATEGORIES instead */
+export const ALL_BITZ_TOPICS = BITZ_CATEGORIES;
+
+/** @deprecated Use ALL_BITZ_CATEGORY_IDS instead */
+export const ALL_BITZ_TOPIC_IDS = ALL_BITZ_CATEGORY_IDS;
+
+/** @deprecated Use getCategoryById instead */
+export function getTopicById(id?: string | null): BitzCategoryItem {
+  if (!id) return BITZ_CATEGORIES[0];
+  // Check new category IDs first
+  if (BITZ_CATEGORY_MAP[id]) return BITZ_CATEGORY_MAP[id];
+  // Check legacy topic_id → new category
+  const mappedId = LEGACY_TOPIC_TO_CATEGORY_MAP[id];
+  if (mappedId && BITZ_CATEGORY_MAP[mappedId]) return BITZ_CATEGORY_MAP[mappedId];
+  // Fallback
+  return {
+    id: id,
+    name: id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]/g, ' '),
+    slug: id,
+    icon: 'Sparkles',
+    color: '#026fc3',
+    bgGradient: 'from-blue-600 to-indigo-700',
+    description: '',
+    subtopics: []
+  };
+}
+
+/** @deprecated Use BITZ_CATEGORY_MAP instead */
+export const BITZ_TOPIC_MAP = BITZ_CATEGORY_MAP;

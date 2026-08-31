@@ -1,7 +1,7 @@
 // ============================================================================
-// EDTECHRA-BITZ: Knowledge Discovery Feed Engine
-// Server-paginated, personalized Knowledge Bitz stream with topic filters,
-// double-tap reading experience, and permanent learned exclusion.
+// EDTECHRA-BITZ: Knowledge Discovery Feed Engine (V2)
+// Server-paginated, personalized Knowledge Bitz stream with 10-category filters,
+// 1:1 discovery cards, double-tap reading experience, and permanent learned exclusion.
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -25,7 +25,7 @@ import { KnowledgeBitzDiscoveryCard } from './KnowledgeBitzDiscoveryCard';
 import { KnowledgeBitzReaderModal } from './KnowledgeBitzReaderModal';
 import { CustomizeFeedModal } from './CustomizeFeedModal';
 import { SavedBitzModal } from './SavedBitzModal';
-import { ALL_BITZ_TOPICS } from '@/utils/bitzTopicsConfig';
+import { BITZ_CATEGORIES } from '@/utils/bitzTopicsConfig';
 
 export const ExploreFeed: React.FC = () => {
   const { session } = useAuth();
@@ -105,7 +105,6 @@ export const ExploreFeed: React.FC = () => {
         if (res.success) {
           if (isAppend) {
             setBitzList((prev) => {
-              // Deduplicate by id
               const existingIds = new Set(prev.map((b) => b.id));
               const newItems = res.bitz.filter((b) => !existingIds.has(b.id));
               return [...prev, ...newItems];
@@ -167,23 +166,23 @@ export const ExploreFeed: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 py-4 space-y-4">
+    <div className="w-full max-w-xl mx-auto px-3 sm:px-4 py-4 space-y-4">
       {/* Search & Top Action Bar */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500 dark:text-stone-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search ideas, topics, facts..."
-            className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-2xl text-xs sm:text-sm font-semibold text-stone-950 dark:text-white placeholder:text-stone-500 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 shadow-sm transition-all"
+            className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-[#0a213c] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-[#026fc3] shadow-xs transition-all"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-stone-500 hover:text-stone-900 dark:hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-[#0a213c]"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -194,10 +193,10 @@ export const ExploreFeed: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsCustomizeOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-blue-50/80 dark:hover:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:border-blue-500 rounded-2xl text-xs font-black text-stone-900 dark:text-white shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-blue-50 border border-slate-300 hover:border-[#026fc3] rounded-2xl text-xs font-black text-[#0a213c] shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
           title="Customize Your Feed"
         >
-          <SlidersHorizontal className="w-4 h-4 text-[#026fc3] dark:text-blue-400 stroke-[2.5]" />
+          <SlidersHorizontal className="w-4 h-4 text-[#026fc3] stroke-[2.5]" />
           <span className="font-black">Customize</span>
         </button>
 
@@ -205,7 +204,7 @@ export const ExploreFeed: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsSavedOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-amber-50/80 dark:hover:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:border-amber-400 rounded-2xl text-xs font-black text-stone-900 dark:text-white shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-amber-50 border border-slate-300 hover:border-amber-400 rounded-2xl text-xs font-black text-[#0a213c] shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
           title="My Saved Knowledge"
         >
           <Bookmark className="w-4 h-4 text-amber-500 fill-amber-500/30 stroke-[2.5]" />
@@ -213,7 +212,7 @@ export const ExploreFeed: React.FC = () => {
         </button>
       </div>
 
-      {/* Swipeable Topic Rail */}
+      {/* Swipeable 10-Category Topic Rail */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none">
         {/* For You / All Topics Pill */}
         <button
@@ -224,7 +223,7 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTopic === 'all' && activeTab === 'for_you'
-              ? 'bg-[#026fc3] text-white shadow-sm'
+              ? 'bg-[#026fc3] text-white shadow-xs'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
@@ -241,7 +240,7 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTab === 'trending'
-              ? 'bg-[#026fc3] text-white shadow-sm'
+              ? 'bg-[#026fc3] text-white shadow-xs'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
@@ -249,29 +248,29 @@ export const ExploreFeed: React.FC = () => {
           <span>Trending</span>
         </button>
 
-        {/* Individual Topic Pills */}
-        {ALL_BITZ_TOPICS.map((topic) => {
-          const isActive = activeTopic === topic.id;
+        {/* 10 Main Category Pills */}
+        {BITZ_CATEGORIES.map((cat) => {
+          const isActive = activeTopic === cat.id;
 
           return (
             <button
-              key={topic.id}
+              key={cat.id}
               type="button"
               onClick={() => {
-                setActiveTopic(topic.id);
+                setActiveTopic(cat.id);
                 setActiveTab('for_you');
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
                 isActive
-                  ? 'bg-[#026fc3] text-white shadow-sm'
+                  ? 'bg-[#026fc3] text-white shadow-xs'
                   : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
               }`}
             >
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: topic.color }}
+                style={{ backgroundColor: cat.color }}
               />
-              <span>{topic.name}</span>
+              <span>{cat.name}</span>
             </button>
           );
         })}
@@ -282,12 +281,12 @@ export const ExploreFeed: React.FC = () => {
         {loading ? (
           // Loading Skeletons
           <div className="space-y-4">
-            {[1, 2, 3].map((n) => (
+            {[1, 2].map((n) => (
               <div
                 key={n}
-                className="bg-white rounded-3xl border border-slate-200 overflow-hidden animate-pulse p-4 sm:p-5 space-y-4"
+                className="bg-white rounded-3xl border border-slate-200 overflow-hidden animate-pulse p-4 sm:p-5 space-y-4 max-w-xl mx-auto w-full"
               >
-                <div className="w-full aspect-[16/9] bg-slate-100 rounded-2xl" />
+                <div className="w-full aspect-square bg-slate-100 rounded-2xl" />
                 <div className="h-6 bg-slate-100 rounded-md w-3/4" />
                 <div className="space-y-2">
                   <div className="h-4 bg-slate-100 rounded w-full" />
@@ -307,15 +306,15 @@ export const ExploreFeed: React.FC = () => {
             <button
               type="button"
               onClick={() => fetchFeed(1, false)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry</span>
             </button>
           </div>
         ) : (bitzList.length === 0 || allLearnedNotice) ? (
-          // Premium Completion State (Pure White Surface + High Contrast Dark Navy Text)
-          <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-5 shadow-xs">
+          // Premium Completion State
+          <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-5 shadow-xs max-w-xl mx-auto">
             <div className="w-16 h-16 bg-blue-50 text-[#026fc3] border border-blue-200 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
             </div>
@@ -365,13 +364,13 @@ export const ExploreFeed: React.FC = () => {
 
         {/* Infinite Scroll Loading Spinner */}
         {loadingMore && (
-          <div className="py-6 flex items-center justify-center text-stone-400">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          <div className="py-6 flex items-center justify-center text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-[#026fc3]" />
             <span className="text-xs font-medium ml-2">Loading more facts...</span>
           </div>
         )}
 
-        {/* Sentinel element for IntersectionObserver */}
+        {/* Sentinel element for Infinite Scroll */}
         <div ref={sentinelRef} className="h-10 w-full" />
       </div>
 

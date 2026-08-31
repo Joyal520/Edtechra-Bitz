@@ -1,62 +1,87 @@
 // ============================================================================
 // EDTECHRA-BITZ: AI Prompt Generator for External AI Content Creation
-// Generates structured prompts for Gemini, ChatGPT, Claude, etc.
+// V2: 10 main categories, subtopics auto-assigned by AI, 5 quizzes, 100 words
 // ============================================================================
 
-import { getTopicById } from './bitzTopicsConfig';
+import { getCategoryById } from './bitzTopicsConfig';
 import { getCefrLevelById } from './bitzCefrConfig';
 
 export interface AiPromptConfig {
-  topicId: string;
-  cefrLevel: string;
-  quantity: number;
+  categoryId: string;      // One of the 10 main category IDs
+  cefrLevel: string;       // A1-C2
+  quantity: number;         // Number of facts to generate
 }
 
 /**
  * Generate a complete, copy-ready AI prompt for external AI tools.
  * The prompt instructs the AI to produce structured JSON output compatible
- * with EdTechra's BitzBulkImportRecord schema.
+ * with EdTechra's Knowledge Bitz V2 schema (5 quizzes, 100-word readings).
+ *
+ * NOTE: The AI auto-assigns the appropriate subtopic — admin does NOT manually select one.
  */
 export function generateBitzAiPrompt(config: AiPromptConfig): string {
-  const topic = getTopicById(config.topicId);
+  const category = getCategoryById(config.categoryId);
   const cefr = getCefrLevelById(config.cefrLevel);
+  const subtopicsList = category.subtopics.map((st) => st.name).join(', ');
 
   return `You are an expert educational content writer for EdTechra, a microlearning platform.
 
-Generate exactly ${config.quantity} unique Knowledge Bitz (micro-learning facts) about **${topic.name}** for English learners at **CEFR level ${cefr.id} (${cefr.shortLabel})**.
+Generate exactly ${config.quantity} unique Knowledge Bitz (micro-learning facts) about **${category.name}** for English learners at **CEFR level ${cefr.id} (${cefr.shortLabel})**.
+
+## Category: ${category.name}
+${category.description}
+
+## Available Subtopics
+When creating each fact, assign the most appropriate subtopic from this list:
+${category.subtopics.map((st) => `- **${st.name}**${st.description ? `: ${st.description}` : ''}`).join('\n')}
 
 ## CEFR Level Writing Guidelines
 ${cefr.promptInstructions}
 
 ## Content Requirements
 
-Each Bitz MUST contain:
+Each Knowledge Bitz item MUST contain ALL of the following fields:
 
-1. **title**: A curiosity-driven hook headline (5-15 words). Make it surprising, fascinating, or counter-intuitive. Examples: "Octopuses Have Three Hearts", "Bananas Are Slightly Radioactive", "Your Brain Uses 20% of Your Energy".
+### 1. title (string)
+A curiosity-driven hook headline (5–15 words). Make it surprising, fascinating, or counter-intuitive.
+Examples: "Octopuses Have Three Hearts", "The Great Wall Cannot Be Seen from Space", "Your Brain Uses 20% of Your Energy".
 
-2. **short_fact**: A 1-2 sentence supporting explanation (15-40 words) that expands on the title. This is what users see on the discovery card. Keep it concise and intriguing.
+### 2. short_fact (string)
+A 20–30 word supporting explanation that expands on the title. This is what users see on the discovery card. Must be EXACTLY 20–30 words. Count carefully.
 
-3. **reading_text**: A clear educational explanation of 80-120 words. This is the full reading that teaches the concept. It must:
-   - Explain the fact clearly using the CEFR ${cefr.id} English level
-   - Teach exactly one clear idea
-   - Remain interesting and engaging
-   - NOT repeat the title unnecessarily
-   - NOT use unnecessary technical language beyond the CEFR level
-   - Flow naturally as a coherent mini-article
+### 3. reading_text (string)
+A clear educational explanation of EXACTLY 100 words. Not 99. Not 101. Exactly 100 words. Count every word carefully.
+- Explain the fact clearly using the CEFR ${cefr.id} English level
+- Teach exactly one clear idea
+- Remain interesting and engaging
+- Do NOT repeat the title or short_fact unnecessarily
+- Flow naturally as a coherent mini-article
+${config.categoryId === 'history_culture' ? '\n- For myths, legends, and mysteries: clearly distinguish factual information from legends, claims, and uncertainty. Use phrases like "according to legend", "the story claims", or "this remains an unsolved mystery".\n' : ''}
+### 4. category (string)
+Must be exactly: "${category.name}"
 
-4. **topic_id**: Must be exactly "${config.topicId}"
+### 5. subtopic (string)
+Must be one of: ${subtopicsList}
+Choose the most appropriate subtopic based on the fact's content.
 
-5. **category**: Must be exactly "${topic.categoryGroup}"
+### 6. difficulty (string)
+One of "Easy", "Medium", or "Hard" (knowledge difficulty, NOT English difficulty).
 
-6. **difficulty**: One of "Easy", "Medium", or "Hard" (knowledge difficulty, NOT English difficulty)
+### 7. cefr_level (string)
+Must be exactly: "${cefr.id}"
 
-7. **source_citation**: A reliable reference or source for the fact. Use well-known sources (Wikipedia, NASA, Nature, BBC, National Geographic, etc.). If you cannot confidently provide a source, write "Requires administrator review" — do NOT fabricate URLs.
+### 8. source_citation (string)
+A reliable reference or source for the fact. Use well-known sources (Wikipedia, NASA, Nature, BBC, National Geographic, Smithsonian, etc.). If you cannot confidently provide a source, write "Requires administrator review" — do NOT fabricate URLs.
 
-8. **quiz**: A multiple-choice quiz object containing:
-   - **question**: A clear question answerable from the reading (1 sentence)
-   - **options**: Exactly 4 answer options (array of 4 strings)
-   - **correct_answer**: The exact text of the correct option (must match one of the 4 options exactly)
-   - **explanation**: A brief 1-2 sentence explanation of why the answer is correct
+### 9. quiz (array of exactly 5 objects)
+An array of EXACTLY 5 multiple-choice quiz questions. Each question object must contain:
+- **question** (string): A clear question answerable from the reading_text (1 sentence)
+- **options** (array of 4 strings): Exactly 4 answer options
+- **correct_answer** (string): The exact text of the correct option (must match one of the 4 options EXACTLY)
+- **explanation** (string): A brief 1–2 sentence explanation of why the answer is correct
+- **xp** (number): Always set to 2
+
+The 5 questions should test different aspects of the reading. Questions must be clearly derivable from the reading_text.
 
 ## Strict Rules
 
@@ -65,7 +90,9 @@ Each Bitz MUST contain:
 - Do NOT repeat facts or rephrase the same idea with different wording.
 - Do NOT generate images or image descriptions.
 - Do NOT create trick quiz questions or questions unrelated to the reading.
-- Quiz answers must be clearly derivable from the reading_text.
+- short_fact MUST be 20–30 words. Count carefully.
+- reading_text MUST be EXACTLY 100 words. Count every single word.
+- quiz MUST be an array of EXACTLY 5 question objects.
 - Every fact must be scientifically/historically accurate.
 - Avoid controversial, political, religious, or sensitive content.
 - Do NOT include markdown, code fences, or explanatory text outside the JSON.
@@ -78,23 +105,67 @@ Return ONLY a valid JSON object with this exact structure (no markdown wrapping,
   "bitz": [
     {
       "title": "...",
-      "short_fact": "...",
-      "reading_text": "...",
-      "topic_id": "${config.topicId}",
-      "category": "${topic.categoryGroup}",
+      "short_fact": "... (20-30 words) ...",
+      "reading_text": "... (EXACTLY 100 words) ...",
+      "category": "${category.name}",
+      "subtopic": "... (one of: ${subtopicsList}) ...",
       "difficulty": "Easy",
+      "cefr_level": "${cefr.id}",
       "source_citation": "...",
-      "quiz": {
-        "question": "...",
-        "options": ["...", "...", "...", "..."],
-        "correct_answer": "...",
-        "explanation": "..."
-      }
+      "quiz": [
+        {
+          "question": "...",
+          "options": ["...", "...", "...", "..."],
+          "correct_answer": "...",
+          "explanation": "...",
+          "xp": 2
+        },
+        {
+          "question": "...",
+          "options": ["...", "...", "...", "..."],
+          "correct_answer": "...",
+          "explanation": "...",
+          "xp": 2
+        },
+        {
+          "question": "...",
+          "options": ["...", "...", "...", "..."],
+          "correct_answer": "...",
+          "explanation": "...",
+          "xp": 2
+        },
+        {
+          "question": "...",
+          "options": ["...", "...", "...", "..."],
+          "correct_answer": "...",
+          "explanation": "...",
+          "xp": 2
+        },
+        {
+          "question": "...",
+          "options": ["...", "...", "...", "..."],
+          "correct_answer": "...",
+          "explanation": "...",
+          "xp": 2
+        }
+      ]
     }
   ]
 }
 
 Generate exactly ${config.quantity} unique, high-quality, factually accurate Knowledge Bitz. Quality is more important than quantity — if you cannot generate ${config.quantity} unique, accurate facts, generate fewer but ensure each one is excellent.
 
+CRITICAL REMINDERS:
+- short_fact = 20–30 words (count!)
+- reading_text = EXACTLY 100 words (count every word!)
+- quiz = EXACTLY 5 questions, each with 4 options, 1 correct_answer, explanation, xp=2
+
 Return ONLY the JSON. No other text.`;
 }
+
+// ============================================================================
+// BACKWARD COMPAT — Keep old function name working
+// ============================================================================
+
+/** @deprecated — Use generateBitzAiPrompt with categoryId instead of topicId */
+export { generateBitzAiPrompt as generateBitzPrompt };

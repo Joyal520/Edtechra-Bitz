@@ -4,7 +4,7 @@
 // WebP Compression, Cloudflare R2 Upload, and Admin Preview.
 // ============================================================================
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles,
   Plus,
@@ -31,7 +31,12 @@ import {
   BitzBulkImportResult,
   BitzCefrLevel
 } from '@/types';
-import { ALL_BITZ_TOPICS, getTopicById } from '@/utils/bitzTopicsConfig';
+import {
+  BITZ_CATEGORIES,
+  getCategoryById,
+  getSubtopicsForCategory,
+  type BitzSubtopic
+} from '@/utils/bitzTopicsConfig';
 import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
 import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
@@ -51,7 +56,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedTopic, setSelectedTopic] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSubtopic, setSelectedSubtopic] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedVisualStatus, setSelectedVisualStatus] = useState<string>('all');
   const [selectedCefrLevel, setSelectedCefrLevel] = useState<string>('all');
@@ -74,7 +80,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   const [formTitle, setFormTitle] = useState<string>('');
   const [formShortFact, setFormShortFact] = useState<string>('');
   const [formReadingText, setFormReadingText] = useState<string>('');
-  const [formTopicId, setFormTopicId] = useState<string>('science');
+  const [formCategory, setFormCategory] = useState<string>('Science & Nature');
+  const [formSubtopic, setFormSubtopic] = useState<string>('');
   const [formDifficulty, setFormDifficulty] = useState<BitzDifficulty>('Easy');
   const [formCefrLevel, setFormCefrLevel] = useState<BitzCefrLevel>('B1');
   const [formReadingTime, setFormReadingTime] = useState<number>(30);
@@ -90,15 +97,24 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   const [bulkImportResult, setBulkImportResult] = useState<BitzBulkImportResult | null>(null);
   const [bulkImporting, setBulkImporting] = useState<boolean>(false);
 
+  // Available subtopics for the currently selected filter category
+  const availableSubtopics = useMemo(() => {
+    if (selectedCategory === 'all') return [];
+    return getSubtopicsForCategory(selectedCategory);
+  }, [selectedCategory]);
+
   // Fetch Admin Bitz List & Stats
   const loadAdminBitz = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
     try {
+      const categoryObj = selectedCategory !== 'all' ? getCategoryById(selectedCategory) : null;
       const res = await knowledgeBitzService.getAdminBitz(
         {
           search: searchQuery,
-          topic: selectedTopic,
+          category: categoryObj?.name || undefined,
+          topic: selectedCategory !== 'all' ? selectedCategory : undefined,
+          subtopic: selectedSubtopic !== 'all' ? selectedSubtopic : undefined,
           status: selectedStatus,
           visualStatus: selectedVisualStatus,
           cefrLevel: selectedCefrLevel,
@@ -117,7 +133,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedTopic, selectedStatus, selectedVisualStatus, selectedCefrLevel, page, token]);
+  }, [searchQuery, selectedCategory, selectedSubtopic, selectedStatus, selectedVisualStatus, selectedCefrLevel, page, token]);
 
   useEffect(() => {
     loadAdminBitz();
@@ -129,7 +145,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     setFormTitle('');
     setFormShortFact('');
     setFormReadingText('');
-    setFormTopicId('science');
+    setFormCategory(BITZ_CATEGORIES[0]?.name || 'Science & Nature');
+    setFormSubtopic('');
     setFormDifficulty('Easy');
     setFormCefrLevel('B1');
     setFormReadingTime(30);
@@ -148,16 +165,22 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     setFormTitle(bitz.title);
     setFormShortFact(bitz.short_fact);
     setFormReadingText(bitz.reading_text);
-    setFormTopicId(bitz.topic_id);
+    setFormCategory(bitz.category || 'Science & Nature');
+    setFormSubtopic(bitz.sub_topic || '');
     setFormDifficulty(bitz.difficulty);
     setFormCefrLevel(bitz.cefr_level || 'B1');
     setFormReadingTime(bitz.reading_time_sec || 30);
     setFormSource(bitz.source_citation || '');
-    if (bitz.quiz) {
+    if (bitz.quiz && !Array.isArray(bitz.quiz)) {
       setFormQuizQuestion(bitz.quiz.question || '');
       setFormQuizOptions(bitz.quiz.options || ['', '', '', '']);
       setFormQuizCorrect(bitz.quiz.correct_answer || bitz.quiz.correctAnswer || '');
       setFormQuizExplanation(bitz.quiz.explanation || '');
+    } else if (Array.isArray(bitz.quiz) && bitz.quiz.length > 0) {
+      setFormQuizQuestion(bitz.quiz[0]?.question || '');
+      setFormQuizOptions(bitz.quiz[0]?.options || ['', '', '', '']);
+      setFormQuizCorrect(bitz.quiz[0]?.correct_answer || bitz.quiz[0]?.correctAnswer || '');
+      setFormQuizExplanation(bitz.quiz[0]?.explanation || '');
     } else {
       setFormQuizQuestion('');
       setFormQuizOptions(['', '', '', '']);
@@ -202,7 +225,6 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         }
       }
 
-      const topicObj = getTopicById(formTopicId);
       const quizPayload = formQuizQuestion.trim()
         ? {
             question: formQuizQuestion.trim(),
@@ -216,9 +238,9 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         title: formTitle.trim(),
         short_fact: formShortFact.trim(),
         reading_text: formReadingText.trim(),
-        topic_id: formTopicId,
-        category: topicObj.categoryGroup || 'General',
-        sub_topic: topicObj.name,
+        topic_id: 'general',
+        category: formCategory,
+        sub_topic: formSubtopic.trim(),
         difficulty: formDifficulty,
         cefr_level: formCefrLevel,
         reading_time_sec: formReadingTime,
@@ -473,8 +495,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         </button>
       </div>
 
-      {/* Responsive Filter & Search Grid (5-Column Responsive Layout) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-100/90 p-3 rounded-2xl border border-slate-200">
+      {/* Responsive Filter & Search Grid (6-Column Responsive Layout) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 bg-slate-100/90 p-3 rounded-2xl border border-slate-200">
         {/* Search Input */}
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -487,16 +509,36 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           />
         </div>
 
-        {/* Topic Filter */}
+        {/* Main Category Filter */}
         <select
-          value={selectedTopic}
-          onChange={(e) => setSelectedTopic(e.target.value)}
+          value={selectedCategory}
+          onChange={(e) => {
+            setSelectedCategory(e.target.value);
+            setSelectedSubtopic('all');
+          }}
           className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
-          <option value="all">All Topics</option>
-          {ALL_BITZ_TOPICS.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
+          <option value="all">All Categories</option>
+          {BITZ_CATEGORIES.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Subtopic Filter (Dynamically adapts to selected Category) */}
+        <select
+          value={selectedSubtopic}
+          onChange={(e) => setSelectedSubtopic(e.target.value)}
+          disabled={selectedCategory === 'all' || availableSubtopics.length === 0}
+          className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25 disabled:opacity-50 disabled:bg-slate-50"
+        >
+          <option value="all">
+            {selectedCategory === 'all' ? 'All Subtopics' : `All ${getCategoryById(selectedCategory).name}`}
+          </option>
+          {availableSubtopics.map((st: BitzSubtopic) => (
+            <option key={st.id} value={st.name}>
+              {st.name}
             </option>
           ))}
         </select>
@@ -507,7 +549,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           onChange={(e) => setSelectedCefrLevel(e.target.value)}
           className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
         >
-          <option value="all">All English Levels</option>
+          <option value="all">All CEFR Levels</option>
           {CEFR_LEVELS.map((c) => (
             <option key={c.id} value={c.id}>
               {c.label}
@@ -567,7 +609,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 No Knowledge Bitz Found
               </h4>
               <p className="text-xs font-semibold text-slate-600 max-w-sm mx-auto mt-1 leading-relaxed">
-                {searchQuery || selectedTopic !== 'all' || selectedStatus !== 'all' || selectedVisualStatus !== 'all' || selectedCefrLevel !== 'all'
+                {searchQuery || selectedCategory !== 'all' || selectedSubtopic !== 'all' || selectedStatus !== 'all' || selectedVisualStatus !== 'all' || selectedCefrLevel !== 'all'
                   ? 'No facts match your current search and filter criteria.'
                   : 'Start building your microlearning catalogue by creating facts with AI or bulk importing records.'}
               </p>
@@ -611,7 +653,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   <th className="p-3.5">Code</th>
                   <th className="p-3.5">Image</th>
                   <th className="p-3.5">Title & Short Fact</th>
-                  <th className="p-3.5">Topic</th>
+                  <th className="p-3.5">Category</th>
+                  <th className="p-3.5">Subtopic</th>
                   <th className="p-3.5">CEFR</th>
                   <th className="p-3.5">Diff</th>
                   <th className="p-3.5">Status</th>
@@ -620,7 +663,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {bitzList.map((bitz) => {
-                  const topic = getTopicById(bitz.topic_id);
+                  const cat = getCategoryById(bitz.category || bitz.topic_id);
 
                   return (
                     <tr key={bitz.id} className="hover:bg-slate-50/80 transition-colors">
@@ -669,14 +712,21 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Topic */}
+                      {/* Category */}
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-slate-100 text-slate-900 border border-slate-200">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-blue-50 text-[#026fc3] border border-blue-100">
                           <span
                             className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: topic.color }}
+                            style={{ backgroundColor: cat.color }}
                           />
-                          {topic.name}
+                          {cat.name}
+                        </span>
+                      </td>
+
+                      {/* Subtopic */}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="text-[11px] font-semibold text-slate-700">
+                          {bitz.sub_topic || '—'}
                         </span>
                       </td>
 
@@ -847,22 +897,35 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 <div>
                   <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
-                    Topic
+                    Category *
                   </label>
                   <select
-                    value={formTopicId}
-                    onChange={(e) => setFormTopicId(e.target.value)}
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
-                    {ALL_BITZ_TOPICS.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {BITZ_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
+                    Subtopic
+                  </label>
+                  <input
+                    type="text"
+                    value={formSubtopic}
+                    onChange={(e) => setFormSubtopic(e.target.value)}
+                    placeholder="e.g. World History"
+                    className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
+                  />
                 </div>
 
                 <div>

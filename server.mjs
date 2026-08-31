@@ -14489,13 +14489,14 @@ app.post('/api/bitz/interact', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     const userId = authData?.user?.id || 'guest';
-    const { bitzId, status, selectedOption } = req.body;
+    const { bitzId, status, selectedOption, questionIndex } = req.body;
 
     const result = await knowledgeBitzService.recordLearningState({
       userId,
       bitzId,
       status: status || 'seen',
       selectedOption,
+      questionIndex: questionIndex !== undefined ? questionIndex : null,
       supabaseClient: serverSupabase
     });
 
@@ -14511,13 +14512,14 @@ app.post('/api/bitz/:id/quiz-attempt', async (req, res) => {
     const authData = await verifyAuthUser(req);
     const userId = authData?.user?.id || 'guest';
     const bitzId = req.params.id;
-    const { selectedOption } = req.body;
+    const { selectedOption, questionIndex } = req.body;
 
     const result = await knowledgeBitzService.recordLearningState({
       userId,
       bitzId,
       status: 'learned',
       selectedOption,
+      questionIndex: questionIndex !== undefined ? questionIndex : null,
       supabaseClient: serverSupabase
     });
 
