@@ -108,16 +108,16 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-stone-100 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70 backdrop-blur-md">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-xl">
-              <SlidersHorizontal className="w-5 h-5" />
+        <div className="flex items-center justify-between px-6 py-5 border-b border-stone-200 dark:border-stone-800 bg-stone-50/90 dark:bg-stone-900/90 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-blue-100 dark:bg-blue-950/60 text-[#026fc3] dark:text-blue-400 rounded-2xl">
+              <SlidersHorizontal className="w-5 h-5 stroke-[2.5]" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-stone-900 dark:text-stone-50">
+              <h2 className="text-lg font-black text-stone-950 dark:text-white">
                 Customize Your Feed
               </h2>
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-stone-600 dark:text-stone-300 font-semibold">
                 Choose the topics you want to discover in your Knowledge Bitz stream.
               </p>
             </div>
@@ -126,7 +126,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors"
+            className="p-1.5 text-stone-500 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -135,24 +135,24 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
         {/* Modal Body with Topics Selection */}
         <div className="p-6 max-h-[68vh] overflow-y-auto space-y-6">
           {/* Select All Bar */}
-          <div className="flex items-center justify-between bg-stone-100/70 dark:bg-stone-800/70 p-3 rounded-2xl">
-            <div className="text-xs font-semibold text-stone-700 dark:text-stone-300">
-              Selected: <strong className="text-blue-600 dark:text-blue-400">{selectedTopics.size}</strong> of {ALL_BITZ_TOPIC_IDS.length} topics
+          <div className="flex items-center justify-between bg-stone-100 dark:bg-stone-800 p-3.5 rounded-2xl border border-stone-200 dark:border-stone-700">
+            <div className="text-xs font-bold text-stone-800 dark:text-stone-200">
+              Selected: <strong className="text-[#026fc3] dark:text-blue-400 font-black">{selectedTopics.size}</strong> of {ALL_BITZ_TOPIC_IDS.length} topics
             </div>
 
             <button
               type="button"
               onClick={handleToggleSelectAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-stone-700 text-xs font-bold text-stone-800 dark:text-stone-100 rounded-xl shadow-sm hover:bg-stone-50 transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-stone-700 border border-stone-300 dark:border-stone-600 text-xs font-black text-stone-900 dark:text-white rounded-xl shadow-xs hover:bg-stone-50 transition-all active:scale-95 cursor-pointer"
             >
               {isAllSelected ? (
                 <>
-                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                  <CheckSquare className="w-4 h-4 text-[#026fc3] stroke-[2.5]" />
                   <span>Deselect All</span>
                 </>
               ) : (
                 <>
-                  <Square className="w-4 h-4 text-stone-400" />
+                  <Square className="w-4 h-4 text-stone-500" />
                   <span>Select All Topics</span>
                 </>
               )}
@@ -160,23 +160,23 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
           </div>
 
           {loading ? (
-            <div className="py-12 flex flex-col items-center justify-center text-stone-400">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2" />
-              <span className="text-xs font-medium">Loading topics...</span>
+            <div className="py-12 flex flex-col items-center justify-center text-stone-500">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+              <span className="text-xs font-bold">Loading topics...</span>
             </div>
           ) : (
             <div className="space-y-6">
               {BITZ_CATEGORY_GROUPS.map((group) => (
                 <div key={group.id} className="space-y-2.5">
-                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-stone-700 dark:text-stone-300">
                     <span
-                      className="w-2 h-2 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full"
                       style={{ backgroundColor: group.color }}
                     />
                     <span>{group.name}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {group.topics.map((topic) => {
                       const isSelected = selectedTopics.has(topic.id);
 
@@ -185,18 +185,18 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
                           key={topic.id}
                           type="button"
                           onClick={() => handleToggleTopic(topic.id)}
-                          className={`flex items-center justify-between p-3 rounded-2xl border text-left transition-all active:scale-95 ${
+                          className={`flex items-center justify-between p-3 rounded-2xl border text-left transition-all active:scale-95 cursor-pointer ${
                             isSelected
-                              ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 shadow-sm'
-                              : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 hover:border-stone-300 opacity-60'
+                              ? 'bg-blue-50/90 dark:bg-blue-950/60 border-blue-400 dark:border-blue-700 shadow-xs'
+                              : 'bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-800 hover:border-stone-400 opacity-75 hover:opacity-100'
                           }`}
                         >
                           <div className="flex items-center gap-2 overflow-hidden">
                             <span
-                              className="w-2 h-2 rounded-full shrink-0"
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: topic.color }}
                             />
-                            <span className="text-xs font-bold text-stone-800 dark:text-stone-200 truncate">
+                            <span className="text-xs font-extrabold text-stone-950 dark:text-white truncate">
                               {topic.name}
                             </span>
                           </div>
@@ -204,8 +204,8 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
                           <div
                             className={`w-4 h-4 rounded-md flex items-center justify-center shrink-0 ml-1.5 transition-colors ${
                               isSelected
-                                ? 'bg-blue-600 text-white'
-                                : 'border border-stone-300 dark:border-stone-700'
+                                ? 'bg-[#026fc3] text-white'
+                                : 'border-2 border-stone-400 dark:border-stone-600'
                             }`}
                           >
                             {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
@@ -221,18 +221,18 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
 
           {/* Success Save Banner */}
           {saveToast && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-fade-in">
+            <div className="p-3 bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700 rounded-2xl text-center text-xs font-black text-emerald-900 dark:text-emerald-200 animate-fade-in">
               ✓ Your feed has been updated!
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 sm:p-5 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 text-xs font-bold text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors"
+            className="px-4 py-2.5 text-xs font-bold text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -241,7 +241,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />

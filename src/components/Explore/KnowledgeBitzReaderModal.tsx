@@ -193,13 +193,13 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
         {/* Scrollable Reading Content */}
         <div className="p-5 sm:p-6 max-h-[75vh] overflow-y-auto space-y-5">
           {/* Title */}
-          <h2 className="text-xl sm:text-2xl font-black text-stone-900 dark:text-stone-50 leading-tight tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-stone-950 dark:text-white leading-tight tracking-tight">
             {bitz.title}
           </h2>
 
           {/* Visual Media */}
           {bitz.visual_url && (
-            <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-inner">
+            <div className="w-full aspect-[16/9] rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-sm border border-stone-200 dark:border-stone-800">
               <img
                 src={bitz.visual_url}
                 alt={bitz.title}
@@ -209,21 +209,21 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
           )}
 
           {/* 80-120 Word Clear Reading Body */}
-          <div className="text-stone-700 dark:text-stone-200 text-sm sm:text-base leading-relaxed font-normal space-y-3">
+          <div className="text-stone-900 dark:text-stone-100 text-sm sm:text-base leading-relaxed font-normal space-y-3">
             <p>{bitz.reading_text}</p>
           </div>
 
           {/* Key Vocabulary Highlights (if any) */}
           {bitz.vocabulary && bitz.vocabulary.length > 0 && (
-            <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
-                <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-900/60 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400 stroke-[2.5]" />
                 <span>Key Vocabulary</span>
               </div>
               <div className="space-y-1.5">
                 {bitz.vocabulary.map((v, idx) => (
-                  <div key={idx} className="text-xs text-stone-700 dark:text-stone-300">
-                    <strong className="text-stone-900 dark:text-stone-100 font-semibold">{v.word}:</strong>{' '}
+                  <div key={idx} className="text-xs text-stone-800 dark:text-stone-200">
+                    <strong className="text-stone-950 dark:text-white font-bold">{v.word}:</strong>{' '}
                     <span>{v.definition}</span>
                   </div>
                 ))}
@@ -233,9 +233,9 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
           {/* Source Citation */}
           {bitz.source_citation && (
-            <div className="text-[11px] text-stone-400 dark:text-stone-500 italic flex items-center gap-1">
+            <div className="text-[11px] text-stone-500 dark:text-stone-400 italic flex items-center gap-1">
               <span>Source:</span>
-              <span className="font-medium text-stone-600 dark:text-stone-400">{bitz.source_citation}</span>
+              <span className="font-semibold text-stone-700 dark:text-stone-300">{bitz.source_citation}</span>
             </div>
           )}
 
@@ -247,7 +247,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all active:scale-95 ${
                 isPlayingAudio
                   ? 'bg-amber-500 text-white shadow-md'
-                  : 'bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200'
+                  : 'bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-900 dark:text-stone-100'
               }`}
             >
               {isPlayingAudio ? (
@@ -257,7 +257,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
                 </>
               ) : (
                 <>
-                  <Volume2 className="w-4 h-4 text-amber-500" />
+                  <Volume2 className="w-4 h-4 text-amber-500 stroke-[2.2]" />
                   <span>Listen to Fact</span>
                 </>
               )}
@@ -268,7 +268,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
               <button
                 type="button"
                 onClick={() => setShowQuiz(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-full shadow-md shadow-blue-500/20 transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#026fc3] to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-full shadow-md shadow-blue-600/20 transition-all active:scale-95"
               >
                 <HelpCircle className="w-4 h-4" />
                 <span>Quiz Me (+10 XP)</span>
@@ -278,18 +278,18 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
           {/* Expandable Quiz Section */}
           {showQuiz && bitz.quiz && (
-            <div className="mt-4 p-4 sm:p-5 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-2xl space-y-3.5 animate-scale-in">
+            <div className="mt-4 p-4 sm:p-5 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-900/60 rounded-2xl space-y-3.5 animate-scale-in">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-blue-700 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-black text-blue-900 dark:text-blue-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#026fc3]" />
                   Quick Knowledge Check
                 </span>
-                <span className="text-[11px] font-semibold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-2.5 py-0.5 rounded-full">
                   +10 XP
                 </span>
               </div>
 
-              <p className="text-sm font-bold text-stone-900 dark:text-stone-100">
+              <p className="text-sm font-extrabold text-stone-950 dark:text-white">
                 {bitz.quiz.question}
               </p>
 
@@ -300,14 +300,14 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
                   const correctAns = bitz.quiz?.correct_answer || bitz.quiz?.correctAnswer;
                   const isThisCorrect = opt.trim() === String(correctAns).trim();
 
-                  let btnStyle = 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-800 dark:text-stone-200 hover:border-blue-400';
+                  let btnStyle = 'bg-white dark:bg-stone-900 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 hover:border-blue-500 font-semibold';
                   if (quizSubmitted) {
                     if (isThisCorrect) {
-                      btnStyle = 'bg-emerald-500 border-emerald-600 text-white shadow-md';
+                      btnStyle = 'bg-emerald-600 border-emerald-700 text-white shadow-md font-bold';
                     } else if (isSelected) {
-                      btnStyle = 'bg-rose-500 border-rose-600 text-white';
+                      btnStyle = 'bg-rose-600 border-rose-700 text-white font-bold';
                     } else {
-                      btnStyle = 'opacity-50 border-stone-200 dark:border-stone-800 text-stone-400';
+                      btnStyle = 'opacity-40 border-stone-300 dark:border-stone-700 text-stone-500';
                     }
                   }
 
@@ -317,11 +317,11 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
                       type="button"
                       disabled={quizSubmitted}
                       onClick={() => handleSelectQuizOption(opt)}
-                      className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm font-medium transition-all ${btnStyle} flex items-center justify-between`}
+                      className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm transition-all ${btnStyle} flex items-center justify-between`}
                     >
                       <span>{opt}</span>
                       {quizSubmitted && isThisCorrect && (
-                        <CheckCircle2 className="w-4 h-4 text-white shrink-0 ml-2" />
+                        <CheckCircle2 className="w-4 h-4 text-white shrink-0 ml-2 stroke-[2.5]" />
                       )}
                     </button>
                   );
@@ -330,15 +330,15 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
               {/* Quiz Feedback Explanation */}
               {quizSubmitted && (
-                <div className={`p-3 rounded-xl text-xs leading-relaxed ${
+                <div className={`p-3.5 rounded-xl text-xs leading-relaxed ${
                   isQuizCorrect
-                    ? 'bg-emerald-100/90 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
-                    : 'bg-rose-100/90 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800'
+                    ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-950 dark:text-emerald-100 border border-emerald-300 dark:border-emerald-800'
+                    : 'bg-rose-100 dark:bg-rose-950/70 text-rose-950 dark:text-rose-100 border border-rose-300 dark:border-rose-800'
                 }`}>
-                  <div className="font-bold mb-1">
+                  <div className="font-extrabold mb-1">
                     {isQuizCorrect ? '🎉 Correct! Knowledge Verified.' : 'Not quite right.'}
                   </div>
-                  <p>{bitz.quiz.explanation}</p>
+                  <p className="font-medium">{bitz.quiz.explanation}</p>
                 </div>
               )}
             </div>
@@ -346,7 +346,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
           {/* Awarded XP Banner */}
           {awardedXpMessage && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-bounce">
+            <div className="p-3 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center gap-2 text-xs font-black text-emerald-950 dark:text-emerald-100 animate-bounce">
               <Award className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>{awardedXpMessage}</span>
             </div>
@@ -354,11 +354,11 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
         </div>
 
         {/* Modal Footer (Complete / Learned Action) */}
-        <div className="p-4 sm:p-5 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50 flex items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 text-xs font-bold text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors"
+            className="px-4 py-2.5 text-xs font-bold text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors"
           >
             Done Reading
           </button>
@@ -367,22 +367,22 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
             type="button"
             disabled={isLearned || learningInProgress}
             onClick={handleMarkAsLearned}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95 ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black shadow-md transition-all active:scale-95 ${
               isLearned
                 ? 'bg-emerald-600 text-white cursor-default'
-                : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
             }`}
           >
             {learningInProgress ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : isLearned ? (
               <>
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
                 <span>Learned (+{bitz.xp_value || 10} XP)</span>
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
                 <span>I've Learned This (+{bitz.xp_value || 10} XP)</span>
               </>
             )}
