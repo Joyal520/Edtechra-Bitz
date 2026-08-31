@@ -14611,7 +14611,8 @@ app.post('/api/admin/bitz/bulk-import', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
     const items = req.body.items || [];
-    const result = await knowledgeBitzService.bulkImportBitz(items, authData?.user?.id, serverSupabase);
+    const cefrLevel = req.body.cefrLevel || null;
+    const result = await knowledgeBitzService.bulkImportBitz(items, authData?.user?.id, serverSupabase, cefrLevel);
     return res.json({ success: true, ...result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

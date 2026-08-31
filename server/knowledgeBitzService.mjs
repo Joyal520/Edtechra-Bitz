@@ -967,7 +967,7 @@ STRICT RESTRICTIONS:
   // --------------------------------------------------------------------------
   // ADMIN CRUD & BULK FACT IMPORT
   // --------------------------------------------------------------------------
-  async getAdminBitz({ search = '', topic = 'all', status = 'all', visualStatus = 'all', page = 1, limit = 50 }) {
+  async getAdminBitz({ search = '', topic = 'all', status = 'all', visualStatus = 'all', cefrLevel = 'all', page = 1, limit = 50 }) {
     let items = this.getLocalBitz();
 
     if (search && search.trim() !== '') {
@@ -990,6 +990,10 @@ STRICT RESTRICTIONS:
 
     if (visualStatus && visualStatus !== 'all') {
       items = items.filter(b => b.visual_status === visualStatus);
+    }
+
+    if (cefrLevel && cefrLevel !== 'all') {
+      items = items.filter(b => b.cefr_level === cefrLevel);
     }
 
     const total = items.length;
@@ -1046,6 +1050,11 @@ STRICT RESTRICTIONS:
     const bitzCode = input.bitz_code || `B${String(nextSeq).padStart(6, '0')}`;
     const id = crypto.randomUUID();
 
+    const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    const cefrLevel = input.cefr_level && validCefr.includes(input.cefr_level) ? input.cefr_level : 'B1';
+    const hashInput = `${input.title.trim().toLowerCase()}|${input.short_fact.trim().toLowerCase()}`;
+    const contentHash = await this._computeHash(hashInput);
+
     const newBitz = {
       id,
       bitz_code: bitzCode,
@@ -1056,6 +1065,8 @@ STRICT RESTRICTIONS:
       category: input.category || 'Science & Nature',
       sub_topic: input.sub_topic || '',
       difficulty: input.difficulty || 'Easy',
+      cefr_level: cefrLevel,
+      content_hash: contentHash,
       reading_time_sec: Number(input.reading_time_sec) || 30,
       visual_url: input.visual_url || null,
       visual_object_key: input.visual_object_key || null,
@@ -1153,7 +1164,7 @@ STRICT RESTRICTIONS:
    * Bulk Fact Import supporting 1,000+ records with rigorous validation & failure diagnostics
    * All imported records default strictly to DRAFT
    */
-  async bulkImportBitz(items = [], userId = null, supabaseClient = null) {
+  async bulkImportBitz(items = [], userId = null, supabaseClient = null, cefrLevel = null) {
     if (!Array.isArray(items) || items.length === 0) {
       return { totalSubmitted: 0, importedCount: 0, failedCount: 0, errors: [], imported: [] };
     }
@@ -1162,6 +1173,10 @@ STRICT RESTRICTIONS:
     const errors = [];
     const allBitz = this.getLocalBitz();
     let currentSeq = allBitz.length + 1;
+
+    // Build existing content hash set for deduplication
+    const existingHashes = new Set(allBitz.filter(b => b.content_hash).map(b => b.content_hash));
+    const batchHashes = new Set();
 
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
@@ -1191,6 +1206,25 @@ STRICT RESTRICTIONS:
         continue;
       }
 
+      // Content hash for deduplication
+      const hashInput = `${String(row.title).trim().toLowerCase()}|${String(row.short_fact).trim().toLowerCase()}`;
+      const contentHash = await this._computeHash(hashInput);
+
+      if (existingHashes.has(contentHash) || batchHashes.has(contentHash)) {
+        errors.push({
+          index: i + 1,
+          title: row.title,
+          reason: 'Duplicate content detected — this Bitz already exists or appears earlier in this batch.'
+        });
+        continue;
+      }
+      batchHashes.add(contentHash);
+
+      // Resolve CEFR level: per-record override > batch-level > default B1
+      const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+      const recordCefr = row.cefr_level && validCefr.includes(row.cefr_level) ? row.cefr_level : null;
+      const resolvedCefr = recordCefr || (cefrLevel && validCefr.includes(cefrLevel) ? cefrLevel : 'B1');
+
       const bitzCode = `B${String(currentSeq++).padStart(6, '0')}`;
       const newBitz = {
         id: crypto.randomUUID(),
@@ -1202,6 +1236,8 @@ STRICT RESTRICTIONS:
         category: row.category || 'Science & Nature',
         sub_topic: row.sub_topic || '',
         difficulty: ['Easy', 'Medium', 'Hard'].includes(row.difficulty) ? row.difficulty : 'Easy',
+        cefr_level: resolvedCefr,
+        content_hash: contentHash,
         reading_time_sec: Number(row.reading_time_sec) || 30,
         visual_url: row.visual_url || null,
         visual_object_key: row.visual_object_key || null,
@@ -1224,6 +1260,7 @@ STRICT RESTRICTIONS:
 
       allBitz.push(newBitz);
       imported.push(newBitz);
+      existingHashes.add(contentHash);
     }
 
     this.saveLocalBitz(allBitz);
@@ -1244,7 +1281,15 @@ STRICT RESTRICTIONS:
       imported
     };
   }
+
+  /**
+   * Compute a simple hash for content deduplication (server-side).
+   * Uses Node.js crypto module.
+   */
+  async _computeHash(input) {
+    const { createHash } = await import('crypto');
+    return createHash('sha256').update(input).digest('hex');
+  }
 }
 
 export const knowledgeBitzService = new KnowledgeBitzService();
-

@@ -28,12 +28,15 @@ import {
   BitzAdminStats,
   BitzDifficulty,
   BitzPublishStatus,
-  BitzBulkImportResult
+  BitzBulkImportResult,
+  BitzCefrLevel
 } from '@/types';
 import { ALL_BITZ_TOPICS, getTopicById } from '@/utils/bitzTopicsConfig';
+import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
 import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { KnowledgeBitzReaderModal } from './Explore/KnowledgeBitzReaderModal';
+import { AiBitzCreationWizard } from './AiBitzCreationWizard';
 
 export const AdminKnowledgeBitzSection: React.FC = () => {
   const { session } = useAuth();
@@ -51,9 +54,11 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedVisualStatus, setSelectedVisualStatus] = useState<string>('all');
+  const [selectedCefrLevel, setSelectedCefrLevel] = useState<string>('all');
   const [page] = useState<number>(1);
 
   // Modals State
+  const [aiWizardOpen, setAiWizardOpen] = useState<boolean>(false);
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [editingBitz, setEditingBitz] = useState<KnowledgeBitzItem | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState<boolean>(false);
@@ -71,13 +76,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   const [formReadingText, setFormReadingText] = useState<string>('');
   const [formTopicId, setFormTopicId] = useState<string>('science');
   const [formDifficulty, setFormDifficulty] = useState<BitzDifficulty>('Easy');
+  const [formCefrLevel, setFormCefrLevel] = useState<BitzCefrLevel>('B1');
   const [formReadingTime, setFormReadingTime] = useState<number>(30);
   const [formSource, setFormSource] = useState<string>('');
   const [formQuizQuestion, setFormQuizQuestion] = useState<string>('');
   const [formQuizOptions, setFormQuizOptions] = useState<string[]>(['', '', '', '']);
   const [formQuizCorrect, setFormQuizCorrect] = useState<string>('');
   const [formQuizExplanation, setFormQuizExplanation] = useState<string>('');
-  const [formStatus, setFormStatus] = useState<BitzPublishStatus>('published');
+  const [formStatus, setFormStatus] = useState<BitzPublishStatus>('draft');
 
   // Bulk Import Form State
   const [bulkJsonText, setBulkJsonText] = useState<string>('');
@@ -95,6 +101,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           topic: selectedTopic,
           status: selectedStatus,
           visualStatus: selectedVisualStatus,
+          cefrLevel: selectedCefrLevel,
           page,
           limit: 50
         },
@@ -110,7 +117,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedTopic, selectedStatus, selectedVisualStatus, page, token]);
+  }, [searchQuery, selectedTopic, selectedStatus, selectedVisualStatus, selectedCefrLevel, page, token]);
 
   useEffect(() => {
     loadAdminBitz();
@@ -124,6 +131,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     setFormReadingText('');
     setFormTopicId('science');
     setFormDifficulty('Easy');
+    setFormCefrLevel('B1');
     setFormReadingTime(30);
     setFormSource('');
     setFormQuizQuestion('');
@@ -142,6 +150,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     setFormReadingText(bitz.reading_text);
     setFormTopicId(bitz.topic_id);
     setFormDifficulty(bitz.difficulty);
+    setFormCefrLevel(bitz.cefr_level || 'B1');
     setFormReadingTime(bitz.reading_time_sec || 30);
     setFormSource(bitz.source_citation || '');
     if (bitz.quiz) {
@@ -211,6 +220,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         category: topicObj.categoryGroup || 'General',
         sub_topic: topicObj.name,
         difficulty: formDifficulty,
+        cefr_level: formCefrLevel,
         reading_time_sec: formReadingTime,
         source_citation: formSource.trim() || undefined,
         quiz: quizPayload,
@@ -423,11 +433,11 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
-            onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md shadow-blue-600/20 transition-all active:scale-95 cursor-pointer"
+            onClick={() => setAiWizardOpen(true)}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/20 transition-all active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>+ Create Bitz</span>
+            <Sparkles className="w-4 h-4 stroke-[2.5]" />
+            <span>+ Create with AI</span>
           </button>
 
           <button
@@ -442,6 +452,15 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
             <FileJson className="w-4 h-4 text-purple-600 stroke-[2.5]" />
             <span>Bulk Import (1,000+)</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 border border-stone-300 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Single Fact</span>
+          </button>
         </div>
 
         <button
@@ -454,8 +473,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         </button>
       </div>
 
-      {/* Responsive Filter & Search Grid (Guaranteed No Overflow) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 bg-stone-100/80 dark:bg-stone-850 p-3 rounded-2xl border border-stone-300 dark:border-stone-750">
+      {/* Responsive Filter & Search Grid (5-Column Responsive Layout) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-stone-100/80 dark:bg-stone-850 p-3 rounded-2xl border border-stone-300 dark:border-stone-750">
         {/* Search Input */}
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500 dark:text-stone-400" />
@@ -478,6 +497,20 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           {ALL_BITZ_TOPICS.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
+            </option>
+          ))}
+        </select>
+
+        {/* CEFR Level Filter */}
+        <select
+          value={selectedCefrLevel}
+          onChange={(e) => setSelectedCefrLevel(e.target.value)}
+          className="w-full px-3 py-2.5 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+        >
+          <option value="all">All English Levels</option>
+          {CEFR_LEVELS.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
             </option>
           ))}
         </select>
@@ -534,19 +567,19 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 No Knowledge Bitz Found
               </h4>
               <p className="text-xs font-semibold text-stone-700 dark:text-stone-300 max-w-sm mx-auto mt-1 leading-relaxed">
-                {searchQuery || selectedTopic !== 'all' || selectedStatus !== 'all' || selectedVisualStatus !== 'all'
+                {searchQuery || selectedTopic !== 'all' || selectedStatus !== 'all' || selectedVisualStatus !== 'all' || selectedCefrLevel !== 'all'
                   ? 'No facts match your current search and filter criteria.'
-                  : 'Start building your microlearning catalogue by creating your first fact or bulk importing records.'}
+                  : 'Start building your microlearning catalogue by creating facts with AI or bulk importing records.'}
               </p>
             </div>
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
               <button
                 type="button"
-                onClick={handleOpenCreate}
-                className="px-4 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setAiWizardOpen(true)}
+                className="px-5 py-2.5 bg-[#026fc3] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>+ Create Bitz</span>
+                <Sparkles className="w-4 h-4 stroke-[2.5]" />
+                <span>+ Create with AI</span>
               </button>
               <button
                 type="button"
@@ -560,6 +593,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 <FileJson className="w-4 h-4 text-purple-600 stroke-[2.5]" />
                 <span>Bulk Import</span>
               </button>
+              <button
+                type="button"
+                onClick={handleOpenCreate}
+                className="px-4 py-2.5 bg-stone-100 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Single Fact</span>
+              </button>
             </div>
           </div>
         ) : (
@@ -571,6 +612,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                   <th className="p-3.5">Image</th>
                   <th className="p-3.5">Title & Short Fact</th>
                   <th className="p-3.5">Topic</th>
+                  <th className="p-3.5">CEFR</th>
                   <th className="p-3.5">Diff</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5 text-right">Actions</th>
@@ -635,6 +677,13 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                             style={{ backgroundColor: topic.color }}
                           />
                           {topic.name}
+                        </span>
+                      </td>
+
+                      {/* CEFR Level */}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 dark:bg-blue-950/70 text-[#026fc3] dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          {bitz.cefr_level || 'B1'}
                         </span>
                       </td>
 
@@ -798,7 +847,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
                     Topic
@@ -811,6 +860,23 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                     {ALL_BITZ_TOPICS.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-stone-800 dark:text-stone-200 uppercase mb-1">
+                    CEFR Level
+                  </label>
+                  <select
+                    value={formCefrLevel}
+                    onChange={(e) => setFormCefrLevel(e.target.value as BitzCefrLevel)}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
+                  >
+                    {CEFR_LEVELS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
                       </option>
                     ))}
                   </select>
@@ -840,8 +906,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                     onChange={(e) => setFormStatus(e.target.value as BitzPublishStatus)}
                     className="w-full px-3 py-2.5 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 rounded-xl text-xs font-bold text-stone-900 dark:text-white"
                   >
-                    <option value="published">Published</option>
                     <option value="draft">Draft</option>
+                    <option value="published">Published</option>
                     <option value="review">Review</option>
                     <option value="archived">Archived</option>
                   </select>
@@ -1104,6 +1170,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI CONTENT CREATION WIZARD (5-Step) */}
+      <AiBitzCreationWizard
+        isOpen={aiWizardOpen}
+        onClose={() => setAiWizardOpen(false)}
+        onImportComplete={() => loadAdminBitz()}
+        token={token}
+      />
 
       {/* ADMIN PREVIEW MODAL */}
       {previewBitz && (

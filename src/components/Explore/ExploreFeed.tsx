@@ -194,22 +194,22 @@ export const ExploreFeed: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsCustomizeOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-blue-50/80 dark:hover:bg-stone-800 border-2 border-blue-600/30 dark:border-blue-500/40 hover:border-blue-600 rounded-2xl text-xs font-extrabold text-stone-900 dark:text-white shadow-sm transition-all active:scale-95 shrink-0"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-blue-50/80 dark:hover:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:border-blue-500 rounded-2xl text-xs font-black text-stone-900 dark:text-white shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
           title="Customize Your Feed"
         >
           <SlidersHorizontal className="w-4 h-4 text-[#026fc3] dark:text-blue-400 stroke-[2.5]" />
-          <span className="hidden sm:inline">Customize Feed</span>
+          <span className="font-black">Customize</span>
         </button>
 
         {/* My Saved Knowledge Button */}
         <button
           type="button"
           onClick={() => setIsSavedOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-amber-50/80 dark:hover:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:border-amber-400 rounded-2xl text-xs font-extrabold text-stone-900 dark:text-white shadow-sm transition-all active:scale-95 shrink-0"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-stone-900 hover:bg-amber-50/80 dark:hover:bg-stone-800 border border-stone-300 dark:border-stone-700 hover:border-amber-400 rounded-2xl text-xs font-black text-stone-900 dark:text-white shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
           title="My Saved Knowledge"
         >
           <Bookmark className="w-4 h-4 text-amber-500 fill-amber-500/30 stroke-[2.5]" />
-          <span className="hidden sm:inline">Saved</span>
+          <span className="font-black">Saved</span>
         </button>
       </div>
 

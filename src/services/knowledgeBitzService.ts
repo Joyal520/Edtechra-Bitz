@@ -293,6 +293,7 @@ export const knowledgeBitzService = {
     topic?: string;
     status?: string;
     visualStatus?: string;
+    cefrLevel?: string;
     page?: number;
     limit?: number;
   } = {}, token?: string | null): Promise<{
@@ -306,6 +307,7 @@ export const knowledgeBitzService = {
     if (filters.topic) query.set('topic', filters.topic);
     if (filters.status) query.set('status', filters.status);
     if (filters.visualStatus) query.set('visualStatus', filters.visualStatus);
+    if (filters.cefrLevel && filters.cefrLevel !== 'all') query.set('cefrLevel', filters.cefrLevel);
     if (filters.page) query.set('page', String(filters.page));
     if (filters.limit) query.set('limit', String(filters.limit));
 
@@ -354,14 +356,14 @@ export const knowledgeBitzService = {
     return true;
   },
 
-  async bulkImport(items: any[], token?: string | null): Promise<BitzBulkImportResult> {
+  async bulkImport(items: any[], token?: string | null, cefrLevel?: string): Promise<BitzBulkImportResult> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${ADMIN_API_BASE}/bulk-import`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ items })
+      body: JSON.stringify({ items, cefrLevel })
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to bulk import facts.');

@@ -10,6 +10,8 @@ export type BitzPublishStatus = 'draft' | 'review' | 'published' | 'archived';
 
 export type BitzLearningStatus = 'unseen' | 'seen' | 'opened' | 'read' | 'learned';
 
+export type BitzCefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
 export interface BitzQuizData {
   question: string;
   options: string[];
@@ -37,6 +39,8 @@ export interface KnowledgeBitzItem {
   category: string; // e.g. 'Science & Nature'
   sub_topic?: string | null;
   difficulty: BitzDifficulty;
+  cefr_level: BitzCefrLevel; // CEFR English proficiency (A1-C2)
+  content_hash?: string | null; // SHA-256 for deduplication
   reading_time_sec: number; // default 30
   
   // Media & Visuals
@@ -78,6 +82,7 @@ export interface CreateKnowledgeBitzInput {
   category?: string;
   sub_topic?: string;
   difficulty?: BitzDifficulty;
+  cefr_level?: BitzCefrLevel;
   reading_time_sec?: number;
   visual_url?: string;
   visual_object_key?: string;
@@ -125,6 +130,7 @@ export interface BitzBulkImportRecord {
   category?: string;
   sub_topic?: string;
   difficulty?: BitzDifficulty;
+  cefr_level?: BitzCefrLevel;
   source_citation?: string;
   quiz?: BitzQuizData;
   vocabulary?: BitzVocabularyWord[];

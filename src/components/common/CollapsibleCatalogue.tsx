@@ -77,7 +77,7 @@ export const CollapsibleCatalogue: React.FC<CollapsibleCatalogueProps> = ({
     <section className={`bg-white dark:bg-stone-900 border border-stone-300/90 dark:border-stone-800 rounded-3xl overflow-hidden shadow-sm transition-all ${className}`}>
       
       {/* Catalogue Header Bar */}
-      <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-stone-100/80 via-white to-slate-100/70 dark:from-stone-850 dark:via-stone-900 dark:to-stone-850 border-b border-stone-200 dark:border-stone-800">
+      <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-50/95 dark:bg-stone-850 border-b border-stone-300 dark:border-stone-800">
         
         {/* Title & Count Badge */}
         <div className="flex items-center gap-3">
