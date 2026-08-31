@@ -14459,8 +14459,7 @@ app.get('/api/bitz/saved', async (req, res) => {
 app.get('/api/bitz/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const all = knowledgeBitzService.getLocalBitz();
-    const bitz = all.find(b => b.id === id || b.bitz_code === id);
+    const bitz = await knowledgeBitzService.getBitzById(id, serverSupabase);
     if (!bitz) return res.status(404).json({ success: false, error: 'Knowledge Bitz not found.' });
     return res.json({ success: true, bitz });
   } catch (err) {
@@ -14549,94 +14548,176 @@ function isAuthorizedAdmin(authData, req) {
 
 // 10. GET /api/admin/bitz - Admin catalogue list & stats
 app.get('/api/admin/bitz', async (req, res) => {
+  const method = 'GET';
+  const route = '/api/admin/bitz';
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
-    const result = await knowledgeBitzService.getAdminBitz(req.query);
+
+    const result = await knowledgeBitzService.getAdminBitz({
+      ...req.query,
+      supabaseClient: serverSupabase
+    });
+
+    console.log(`[Admin Bitz API] Successfully fetched catalogue (${result.bitz?.length || 0} items, total: ${result.total || 0})`);
     return res.json(result);
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load admin Knowledge Bitz catalogue.' });
   }
 });
 
 // 11. POST /api/admin/bitz - Admin create Bitz
 app.post('/api/admin/bitz', async (req, res) => {
+  const method = 'POST';
+  const route = '/api/admin/bitz';
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
-    const created = await knowledgeBitzService.createBitz(req.body, authData?.user?.id, serverSupabase);
+
+    const created = await knowledgeBitzService.createBitz(req.body, authData.user.id, serverSupabase);
     return res.json({ success: true, bitz: created });
   } catch (err) {
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
     return res.status(400).json({ success: false, error: err.message });
   }
 });
 
 // 12. PUT /api/admin/bitz/:id - Admin update Bitz
 app.put('/api/admin/bitz/:id', async (req, res) => {
+  const method = 'PUT';
+  const route = `/api/admin/bitz/${req.params.id}`;
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
+
     const updated = await knowledgeBitzService.updateBitz(req.params.id, req.body, serverSupabase);
     return res.json({ success: true, bitz: updated });
   } catch (err) {
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
     return res.status(400).json({ success: false, error: err.message });
   }
 });
 
 // 13. DELETE /api/admin/bitz/:id - Admin delete Bitz
 app.delete('/api/admin/bitz/:id', async (req, res) => {
+  const method = 'DELETE';
+  const route = `/api/admin/bitz/${req.params.id}`;
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
+
     await knowledgeBitzService.deleteBitz(req.params.id, serverSupabase);
     return res.json({ success: true, message: 'Bitz deleted successfully.' });
   } catch (err) {
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // 14. POST /api/admin/bitz/bulk-import - Admin bulk import (1,000+ facts)
 app.post('/api/admin/bitz/bulk-import', async (req, res) => {
+  const method = 'POST';
+  const route = '/api/admin/bitz/bulk-import';
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
+
     const items = req.body.items || [];
     const cefrLevel = req.body.cefrLevel || null;
-    const result = await knowledgeBitzService.bulkImportBitz(items, authData?.user?.id, serverSupabase, cefrLevel);
+    const result = await knowledgeBitzService.bulkImportBitz(items, authData.user.id, serverSupabase, cefrLevel);
     return res.json({ success: true, ...result });
   } catch (err) {
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // 15. POST /api/admin/bitz/:id/generate-image - Gemini AI Image generation
 app.post('/api/admin/bitz/:id/generate-image', async (req, res) => {
+  const method = 'POST';
+  const route = `/api/admin/bitz/${req.params.id}/generate-image`;
   try {
     const authData = await verifyAuthUser(req);
-    if (!isAuthorizedAdmin(authData, req)) {
+    const userId = authData?.user?.id || 'unauthenticated';
+    const isUserAdmin = isAuthorizedAdmin(authData, req);
+
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+
+    if (!authData || !authData.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
+    }
+
+    if (!isUserAdmin) {
       return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
     }
-    const all = knowledgeBitzService.getLocalBitz();
-    const bitz = all.find(b => b.id === req.params.id || b.bitz_code === req.params.id);
+
+    const bitz = await knowledgeBitzService.getBitzById(req.params.id, serverSupabase);
     if (!bitz) return res.status(404).json({ success: false, error: 'Knowledge Bitz not found.' });
 
-    const genResult = await knowledgeBitzService.generateBitzVisualWithGemini(bitz, req.body);
+    const genResult = await knowledgeBitzService.generateBitzVisualWithGemini(bitz, req.body, serverSupabase);
     if (!genResult.success) {
       return res.status(400).json(genResult);
     }
 
     return res.json(genResult);
   } catch (err) {
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

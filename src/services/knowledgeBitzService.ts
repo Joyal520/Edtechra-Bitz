@@ -315,7 +315,14 @@ export const knowledgeBitzService = {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${ADMIN_API_BASE}?${query.toString()}`, { headers });
-    if (!res.ok) throw new Error('Failed to load admin Knowledge Bitz catalogue.');
+    if (!res.ok) {
+      let serverErrorMsg = 'Failed to load admin Knowledge Bitz catalogue.';
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) serverErrorMsg = errJson.error;
+      } catch (e) {}
+      throw new Error(serverErrorMsg);
+    }
     return await res.json();
   },
 

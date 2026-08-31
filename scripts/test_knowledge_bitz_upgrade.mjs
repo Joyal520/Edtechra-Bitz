@@ -63,9 +63,10 @@ async function runAuditSuite() {
   // TEST 2: BULK IMPORT (20 REALISTIC RECORDS AS DRAFT)
   // --------------------------------------------------------------------------
   console.log('\n--- 2. Testing Bulk Import Pipeline (20 Records) ---');
+  const runId = Date.now();
   const batchRecords = [
     {
-      title: 'Why Do We Yawn When Others Yawn? Mirror Neurons',
+      title: `Why Do We Yawn When Others Yawn? Mirror Neurons (${runId})`,
       short_fact: 'Contagious yawning is linked to social empathy and brain temperature regulation.',
       reading_text: 'Contagious yawning is a subconscious social phenomenon driven by mirror neurons in the motor cortex. Studies show that individuals with higher empathy scores yawn more readily in response to others. Yawning also brings a rush of cool air into nasal passages, lowering brain temperature.',
       topic_id: 'psychology',
@@ -73,7 +74,7 @@ async function runAuditSuite() {
       difficulty: 'Easy'
     },
     {
-      title: 'The Great Barrier Reef Is Visible From Space',
+      title: `The Great Barrier Reef Is Visible From Space (${runId})`,
       short_fact: 'Stretching over 2,300 kilometers, it is the largest living structure on Earth.',
       reading_text: 'Composed of billions of tiny coral polyps, the Great Barrier Reef covers an area larger than Italy. It hosts thousands of species of fish, mollusks, and marine turtles. The biological calcium carbonate matrix reflects sunlight, making it clearly distinguishable from low Earth orbit.',
       topic_id: 'nature',
@@ -81,7 +82,7 @@ async function runAuditSuite() {
       difficulty: 'Easy'
     },
     {
-      title: 'Quantum Entanglement: Spooky Action at a Distance',
+      title: `Quantum Entanglement: Spooky Action at a Distance (${runId})`,
       short_fact: 'Two entangled particles instantaneously influence each other across light years.',
       reading_text: 'When two subatomic particles become quantum entangled, the quantum state of one instantaneously determines the state of the other, regardless of distance. Albert Einstein famously called this spooky action at a distance because it seemed to violate the cosmic speed limit of light.',
       topic_id: 'physics',
@@ -89,7 +90,7 @@ async function runAuditSuite() {
       difficulty: 'Hard'
     },
     {
-      title: 'Invalid Too Short Reading',
+      title: `Invalid Too Short Reading (${runId})`,
       short_fact: 'This fact has an invalid reading text length.',
       reading_text: 'Too short text.',
       topic_id: 'biology'
@@ -99,7 +100,7 @@ async function runAuditSuite() {
   // Add 16 more valid records to reach 20
   for (let i = 1; i <= 16; i++) {
     batchRecords.push({
-      title: `Microlearning Insight #${i}: The Power of Spaced Repetition`,
+      title: `Microlearning Insight #${i}: The Power of Spaced Repetition (${runId})`,
       short_fact: `Spacing study sessions exponentially boosts retention across long intervals.`,
       reading_text: `Spaced repetition works by systematically reviewing material at increasing intervals right before the memory fades. Hermann Ebbinghaus discovered the forgetting curve in 1885, proving that active recall resets retention to 100 percent. Modern algorithms optimize these review intervals for maximum learning efficiency.`,
       topic_id: i % 2 === 0 ? 'productivity' : 'ai',

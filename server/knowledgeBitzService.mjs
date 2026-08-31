@@ -21,9 +21,13 @@ const BOOKMARKS_CACHE_FILE = path.join(DATA_DIR, 'bitz_bookmarks_cache.json');
 const LIKES_CACHE_FILE = path.join(DATA_DIR, 'bitz_likes_cache.json');
 const HISTORY_CACHE_FILE = path.join(DATA_DIR, 'bitz_history_cache.json');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Ensure data directory exists (safely catch on read-only serverless filesystems)
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Read-only filesystem (e.g. Vercel serverless environment)
 }
 
 // Initial default seed Bitz for instantaneous local availability
@@ -268,12 +272,20 @@ const INITIAL_SEED_BITZ = [
   }
 ];
 
+// In-memory memory store for serverless/read-only filesystems
+const inMemoryStore = new Map();
+
 // Helper: Read JSON cache
 function readJson(file, defaultData = []) {
+  if (inMemoryStore.has(file)) {
+    return inMemoryStore.get(file);
+  }
   try {
     if (fs.existsSync(file)) {
       const data = fs.readFileSync(file, 'utf8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      inMemoryStore.set(file, parsed);
+      return parsed;
     }
   } catch (e) {
     console.warn(`[KnowledgeBitzService] Error reading ${file}:`, e.message);
@@ -283,16 +295,21 @@ function readJson(file, defaultData = []) {
 
 // Helper: Write JSON cache
 function writeJson(file, data) {
+  inMemoryStore.set(file, data);
   try {
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
   } catch (e) {
-    console.warn(`[KnowledgeBitzService] Error writing ${file}:`, e.message);
+    // Expected on read-only environments like Vercel serverless
   }
 }
 
 // Initialize seed data if cache file is empty
-if (!fs.existsSync(BITZ_CACHE_FILE)) {
-  writeJson(BITZ_CACHE_FILE, INITIAL_SEED_BITZ);
+try {
+  if (!fs.existsSync(BITZ_CACHE_FILE)) {
+    writeJson(BITZ_CACHE_FILE, INITIAL_SEED_BITZ);
+  }
+} catch (e) {
+  inMemoryStore.set(BITZ_CACHE_FILE, INITIAL_SEED_BITZ);
 }
 
 class KnowledgeBitzService {
@@ -816,7 +833,7 @@ class KnowledgeBitzService {
   // --------------------------------------------------------------------------
   // GEMINI AI IMAGE GENERATION FOR KNOWLEDGE BITZ
   // --------------------------------------------------------------------------
-  async generateBitzVisualWithGemini(bitz, options = {}) {
+  async generateBitzVisualWithGemini(bitz, options = {}, supabaseClient = null) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || apiKey.trim() === '') {
       return { success: false, error: 'GEMINI_API_KEY is not configured in server environment.' };
@@ -948,6 +965,35 @@ STRICT RESTRICTIONS:
 
     try {
       const uploadResult = await putBinaryContent(objectKey, optimizedBuffer, 'image/webp');
+
+      // If supabaseClient is available, persist visual_url and visual_status to Supabase
+      if (supabaseClient && bitz.id) {
+        try {
+          await supabaseClient
+            .from('knowledge_bitz')
+            .update({
+              visual_url: uploadResult.publicUrl,
+              visual_object_key: objectKey,
+              visual_status: 'ready',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', bitz.id);
+        } catch (dbErr) {
+          console.warn('[KnowledgeBitzService] Could not update Supabase with generated visual:', dbErr.message);
+        }
+      }
+
+      // Also update local cache
+      const allBitz = this.getLocalBitz();
+      const idx = allBitz.findIndex(b => b.id === bitz.id || b.bitz_code === bitz.bitz_code);
+      if (idx !== -1) {
+        allBitz[idx].visual_url = uploadResult.publicUrl;
+        allBitz[idx].visual_object_key = objectKey;
+        allBitz[idx].visual_status = 'ready';
+        allBitz[idx].updated_at = new Date().toISOString();
+        this.saveLocalBitz(allBitz);
+      }
+
       return {
         success: true,
         publicUrl: uploadResult.publicUrl,
@@ -965,9 +1011,143 @@ STRICT RESTRICTIONS:
   }
 
   // --------------------------------------------------------------------------
-  // ADMIN CRUD & BULK FACT IMPORT
+  // ADMIN CRUD, GET BY ID & BULK FACT IMPORT
   // --------------------------------------------------------------------------
-  async getAdminBitz({ search = '', topic = 'all', status = 'all', visualStatus = 'all', cefrLevel = 'all', page = 1, limit = 50 }) {
+  async getBitzById(id, supabaseClient = null) {
+    if (!id) return null;
+
+    if (supabaseClient) {
+      try {
+        // Try UUID match or bitz_code match
+        let query = supabaseClient.from('knowledge_bitz').select('*');
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (isUuid) {
+          query = query.eq('id', id);
+        } else {
+          query = query.eq('bitz_code', id);
+        }
+
+        const { data, error } = await query.maybeSingle();
+        if (!error && data) return data;
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase getBitzById notice:', e.message);
+      }
+    }
+
+    const all = this.getLocalBitz();
+    return all.find(b => b.id === id || b.bitz_code === id) || null;
+  }
+
+  async getAdminBitz({
+    search = '',
+    topic = 'all',
+    status = 'all',
+    visualStatus = 'all',
+    cefrLevel = 'all',
+    page = 1,
+    limit = 50,
+    supabaseClient = null
+  }) {
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    if (supabaseClient) {
+      try {
+        let query = supabaseClient
+          .from('knowledge_bitz')
+          .select('*', { count: 'exact' });
+
+        if (status && status !== 'all') {
+          query = query.eq('status', status);
+        }
+
+        if (topic && topic !== 'all') {
+          query = query.eq('topic_id', topic);
+        }
+
+        if (visualStatus && visualStatus !== 'all') {
+          query = query.eq('visual_status', visualStatus);
+        }
+
+        if (cefrLevel && cefrLevel !== 'all') {
+          query = query.eq('cefr_level', cefrLevel);
+        }
+
+        if (search && search.trim() !== '') {
+          const s = search.trim();
+          query = query.or(`title.ilike.%${s}%,short_fact.ilike.%${s}%,bitz_code.ilike.%${s}%,category.ilike.%${s}%,reading_text.ilike.%${s}%`);
+        }
+
+        query = query.order('created_at', { ascending: false }).range(offset, offset + limitNum - 1);
+
+        const { data: bitzData, count: totalCount, error: bitzError } = await query;
+
+        if (bitzError) {
+          console.error('[KnowledgeBitzService] Supabase getAdminBitz query error:', bitzError);
+          throw bitzError;
+        }
+
+        // Compute admin stats via Supabase exact counts
+        const [
+          totalRes,
+          pubRes,
+          draftRes,
+          readyImgRes,
+          missingImgRes,
+          genImgRes,
+          failedImgRes,
+          aggregatesRes
+        ] = await Promise.all([
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('status', 'published'),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'ready'),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'missing'),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'generating'),
+          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'failed'),
+          supabaseClient.from('knowledge_bitz').select('completions_count, likes_count, saves_count')
+        ]);
+
+        let totalCompletions = 0;
+        let totalLikes = 0;
+        let totalSaves = 0;
+        if (aggregatesRes.data && Array.isArray(aggregatesRes.data)) {
+          for (const row of aggregatesRes.data) {
+            totalCompletions += Number(row.completions_count) || 0;
+            totalLikes += Number(row.likes_count) || 0;
+            totalSaves += Number(row.saves_count) || 0;
+          }
+        }
+
+        const stats = {
+          totalBitz: totalRes.count || 0,
+          publishedCount: pubRes.count || 0,
+          draftCount: draftRes.count || 0,
+          readyImageCount: readyImgRes.count || 0,
+          missingImageCount: missingImgRes.count || 0,
+          generatingImageCount: genImgRes.count || 0,
+          failedImageCount: failedImgRes.count || 0,
+          totalCompletions,
+          totalLikes,
+          totalSaves
+        };
+
+        return {
+          success: true,
+          bitz: bitzData || [],
+          stats,
+          total: totalCount !== null && totalCount !== undefined ? totalCount : (bitzData?.length || 0),
+          page: pageNum,
+          limit: limitNum
+        };
+      } catch (err) {
+        console.error('[KnowledgeBitzService] Supabase getAdminBitz error:', err.message);
+        throw err;
+      }
+    }
+
+    // Local in-memory / JSON fallback
     let items = this.getLocalBitz();
 
     if (search && search.trim() !== '') {
@@ -997,8 +1177,8 @@ STRICT RESTRICTIONS:
     }
 
     const total = items.length;
-    const startIndex = (page - 1) * limit;
-    const paginated = items.slice(startIndex, startIndex + limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = items.slice(startIndex, startIndex + limitNum);
 
     // Compute admin stats
     const allItems = this.getLocalBitz();
@@ -1020,8 +1200,8 @@ STRICT RESTRICTIONS:
       bitz: paginated,
       stats,
       total,
-      page,
-      limit
+      page: pageNum,
+      limit: limitNum
     };
   }
 
@@ -1030,7 +1210,7 @@ STRICT RESTRICTIONS:
       throw new Error('Title, Short Fact, and Reading Text are strictly required.');
     }
 
-    const readingWords = input.reading_text.trim().split(/\s+/).length;
+    const readingWords = input.reading_text.trim().split(/\s+/).filter(Boolean).length;
     if (readingWords < 40 || readingWords > 250) {
       throw new Error(`Reading explanation must be approx 80-120 words (received ${readingWords} words).`);
     }
@@ -1045,19 +1225,15 @@ STRICT RESTRICTIONS:
       }
     }
 
-    const allBitz = this.getLocalBitz();
-    const nextSeq = allBitz.length + 1;
-    const bitzCode = input.bitz_code || `B${String(nextSeq).padStart(6, '0')}`;
-    const id = crypto.randomUUID();
-
     const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
     const cefrLevel = input.cefr_level && validCefr.includes(input.cefr_level) ? input.cefr_level : 'B1';
     const hashInput = `${input.title.trim().toLowerCase()}|${input.short_fact.trim().toLowerCase()}`;
     const contentHash = await this._computeHash(hashInput);
 
+    const id = input.id || crypto.randomUUID();
+
     const newBitz = {
       id,
-      bitz_code: bitzCode,
       title: input.title.trim(),
       short_fact: input.short_fact.trim(),
       reading_text: input.reading_text.trim(),
@@ -1082,27 +1258,107 @@ STRICT RESTRICTIONS:
       views_count: 0,
       completions_count: 0,
       status: targetStatus,
-      created_by: userId,
+      created_by: userId || null,
       published_at: targetStatus === 'published' ? new Date().toISOString() : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
-    allBitz.unshift(newBitz);
-    this.saveLocalBitz(allBitz);
-
-    if (supabaseClient) {
-      try {
-        await supabaseClient.from('knowledge_bitz').insert([newBitz]);
-      } catch (e) {
-        console.warn('[KnowledgeBitzService] Supabase insert notice:', e.message);
-      }
+    if (input.bitz_code) {
+      newBitz.bitz_code = input.bitz_code;
     }
 
+    if (supabaseClient) {
+      let { data, error } = await supabaseClient
+        .from('knowledge_bitz')
+        .insert([newBitz])
+        .select()
+        .single();
+
+      if (error && error.code === '23503') {
+        // Foreign key violation on created_by (e.g. mock admin or test user): retry with created_by null
+        newBitz.created_by = null;
+        const retry = await supabaseClient
+          .from('knowledge_bitz')
+          .insert([newBitz])
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (error) {
+        console.error('[KnowledgeBitzService] Supabase insert error:', error);
+        throw new Error(error.message || 'Failed to insert Knowledge Bitz into Supabase.');
+      }
+      return data;
+    }
+
+    // Local fallback
+    const allBitz = this.getLocalBitz();
+    if (!newBitz.bitz_code) {
+      newBitz.bitz_code = `B${String(allBitz.length + 1).padStart(6, '0')}`;
+    }
+    allBitz.unshift(newBitz);
+    this.saveLocalBitz(allBitz);
     return newBitz;
   }
 
   async updateBitz(id, updates, supabaseClient = null) {
+    if (supabaseClient) {
+      // Fetch existing record
+      let targetId = id;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      
+      let query = supabaseClient.from('knowledge_bitz').select('*');
+      if (isUuid) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('bitz_code', id);
+      }
+
+      const { data: current, error: fetchErr } = await query.maybeSingle();
+      if (fetchErr || !current) {
+        throw new Error('Knowledge Bitz not found.');
+      }
+      targetId = current.id;
+
+      const targetStatus = updates.status || current.status;
+      const effectiveVisualStatus = updates.visual_url 
+        ? 'ready' 
+        : (updates.visual_status !== undefined ? updates.visual_status : current.visual_status);
+      const effectiveVisualUrl = updates.visual_url !== undefined ? updates.visual_url : current.visual_url;
+
+      // Strict validation: Bitz without ready image CANNOT be published
+      if (targetStatus === 'published') {
+        if (effectiveVisualStatus !== 'ready' || !effectiveVisualUrl) {
+          throw new Error('Cannot publish Knowledge Bitz without a ready image. Attach an image first.');
+        }
+      }
+
+      const cleanUpdates = {
+        ...updates,
+        visual_status: effectiveVisualStatus,
+        published_at: targetStatus === 'published' && !current.published_at ? new Date().toISOString() : (updates.published_at !== undefined ? updates.published_at : current.published_at),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: updated, error: updateErr } = await supabaseClient
+        .from('knowledge_bitz')
+        .update(cleanUpdates)
+        .eq('id', targetId)
+        .select()
+        .single();
+
+      if (updateErr) {
+        console.error('[KnowledgeBitzService] Supabase update error:', updateErr);
+        throw new Error(updateErr.message || 'Failed to update Knowledge Bitz in Supabase.');
+      }
+
+      return updated;
+    }
+
+    // Local fallback
     const allBitz = this.getLocalBitz();
     const idx = allBitz.findIndex(b => b.id === id || b.bitz_code === id);
     if (idx === -1) throw new Error('Knowledge Bitz not found.');
@@ -1114,7 +1370,6 @@ STRICT RESTRICTIONS:
       : (updates.visual_status !== undefined ? updates.visual_status : current.visual_status);
     const effectiveVisualUrl = updates.visual_url !== undefined ? updates.visual_url : current.visual_url;
 
-    // Strict validation: Bitz without ready image CANNOT be published
     if (targetStatus === 'published') {
       if (effectiveVisualStatus !== 'ready' || !effectiveVisualUrl) {
         throw new Error('Cannot publish Knowledge Bitz without a ready image. Attach an image first.');
@@ -1131,32 +1386,30 @@ STRICT RESTRICTIONS:
 
     allBitz[idx] = updated;
     this.saveLocalBitz(allBitz);
-
-    if (supabaseClient) {
-      try {
-        await supabaseClient.from('knowledge_bitz').update(updated).eq('id', current.id);
-      } catch (e) {
-        console.warn('[KnowledgeBitzService] Supabase update notice:', e.message);
-      }
-    }
-
     return updated;
   }
 
   async deleteBitz(id, supabaseClient = null) {
-    let allBitz = this.getLocalBitz();
-    const target = allBitz.find(b => b.id === id || b.bitz_code === id);
-    allBitz = allBitz.filter(b => b.id !== id && b.bitz_code !== id);
-    this.saveLocalBitz(allBitz);
-
-    if (supabaseClient && target) {
-      try {
-        await supabaseClient.from('knowledge_bitz').delete().eq('id', target.id);
-      } catch (e) {
-        console.warn('[KnowledgeBitzService] Supabase delete notice:', e.message);
+    if (supabaseClient) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let deleteQuery = supabaseClient.from('knowledge_bitz').delete();
+      if (isUuid) {
+        deleteQuery = deleteQuery.eq('id', id);
+      } else {
+        deleteQuery = deleteQuery.eq('bitz_code', id);
       }
+
+      const { error } = await deleteQuery;
+      if (error) {
+        console.error('[KnowledgeBitzService] Supabase delete error:', error);
+        throw new Error(error.message || 'Failed to delete Knowledge Bitz.');
+      }
+      return true;
     }
 
+    let allBitz = this.getLocalBitz();
+    allBitz = allBitz.filter(b => b.id !== id && b.bitz_code !== id);
+    this.saveLocalBitz(allBitz);
     return true;
   }
 
@@ -1171,12 +1424,27 @@ STRICT RESTRICTIONS:
 
     const imported = [];
     const errors = [];
-    const allBitz = this.getLocalBitz();
-    let currentSeq = allBitz.length + 1;
-
-    // Build existing content hash set for deduplication
-    const existingHashes = new Set(allBitz.filter(b => b.content_hash).map(b => b.content_hash));
     const batchHashes = new Set();
+
+    // Fetch existing hashes from Supabase or local to prevent duplicate insertions
+    let existingHashes = new Set();
+    if (supabaseClient) {
+      try {
+        const { data: hashRows } = await supabaseClient
+          .from('knowledge_bitz')
+          .select('content_hash')
+          .not('content_hash', 'is', null);
+
+        if (hashRows && Array.isArray(hashRows)) {
+          existingHashes = new Set(hashRows.map(r => r.content_hash).filter(Boolean));
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Could not fetch existing hashes from Supabase:', e.message);
+      }
+    } else {
+      const allBitz = this.getLocalBitz();
+      existingHashes = new Set(allBitz.filter(b => b.content_hash).map(b => b.content_hash));
+    }
 
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
@@ -1206,7 +1474,6 @@ STRICT RESTRICTIONS:
         continue;
       }
 
-      // Content hash for deduplication
       const hashInput = `${String(row.title).trim().toLowerCase()}|${String(row.short_fact).trim().toLowerCase()}`;
       const contentHash = await this._computeHash(hashInput);
 
@@ -1220,15 +1487,12 @@ STRICT RESTRICTIONS:
       }
       batchHashes.add(contentHash);
 
-      // Resolve CEFR level: per-record override > batch-level > default B1
       const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
       const recordCefr = row.cefr_level && validCefr.includes(row.cefr_level) ? row.cefr_level : null;
       const resolvedCefr = recordCefr || (cefrLevel && validCefr.includes(cefrLevel) ? cefrLevel : 'B1');
 
-      const bitzCode = `B${String(currentSeq++).padStart(6, '0')}`;
       const newBitz = {
         id: crypto.randomUUID(),
-        bitz_code: bitzCode,
         title: String(row.title).trim(),
         short_fact: String(row.short_fact).trim(),
         reading_text: readingText,
@@ -1258,20 +1522,49 @@ STRICT RESTRICTIONS:
         updated_at: new Date().toISOString()
       };
 
-      allBitz.push(newBitz);
       imported.push(newBitz);
       existingHashes.add(contentHash);
     }
 
-    this.saveLocalBitz(allBitz);
-
     if (supabaseClient && imported.length > 0) {
-      try {
-        await supabaseClient.from('knowledge_bitz').insert(imported);
-      } catch (e) {
-        console.warn('[KnowledgeBitzService] Supabase bulk insert notice:', e.message);
+      let { data: insertedData, error: insertError } = await supabaseClient
+        .from('knowledge_bitz')
+        .insert(imported)
+        .select();
+
+      if (insertError && insertError.code === '23503') {
+        // Retry with created_by null in case mock admin / test user ID is not in auth.users
+        imported.forEach(b => { b.created_by = null; });
+        const retry = await supabaseClient
+          .from('knowledge_bitz')
+          .insert(imported)
+          .select();
+        insertedData = retry.data;
+        insertError = retry.error;
       }
+
+      if (insertError) {
+        console.error('[KnowledgeBitzService] Supabase bulk insert error:', insertError);
+        throw new Error(insertError.message || 'Failed to bulk insert Knowledge Bitz into Supabase.');
+      }
+
+      return {
+        totalSubmitted: items.length,
+        importedCount: insertedData ? insertedData.length : imported.length,
+        failedCount: errors.length,
+        errors,
+        imported: insertedData || imported
+      };
     }
+
+    // Local in-memory fallback
+    const allBitz = this.getLocalBitz();
+    let currentSeq = allBitz.length + 1;
+    for (const b of imported) {
+      b.bitz_code = `B${String(currentSeq++).padStart(6, '0')}`;
+      allBitz.push(b);
+    }
+    this.saveLocalBitz(allBitz);
 
     return {
       totalSubmitted: items.length,
