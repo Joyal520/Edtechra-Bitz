@@ -12,7 +12,9 @@ import {
   XCircle,
   Check,
   X,
-  Send
+  Send,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { CourseQuestion } from '@/types/courseStudio';
 import { courseAudio } from '@/utils/courseAudio';
@@ -239,34 +241,19 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full space-y-4 select-none"
+      className="w-full space-y-3 select-none"
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {/* Subtitle / Hint Header */}
-      {!isLocked && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#026fc3]" />
-            <span className="uppercase tracking-wider text-[11px] font-bold text-[#026fc3] reader-meta">
-              Arrange the Story in Chronological Order
-            </span>
-          </div>
-          <span className="text-[11px] opacity-80 reader-meta">
-            Drag cards or tap <span className="font-bold text-[#026fc3]">↑ / ↓</span> to order
-          </span>
-        </div>
-      )}
-
       {/* DRAGGABLE & ACCESSIBLE SENTENCE BLOCKS */}
-      <div className="w-full space-y-2.5">
+      <div className="w-full space-y-2">
         {items.map((item, index) => {
           const isBeingDragged = draggedIndex === index;
           const isDropTarget = dropTargetIndex === index && draggedIndex !== index;
 
-          let cardStyle = 'surface-answer-option text-slate-800 dark:text-slate-100 shadow-2xs';
-          let numBadgeStyle = 'bg-sky-50 dark:bg-slate-800 text-[#026fc3] dark:text-sky-300 border border-sky-200/80 dark:border-slate-700';
+          let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
+          let numBadgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-accent border border-[var(--theme-border-subtle)]';
 
           if (isLocked) {
             if (feedback?.isCorrect) {
@@ -286,9 +273,9 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
               
               {/* Drop Target Indicator Line */}
               {isDropTarget && (
-                <div className="w-full py-1.5 flex items-center justify-center gap-2 animate-pulse">
+                <div className="w-full py-1 flex items-center justify-center gap-2 animate-pulse">
                   <div className="h-0.5 flex-1 bg-[var(--theme-accent)] rounded-full" />
-                  <span className="text-[10px] font-black uppercase text-theme-accent px-2.5 py-0.5 bg-[var(--theme-accent-soft)] rounded-full border border-[var(--theme-border-subtle)] shadow-2xs">
+                  <span className="text-[10px] font-black uppercase text-theme-accent px-2 py-0.5 bg-[var(--theme-accent-soft)] rounded-full border border-[var(--theme-border-subtle)] shadow-2xs reader-badge">
                     Drop Here
                   </span>
                   <div className="h-0.5 flex-1 bg-[var(--theme-accent)] rounded-full" />
@@ -306,34 +293,34 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                 tabIndex={isLocked ? -1 : 0}
                 onKeyDown={e => handleKeyDown(e, index)}
                 aria-label={`Event ${index + 1}: ${item.text}`}
-                className={`w-full min-h-[58px] p-3 sm:p-4 rounded-2xl border text-left reader-option leading-relaxed transition-all flex items-center gap-3 box-border ${
-                  isLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:shadow-xs'
+                className={`w-full min-h-[52px] p-2.5 sm:p-3.5 rounded-2xl border text-left reader-option leading-relaxed transition-all flex items-center gap-2 sm:gap-3 box-border ${
+                  isLocked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:shadow-xs hover:border-[var(--theme-accent)]'
                 } ${cardStyle}`}
               >
                 {/* Grip Handle Indicator */}
                 {!isLocked && (
-                  <div className="text-[var(--theme-text-subtle)] hover:text-theme-accent shrink-0 touch-none cursor-grab" title="Drag to rearrange">
-                    <GripVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <div className="text-theme-muted hover:text-theme-accent shrink-0 touch-none cursor-grab p-0.5" title="Drag to rearrange">
+                    <GripVertical className="w-4 h-4 text-theme-muted" />
                   </div>
                 )}
 
                 {/* Position Number Badge (01, 02, 03...) */}
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors shadow-2xs ${numBadgeStyle}`}>
+                <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-[11px] sm:text-xs font-black shrink-0 transition-colors shadow-2xs ${numBadgeStyle}`}>
                   {isLocked ? (
-                    feedback?.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />
+                    feedback?.isCorrect ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />
                   ) : (
                     String(index + 1).padStart(2, '0')
                   )}
                 </span>
 
-                {/* Sentence Block Text */}
-                <span className="flex-1 font-medium break-words leading-relaxed text-left reader-option text-theme-primary">
+                {/* Sentence Block Text - takes majority width */}
+                <span className="flex-1 font-medium break-words leading-relaxed text-left reader-option text-theme-primary px-1">
                   {item.text}
                 </span>
 
-                {/* Prominent, Touch-Friendly Move Up / Move Down Controls */}
+                {/* Prominent Circular Move Up / Move Down Controls */}
                 {!isLocked && (
-                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <div className="flex flex-col sm:flex-row items-center gap-1 shrink-0 ml-auto">
                     <button
                       type="button"
                       disabled={index === 0}
@@ -347,10 +334,10 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                         courseAudio.playSelectSound();
                       }}
                       aria-label="Move item up"
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl btn-theme-subtle disabled:opacity-20 cursor-pointer flex items-center justify-center transition-all shadow-2xs active:scale-95 reader-button"
+                      className="ordering-btn-control"
                       title="Move up"
                     >
-                      <span className="text-sm font-black leading-none">▲</span>
+                      <ChevronUp className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
@@ -365,10 +352,10 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
                         courseAudio.playSelectSound();
                       }}
                       aria-label="Move item down"
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl btn-theme-subtle disabled:opacity-20 cursor-pointer flex items-center justify-center transition-all shadow-2xs active:scale-95 reader-button"
+                      className="ordering-btn-control"
                       title="Move down"
                     >
-                      <span className="text-sm font-black leading-none">▼</span>
+                      <ChevronDown className="w-4 h-4" />
                     </button>
                   </div>
                 )}
@@ -382,7 +369,7 @@ export const DraggableOrderingQuestion: React.FC<Props> = ({
       {!isLocked && (
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-[11px] text-theme-muted font-medium italic text-center sm:text-left reader-meta">
-            Drag cards or use ▲ ▼ buttons to arrange before submitting.
+            Drag cards or use ↑ / ↓ buttons to rearrange before submitting.
           </p>
 
           <button

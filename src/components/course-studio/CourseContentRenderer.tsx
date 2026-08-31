@@ -254,9 +254,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       ? 'md:float-left md:w-[42%] md:max-w-[320px] md:mr-8 md:mb-6'
                       : pos === 'right'
                       ? 'md:float-right md:w-[42%] md:max-w-[320px] md:ml-8 md:mb-6'
-                      : 'max-w-[800px] mx-auto'
+                      : 'max-w-[800px] mx-auto media-breakout-mobile'
                   }`}>
-                    <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border border-sky-100 dark:border-slate-700">
+                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border-y sm:border border-sky-100 dark:border-slate-700">
                       <img
                         src={img.url}
                         alt={img.alt || img.caption || 'Story illustration'}
@@ -275,8 +275,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <FormattedLessonText text={bodyText} textScale={textScale} />
 
                 {pos === 'below' && img.url && (
-                  <figure className="w-full my-4 sm:my-6 max-w-[800px] mx-auto">
-                    <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border border-sky-100 dark:border-slate-700">
+                  <figure className="w-full my-4 sm:my-6 max-w-[800px] mx-auto media-breakout-mobile">
+                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border-y sm:border border-sky-100 dark:border-slate-700">
                       <img
                         src={img.url}
                         alt={img.alt || img.caption || 'Story illustration'}
@@ -317,9 +317,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       ? 'md:float-left md:w-[48%] md:max-w-[360px] md:mr-8 md:mb-6'
                       : pos === 'right'
                       ? 'md:float-right md:w-[48%] md:max-w-[360px] md:ml-8 md:mb-6'
-                      : 'max-w-2xl mx-auto'
+                      : 'max-w-2xl mx-auto media-breakout-mobile'
                   }`}>
-                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-slate-200 dark:border-slate-800">
+                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video border-y sm:border border-slate-200 dark:border-slate-800">
                       <iframe
                         src={embedUrl}
                         title={vid.title || 'Lesson Video'}
@@ -334,8 +334,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <FormattedLessonText text={bodyText} textScale={textScale} />
 
                 {pos === 'below' && embedUrl && (
-                  <div className="w-full my-4 sm:my-6 max-w-2xl mx-auto">
-                    <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video border border-slate-200 dark:border-slate-800">
+                  <div className="w-full my-4 sm:my-6 max-w-2xl mx-auto media-breakout-mobile">
+                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video border-y sm:border border-slate-200 dark:border-slate-800">
                       <iframe
                         src={embedUrl}
                         title={vid.title || 'Lesson Video'}
@@ -356,12 +356,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
             if (!imgContent?.url) return null;
 
             return (
-              <figure key={block.id || idx} className="w-full my-6 sm:my-8 overflow-hidden text-center">
-                <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs max-w-2xl mx-auto border border-sky-100 dark:border-slate-700">
+              <figure key={block.id || idx} className="w-full my-6 sm:my-8 overflow-hidden text-center media-breakout-mobile">
+                <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs max-w-2xl mx-auto border-y sm:border border-sky-100 dark:border-slate-700">
                   <img
                     src={imgContent.url}
                     alt={imgContent.alt || imgContent.caption || 'Course visual material'}
-                    className="w-full h-auto object-contain max-h-[500px] block"
+                    className="w-full h-auto object-contain max-h-[500px] block mx-auto"
                     loading="lazy"
                   />
                 </div>
@@ -380,8 +380,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const embedUrl = getYouTubeEmbedUrl(yt?.url || yt?.video_id);
 
             return (
-              <figure key={block.id || idx} className="w-full my-6 sm:my-8 space-y-2">
-                <div className="w-full rounded-2xl overflow-hidden bg-black shadow-md aspect-video max-w-2xl mx-auto border border-slate-200 dark:border-slate-800">
+              <figure key={block.id || idx} className="w-full my-6 sm:my-8 space-y-2 media-breakout-mobile">
+                <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video max-w-2xl mx-auto border-y sm:border border-slate-200 dark:border-slate-800">
                   <iframe
                     src={embedUrl}
                     title={yt.title || 'Lesson Video'}
@@ -430,60 +430,51 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
       {/* 2. REFINED EDITORIAL INTERACTIVE PRACTICE SECTION */}
       {validQuestions.length > 0 && (
-        <section className="w-full pt-8 sm:pt-12 border-t border-[var(--theme-border-subtle)] space-y-6 sm:space-y-8">
+        <section className="w-full pt-6 sm:pt-8 border-t border-[var(--theme-border-subtle)] space-y-5 sm:space-y-6">
           
-          {/* Editorial Practice Section Header */}
-          <div className="surface-practice-header rounded-3xl p-5 sm:p-7 space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black uppercase tracking-wider reader-badge">
-                  <Sparkles className="w-3.5 h-3.5 text-theme-accent" />
-                  <span>Interactive Practice</span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black tracking-tight text-theme-primary reader-h2">
-                  Think About the Story
-                </h3>
-                <p className="text-xs sm:text-sm text-theme-muted font-medium reader-meta">
-                  Check your understanding with {validQuestions.length} practice activities.
-                </p>
+          {/* Ultra-Compact Modern Practice Header (Zero Vertical Waste) */}
+          <div className="surface-card rounded-2xl p-3.5 sm:p-4.5 space-y-2.5 border border-[var(--theme-border-subtle)] shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[10px] sm:text-[11px] font-black uppercase tracking-wider reader-badge">
+                  <Sparkles className="w-3 h-3 text-theme-accent" />
+                  <span>Practice</span>
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-theme-secondary reader-meta">
+                  {answeredTotal} of {validQuestions.length} completed
+                </span>
               </div>
 
-              {/* Subtle Sound Toggle Control */}
-              <button
-                type="button"
-                onClick={handleToggleSound}
-                className="px-3.5 py-1.5 rounded-full btn-theme-subtle text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs reader-button"
-                title="Toggle Question Sound Effects"
-              >
-                {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-theme-accent" /> : <VolumeX className="w-3.5 h-3.5 opacity-60" />}
-                <span>{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
-              </button>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-xs sm:text-sm font-black text-theme-accent font-mono reader-meta">
+                  {Math.round((answeredTotal / validQuestions.length) * 100)}%
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[10px] sm:text-[11px] font-black border border-amber-400/30 flex items-center gap-1 reader-badge">
+                  <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span>{earnedPoints} / {totalPointsPossible} XP</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleSound}
+                  className="p-1 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-theme-secondary transition-all cursor-pointer"
+                  title="Toggle Sound Effects"
+                >
+                  {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-theme-accent" /> : <VolumeX className="w-3.5 h-3.5 opacity-60" />}
+                </button>
+              </div>
             </div>
 
-            {/* Refined Minimalist Progress Bar */}
-            <div className="pt-3 border-t border-[var(--theme-border-subtle)] space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-theme-secondary reader-meta">
-                <span>{answeredTotal} of {validQuestions.length} completed</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-theme-accent font-black">{Math.round((answeredTotal / validQuestions.length) * 100)}%</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black border border-[var(--theme-border-subtle)]">
-                    {earnedPoints} / {totalPointsPossible} pts
-                  </span>
-                </div>
-              </div>
-
-              {/* Smooth Progress Track */}
-              <div className="w-full h-2 bg-[var(--theme-surface-subtle)] rounded-full overflow-hidden border border-[var(--theme-border-subtle)]">
-                <div
-                  className="h-full bg-linear-to-r from-[#026fc3] via-[#0284c7] to-[#38bdf8] rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${(answeredTotal / validQuestions.length) * 100}%` }}
-                />
-              </div>
+            {/* Slim 4px Progress Track */}
+            <div className="w-full h-1.5 bg-[var(--theme-surface-subtle)] rounded-full overflow-hidden border border-[var(--theme-border-subtle)]">
+              <div
+                className="h-full bg-linear-to-r from-[#026fc3] via-[#0284c7] to-[#38bdf8] rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${(answeredTotal / validQuestions.length) * 100}%` }}
+              />
             </div>
           </div>
 
           {/* Interactive Question Cards Stream */}
-          <div className="w-full space-y-6 sm:space-y-8">
+          <div className="w-full space-y-5 sm:space-y-6">
             {validQuestions.map((q, qIndex) => {
               const qId = q.id;
               const feedback = localFeedback[qId];
@@ -502,12 +493,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 <div
                   key={qId || qIndex}
                   id={`question-card-${qId}`}
-                  className={`w-full rounded-3xl p-5 sm:p-7 surface-card space-y-4 transition-all box-border ${
+                  className={`w-full rounded-2xl sm:rounded-3xl p-4 sm:p-6 surface-card space-y-3.5 transition-all box-border border border-[var(--theme-border-primary)] shadow-xs ${
                     isShaking ? 'animate-shake ring-2 ring-rose-400' : ''
                   }`}
                 >
                   {/* Question Card Header */}
-                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
+                  <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[var(--theme-border-subtle)]">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge">
                         QUESTION {String(qIndex + 1).padStart(2, '0')}
@@ -531,7 +522,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   {/* 1. MULTIPLE CHOICE ANSWER CARDS                          */}
                   {/* -------------------------------------------------------- */}
                   {qType === 'multiple_choice' && (
-                    <div className="w-full space-y-2.5 pt-1">
+                    <div className="w-full space-y-2 pt-0.5">
                       {optionsList.map((optText, optIdx) => {
                         const letter = String.fromCharCode(65 + optIdx);
                         const isSelected = selectedAnswer === optText;
@@ -782,45 +773,47 @@ export const CourseContentRenderer: React.FC<Props> = ({
           {/* LESSON PRACTICE COMPLETION CARD                                  */}
           {/* ---------------------------------------------------------------- */}
           {isAllAnswered && (
-            <div className="w-full bg-linear-to-b from-sky-50/80 to-white dark:from-slate-900 dark:to-slate-950 rounded-3xl p-6 sm:p-8 border border-sky-200 dark:border-slate-800 shadow-md text-center space-y-5 animate-in fade-in zoom-in-95 duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-[#026fc3] text-white flex items-center justify-center mx-auto shadow-md">
-                <Award className="w-7 h-7" />
+            <div className="w-full surface-elevated rounded-3xl p-5 sm:p-7 border border-[var(--theme-border-primary)] shadow-md text-center space-y-4 animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-12 h-12 rounded-2xl bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] flex items-center justify-center mx-auto shadow-md">
+                <Award className="w-6 h-6" />
               </div>
 
               <div className="space-y-1">
-                <span className="text-[11px] font-black uppercase tracking-wider text-[#026fc3] reader-badge">
+                <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge">
                   Lesson Practice Completed
                 </span>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white reader-h2">
+                <h3 className="text-lg sm:text-xl font-black text-theme-primary reader-h2">
                   Great job! You finished all practice questions.
                 </h3>
               </div>
 
               {/* Score Breakdown */}
-              <div className="grid grid-cols-3 gap-3 max-w-md mx-auto pt-2">
-                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Score</span>
-                  <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white reader-body">{earnedPoints} / {totalPointsPossible}</span>
+              <div className="grid grid-cols-3 gap-2.5 max-w-sm mx-auto pt-1">
+                <div className="p-2.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] shadow-2xs">
+                  <span className="text-[10px] font-bold text-theme-muted uppercase block reader-meta">Score</span>
+                  <span className="text-sm sm:text-base font-black text-theme-primary reader-body">{earnedPoints} / {totalPointsPossible}</span>
                 </div>
-                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Correct</span>
-                  <span className="text-base sm:text-lg font-black text-emerald-600 reader-body">{correctTotal}</span>
+                <div className="p-2.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] shadow-2xs">
+                  <span className="text-[10px] font-bold text-theme-muted uppercase block reader-meta">Correct</span>
+                  <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 reader-body">{correctTotal}</span>
                 </div>
-                <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-sky-100 dark:border-slate-700 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block reader-meta">Incorrect</span>
-                  <span className="text-base sm:text-lg font-black text-rose-500 reader-body">{incorrectTotal}</span>
+                <div className="p-2.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] shadow-2xs">
+                  <span className="text-[10px] font-bold text-theme-muted uppercase block reader-meta">Incorrect</span>
+                  <span className="text-sm sm:text-base font-black text-rose-500 dark:text-rose-400 reader-body">{incorrectTotal}</span>
                 </div>
               </div>
 
               {onCompleteLesson && (
-                <button
-                  type="button"
-                  onClick={onCompleteLesson}
-                  className="min-h-[44px] px-6 py-3 rounded-2xl bg-[#026fc3] hover:bg-[#02599c] text-white font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-98 reader-button"
-                >
-                  <span>Continue to Next Lesson</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={onCompleteLesson}
+                    className="min-h-[44px] px-6 py-2.5 rounded-2xl btn-theme-primary font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-98 reader-button"
+                  >
+                    <span>Continue to Next Lesson</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
           )}

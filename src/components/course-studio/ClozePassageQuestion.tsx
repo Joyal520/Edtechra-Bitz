@@ -175,10 +175,10 @@ export const ClozePassageQuestion: React.FC<Props> = ({
                   </span>
                 )}
 
-                {/* 4-Option Dropdown Popover */}
+                {/* 4-Option Dropdown Popover with safe viewport positioning */}
                 {isOpen && !isAnswered && (
                   <div
-                    className="absolute left-0 bottom-full mb-2 z-50 w-56 sm:w-64 p-2.5 rounded-2xl surface-elevated space-y-1 animate-in fade-in zoom-in-95 duration-150 box-border"
+                    className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 bottom-full mb-2 z-50 w-56 sm:w-64 max-w-[calc(100vw-3rem)] p-2.5 rounded-2xl surface-elevated space-y-1 animate-in fade-in zoom-in-95 duration-150 box-border shadow-xl border border-[var(--theme-border-primary)]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="text-[10px] font-bold text-theme-accent uppercase px-2 py-1 border-b border-[var(--theme-border-subtle)] flex items-center justify-between reader-meta">

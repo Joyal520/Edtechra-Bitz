@@ -44,8 +44,12 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
   const [showDrawer, setShowDrawer] = useState(false);
-  const [themeId, setThemeId] = useState<string>(DEFAULT_THEME_ID);
-  const [textScale, setTextScale] = useState<TextScale>('md');
+  const [themeId, setThemeId] = useState<string>(() => {
+    return localStorage.getItem('edtechra_course_theme') || DEFAULT_THEME_ID;
+  });
+  const [textScale, setTextScale] = useState<TextScale>(() => {
+    return (localStorage.getItem('edtechra_reader_scale') as TextScale) || 'md';
+  });
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
@@ -60,6 +64,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [celebrationOpen, setCelebrationOpen] = useState(false);
   const [lastCompletedTitle, setLastCompletedTitle] = useState('');
   const [lastCompletedPos, setLastCompletedPos] = useState(1);
+  const [lastCompletedPoints, setLastCompletedPoints] = useState(10);
   const [celebratedIds, setCelebratedIds] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -162,17 +167,30 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
   };
 
-  // Font size scale cycler
+  // Font size scale cycler with persistence
   const handleScaleDown = () => {
-    if (textScale === 'xl') setTextScale('lg');
-    else if (textScale === 'lg') setTextScale('md');
-    else if (textScale === 'md') setTextScale('sm');
+    let next: TextScale = 'md';
+    if (textScale === 'xxl') next = 'xl';
+    else if (textScale === 'xl') next = 'lg';
+    else if (textScale === 'lg') next = 'md';
+    else if (textScale === 'md') next = 'sm';
+    setTextScale(next);
+    localStorage.setItem('edtechra_reader_scale', next);
   };
 
   const handleScaleUp = () => {
-    if (textScale === 'sm') setTextScale('md');
-    else if (textScale === 'md') setTextScale('lg');
-    else if (textScale === 'lg') setTextScale('xl');
+    let next: TextScale = 'md';
+    if (textScale === 'sm') next = 'md';
+    else if (textScale === 'md') next = 'lg';
+    else if (textScale === 'lg') next = 'xl';
+    else if (textScale === 'xl') next = 'xxl';
+    setTextScale(next);
+    localStorage.setItem('edtechra_reader_scale', next);
+  };
+
+  const handleThemeChange = (newThemeId: string) => {
+    setThemeId(newThemeId);
+    localStorage.setItem('edtechra_course_theme', newThemeId);
   };
 
   // Linearize episodes for progress navigation
@@ -251,9 +269,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
       // Only trigger celebration modal ONCE per lesson completion
       if (!celebratedIds.has(epId)) {
+        const pointsForLesson = (selectedEpisode.questions || []).reduce((sum, q) => {
+          const fb = feedbackState[q.id];
+          return sum + (fb?.isCorrect ? (q.points || 10) : 0);
+        }, 0) || 10;
         setCelebratedIds(prev => new Set([...prev, epId]));
         setLastCompletedTitle(selectedEpisode.title);
         setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
+        setLastCompletedPoints(pointsForLesson);
         setCelebrationOpen(true);
       } else {
         // Already celebrated, proceed directly
@@ -426,7 +449,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleScaleUp}
-                disabled={textScale === 'xl'}
+                disabled={textScale === 'xxl'}
                 className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer"
                 title="Increase Font Size"
               >
@@ -438,7 +461,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
           {/* Theme Presets Popover */}
           <ThemeSelectorPopover
             activeThemeId={themeId}
-            onSelectTheme={setThemeId}
+            onSelectTheme={handleThemeChange}
           />
 
           {/* Bookmark Toggle */}
@@ -660,7 +683,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         studentName={studentName}
         lessonTitle={lastCompletedTitle}
         lessonPosition={lastCompletedPos}
-        pointsEarned={10}
+        pointsEarned={lastCompletedPoints}
         progressPercent={roadmapData?.progressPercent || 0}
         completedLessonsCount={roadmapData?.completedLessons || 1}
         totalLessonsCount={roadmapData?.totalLessons || 1}

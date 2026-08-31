@@ -73,37 +73,43 @@ export function formatInlineText(text: string): React.ReactNode[] {
   });
 }
 
-export type TextScale = 'sm' | 'md' | 'lg' | 'xl';
+export type TextScale = 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
 
 export const TEXT_SCALE_CLASSES: Record<TextScale, { body: string; quote: string; h1: string; h2: string; h3: string }> = {
   sm: {
-    body: 'text-[13px] leading-[1.7]',
-    quote: 'text-[13px]',
-    h1: 'text-[20px] sm:text-[22px]',
-    h2: 'text-[16px] sm:text-[18px]',
-    h3: 'text-[14px] sm:text-[15px]'
+    body: 'leading-[1.7]',
+    quote: '',
+    h1: '',
+    h2: '',
+    h3: ''
   },
   md: {
-    // Standard Strict Specification: 14px Body with 1.75 Line-Height
-    body: 'text-[14px] leading-[1.75] tracking-normal',
-    quote: 'text-[14px]',
-    h1: 'text-[22px] sm:text-[24px]',
-    h2: 'text-[18px] sm:text-[20px]',
-    h3: 'text-[15px] sm:text-[16px]'
+    body: 'leading-[1.75] tracking-normal',
+    quote: '',
+    h1: '',
+    h2: '',
+    h3: ''
   },
   lg: {
-    body: 'text-[16px] leading-[1.8] tracking-normal',
-    quote: 'text-[16px]',
-    h1: 'text-[26px] sm:text-[28px]',
-    h2: 'text-[20px] sm:text-[22px]',
-    h3: 'text-[17px] sm:text-[18px]'
+    body: 'leading-[1.8] tracking-normal',
+    quote: '',
+    h1: '',
+    h2: '',
+    h3: ''
   },
   xl: {
-    body: 'text-[18px] leading-[1.85] tracking-normal',
-    quote: 'text-[18px]',
-    h1: 'text-[30px] sm:text-[32px]',
-    h2: 'text-[24px] sm:text-[26px]',
-    h3: 'text-[19px] sm:text-[20px]'
+    body: 'leading-[1.85] tracking-normal',
+    quote: '',
+    h1: '',
+    h2: '',
+    h3: ''
+  },
+  xxl: {
+    body: 'leading-[1.9] tracking-normal',
+    quote: '',
+    h1: '',
+    h2: '',
+    h3: ''
   }
 };
 
