@@ -268,3 +268,12 @@ class ReorderAudioSynthesizer {
 
 export const reorderAudio = new ReorderAudioSynthesizer();
 export const asmrAudio = reorderAudio;
+
+export function playCorrectAnswerSound() {
+  reorderAudio.playCorrectAnswerPop();
+}
+
+export function playCelebrationSound() {
+  reorderAudio.playCorrectChime();
+}
+

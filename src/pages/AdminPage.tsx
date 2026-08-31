@@ -33,6 +33,7 @@ import { AdminPollsSection } from '@/components/AdminPollsSection';
 import { AdminReorderSection } from '@/components/AdminReorderSection';
 import { AdminStorageSection } from '@/components/AdminStorageSection';
 import { AdminVocabularySection } from '@/components/AdminVocabularySection';
+import { AdminKnowledgeBitzSection } from '@/components/AdminKnowledgeBitzSection';
 import { AdminLeaderboardSection } from '@/components/AdminLeaderboardSection';
 import { AdminQueueDashboard } from '@/components/PostFeed/AdminQueueDashboard';
 import { CollapsibleCatalogue } from '@/components/CollapsibleCatalogue';
@@ -48,7 +49,7 @@ export const AdminPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Navigation Tab state
-  const [adminTab, setAdminTab] = useState<'all' | 'vocabulary' | 'words' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'queue' | 'youtube' | 'users' | 'thumbnails'>('all');
+  const [adminTab, setAdminTab] = useState<'all' | 'bitz' | 'vocabulary' | 'words' | 'quizzes' | 'shorts' | 'readings' | 'polls' | 'reorders' | 'storage' | 'queue' | 'youtube' | 'users' | 'thumbnails'>('bitz');
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -246,6 +247,23 @@ export const AdminPage: React.FC = () => {
       {/* Navigation Section Tabs */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-white border border-stone-200/90 rounded-2xl shadow-xs">
         <button
+          onClick={() => setAdminTab('bitz')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'bitz'
+              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Knowledge Bitz</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            adminTab === 'bitz' ? 'bg-blue-200 text-blue-900' : 'bg-blue-100 text-blue-800'
+          }`}>
+            Discovery Feed
+          </span>
+        </button>
+
+        <button
           onClick={() => setAdminTab('vocabulary')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
             adminTab === 'vocabulary' || adminTab === 'words'
@@ -439,6 +457,17 @@ export const AdminPage: React.FC = () => {
             <div className="text-[11px] text-rose-700 mt-0.5">{error}</div>
           </div>
         </div>
+      )}
+
+      {/* 0. Knowledge Bitz Discovery Catalogue */}
+      {(adminTab === 'all' || adminTab === 'bitz') && (
+        <CollapsibleCatalogue
+          title="Knowledge Bitz Discovery Catalogue"
+          icon={<Sparkles className="w-4 h-4 text-blue-600" />}
+          subtitle="Microlearning discovery feed: Fact management, Gemini AI images, and 1,000+ fact import."
+        >
+          <AdminKnowledgeBitzSection />
+        </CollapsibleCatalogue>
       )}
 
       {/* 1. Vocabulary Content System Section (Words, Collocations, Phrasal Verbs, Idioms) */}

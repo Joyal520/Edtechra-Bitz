@@ -2,6 +2,7 @@ export type { PresignedUploadResponse, StudentPost, PostAuthor } from './post';
 export * from './postQueue';
 export * from './classroom';
 export * from './liveQuiz';
+export * from './knowledgeBitz';
 
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 

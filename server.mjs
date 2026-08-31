@@ -120,6 +120,7 @@ import {
   retryQueueItem
 } from './server/postQueueService.mjs';
 import { evaluateStudentEssay } from './server/courseEssayEvaluationService.mjs';
+import { knowledgeBitzService } from './server/knowledgeBitzService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14382,6 +14383,291 @@ app.post('/api/score-analysis', async (req, res) => {
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+// ============================================================================
+// EDTECHRA-BITZ: Knowledge Bitz Discovery, Learning & Admin Endpoints
+// ============================================================================
+
+// 1. GET /api/bitz/feed - Discovery feed with server ranking, topic preferences, learned exclusion
+app.get('/api/bitz/feed', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const topic = req.query.topic || null;
+    const difficulty = req.query.difficulty || null;
+    const search = req.query.search || '';
+    const tab = req.query.tab || 'for_you';
+
+    const result = await knowledgeBitzService.getPersonalizedFeed({
+      userId,
+      page,
+      limit,
+      topic,
+      difficulty,
+      search,
+      tab,
+      supabaseClient: serverSupabase
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[API /api/bitz/feed Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch knowledge feed.' });
+  }
+});
+
+// 2. GET /api/bitz/preferences - Get user topic preferences
+app.get('/api/bitz/preferences', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const prefs = await knowledgeBitzService.getUserPreferences(userId, serverSupabase);
+    return res.json({ success: true, ...prefs });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. POST /api/bitz/preferences - Save user topic preferences
+app.post('/api/bitz/preferences', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const selectedTopics = req.body.selectedTopics || [];
+    const result = await knowledgeBitzService.saveUserPreferences(userId, selectedTopics, serverSupabase);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. GET /api/bitz/saved - Get saved Knowledge Bitz
+app.get('/api/bitz/saved', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const saved = await knowledgeBitzService.getSavedBitz(userId, serverSupabase);
+    return res.json({ success: true, bitz: saved, count: saved.length });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. GET /api/bitz/:id - Get single Knowledge Bitz
+app.get('/api/bitz/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const all = knowledgeBitzService.getLocalBitz();
+    const bitz = all.find(b => b.id === id || b.bitz_code === id);
+    if (!bitz) return res.status(404).json({ success: false, error: 'Knowledge Bitz not found.' });
+    return res.json({ success: true, bitz });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. POST /api/bitz/interact - Record interaction (seen, opened, read, learned)
+app.post('/api/bitz/interact', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const { bitzId, status, selectedOption } = req.body;
+
+    const result = await knowledgeBitzService.recordLearningState({
+      userId,
+      bitzId,
+      status: status || 'seen',
+      selectedOption,
+      supabaseClient: serverSupabase
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7. POST /api/bitz/:id/quiz-attempt - Record quiz attempt & award XP
+app.post('/api/bitz/:id/quiz-attempt', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const bitzId = req.params.id;
+    const { selectedOption } = req.body;
+
+    const result = await knowledgeBitzService.recordLearningState({
+      userId,
+      bitzId,
+      status: 'learned',
+      selectedOption,
+      supabaseClient: serverSupabase
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. POST /api/bitz/:id/like - Toggle like
+app.post('/api/bitz/:id/like', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const bitzId = req.params.id;
+    const result = await knowledgeBitzService.toggleLike(userId, bitzId, serverSupabase);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 9. POST /api/bitz/:id/save - Toggle bookmark
+app.post('/api/bitz/:id/save', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const bitzId = req.params.id;
+    const category = req.body?.category || 'General';
+    const result = await knowledgeBitzService.toggleSave(userId, bitzId, category, serverSupabase);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Helper: Check if authData represents an admin
+function isAuthorizedAdmin(authData, req) {
+  if (process.env.NODE_ENV !== 'production' && req.headers['x-mock-admin'] === 'true') return true;
+  if (!authData || !authData.user) return false;
+  if (authData.profile?.role === 'admin') return true;
+  if (authData.user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com') return true;
+  return false;
+}
+
+// 10. GET /api/admin/bitz - Admin catalogue list & stats
+app.get('/api/admin/bitz', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const result = await knowledgeBitzService.getAdminBitz(req.query);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 11. POST /api/admin/bitz - Admin create Bitz
+app.post('/api/admin/bitz', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const created = await knowledgeBitzService.createBitz(req.body, authData?.user?.id, serverSupabase);
+    return res.json({ success: true, bitz: created });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// 12. PUT /api/admin/bitz/:id - Admin update Bitz
+app.put('/api/admin/bitz/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const updated = await knowledgeBitzService.updateBitz(req.params.id, req.body, serverSupabase);
+    return res.json({ success: true, bitz: updated });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// 13. DELETE /api/admin/bitz/:id - Admin delete Bitz
+app.delete('/api/admin/bitz/:id', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    await knowledgeBitzService.deleteBitz(req.params.id, serverSupabase);
+    return res.json({ success: true, message: 'Bitz deleted successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 14. POST /api/admin/bitz/bulk-import - Admin bulk import (1,000+ facts)
+app.post('/api/admin/bitz/bulk-import', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const items = req.body.items || [];
+    const result = await knowledgeBitzService.bulkImportBitz(items, authData?.user?.id, serverSupabase);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 15. POST /api/admin/bitz/:id/generate-image - Gemini AI Image generation
+app.post('/api/admin/bitz/:id/generate-image', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const all = knowledgeBitzService.getLocalBitz();
+    const bitz = all.find(b => b.id === req.params.id || b.bitz_code === req.params.id);
+    if (!bitz) return res.status(404).json({ success: false, error: 'Knowledge Bitz not found.' });
+
+    const genResult = await knowledgeBitzService.generateBitzVisualWithGemini(bitz, req.body);
+    if (!genResult.success) {
+      return res.status(400).json(genResult);
+    }
+
+    return res.json(genResult);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 16. POST /api/admin/bitz/presign-upload - Presigned Cloudflare R2 URL for Bitz upload
+app.post('/api/admin/bitz/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+    const userId = authData?.user?.id || 'admin';
+    const { bitzId, contentType = 'image/webp' } = req.body;
+
+    const cleanId = sanitizeSegment(bitzId || 'bitz');
+    const objectKey = `bitz/${cleanId}/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.webp`;
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType,
+      maxSizeBytes: 15 * 1024 * 1024
+    });
+
+    return res.json({
+      success: true,
+      uploadUrl: presigned.uploadUrl,
+      publicUrl: presigned.publicUrl,
+      objectKey: presigned.objectKey,
+      headers: presigned.headers
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

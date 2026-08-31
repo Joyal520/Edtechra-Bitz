@@ -1,0 +1,1073 @@
+// ============================================================================
+// EDTECHRA-BITZ: Admin Knowledge Bitz Catalogue & Image Pipeline
+// Fact Management, Bulk Import (1,000+ facts), Gemini Image Generation,
+// WebP Compression, Cloudflare R2 Upload, and Admin Preview.
+// ============================================================================
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Sparkles,
+  Plus,
+  Upload,
+  Image as ImageIcon,
+  Search,
+  AlertCircle,
+  Eye,
+  Trash2,
+  Edit,
+  Loader2,
+  FileJson,
+  Layers,
+  X,
+  Check
+} from 'lucide-react';
+import {
+  KnowledgeBitzItem,
+  CreateKnowledgeBitzInput,
+  BitzAdminStats,
+  BitzDifficulty,
+  BitzPublishStatus,
+  BitzBulkImportResult
+} from '@/types';
+import { ALL_BITZ_TOPICS, getTopicById } from '@/utils/bitzTopicsConfig';
+import { useAuth } from '@/context/AuthContext';
+import { knowledgeBitzService } from '@/services/knowledgeBitzService';
+import { KnowledgeBitzReaderModal } from './Explore/KnowledgeBitzReaderModal';
+
+export const AdminKnowledgeBitzSection: React.FC = () => {
+  const { session } = useAuth();
+  const token = session?.access_token || null;
+
+  // Catalogue Data State
+  const [bitzList, setBitzList] = useState<KnowledgeBitzItem[]>([]);
+  const [stats, setStats] = useState<BitzAdminStats | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Filter & Search State
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedTopic, setSelectedTopic] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedVisualStatus, setSelectedVisualStatus] = useState<string>('all');
+  const [page] = useState<number>(1);
+
+  // Modals State
+  const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
+  const [editingBitz, setEditingBitz] = useState<KnowledgeBitzItem | null>(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState<boolean>(false);
+  const [geminiModalOpen, setGeminiModalOpen] = useState<boolean>(false);
+  const [activeGeminiBitz, setActiveGeminiBitz] = useState<KnowledgeBitzItem | null>(null);
+  const [geminiPreviewUrl, setGeminiPreviewUrl] = useState<string | null>(null);
+  const [geminiObjectKey, setGeminiObjectKey] = useState<string | null>(null);
+  const [geminiCustomPrompt, setGeminiCustomPrompt] = useState<string>('');
+  const [geminiGenerating, setGeminiGenerating] = useState<boolean>(false);
+  const [previewBitz, setPreviewBitz] = useState<KnowledgeBitzItem | null>(null);
+
+  // Form State for Create / Edit
+  const [formTitle, setFormTitle] = useState<string>('');
+  const [formShortFact, setFormShortFact] = useState<string>('');
+  const [formReadingText, setFormReadingText] = useState<string>('');
+  const [formTopicId, setFormTopicId] = useState<string>('science');
+  const [formDifficulty, setFormDifficulty] = useState<BitzDifficulty>('Easy');
+  const [formReadingTime, setFormReadingTime] = useState<number>(30);
+  const [formSource, setFormSource] = useState<string>('');
+  const [formQuizQuestion, setFormQuizQuestion] = useState<string>('');
+  const [formQuizOptions, setFormQuizOptions] = useState<string[]>(['', '', '', '']);
+  const [formQuizCorrect, setFormQuizCorrect] = useState<string>('');
+  const [formQuizExplanation, setFormQuizExplanation] = useState<string>('');
+  const [formStatus, setFormStatus] = useState<BitzPublishStatus>('published');
+
+  // Bulk Import Form State
+  const [bulkJsonText, setBulkJsonText] = useState<string>('');
+  const [bulkImportResult, setBulkImportResult] = useState<BitzBulkImportResult | null>(null);
+  const [bulkImporting, setBulkImporting] = useState<boolean>(false);
+
+  // Fetch Admin Bitz List & Stats
+  const loadAdminBitz = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await knowledgeBitzService.getAdminBitz(
+        {
+          search: searchQuery,
+          topic: selectedTopic,
+          status: selectedStatus,
+          visualStatus: selectedVisualStatus,
+          page,
+          limit: 50
+        },
+        token
+      );
+      if (res.success) {
+        setBitzList(res.bitz);
+        setStats(res.stats);
+      }
+    } catch (err: any) {
+      console.error('[AdminKnowledgeBitzSection] Load error:', err);
+      setErrorMessage(err.message || 'Failed to load Knowledge Bitz catalogue.');
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, selectedTopic, selectedStatus, selectedVisualStatus, page, token]);
+
+  useEffect(() => {
+    loadAdminBitz();
+  }, [loadAdminBitz]);
+
+  // Open Create Modal
+  const handleOpenCreate = () => {
+    setEditingBitz(null);
+    setFormTitle('');
+    setFormShortFact('');
+    setFormReadingText('');
+    setFormTopicId('science');
+    setFormDifficulty('Easy');
+    setFormReadingTime(30);
+    setFormSource('');
+    setFormQuizQuestion('');
+    setFormQuizOptions(['', '', '', '']);
+    setFormQuizCorrect('');
+    setFormQuizExplanation('');
+    setFormStatus('draft'); // Strictly default to draft
+    setCreateModalOpen(true);
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (bitz: KnowledgeBitzItem) => {
+    setEditingBitz(bitz);
+    setFormTitle(bitz.title);
+    setFormShortFact(bitz.short_fact);
+    setFormReadingText(bitz.reading_text);
+    setFormTopicId(bitz.topic_id);
+    setFormDifficulty(bitz.difficulty);
+    setFormReadingTime(bitz.reading_time_sec || 30);
+    setFormSource(bitz.source_citation || '');
+    if (bitz.quiz) {
+      setFormQuizQuestion(bitz.quiz.question || '');
+      setFormQuizOptions(bitz.quiz.options || ['', '', '', '']);
+      setFormQuizCorrect(bitz.quiz.correct_answer || bitz.quiz.correctAnswer || '');
+      setFormQuizExplanation(bitz.quiz.explanation || '');
+    } else {
+      setFormQuizQuestion('');
+      setFormQuizOptions(['', '', '', '']);
+      setFormQuizCorrect('');
+      setFormQuizExplanation('');
+    }
+    setFormStatus(bitz.status);
+    setCreateModalOpen(true);
+  };
+
+  // Quick 1-Click Publish / Unpublish Toggle
+  const handleTogglePublish = async (bitz: KnowledgeBitzItem) => {
+    const nextStatus: BitzPublishStatus = bitz.status === 'published' ? 'draft' : 'published';
+    if (nextStatus === 'published') {
+      if (bitz.visual_status !== 'ready' || !bitz.visual_url) {
+        alert('Cannot publish Knowledge Bitz without a ready image. Generate with Gemini or upload an image first.');
+        return;
+      }
+    }
+    setActionLoading(`toggle-${bitz.id}`);
+    try {
+      await knowledgeBitzService.updateBitz(bitz.id, { status: nextStatus }, token);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Status update failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Save Create / Edit
+  const handleSaveBitz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading('save');
+    try {
+      if (formStatus === 'published') {
+        const hasImage = editingBitz ? (editingBitz.visual_status === 'ready' && Boolean(editingBitz.visual_url)) : false;
+        if (!hasImage) {
+          alert('Cannot publish Knowledge Bitz without a ready image. Please save as Draft first, then attach an image.');
+          setActionLoading(null);
+          return;
+        }
+      }
+
+      const topicObj = getTopicById(formTopicId);
+      const quizPayload = formQuizQuestion.trim()
+        ? {
+            question: formQuizQuestion.trim(),
+            options: formQuizOptions.map((o) => o.trim()).filter(Boolean),
+            correct_answer: formQuizCorrect.trim() || formQuizOptions[0]?.trim(),
+            explanation: formQuizExplanation.trim() || 'Verified answer.'
+          }
+        : null;
+
+      const payload: CreateKnowledgeBitzInput = {
+        title: formTitle.trim(),
+        short_fact: formShortFact.trim(),
+        reading_text: formReadingText.trim(),
+        topic_id: formTopicId,
+        category: topicObj.categoryGroup || 'General',
+        sub_topic: topicObj.name,
+        difficulty: formDifficulty,
+        reading_time_sec: formReadingTime,
+        source_citation: formSource.trim() || undefined,
+        quiz: quizPayload,
+        status: formStatus
+      };
+
+      if (editingBitz) {
+        await knowledgeBitzService.updateBitz(editingBitz.id, payload, token);
+      } else {
+        await knowledgeBitzService.createBitz(payload, token);
+      }
+
+      setCreateModalOpen(false);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Save failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Delete Bitz
+  const handleDeleteBitz = async (id: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this Knowledge Bitz?')) return;
+    setActionLoading(id);
+    try {
+      await knowledgeBitzService.deleteBitz(id, token);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Gemini AI Image Generator Modal Trigger
+  const handleOpenGeminiModal = (bitz: KnowledgeBitzItem) => {
+    setActiveGeminiBitz(bitz);
+    setGeminiPreviewUrl(bitz.visual_url || null);
+    setGeminiObjectKey(bitz.visual_object_key || null);
+    setGeminiCustomPrompt('');
+    setGeminiModalOpen(true);
+  };
+
+  // Execute Gemini Image Generation
+  const handleGenerateGemini = async () => {
+    if (!activeGeminiBitz) return;
+    setGeminiGenerating(true);
+    try {
+      const res = await knowledgeBitzService.generateGeminiImage(
+        activeGeminiBitz.id,
+        geminiCustomPrompt.trim() || undefined,
+        token
+      );
+      if (res.success && res.publicUrl) {
+        setGeminiPreviewUrl(res.publicUrl);
+        setGeminiObjectKey(res.objectKey || null);
+      }
+    } catch (err: any) {
+      alert(`Gemini image generation failed: ${err.message}`);
+    } finally {
+      setGeminiGenerating(false);
+    }
+  };
+
+  // Approve Generated Gemini Image
+  const handleApproveGeminiImage = async () => {
+    if (!activeGeminiBitz || !geminiPreviewUrl) return;
+    setActionLoading('approve-gemini');
+    try {
+      await knowledgeBitzService.updateBitz(
+        activeGeminiBitz.id,
+        {
+          visual_url: geminiPreviewUrl,
+          visual_object_key: geminiObjectKey,
+          visual_status: 'ready'
+        },
+        token
+      );
+      setGeminiModalOpen(false);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Failed to save image: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Direct Image File Upload (WebP compression & Cloudflare R2)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, bitz: KnowledgeBitzItem) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setActionLoading(`upload-${bitz.id}`);
+    try {
+      // 1. Get presigned R2 upload URL
+      const presigned = await knowledgeBitzService.getPresignedUpload(bitz.id, file.type, token);
+      if (!presigned.success || !presigned.uploadUrl) {
+        throw new Error('Could not get secure upload URL from server.');
+      }
+
+      // 2. Direct PUT upload to Cloudflare R2
+      const putRes = await fetch(presigned.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+
+      if (!putRes.ok) throw new Error(`Cloudflare R2 PUT failed (${putRes.status})`);
+
+      // 3. Update Bitz record
+      await knowledgeBitzService.updateBitz(
+        bitz.id,
+        {
+          visual_url: presigned.publicUrl,
+          visual_object_key: presigned.objectKey,
+          visual_status: 'ready'
+        },
+        token
+      );
+
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Image upload failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Bulk Fact Import Submission
+  const handleBulkImport = async () => {
+    if (!bulkJsonText.trim()) return;
+    setBulkImporting(true);
+    setBulkImportResult(null);
+
+    try {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(bulkJsonText.trim());
+      } catch (e: any) {
+        throw new Error(`Invalid JSON syntax: ${e.message}`);
+      }
+
+      const items = Array.isArray(parsed) ? parsed : parsed.facts || parsed.bitz || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new Error('JSON must contain an array of fact objects.');
+      }
+
+      const res = await knowledgeBitzService.bulkImport(items, token);
+      setBulkImportResult(res);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Import error: ${err.message}`);
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Metrics Dashboard */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-stone-500 font-semibold uppercase">Total Bitz</div>
+            <div className="text-2xl font-black text-stone-900 dark:text-stone-100 mt-1">
+              {stats.totalBitz}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-emerald-600 font-semibold uppercase">Published</div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              {stats.publishedCount}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-blue-600 font-semibold uppercase">Images Ready</div>
+            <div className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
+              {stats.readyImageCount}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-amber-600 font-semibold uppercase">Missing Images</div>
+            <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+              {stats.missingImageCount}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-purple-600 font-semibold uppercase">Completions</div>
+            <div className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">
+              {stats.totalCompletions}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+            <div className="text-xs text-rose-600 font-semibold uppercase">Total Likes</div>
+            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+              {stats.totalLikes}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-stone-900 p-4 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Bitz</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBulkImportResult(null);
+              setBulkJsonText('');
+              setBulkImportOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold rounded-xl transition-all active:scale-95"
+          >
+            <FileJson className="w-4 h-4 text-purple-500" />
+            <span>Bulk Import (1000+)</span>
+          </button>
+        </div>
+
+        {/* Search & Topic Quick Filters */}
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by title, code, topic..."
+              className="w-full pl-9 pr-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+
+          <select
+            value={selectedTopic}
+            onChange={(e) => setSelectedTopic(e.target.value)}
+            className="px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium focus:outline-none"
+          >
+            <option value="all">All Topics</option>
+            {ALL_BITZ_TOPICS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedVisualStatus}
+            onChange={(e) => setSelectedVisualStatus(e.target.value)}
+            className="px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium focus:outline-none"
+          >
+            <option value="all">All Images</option>
+            <option value="ready">Images Ready</option>
+            <option value="missing">Missing Images</option>
+            <option value="generating">Generating</option>
+            <option value="failed">Failed</option>
+          </select>
+
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium focus:outline-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+            <option value="review">Review</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Error Message Banner */}
+      {errorMessage && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Catalogue Table */}
+      <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-12 flex flex-col items-center justify-center text-stone-400">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2" />
+            <span className="text-xs font-medium">Loading catalogue...</span>
+          </div>
+        ) : bitzList.length === 0 ? (
+          <div className="p-12 text-center text-stone-500">
+            <Layers className="w-10 h-10 mx-auto text-stone-300 mb-2" />
+            <h4 className="text-sm font-bold text-stone-700 dark:text-stone-300">No Knowledge Bitz Found</h4>
+            <p className="text-xs text-stone-400 mt-1">Create your first fact or use Bulk Import.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-stone-50 dark:bg-stone-800/60 border-b border-stone-200 dark:border-stone-800 text-stone-500 uppercase tracking-wider font-bold">
+                <tr>
+                  <th className="p-3.5">Code</th>
+                  <th className="p-3.5">Image</th>
+                  <th className="p-3.5">Title & Short Fact</th>
+                  <th className="p-3.5">Topic</th>
+                  <th className="p-3.5">Diff</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+                {bitzList.map((bitz) => {
+                  const topic = getTopicById(bitz.topic_id);
+
+                  return (
+                    <tr key={bitz.id} className="hover:bg-stone-50/70 dark:hover:bg-stone-800/40 transition-colors">
+                      <td className="p-3.5 font-mono font-bold text-stone-600 dark:text-stone-400">
+                        {bitz.bitz_code}
+                      </td>
+
+                      {/* Image Thumbnail & Status */}
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-stone-100 dark:bg-stone-800 shrink-0 border border-stone-200 dark:border-stone-700">
+                            {bitz.visual_url ? (
+                              <img
+                                src={bitz.visual_url}
+                                alt={bitz.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-stone-300 dark:text-stone-600">
+                                <ImageIcon className="w-5 h-5" />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            {bitz.visual_status === 'ready' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full">
+                                <Check className="w-3 h-3" /> Ready
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-full">
+                                <AlertCircle className="w-3 h-3" /> Missing
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Title & Short Fact */}
+                      <td className="p-3.5 max-w-sm">
+                        <div className="font-bold text-stone-900 dark:text-stone-100 line-clamp-1">
+                          {bitz.title}
+                        </div>
+                        <div className="text-[11px] text-stone-500 line-clamp-2 mt-0.5">
+                          {bitz.short_fact}
+                        </div>
+                      </td>
+
+                      {/* Topic */}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200">
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: topic.color }}
+                          />
+                          {topic.name}
+                        </span>
+                      </td>
+
+                      {/* Difficulty */}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <span className="text-[11px] font-semibold text-stone-500">
+                          {bitz.difficulty}
+                        </span>
+                      </td>
+
+                      {/* Publish Status Toggle */}
+                      <td className="p-3.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePublish(bitz)}
+                          disabled={actionLoading === `toggle-${bitz.id}`}
+                          title={`Click to ${bitz.status === 'published' ? 'unpublish to Draft' : 'publish to Explore'}`}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1 cursor-pointer ${
+                            bitz.status === 'published'
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                              : 'bg-stone-200 text-stone-700 hover:bg-stone-300 dark:bg-stone-800 dark:text-stone-300'
+                          }`}
+                        >
+                          {bitz.status === 'published' ? '✓ Published' : 'Draft'}
+                        </button>
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          {/* Admin Preview */}
+                          <button
+                            type="button"
+                            onClick={() => setPreviewBitz(bitz)}
+                            className="p-1.5 text-stone-600 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-stone-800 rounded-lg transition-colors"
+                            title="Preview Discovery Card & Reader"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+
+                          {/* Generate with Gemini */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenGeminiModal(bitz)}
+                            className="p-1.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/40 rounded-lg transition-colors"
+                            title="Generate AI Image with Gemini"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </button>
+
+                          {/* Upload Direct Image */}
+                          <label className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer transition-colors" title="Upload Image (R2)">
+                            <Upload className="w-4 h-4" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleFileUpload(e, bitz)}
+                            />
+                          </label>
+
+                          {/* Edit */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(bitz)}
+                            className="p-1.5 text-stone-600 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-stone-800 rounded-lg transition-colors"
+                            title="Edit Bitz"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBitz(bitz.id)}
+                            className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-stone-800 rounded-lg transition-colors"
+                            title="Delete Bitz"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* CREATE / EDIT BITZ MODAL */}
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70">
+              <h3 className="text-base font-extrabold text-stone-900 dark:text-stone-50">
+                {editingBitz ? 'Edit Knowledge Bitz' : 'Create Knowledge Bitz'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBitz} className="p-6 max-h-[75vh] overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                  Title / Hook *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  placeholder="e.g. Why Mars Appears Red: Planetary Rust"
+                  className="w-full px-3.5 py-2.5 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                  Short Fact (Discovery Card) *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={formShortFact}
+                  onChange={(e) => setFormShortFact(e.target.value)}
+                  placeholder="1-2 sentences shown on the card before reader opens"
+                  className="w-full px-3.5 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase">
+                    100-Word Reading Explanation *
+                  </label>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                    formReadingText.trim().split(/\s+/).filter(Boolean).length >= 70 && formReadingText.trim().split(/\s+/).filter(Boolean).length <= 130
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                  }`}>
+                    {formReadingText.trim().split(/\s+/).filter(Boolean).length} words (Recommended: 80–120)
+                  </span>
+                </div>
+                <textarea
+                  required
+                  rows={4}
+                  value={formReadingText}
+                  onChange={(e) => setFormReadingText(e.target.value)}
+                  placeholder="Clear, simple English paragraph explaining the insight (80-120 words)"
+                  className="w-full px-3.5 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                    Topic
+                  </label>
+                  <select
+                    value={formTopicId}
+                    onChange={(e) => setFormTopicId(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                  >
+                    {ALL_BITZ_TOPICS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                    Difficulty
+                  </label>
+                  <select
+                    value={formDifficulty}
+                    onChange={(e) => setFormDifficulty(e.target.value as BitzDifficulty)}
+                    className="w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                  >
+                    <option value="Easy">Easy</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value as BitzPublishStatus)}
+                    className="w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                  >
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                    <option value="review">Review</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 uppercase mb-1">
+                  Source Citation
+                </label>
+                <input
+                  type="text"
+                  value={formSource}
+                  onChange={(e) => setFormSource(e.target.value)}
+                  placeholder="e.g. NASA Planetary Science Division"
+                  className="w-full px-3.5 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              {/* Optional Quiz Section */}
+              <div className="p-4 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200 dark:border-stone-700 space-y-3">
+                <span className="text-xs font-bold uppercase text-stone-600 dark:text-stone-300">
+                  Optional Quiz Question (+10 XP)
+                </span>
+                <input
+                  type="text"
+                  value={formQuizQuestion}
+                  onChange={(e) => setFormQuizQuestion(e.target.value)}
+                  placeholder="Question text..."
+                  className="w-full px-3.5 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  {formQuizOptions.map((opt, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={opt}
+                      onChange={(e) => {
+                        const next = [...formQuizOptions];
+                        next[idx] = e.target.value;
+                        setFormQuizOptions(next);
+                      }}
+                      placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                      className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                    />
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={formQuizCorrect}
+                    onChange={(e) => setFormQuizCorrect(e.target.value)}
+                    placeholder="Exact correct answer string..."
+                    className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                  />
+                  <input
+                    type="text"
+                    value={formQuizExplanation}
+                    onChange={(e) => setFormQuizExplanation(e.target.value)}
+                    placeholder="Short 1-sentence explanation..."
+                    className="px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-100 dark:border-stone-800">
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-stone-600 dark:text-stone-400 hover:bg-stone-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading === 'save'}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md"
+                >
+                  {actionLoading === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Save Bitz</span>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BULK IMPORT MODAL */}
+      {bulkImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70">
+              <div>
+                <h3 className="text-base font-extrabold text-stone-900 dark:text-stone-50">
+                  Bulk Fact Import (1,000+ Facts)
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Paste JSON array of fact objects with validation diagnostics.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkImportOpen(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <textarea
+                rows={10}
+                value={bulkJsonText}
+                onChange={(e) => setBulkJsonText(e.target.value)}
+                placeholder={`[
+  {
+    "title": "Why Does Popcorn Pop?",
+    "short_fact": "Pressurized steam bursts the kernel hull.",
+    "reading_text": "Each kernel holds a droplet of water...",
+    "topic_id": "physics",
+    "difficulty": "Easy",
+    "source_citation": "American Chemical Society"
+  }
+]`}
+                className="w-full font-mono text-xs p-3 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl"
+              />
+
+              {bulkImportResult && (
+                <div className="p-4 bg-stone-50 dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 space-y-2">
+                  <div className="flex items-center gap-4 text-xs font-bold">
+                    <span className="text-emerald-600">Imported: {bulkImportResult.importedCount}</span>
+                    <span className="text-rose-600">Failed: {bulkImportResult.failedCount}</span>
+                  </div>
+                  {bulkImportResult.errors.length > 0 && (
+                    <div className="text-xs text-rose-500 max-h-32 overflow-y-auto space-y-1">
+                      {bulkImportResult.errors.map((err, i) => (
+                        <div key={i}>
+                          #{err.index} {err.title}: {err.reason}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBulkImportOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-stone-600 rounded-xl"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkImporting || !bulkJsonText.trim()}
+                  onClick={handleBulkImport}
+                  className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50"
+                >
+                  {bulkImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Start Import</span>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GEMINI AI IMAGE GENERATOR MODAL */}
+      {geminiModalOpen && activeGeminiBitz && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div
+            className="relative w-full max-w-xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 bg-stone-50/70 dark:bg-stone-900/70">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+                <h3 className="text-base font-extrabold text-stone-900 dark:text-stone-50">
+                  Gemini AI Image Generator
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGeminiModalOpen(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="text-xs bg-purple-50 dark:bg-purple-950/40 p-3 rounded-xl border border-purple-200 dark:border-purple-900 text-purple-900 dark:text-purple-200">
+                <strong>Fact:</strong> {activeGeminiBitz.title} ({activeGeminiBitz.category})
+              </div>
+
+              {/* Image Preview Container */}
+              <div className="w-full aspect-[16/10] bg-stone-100 dark:bg-stone-800 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 flex items-center justify-center relative">
+                {geminiGenerating ? (
+                  <div className="flex flex-col items-center justify-center text-purple-600">
+                    <Loader2 className="w-10 h-10 animate-spin mb-2" />
+                    <span className="text-xs font-bold">Creating paper-cut artwork...</span>
+                  </div>
+                ) : geminiPreviewUrl ? (
+                  <img
+                    src={geminiPreviewUrl}
+                    alt="Generated Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center text-stone-400 text-xs">
+                    <ImageIcon className="w-10 h-10 mx-auto mb-1 text-stone-300" />
+                    <span>Click Generate to produce visual</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Prompt Override */}
+              <div>
+                <label className="block text-xs font-bold text-stone-600 dark:text-stone-400 uppercase mb-1">
+                  Custom Prompt (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={geminiCustomPrompt}
+                  onChange={(e) => setGeminiCustomPrompt(e.target.value)}
+                  placeholder="Leave blank for automatic paper-cut art prompt..."
+                  className="w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-stone-800">
+                <button
+                  type="button"
+                  disabled={geminiGenerating}
+                  onClick={handleGenerateGemini}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-md disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{geminiPreviewUrl ? 'Regenerate' : 'Generate Image'}</span>
+                </button>
+
+                {geminiPreviewUrl && (
+                  <button
+                    type="button"
+                    disabled={actionLoading === 'approve-gemini'}
+                    onClick={handleApproveGeminiImage}
+                    className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Use This Image (Upload to R2)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADMIN PREVIEW MODAL */}
+      {previewBitz && (
+        <KnowledgeBitzReaderModal
+          bitz={previewBitz}
+          isOpen={Boolean(previewBitz)}
+          onClose={() => setPreviewBitz(null)}
+          onLearned={() => {}}
+        />
+      )}
+    </div>
+  );
+};
