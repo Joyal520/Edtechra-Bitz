@@ -145,8 +145,8 @@ function cleanEnv(value) {
 }
 
 // Initialize server-side Supabase client
-const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
-const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY);
+const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY);
 const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Initialize server-side OpenAI client
@@ -14541,7 +14541,8 @@ app.post('/api/bitz/:id/save', async (req, res) => {
 function isAuthorizedAdmin(authData, req) {
   if (process.env.NODE_ENV !== 'production' && req.headers['x-mock-admin'] === 'true') return true;
   if (!authData || !authData.user) return false;
-  if (authData.profile?.role === 'admin') return true;
+  if (authData.profile?.role === 'admin' || authData.profile?.role === 'superadmin') return true;
+  if (authData.user?.app_metadata?.role === 'admin' || authData.user?.user_metadata?.role === 'admin') return true;
   if (authData.user?.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com') return true;
   return false;
 }
@@ -14555,7 +14556,7 @@ app.get('/api/admin/bitz', async (req, res) => {
     const userId = authData?.user?.id || 'unauthenticated';
     const isUserAdmin = isAuthorizedAdmin(authData, req);
 
-    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin}`);
+    console.log(`[Admin Bitz API] ${method} ${route} | User: ${userId} | Admin: ${isUserAdmin} | Query:`, req.query);
 
     if (!authData || !authData.user) {
       return res.status(401).json({ success: false, error: 'Unauthorized: Authentication token is missing or invalid.' });
@@ -14573,8 +14574,19 @@ app.get('/api/admin/bitz', async (req, res) => {
     console.log(`[Admin Bitz API] Successfully fetched catalogue (${result.bitz?.length || 0} items, total: ${result.total || 0})`);
     return res.json(result);
   } catch (err) {
-    console.error(`[Admin Bitz API Error] ${method} ${route}:`, err.message || err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to load admin Knowledge Bitz catalogue.' });
+    console.error(`[Admin Bitz API Error] ${method} ${route}:`, {
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+      stack: err.stack
+    });
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to load admin Knowledge Bitz catalogue.',
+      code: err.code || null,
+      details: err.details || null
+    });
   }
 });
 

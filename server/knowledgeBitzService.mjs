@@ -7,7 +7,6 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import sharp from 'sharp';
 import dotenv from 'dotenv';
 import { putBinaryContent, sanitizeSegment } from './r2Service.mjs';
 
@@ -951,7 +950,9 @@ STRICT RESTRICTIONS:
     // Process & compress with Sharp (16:9 Landscape 1024x576 high-efficiency WebP)
     let optimizedBuffer = rawBuffer;
     try {
-      optimizedBuffer = await sharp(rawBuffer)
+      const sharpModule = await import('sharp');
+      const sharpInstance = sharpModule.default || sharpModule;
+      optimizedBuffer = await sharpInstance(rawBuffer)
         .resize({ width: 1024, height: 576, fit: 'cover', position: 'center' })
         .webp({ quality: 88, effort: 4 })
         .toBuffer();
@@ -1038,19 +1039,22 @@ STRICT RESTRICTIONS:
     return all.find(b => b.id === id || b.bitz_code === id) || null;
   }
 
-  async getAdminBitz({
-    search = '',
-    topic = 'all',
-    status = 'all',
-    visualStatus = 'all',
-    cefrLevel = 'all',
-    page = 1,
-    limit = 50,
-    supabaseClient = null
-  }) {
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+  async getAdminBitz(params = {}) {
+    const search = params.search ? String(params.search).trim() : '';
+    const rawTopic = params.topic ?? params.topic_id ?? 'all';
+    const rawStatus = params.status ?? 'all';
+    const rawVisualStatus = params.visualStatus ?? params.visual_status ?? params.imageStatus ?? params.image_status ?? 'all';
+    const rawCefrLevel = params.cefrLevel ?? params.cefr_level ?? 'all';
+
+    const topic = (rawTopic && rawTopic !== 'all') ? String(rawTopic).trim() : null;
+    const status = (rawStatus && rawStatus !== 'all') ? String(rawStatus).trim() : null;
+    const visualStatus = (rawVisualStatus && rawVisualStatus !== 'all') ? String(rawVisualStatus).trim() : null;
+    const cefrLevel = (rawCefrLevel && rawCefrLevel !== 'all') ? String(rawCefrLevel).trim() : null;
+
+    const pageNum = Math.max(1, parseInt(params.page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(200, parseInt(params.limit, 10) || 50));
     const offset = (pageNum - 1) * limitNum;
+    const supabaseClient = params.supabaseClient || null;
 
     if (supabaseClient) {
       try {
@@ -1058,25 +1062,24 @@ STRICT RESTRICTIONS:
           .from('knowledge_bitz')
           .select('*', { count: 'exact' });
 
-        if (status && status !== 'all') {
+        if (status) {
           query = query.eq('status', status);
         }
 
-        if (topic && topic !== 'all') {
+        if (topic) {
           query = query.eq('topic_id', topic);
         }
 
-        if (visualStatus && visualStatus !== 'all') {
+        if (visualStatus) {
           query = query.eq('visual_status', visualStatus);
         }
 
-        if (cefrLevel && cefrLevel !== 'all') {
+        if (cefrLevel) {
           query = query.eq('cefr_level', cefrLevel);
         }
 
-        if (search && search.trim() !== '') {
-          const s = search.trim();
-          query = query.or(`title.ilike.%${s}%,short_fact.ilike.%${s}%,bitz_code.ilike.%${s}%,category.ilike.%${s}%,reading_text.ilike.%${s}%`);
+        if (search) {
+          query = query.or(`title.ilike.%${search}%,short_fact.ilike.%${search}%,bitz_code.ilike.%${search}%,category.ilike.%${search}%,reading_text.ilike.%${search}%`);
         }
 
         query = query.order('created_at', { ascending: false }).range(offset, offset + limitNum - 1);
@@ -1088,7 +1091,7 @@ STRICT RESTRICTIONS:
           throw bitzError;
         }
 
-        // Compute admin stats via Supabase exact counts
+        // Compute admin stats via Supabase exact counts with safe fallback
         const [
           totalRes,
           pubRes,
@@ -1099,20 +1102,23 @@ STRICT RESTRICTIONS:
           failedImgRes,
           aggregatesRes
         ] = await Promise.all([
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('status', 'published'),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'ready'),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'missing'),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'generating'),
-          supabaseClient.from('knowledge_bitz').select('*', { count: 'exact', head: true }).eq('visual_status', 'failed'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('status', 'published'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('status', 'draft'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('visual_status', 'ready'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('visual_status', 'missing'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('visual_status', 'generating'),
+          supabaseClient.from('knowledge_bitz').select('id', { count: 'exact', head: true }).eq('visual_status', 'failed'),
           supabaseClient.from('knowledge_bitz').select('completions_count, likes_count, saves_count')
-        ]);
+        ]).catch(err => {
+          console.warn('[KnowledgeBitzService] Stats aggregation notice:', err?.message || err);
+          return [{}, {}, {}, {}, {}, {}, {}, { data: [] }];
+        });
 
         let totalCompletions = 0;
         let totalLikes = 0;
         let totalSaves = 0;
-        if (aggregatesRes.data && Array.isArray(aggregatesRes.data)) {
+        if (aggregatesRes?.data && Array.isArray(aggregatesRes.data)) {
           for (const row of aggregatesRes.data) {
             totalCompletions += Number(row.completions_count) || 0;
             totalLikes += Number(row.likes_count) || 0;
@@ -1121,13 +1127,13 @@ STRICT RESTRICTIONS:
         }
 
         const stats = {
-          totalBitz: totalRes.count || 0,
-          publishedCount: pubRes.count || 0,
-          draftCount: draftRes.count || 0,
-          readyImageCount: readyImgRes.count || 0,
-          missingImageCount: missingImgRes.count || 0,
-          generatingImageCount: genImgRes.count || 0,
-          failedImageCount: failedImgRes.count || 0,
+          totalBitz: totalRes?.count ?? 0,
+          publishedCount: pubRes?.count ?? 0,
+          draftCount: draftRes?.count ?? 0,
+          readyImageCount: readyImgRes?.count ?? 0,
+          missingImageCount: missingImgRes?.count ?? 0,
+          generatingImageCount: genImgRes?.count ?? 0,
+          failedImageCount: failedImgRes?.count ?? 0,
           totalCompletions,
           totalLikes,
           totalSaves
@@ -1142,7 +1148,7 @@ STRICT RESTRICTIONS:
           limit: limitNum
         };
       } catch (err) {
-        console.error('[KnowledgeBitzService] Supabase getAdminBitz error:', err.message);
+        console.error('[KnowledgeBitzService] Supabase getAdminBitz error:', err.message || err);
         throw err;
       }
     }
