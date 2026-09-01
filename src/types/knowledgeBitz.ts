@@ -49,8 +49,8 @@ export interface KnowledgeBitzItem {
   short_fact: string; // 20–30 word discovery preview
   reading_text: string; // Exactly 100-word reading explanation
   topic_id: string; // legacy subtopic identifier (e.g. 'biology', 'space')
-  category: string; // One of 10 main categories (e.g. 'Science & Nature')
-  sub_topic?: string | null; // Internal subtopic (e.g. 'Myths & Legends')
+  category: string; // Master categories (e.g. 'Science & Nature', 'Personal Growth', 'Mysteries & Legends')
+  sub_topic?: string | null; // Internal subtopic (e.g. 'Mindset & Habits', 'Ancient Mysteries')
   difficulty: BitzDifficulty;
   cefr_level: BitzCefrLevel; // CEFR English proficiency (A1-C2)
   content_hash?: string | null; // SHA-256 for deduplication

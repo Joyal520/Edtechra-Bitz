@@ -180,6 +180,44 @@ export const BITZ_CATEGORIES: BitzCategoryItem[] = [
       { id: 'education', name: 'Education & Learning' },
       { id: 'communication', name: 'Languages & Communication' }
     ]
+  },
+  {
+    id: 'personal_growth',
+    name: 'Personal Growth',
+    slug: 'personal-growth',
+    icon: 'Sprout',
+    color: '#0d9488',
+    bgGradient: 'from-teal-600 to-emerald-700',
+    description: 'Develop a positive mindset, master productivity, build habits, and boost communication skills.',
+    subtopics: [
+      { id: 'mindset_habits', name: 'Mindset & Habits' },
+      { id: 'motivation', name: 'Motivation' },
+      { id: 'communication_growth', name: 'Communication' },
+      { id: 'confidence', name: 'Confidence' },
+      { id: 'learning_study', name: 'Learning & Study' },
+      { id: 'productivity_growth', name: 'Productivity' },
+      { id: 'emotional_skills', name: 'Emotional Skills' },
+      { id: 'life_skills_growth', name: 'Life Skills' }
+    ]
+  },
+  {
+    id: 'mysteries_legends',
+    name: 'Mysteries & Legends',
+    slug: 'mysteries-legends',
+    icon: 'HelpCircle',
+    color: '#6366f1',
+    bgGradient: 'from-indigo-600 to-purple-800',
+    description: 'Explore ancient enigmas, mythical creatures, strange phenomena, and unsolved historical secrets.',
+    subtopics: [
+      { id: 'ancient_mysteries', name: 'Ancient Mysteries' },
+      { id: 'legends_folklore', name: 'Legends & Folklore' },
+      { id: 'unsolved_mysteries', name: 'Unsolved Mysteries' },
+      { id: 'strange_places', name: 'Strange Places' },
+      { id: 'lost_civilizations', name: 'Lost Civilizations' },
+      { id: 'historical_mysteries', name: 'Historical Mysteries' },
+      { id: 'mythical_creatures', name: 'Mythical Creatures' },
+      { id: 'mysterious_events', name: 'Mysterious Events' }
+    ]
   }
 ];
 
@@ -187,7 +225,7 @@ export const BITZ_CATEGORIES: BitzCategoryItem[] = [
 // Flat lookups — used across the app
 // ============================================================================
 
-/** All 10 main category IDs */
+/** All master category IDs */
 export const ALL_BITZ_CATEGORY_IDS: string[] = BITZ_CATEGORIES.map((c) => c.id);
 
 /** Flat array of all subtopics across all categories */
@@ -210,13 +248,30 @@ export const SUBTOPIC_TO_CATEGORY_MAP: Record<string, string> = Object.fromEntri
   ALL_BITZ_SUBTOPICS.map((st) => [st.subtopicId, st.categoryId])
 );
 
-/** Get category by ID with safe fallback */
+/** Get category by ID or name with safe fallback */
 export function getCategoryById(id?: string | null): BitzCategoryItem {
   if (!id) return BITZ_CATEGORIES[0];
-  return BITZ_CATEGORY_MAP[id] || {
-    id: id,
-    name: id.charAt(0).toUpperCase() + id.slice(1).replace(/[-_]/g, ' '),
-    slug: id,
+  const clean = String(id).trim();
+  if (BITZ_CATEGORY_MAP[clean]) return BITZ_CATEGORY_MAP[clean];
+
+  // Match by category name or slug (case-insensitive)
+  const lower = clean.toLowerCase();
+  const match = BITZ_CATEGORIES.find(
+    (c) =>
+      c.name.toLowerCase() === lower ||
+      c.slug.toLowerCase() === lower ||
+      c.id.toLowerCase() === lower
+  );
+  if (match) return match;
+
+  // Check legacy map
+  const mappedId = LEGACY_TOPIC_TO_CATEGORY_MAP[lower];
+  if (mappedId && BITZ_CATEGORY_MAP[mappedId]) return BITZ_CATEGORY_MAP[mappedId];
+
+  return {
+    id: clean,
+    name: clean.charAt(0).toUpperCase() + clean.slice(1).replace(/[-_]/g, ' '),
+    slug: clean.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     icon: 'Sparkles',
     color: '#026fc3',
     bgGradient: 'from-blue-600 to-indigo-700',
@@ -225,17 +280,20 @@ export function getCategoryById(id?: string | null): BitzCategoryItem {
   };
 }
 
-/** Get subtopics for a given category ID */
-export function getSubtopicsForCategory(categoryId: string): BitzSubtopic[] {
-  const cat = BITZ_CATEGORY_MAP[categoryId];
+/** Get subtopics for a given category ID or category name */
+export function getSubtopicsForCategory(categoryIdOrName: string): BitzSubtopic[] {
+  const cat = getCategoryById(categoryIdOrName);
   return cat?.subtopics || [];
 }
 
-/** Validate that a subtopic belongs to its claimed category */
-export function isValidSubtopicForCategory(categoryId: string, subtopicId: string): boolean {
-  const cat = BITZ_CATEGORY_MAP[categoryId];
+/** Validate that a subtopic belongs to its claimed category (checks ID and Name, case-insensitive) */
+export function isValidSubtopicForCategory(categoryIdOrName: string, subtopicIdOrName: string): boolean {
+  const cat = getCategoryById(categoryIdOrName);
   if (!cat) return false;
-  return cat.subtopics.some((st) => st.id === subtopicId);
+  const clean = String(subtopicIdOrName || '').trim().toLowerCase();
+  return cat.subtopics.some(
+    (st) => st.id.toLowerCase() === clean || st.name.toLowerCase() === clean
+  );
 }
 
 // ============================================================================
@@ -286,7 +344,26 @@ export const LEGACY_TOPIC_TO_CATEGORY_MAP: Record<string, string> = {
   'life-skills': 'life_skills_english',
   learning: 'life_skills_english',
   english: 'life_skills_english',
-  languages: 'life_skills_english'
+  languages: 'life_skills_english',
+  // Personal Growth
+  'personal-growth': 'personal_growth',
+  personal_growth: 'personal_growth',
+  'personal growth': 'personal_growth',
+  growth: 'personal_growth',
+  mindset: 'personal_growth',
+  habits: 'personal_growth',
+  motivation: 'personal_growth',
+  confidence: 'personal_growth',
+  // Mysteries & Legends
+  'mysteries-legends': 'mysteries_legends',
+  mysteries_legends: 'mysteries_legends',
+  'mysteries & legends': 'mysteries_legends',
+  'mysteries and legends': 'mysteries_legends',
+  mysteries: 'mysteries_legends',
+  legends: 'mysteries_legends',
+  folklore: 'mysteries_legends',
+  myths: 'mysteries_legends',
+  unsolved: 'mysteries_legends'
 };
 
 /**

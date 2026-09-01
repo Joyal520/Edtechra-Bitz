@@ -56,7 +56,7 @@ A clear educational explanation of EXACTLY 100 words. Not 99. Not 101. Exactly 1
 - Remain interesting and engaging
 - Do NOT repeat the title or short_fact unnecessarily
 - Flow naturally as a coherent mini-article
-${config.categoryId === 'history_culture' ? '\n- For myths, legends, and mysteries: clearly distinguish factual information from legends, claims, and uncertainty. Use phrases like "according to legend", "the story claims", or "this remains an unsolved mystery".\n' : ''}
+${(config.categoryId === 'history_culture' || config.categoryId === 'mysteries_legends') ? '\n- For myths, legends, and mysteries: clearly distinguish factual information from legends, claims, and uncertainty. Use phrases like "according to legend", "the story claims", or "this remains an unsolved mystery".\n' : ''}${(config.categoryId === 'personal_growth') ? '\n- For personal growth: focus on actionable psychological insights, habit science, communication techniques, and evidence-based self-improvement concepts.\n' : ''}
 ### 4. category (string)
 Must be exactly: "${category.name}"
 

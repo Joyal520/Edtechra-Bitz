@@ -16,7 +16,10 @@ import {
   Palette,
   Trophy,
   BookOpen,
-  Sparkles
+  Sparkles,
+  Sprout,
+  HelpCircle,
+  Compass
 } from 'lucide-react';
 import {
   BITZ_CATEGORIES,
@@ -43,7 +46,11 @@ const CATEGORY_ICON_MAP: Record<string, React.ReactNode> = {
   Globe: <Globe className="w-4 h-4" />,
   Palette: <Palette className="w-4 h-4" />,
   Trophy: <Trophy className="w-4 h-4" />,
-  BookOpen: <BookOpen className="w-4 h-4" />
+  BookOpen: <BookOpen className="w-4 h-4" />,
+  Sprout: <Sprout className="w-4 h-4" />,
+  HelpCircle: <HelpCircle className="w-4 h-4" />,
+  Compass: <Compass className="w-4 h-4" />,
+  Sparkles: <Sparkles className="w-4 h-4" />
 };
 
 export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
