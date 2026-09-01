@@ -21,7 +21,9 @@ import {
   Layers,
   X,
   Check,
-  RefreshCw
+  RefreshCw,
+  Globe,
+  Rocket
 } from 'lucide-react';
 import {
   KnowledgeBitzItem,
@@ -162,7 +164,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
     setFormQuizOptions(['', '', '', '']);
     setFormQuizCorrect('');
     setFormQuizExplanation('');
-    setFormStatus('draft'); // Strictly default to draft
+    setFormStatus('published'); // Default to published so it is live immediately on Explore
     setCreateModalOpen(true);
   };
 
@@ -207,6 +209,27 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       await loadAdminBitz();
     } catch (err: any) {
       alert(`Status update failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // 1-Click Batch Publish All Drafts
+  const handlePublishAllDrafts = async () => {
+    const draftItems = bitzList.filter((b) => b.status !== 'published');
+    if (draftItems.length === 0) {
+      alert('All facts are already published!');
+      return;
+    }
+    if (!window.confirm(`Publish all ${draftItems.length} draft facts to the Explore feed now?`)) return;
+    setActionLoading('publish-all');
+    try {
+      for (const b of draftItems) {
+        await knowledgeBitzService.updateBitz(b.id, { status: 'published' }, token);
+      }
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Batch publish failed: ${err.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -500,6 +523,24 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>+ Single Fact</span>
           </button>
+
+          {/* Batch Publish All Drafts Button */}
+          {bitzList.some((b) => b.status !== 'published') && (
+            <button
+              type="button"
+              disabled={actionLoading === 'publish-all'}
+              onClick={handlePublishAllDrafts}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 cursor-pointer shadow-sm shadow-emerald-600/25"
+              title="Publish all draft facts to Explore feed"
+            >
+              {actionLoading === 'publish-all' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Rocket className="w-4 h-4 stroke-[2.5]" />
+              )}
+              <span>Publish All Drafts ({bitzList.filter((b) => b.status !== 'published').length})</span>
+            </button>
+          )}
         </div>
 
         <button
@@ -767,20 +808,47 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           type="button"
                           onClick={() => handleTogglePublish(bitz)}
                           disabled={actionLoading === `toggle-${bitz.id}`}
-                          title={`Click to ${bitz.status === 'published' ? 'unpublish to Draft' : 'publish to Explore'}`}
-                          className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1 cursor-pointer ${
+                          title={`Click to ${bitz.status === 'published' ? 'unpublish to Draft' : 'publish immediately to Explore feed'}`}
+                          className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs ${
                             bitz.status === 'published'
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800'
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500'
+                              : 'bg-[#026fc3] hover:bg-[#025ea6] text-white border border-blue-600 animate-pulse'
                           }`}
                         >
-                          {bitz.status === 'published' ? '✓ Published' : 'Draft'}
+                          {actionLoading === `toggle-${bitz.id}` ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : bitz.status === 'published' ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Live on Explore</span>
+                            </>
+                          ) : (
+                            <>
+                              <Rocket className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>Publish to Explore</span>
+                            </>
+                          )}
                         </button>
                       </td>
 
                       {/* Action Buttons */}
                       <td className="p-3.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
+                          {/* Quick Publish / Unpublish Icon */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePublish(bitz)}
+                            disabled={actionLoading === `toggle-${bitz.id}`}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              bitz.status === 'published'
+                                ? 'text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50'
+                                : 'text-[#026fc3] hover:text-blue-900 hover:bg-blue-50'
+                            }`}
+                            title={bitz.status === 'published' ? 'Live on Explore (Click to Unpublish)' : 'Draft (Click to Publish to Explore)'}
+                          >
+                            <Globe className="w-4 h-4 stroke-[2.2]" />
+                          </button>
+
                           {/* Admin Preview */}
                           <button
                             type="button"
@@ -979,17 +1047,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-black text-[#0a213c] uppercase mb-1">
-                    Status
+                    Publication Status *
                   </label>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as BitzPublishStatus)}
                     className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-black text-[#0a213c] focus:outline-none focus:ring-2 focus:ring-[#026fc3]/25"
                   >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="review">Review</option>
-                    <option value="archived">Archived</option>
+                    <option value="published">🚀 Published (Live on Explore Feed)</option>
+                    <option value="draft">📁 Draft (Saved Privately in Admin)</option>
+                    <option value="review">🔍 Under Review</option>
+                    <option value="archived">📦 Archived</option>
                   </select>
                 </div>
               </div>
