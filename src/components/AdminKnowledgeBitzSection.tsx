@@ -369,13 +369,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
       if (!putRes.ok) throw new Error(`Cloudflare R2 PUT failed (${putRes.status})`);
 
-      // 3. Update Bitz record
+      // 3. Update Bitz record with strict Admin upload priority
       await knowledgeBitzService.updateBitz(
         bitz.id,
         {
           visual_url: presigned.publicUrl,
           visual_object_key: presigned.objectKey,
-          visual_status: 'ready'
+          visual_status: 'ready',
+          image_source: 'admin'
         },
         token
       );
@@ -383,6 +384,33 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       await loadAdminBitz();
     } catch (err: any) {
       alert(`Image upload failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Fetch or Replace image with automatic Pixabay search & R2 storage
+  const handleFetchPixabay = async (bitz: KnowledgeBitzItem) => {
+    setActionLoading(`pixabay-${bitz.id}`);
+    try {
+      await knowledgeBitzService.fetchPixabayImageForBitz(bitz.id, undefined, token);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Pixabay fetch failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Remove image from Bitz (reverts to premium animated visual)
+  const handleRemoveImage = async (bitz: KnowledgeBitzItem) => {
+    if (!window.confirm(`Remove image from "${bitz.title}"?`)) return;
+    setActionLoading(`remove-img-${bitz.id}`);
+    try {
+      await knowledgeBitzService.removeBitzImage(bitz.id, token);
+      await loadAdminBitz();
+    } catch (err: any) {
+      alert(`Failed to remove image: ${err.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -747,13 +775,27 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                           </div>
 
                           <div className="space-y-1">
-                            {bitz.visual_status === 'ready' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
-                                <Check className="w-3 h-3 stroke-[2.5]" /> Ready
-                              </span>
+                            {bitz.visual_url ? (
+                              bitz.image_source === 'admin' || bitz.image_source === 'manual' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200" title="Administrator Uploaded Image">
+                                  <Check className="w-3 h-3 stroke-[2.5]" /> Admin Upload
+                                </span>
+                              ) : bitz.image_source === 'pixabay' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-sky-800 bg-sky-100 px-2 py-0.5 rounded-full border border-sky-200" title="Automatic Pixabay Image (Stored in R2)">
+                                  <Check className="w-3 h-3 stroke-[2.5]" /> Pixabay
+                                </span>
+                              ) : bitz.image_source === 'gemini' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200" title="Gemini AI Generated Artwork">
+                                  <Sparkles className="w-3 h-3 stroke-[2.5]" /> Gemini AI
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  <Check className="w-3 h-3 stroke-[2.5]" /> Ready
+                                </span>
+                              )
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
-                                <AlertCircle className="w-3 h-3 stroke-[2.5]" /> Missing
+                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                <AlertCircle className="w-3 h-3 stroke-[2.5]" /> No image
                               </span>
                             )}
                           </div>
@@ -859,6 +901,21 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                             <Eye className="w-4 h-4 stroke-[2.2]" />
                           </button>
 
+                          {/* Fetch / Replace with Pixabay */}
+                          <button
+                            type="button"
+                            onClick={() => handleFetchPixabay(bitz)}
+                            disabled={actionLoading === `pixabay-${bitz.id}`}
+                            className="p-1.5 text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer"
+                            title="Fetch / Replace Image from Pixabay (Stored in R2)"
+                          >
+                            {actionLoading === `pixabay-${bitz.id}` ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                            ) : (
+                              <Search className="w-4 h-4 stroke-[2.2]" />
+                            )}
+                          </button>
+
                           {/* Generate with Gemini */}
                           <button
                             type="button"
@@ -869,8 +926,8 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                             <Sparkles className="w-4 h-4 stroke-[2.2]" />
                           </button>
 
-                          {/* Upload Direct Image */}
-                          <label className="p-1.5 text-[#026fc3] hover:text-blue-900 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors" title="Upload Image (R2)">
+                          {/* Upload Direct Image (Admin Priority) */}
+                          <label className="p-1.5 text-[#026fc3] hover:text-blue-900 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors" title="Upload Image (Admin Priority - Stored in R2)">
                             <Upload className="w-4 h-4 stroke-[2.2]" />
                             <input
                               type="file"
@@ -879,6 +936,19 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
                               onChange={(e) => handleFileUpload(e, bitz)}
                             />
                           </label>
+
+                          {/* Remove Image (if present) */}
+                          {bitz.visual_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(bitz)}
+                              disabled={actionLoading === `remove-img-${bitz.id}`}
+                              className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove Image (Revert to No-Image Visual)"
+                            >
+                              <X className="w-4 h-4 stroke-[2.2]" />
+                            </button>
+                          )}
 
                           {/* Edit */}
                           <button

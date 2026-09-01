@@ -121,6 +121,7 @@ import {
 } from './server/postQueueService.mjs';
 import { evaluateStudentEssay } from './server/courseEssayEvaluationService.mjs';
 import { knowledgeBitzService } from './server/knowledgeBitzService.mjs';
+import { searchPixabay } from './server/pixabayService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14779,7 +14780,66 @@ app.post('/api/admin/bitz/presign-upload', async (req, res) => {
       objectKey: presigned.objectKey,
       headers: presigned.headers
     });
+// 17. GET /api/images/pixabay-search & POST /api/images/pixabay-search - Proxy Pixabay Search
+const handlePixabaySearch = async (req, res) => {
+  try {
+    const q = req.method === 'GET' ? req.query.q || req.query.query : req.body.q || req.body.query;
+    const category = req.method === 'GET' ? req.query.category : req.body.category;
+    const imageType = req.method === 'GET' ? req.query.image_type || 'photo' : req.body.image_type || 'photo';
+    const perPage = Number(req.method === 'GET' ? req.query.per_page : req.body.per_page) || 5;
+
+    const result = await searchPixabay({
+      query: q,
+      category,
+      imageType,
+      perPage
+    });
+
+    if (!result.success && result.error && result.error.includes('PIXABAY_API_KEY')) {
+      return res.status(503).json({ success: false, error: 'Pixabay integration is not configured on server.' });
+    }
+
+    return res.json(result);
   } catch (err) {
+    console.error('[API /api/images/pixabay-search Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: 'Internal server error during image search.' });
+  }
+};
+
+app.get('/api/images/pixabay-search', handlePixabaySearch);
+app.post('/api/images/pixabay-search', handlePixabaySearch);
+app.get('/api/admin/bitz/pixabay-search', handlePixabaySearch);
+app.post('/api/admin/bitz/pixabay-search', handlePixabaySearch);
+
+// 18. POST /api/admin/bitz/:id/fetch-pixabay - Replace image with Pixabay
+app.post('/api/admin/bitz/:id/fetch-pixabay', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+
+    const { query } = req.body;
+    const result = await knowledgeBitzService.replaceBitzImageWithPixabay(req.params.id, query, serverSupabase);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[API /api/admin/bitz/:id/fetch-pixabay Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 19. POST /api/admin/bitz/:id/remove-image - Remove image from Bitz
+app.post('/api/admin/bitz/:id/remove-image', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+
+    const result = await knowledgeBitzService.removeBitzImage(req.params.id, serverSupabase);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[API /api/admin/bitz/:id/remove-image Error]:', err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -9,6 +9,12 @@ import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { putBinaryContent, sanitizeSegment } from './r2Service.mjs';
+import {
+  autoAssignPixabayImageToBitz,
+  downloadAndStoreImage,
+  searchPixabay,
+  selectBestCandidate
+} from './pixabayService.mjs';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -895,7 +901,7 @@ STRICT RESTRICTIONS:
         }
 
         const { data, error } = await query.maybeSingle();
-        if (!error && data) return data;
+        if (!error) return data;
       } catch (e) {
         console.warn('[KnowledgeBitzService] Supabase getBitzById notice:', e.message);
       }
@@ -1104,14 +1110,7 @@ STRICT RESTRICTIONS:
     }
 
     const targetStatus = input.status || 'draft';
-    const visualStatus = input.visual_url ? 'ready' : (input.visual_status || 'missing');
-
-    // Strict validation: Bitz without ready image CANNOT be published
-    if (targetStatus === 'published') {
-      if (visualStatus !== 'ready' || !input.visual_url) {
-        throw new Error('Cannot publish Knowledge Bitz without a ready image. Save as Draft first.');
-      }
-    }
+    const hasVisual = Boolean(input.visual_url && input.visual_url.trim() !== '');
 
     const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
     const cefrLevel = input.cefr_level && validCefr.includes(input.cefr_level) ? input.cefr_level : 'B1';
@@ -1132,9 +1131,12 @@ STRICT RESTRICTIONS:
       cefr_level: cefrLevel,
       content_hash: contentHash,
       reading_time_sec: Number(input.reading_time_sec) || 30,
-      visual_url: input.visual_url || null,
+      visual_url: hasVisual ? input.visual_url : null,
       visual_object_key: input.visual_object_key || null,
-      visual_status: visualStatus,
+      visual_status: hasVisual ? 'ready' : 'missing',
+      image_source: hasVisual ? (input.image_source || 'admin') : 'none',
+      image_source_id: input.image_source_id || null,
+      image_source_url: input.image_source_url || null,
       audio_url: input.audio_url || null,
       quiz: input.quiz || null,
       vocabulary: Array.isArray(input.vocabulary) ? input.vocabulary : [],
@@ -1146,7 +1148,7 @@ STRICT RESTRICTIONS:
       views_count: 0,
       completions_count: 0,
       status: targetStatus,
-      created_by: userId || null,
+      created_by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId || '') ? userId : null,
       published_at: targetStatus === 'published' ? new Date().toISOString() : null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -1156,6 +1158,22 @@ STRICT RESTRICTIONS:
       newBitz.bitz_code = input.bitz_code;
     }
 
+    // AUTOMATIC PIXABAY PIPELINE (Priority 4): If no image supplied, auto-assign from Pixabay -> R2
+    if (!hasVisual && process.env.PIXABAY_API_KEY) {
+      try {
+        await autoAssignPixabayImageToBitz(newBitz, null);
+      } catch (pixErr) {
+        console.warn('[KnowledgeBitzService] Auto Pixabay assignment notice:', pixErr.message);
+      }
+    }
+
+    // Strict validation: Bitz without ready image CANNOT be published
+    if (targetStatus === 'published') {
+      if (newBitz.visual_status !== 'ready' || !newBitz.visual_url) {
+        throw new Error('Cannot publish Knowledge Bitz without a ready image. Save as Draft first.');
+      }
+    }
+
     if (supabaseClient) {
       let { data, error } = await supabaseClient
         .from('knowledge_bitz')
@@ -1163,12 +1181,16 @@ STRICT RESTRICTIONS:
         .select()
         .single();
 
-      if (error && error.code === '23503') {
-        // Foreign key violation on created_by (e.g. mock admin or test user): retry with created_by null
-        newBitz.created_by = null;
+      if (error && (error.code === '23503' || error.code === 'PGRST204')) {
+        const fallbackPayload = { ...newBitz };
+        if (error.code === '23503') fallbackPayload.created_by = null;
+        if (error.code === 'PGRST204') {
+          delete fallbackPayload.image_source_id;
+          delete fallbackPayload.image_source_url;
+        }
         const retry = await supabaseClient
           .from('knowledge_bitz')
-          .insert([newBitz])
+          .insert([fallbackPayload])
           .select()
           .single();
         data = retry.data;
@@ -1179,6 +1201,15 @@ STRICT RESTRICTIONS:
         console.error('[KnowledgeBitzService] Supabase insert error:', error);
         throw new Error(error.message || 'Failed to insert Knowledge Bitz into Supabase.');
       }
+
+      if (data) {
+        const allBitz = this.getLocalBitz();
+        const idx = allBitz.findIndex(b => b.id === data.id);
+        if (idx >= 0) allBitz[idx] = data;
+        else allBitz.unshift(data);
+        this.saveLocalBitz(allBitz);
+      }
+
       return data;
     }
 
@@ -1224,16 +1255,38 @@ STRICT RESTRICTIONS:
         updated_at: new Date().toISOString()
       };
 
-      const { data: updated, error: updateErr } = await supabaseClient
+      let { data: updated, error: updateErr } = await supabaseClient
         .from('knowledge_bitz')
         .update(cleanUpdates)
         .eq('id', targetId)
         .select()
         .single();
 
+      if (updateErr && updateErr.code === 'PGRST204') {
+        const fallbackUpdates = { ...cleanUpdates };
+        delete fallbackUpdates.image_source_id;
+        delete fallbackUpdates.image_source_url;
+        const retry = await supabaseClient
+          .from('knowledge_bitz')
+          .update(fallbackUpdates)
+          .eq('id', targetId)
+          .select()
+          .single();
+        updated = retry.data;
+        updateErr = retry.error;
+      }
+
       if (updateErr) {
         console.error('[KnowledgeBitzService] Supabase update error:', updateErr);
         throw new Error(updateErr.message || 'Failed to update Knowledge Bitz in Supabase.');
+      }
+
+      if (updated) {
+        const allBitz = this.getLocalBitz();
+        const idx = allBitz.findIndex(b => b.id === updated.id || b.bitz_code === updated.bitz_code);
+        if (idx >= 0) allBitz[idx] = updated;
+        else allBitz.unshift(updated);
+        this.saveLocalBitz(allBitz);
       }
 
       return updated;
@@ -1279,7 +1332,6 @@ STRICT RESTRICTIONS:
         console.error('[KnowledgeBitzService] Supabase delete error:', error);
         throw new Error(error.message || 'Failed to delete Knowledge Bitz.');
       }
-      return true;
     }
 
     let allBitz = this.getLocalBitz();
@@ -1410,6 +1462,9 @@ STRICT RESTRICTIONS:
         }];
       }
 
+      const hasVisual = Boolean((row.visual_url || row.image_url) && String(row.visual_url || row.image_url).trim() !== '');
+      const rawVisualUrl = hasVisual ? String(row.visual_url || row.image_url).trim() : null;
+
       const newBitz = {
         id: crypto.randomUUID(),
         title,
@@ -1422,9 +1477,12 @@ STRICT RESTRICTIONS:
         cefr_level: resolvedCefr,
         content_hash: contentHash,
         reading_time_sec: Number(row.reading_time_sec) || 30,
-        visual_url: row.visual_url || null,
+        visual_url: rawVisualUrl,
         visual_object_key: row.visual_object_key || null,
-        visual_status: row.visual_url ? 'ready' : 'missing',
+        visual_status: hasVisual ? 'ready' : 'missing',
+        image_source: hasVisual ? (row.image_source || 'admin') : 'none',
+        image_source_id: row.image_source_id || null,
+        image_source_url: row.image_source_url || null,
         source_citation: row.source_citation || row.sourceCitation || row.source || null,
         quiz: normalizedQuiz,
         vocabulary: Array.isArray(row.vocabulary) ? row.vocabulary : [],
@@ -1435,11 +1493,20 @@ STRICT RESTRICTIONS:
         views_count: 0,
         completions_count: 0,
         status: 'draft', // Strictly draft on import
-        created_by: userId,
+        created_by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId || '') ? userId : null,
         published_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+
+      // AUTOMATIC PIXABAY PIPELINE (Priority 4): If no image supplied, auto-assign from Pixabay -> R2
+      if (!hasVisual && process.env.PIXABAY_API_KEY) {
+        try {
+          await autoAssignPixabayImageToBitz(newBitz, null);
+        } catch (pixErr) {
+          console.warn('[KnowledgeBitzService] Auto Pixabay bulk import notice:', pixErr.message);
+        }
+      }
 
       imported.push(newBitz);
       existingHashes.add(contentHash);
@@ -1451,12 +1518,19 @@ STRICT RESTRICTIONS:
         .insert(imported)
         .select();
 
-      if (insertError && insertError.code === '23503') {
-        // Retry with created_by null in case mock admin / test user ID is not in auth.users
-        imported.forEach(b => { b.created_by = null; });
+      if (insertError && (insertError.code === '23503' || insertError.code === 'PGRST204')) {
+        const fallbackBatch = imported.map(b => {
+          const item = { ...b };
+          if (insertError.code === '23503') item.created_by = null;
+          if (insertError.code === 'PGRST204') {
+            delete item.image_source_id;
+            delete item.image_source_url;
+          }
+          return item;
+        });
         const retry = await supabaseClient
           .from('knowledge_bitz')
-          .insert(imported)
+          .insert(fallbackBatch)
           .select();
         insertedData = retry.data;
         insertError = retry.error;
@@ -1495,6 +1569,58 @@ STRICT RESTRICTIONS:
   }
 
   /**
+   * Search Pixabay and replace the Bitz image with the best candidate stored in Cloudflare R2
+   */
+  async replaceBitzImageWithPixabay(id, customQuery = null, supabaseClient = null) {
+    const bitz = await this.getBitzById(id, supabaseClient);
+    if (!bitz) throw new Error('Knowledge Bitz not found.');
+
+    const query = customQuery || `${bitz.title} ${bitz.sub_topic || ''}`.trim();
+    const searchRes = await searchPixabay({ query, perPage: 8 });
+
+    if (!searchRes.success || !searchRes.hits || searchRes.hits.length === 0) {
+      throw new Error(`No Pixabay image matches found for query "${query}".`);
+    }
+
+    const bestHit = selectBestCandidate(searchRes.hits);
+    if (!bestHit) throw new Error('No suitable Pixabay image found.');
+
+    const stored = await downloadAndStoreImage(bestHit, bitz.id || bitz.bitz_code);
+
+    const updates = {
+      visual_url: stored.publicUrl,
+      visual_object_key: stored.objectKey,
+      visual_status: 'ready',
+      image_source: 'pixabay',
+      image_source_id: stored.imageSourceId,
+      image_source_url: stored.imageSourceUrl,
+      updated_at: new Date().toISOString()
+    };
+
+    return await this.updateBitz(bitz.id, updates, supabaseClient);
+  }
+
+  /**
+   * Remove image from Bitz (reverts to premium animated visual in Explore)
+   */
+  async removeBitzImage(id, supabaseClient = null) {
+    const bitz = await this.getBitzById(id, supabaseClient);
+    if (!bitz) throw new Error('Knowledge Bitz not found.');
+
+    const updates = {
+      visual_url: null,
+      visual_object_key: null,
+      visual_status: 'missing',
+      image_source: 'none',
+      image_source_id: null,
+      image_source_url: null,
+      updated_at: new Date().toISOString()
+    };
+
+    return await this.updateBitz(bitz.id, updates, supabaseClient);
+  }
+
+  /**
    * Compute a simple hash for content deduplication (server-side).
    * Uses Node.js crypto module.
    */
@@ -1505,3 +1631,4 @@ STRICT RESTRICTIONS:
 }
 
 export const knowledgeBitzService = new KnowledgeBitzService();
+

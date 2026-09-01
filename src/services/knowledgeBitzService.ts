@@ -436,5 +436,47 @@ export const knowledgeBitzService = {
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to get upload URL.');
     return json;
+  },
+
+  async searchPixabayImages(query: string, category?: string, perPage = 5, token?: string | null) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/images/pixabay-search', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, category, per_page: perPage })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Pixabay search failed.');
+    return json;
+  },
+
+  async fetchPixabayImageForBitz(bitzId: string, query?: string, token?: string | null) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${ADMIN_API_BASE}/${bitzId}/fetch-pixabay`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to fetch Pixabay image.');
+    return json;
+  },
+
+  async removeBitzImage(bitzId: string, token?: string | null) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${ADMIN_API_BASE}/${bitzId}/remove-image`, {
+      method: 'POST',
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to remove image.');
+    return json;
   }
 };
+

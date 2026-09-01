@@ -13,7 +13,7 @@ export type BitzLearningStatus = 'unseen' | 'seen' | 'opened' | 'read' | 'learne
 
 export type BitzCefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
-export type BitzImageSource = 'none' | 'manual' | 'pexels' | 'pixabay' | 'unsplash' | 'openverse' | 'gemini';
+export type BitzImageSource = 'none' | 'admin' | 'manual' | 'pixabay' | 'gemini' | 'pexels' | 'unsplash' | 'openverse';
 
 export interface BitzQuizQuestion {
   question: string;
@@ -60,6 +60,9 @@ export interface KnowledgeBitzItem {
   visual_url?: string | null;
   visual_object_key?: string | null;
   visual_status: BitzVisualStatus;
+  image_source?: BitzImageSource;
+  image_source_id?: string | null;
+  image_source_url?: string | null;
   audio_url?: string | null;
 
   // Interactive Elements — quiz is an array of 5 questions (2 XP each)
