@@ -96,22 +96,33 @@ export const BitzThemeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setReadingSettings(DEFAULT_READING_SETTINGS);
   };
 
-  // Sync theme to localStorage
+  // Sync theme to localStorage and HTML root attribute
   useEffect(() => {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem('theme', theme);
     } catch {}
+
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme-mode', theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
   }, [theme]);
 
-  // Sync reading settings to localStorage & apply dynamic CSS variables
+  // Sync reading settings to localStorage & apply dynamic CSS variables & HTML data-text-size attribute
   useEffect(() => {
     try {
       localStorage.setItem(READING_SETTINGS_KEY, JSON.stringify(readingSettings));
+      localStorage.setItem('edtechra_text_size', readingSettings.textSize);
     } catch {}
 
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
 
-    // Font size mapping
+    // Font size mapping for 100-word reading text
     let fontSizeValue = '18px';
     if (readingSettings.textSize === 'small') fontSizeValue = isMobile ? '15px' : '16px';
     else if (readingSettings.textSize === 'medium') fontSizeValue = isMobile ? '17px' : '18px';
@@ -133,6 +144,7 @@ export const BitzThemeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-text-size', readingSettings.textSize);
       document.documentElement.style.setProperty('--reading-font-size', fontSizeValue);
       document.documentElement.style.setProperty('--reading-line-height', lineSpacingValue);
       document.documentElement.style.setProperty('--reading-font-family', fontFamilyValue);

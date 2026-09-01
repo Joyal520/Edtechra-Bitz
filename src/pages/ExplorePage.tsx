@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import { Sparkles, Users } from 'lucide-react';
 import { ExploreFeed } from '@/components/Explore/ExploreFeed';
 import { PostFeed } from '@/components/PostFeed/PostFeed';
-import { BitzThemeProvider, useBitzTheme } from '@/context/BitzThemeContext';
+import { useBitzTheme } from '@/context/BitzThemeContext';
 
 const ExplorePageContent: React.FC = () => {
   const [feedMode, setFeedMode] = useState<'knowledge' | 'community'>('knowledge');
@@ -161,9 +161,5 @@ const ExplorePageContent: React.FC = () => {
 };
 
 export const ExplorePage: React.FC = () => {
-  return (
-    <BitzThemeProvider>
-      <ExplorePageContent />
-    </BitzThemeProvider>
-  );
+  return <ExplorePageContent />;
 };

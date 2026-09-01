@@ -4,7 +4,7 @@
 // WebP Compression, Cloudflare R2 Upload, and Admin Preview.
 // ============================================================================
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Sparkles,
   Plus,
@@ -23,7 +23,8 @@ import {
   Check,
   RefreshCw,
   Globe,
-  Rocket
+  Rocket,
+  Download
 } from 'lucide-react';
 import {
   KnowledgeBitzItem,
@@ -47,6 +48,7 @@ import {
 import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
 import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
+import { downloadKnowledgeBitzCsv } from '@/utils/bitzCsvExporter';
 import { KnowledgeBitzReaderModal } from './Explore/KnowledgeBitzReaderModal';
 import { AiBitzCreationWizard } from './AiBitzCreationWizard';
 
@@ -60,6 +62,18 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // CSV Export State
+  const [exportingCsv, setExportingCsv] = useState<boolean>(false);
+  const [exportSuccessMessage, setExportSuccessMessage] = useState<string | null>(null);
+
+  // Synchronized Horizontal Scroll Bar State & Refs
+  const topScrollRef = useRef<HTMLDivElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const isSyncingTop = useRef<boolean>(false);
+  const isSyncingTable = useRef<boolean>(false);
+  const [tableScrollWidth, setTableScrollWidth] = useState<number>(0);
+  const [tableClientWidth, setTableClientWidth] = useState<number>(0);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -147,6 +161,79 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
   useEffect(() => {
     loadAdminBitz();
   }, [loadAdminBitz]);
+
+  // Synchronize top horizontal scrollbar with facts table width dynamically
+  useEffect(() => {
+    const tableEl = tableScrollRef.current;
+    if (!tableEl) return;
+
+    const updateWidth = () => {
+      setTableScrollWidth(tableEl.scrollWidth);
+      setTableClientWidth(tableEl.clientWidth);
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateWidth();
+    });
+
+    resizeObserver.observe(tableEl);
+    if (tableEl.firstElementChild) {
+      resizeObserver.observe(tableEl.firstElementChild);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [bitzList, loading]);
+
+  const handleTopScroll = () => {
+    if (isSyncingTop.current) {
+      isSyncingTop.current = false;
+      return;
+    }
+    if (topScrollRef.current && tableScrollRef.current) {
+      isSyncingTable.current = true;
+      tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (isSyncingTable.current) {
+      isSyncingTable.current = false;
+      return;
+    }
+    if (topScrollRef.current && tableScrollRef.current) {
+      isSyncingTop.current = true;
+      topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  };
+
+  // Export ALL Knowledge Bitz in database to Excel UTF-8 BOM CSV
+  const handleExportCsv = async () => {
+    if (exportingCsv) return;
+    setExportingCsv(true);
+    setErrorMessage(null);
+    setExportSuccessMessage(null);
+
+    try {
+      const allBitz = await knowledgeBitzService.getAllAdminBitz(token);
+      if (!allBitz || allBitz.length === 0) {
+        setErrorMessage('No Knowledge Bitz records found in the database to export.');
+        return;
+      }
+
+      downloadKnowledgeBitzCsv(allBitz);
+      setExportSuccessMessage(`Successfully exported all ${allBitz.length} Knowledge Bitz to CSV.`);
+      setTimeout(() => {
+        setExportSuccessMessage(null);
+      }, 4000);
+    } catch (err: any) {
+      console.error('[AdminKnowledgeBitzSection] Export CSV error:', err);
+      setErrorMessage(err.message || 'Failed to export Knowledge Bitz catalogue to CSV.');
+    } finally {
+      setExportingCsv(false);
+    }
+  };
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -552,6 +639,22 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
             <span>+ Single Fact</span>
           </button>
 
+          {/* Export CSV Button (All Facts in database) */}
+          <button
+            type="button"
+            disabled={exportingCsv}
+            onClick={handleExportCsv}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-emerald-50 border-2 border-emerald-500 hover:border-emerald-600 text-emerald-800 hover:text-emerald-900 text-xs font-black rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs disabled:opacity-50"
+            title="Export ALL Knowledge Bitz records and 5 flattened quizzes to CSV"
+          >
+            {exportingCsv ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+            )}
+            <span>{exportingCsv ? 'Exporting CSV...' : 'Export CSV'}</span>
+          </button>
+
           {/* Batch Publish All Drafts Button */}
           {bitzList.some((b) => b.status !== 'published') && (
             <button
@@ -670,6 +773,14 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         </select>
       </div>
 
+      {/* Success Banner */}
+      {exportSuccessMessage && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0 stroke-[3]" />
+          <span>{exportSuccessMessage}</span>
+        </div>
+      )}
+
       {/* Error Message Banner */}
       {errorMessage && (
         <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-900 font-bold rounded-xl text-xs flex items-center gap-2">
@@ -679,7 +790,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       )}
 
       {/* Catalogue Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden table-scroll-wrapper">
         {loading ? (
           <div className="p-16 flex flex-col items-center justify-center text-slate-500">
             <Loader2 className="w-8 h-8 animate-spin text-[#026fc3] mb-2" />
@@ -732,9 +843,36 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wider font-black text-[11px]">
+          <div>
+            {/* Top Synchronized Horizontal Scroll Bar */}
+            <div
+              ref={topScrollRef}
+              onScroll={handleTopScroll}
+              className="top-horizontal-scroll overflow-x-auto overflow-y-hidden bg-slate-100 border-b border-slate-200"
+              style={{
+                height: '14px',
+                display: tableScrollWidth > tableClientWidth ? 'block' : 'none'
+              }}
+              title="Drag or scroll horizontally to pan table"
+              aria-label="Table horizontal scroll controller"
+            >
+              <div
+                className="scroll-width-spacer"
+                style={{
+                  width: `${tableScrollWidth}px`,
+                  height: '1px'
+                }}
+              />
+            </div>
+
+            {/* Main Table Horizontal Scroll Area */}
+            <div
+              ref={tableScrollRef}
+              onScroll={handleTableScroll}
+              className="table-horizontal-scroll overflow-x-auto"
+            >
+              <table className="w-full text-left text-xs min-w-[1000px]">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wider font-black text-[11px]">
                 <tr>
                   <th className="p-3.5">Code</th>
                   <th className="p-3.5">Image</th>
@@ -977,8 +1115,9 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
 
       {/* CREATE / EDIT BITZ MODAL */}
       {createModalOpen && (

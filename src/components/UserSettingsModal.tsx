@@ -11,9 +11,13 @@ import {
   GraduationCap,
   Sparkles,
   Save,
-  Check
+  Check,
+  Type,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useBitzTheme, BitzTextSize } from '@/context/BitzThemeContext';
 import { DEFAULT_AVATARS, AvatarPreset, AVATAR_CATEGORY_TABS, AvatarCategory } from '@/utils/avatarConstants';
 import { ImageSquareCropper } from '@/components/PostFeed/ImageSquareCropper';
 import {
@@ -29,6 +33,7 @@ interface UserSettingsModalProps {
 
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
   const { user, profile, isAdmin, updateUserProfile, session } = useAuth();
+  const { isDark, setTheme, readingSettings, setTextSize } = useBitzTheme();
 
   const [displayName, setDisplayName] = useState<string>('');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string>('');
@@ -179,7 +184,8 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
     try {
       const res = await updateUserProfile({
         full_name: trimmedName,
-        avatar_url: selectedAvatarUrl || null
+        avatar_url: selectedAvatarUrl || null,
+        text_size: readingSettings.textSize
       });
 
       if (res.error) {
@@ -425,7 +431,114 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 </div>
               </div>
 
-              {/* 2. ACCOUNT STATUS */}
+              {/* 2. LEARNING CONTENT TEXT SIZE */}
+              <div className="space-y-3.5 pt-4 border-t border-stone-100">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Type className="w-4 h-4 text-[#026fc3]" />
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                      Learning Content Text Size
+                    </label>
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Customizes the font size of learning content.
+                  </p>
+                </div>
+
+                {/* 3 Size Options: Small (A-), Medium (A), Large (A+) */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'small', label: 'Small', sub: 'A−', size: '12px' },
+                    { id: 'medium', label: 'Medium', sub: 'A', size: '14px' },
+                    { id: 'large', label: 'Large', sub: 'A+', size: '16px' }
+                  ].map((option) => {
+                    const isSelected = readingSettings.textSize === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setTextSize(option.id as BitzTextSize);
+                        }}
+                        className={`p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                          isSelected
+                            ? 'border-[#026fc3] bg-blue-50/80 text-[#026fc3] font-black shadow-2xs ring-2 ring-[#026fc3]/25'
+                            : 'border-slate-200 bg-stone-50/50 hover:bg-stone-100/70 text-slate-700 font-bold'
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <div className="text-xs flex items-center gap-1">
+                          <span>{option.label}</span>
+                          <span className="text-[11px] font-black opacity-75">({option.sub})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">{option.size}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Live Preview Card */}
+                <div className="p-3.5 rounded-2xl bg-stone-100/80 border border-stone-200/80 space-y-1.5">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Live Preview
+                  </div>
+                  <div className="p-3 rounded-xl bg-white border border-stone-200/80 shadow-2xs space-y-1">
+                    <p className="font-bold text-slate-900 leading-snug learning-content-text text-[length:var(--learning-text-size,14px)]">
+                      🎯 &ldquo;Which sentence uses the correct past tense?&rdquo;
+                    </p>
+                    <p className="text-slate-600 leading-relaxed learning-content-text text-[length:var(--learning-text-size,14px)]">
+                      📖 &ldquo;The early morning light illuminated the tranquil mountain path.&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. THEME */}
+              <div className="space-y-3.5 pt-4 border-t border-stone-100">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    {isDark ? <Moon className="w-4 h-4 text-[#026fc3]" /> : <Sun className="w-4 h-4 text-amber-500" />}
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                      Theme
+                    </label>
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    Choose your preferred EdTechra appearance.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      isDark
+                        ? 'border-[#026fc3] bg-blue-50/80 text-[#026fc3] font-black shadow-2xs ring-2 ring-[#026fc3]/25'
+                        : 'border-slate-200 bg-stone-50/50 hover:bg-stone-100/70 text-slate-700 font-bold'
+                    }`}
+                    aria-pressed={isDark}
+                  >
+                    <Moon className="w-4 h-4 text-sky-500" />
+                    <span className="text-xs">Dark</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      !isDark
+                        ? 'border-[#026fc3] bg-blue-50/80 text-[#026fc3] font-black shadow-2xs ring-2 ring-[#026fc3]/25'
+                        : 'border-slate-200 bg-stone-50/50 hover:bg-stone-100/70 text-slate-700 font-bold'
+                    }`}
+                    aria-pressed={!isDark}
+                  >
+                    <Sun className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs">Light</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. ACCOUNT INFORMATION */}
               <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between text-xs">
                 <div className="space-y-0.5">
                   <div className="font-bold text-slate-700">Account Email</div>
@@ -449,7 +562,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 )}
               </div>
 
-              {/* Action Buttons */}
+              {/* 5. ACTION BUTTONS */}
               <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2.5">
                 <button
                   type="button"

@@ -351,6 +351,68 @@ export const knowledgeBitzService = {
     return await res.json();
   },
 
+  /**
+   * Fetches ALL Knowledge Bitz records in the database catalogue for export.
+   * Paginates through all pages in batches to retrieve 100% of facts.
+   */
+  async getAllAdminBitz(token?: string | null): Promise<KnowledgeBitzItem[]> {
+    const allBitz: KnowledgeBitzItem[] = [];
+    let currentPage = 1;
+    const limit = 100;
+    let hasMore = true;
+
+    try {
+      while (hasMore) {
+        const res = await this.getAdminBitz(
+          {
+            page: currentPage,
+            limit,
+            status: 'all',
+            visualStatus: 'all',
+            category: 'all',
+            subtopic: 'all',
+            cefrLevel: 'all',
+            search: ''
+          },
+          token
+        );
+
+        if (res.success && Array.isArray(res.bitz)) {
+          allBitz.push(...res.bitz);
+          if (allBitz.length >= res.total || res.bitz.length < limit || res.bitz.length === 0) {
+            hasMore = false;
+          } else {
+            currentPage += 1;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+    } catch (err) {
+      console.warn('[KnowledgeBitzService] Admin API getAllAdminBitz fallback:', err);
+      // Supabase direct fallback if API is unreachable
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('knowledge_bitz')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!error && Array.isArray(data)) {
+            return data.map((b: any) => ({
+              ...b,
+              image_url: b.visual_url || b.image_url || null,
+              visual_url: b.visual_url || b.image_url || null,
+              image_source: b.image_source || (b.visual_url ? 'custom' : 'none')
+            }));
+          }
+        } catch (e) {}
+      }
+      throw err;
+    }
+
+    return allBitz;
+  },
+
   async createBitz(input: CreateKnowledgeBitzInput, token?: string | null): Promise<KnowledgeBitzItem> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;

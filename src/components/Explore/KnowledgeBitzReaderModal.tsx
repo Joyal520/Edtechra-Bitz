@@ -20,10 +20,7 @@ import {
   Bookmark,
   Share2,
   RotateCcw,
-  Check,
-  Sliders,
-  Sun,
-  Moon
+  Check
 } from 'lucide-react';
 import { KnowledgeBitzItem, BitzQuizQuestion, normalizeQuizToArray } from '@/types';
 import { getCategoryById } from '@/utils/bitzTopicsConfig';
@@ -50,19 +47,12 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 }) => {
   const { session, requireAuth } = useAuth();
   const token = session?.access_token || null;
-  const {
-    isDark,
-    setTheme,
-    readingSettings,
-    setTextSize,
-    resetReadingSettings
-  } = useBitzTheme();
+  const { isDark } = useBitzTheme();
 
-  // Audio, Sharing, and Reading Settings Popover
+  // Audio and Sharing State
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const [showReadingSettings, setShowReadingSettings] = useState<boolean>(false);
 
   // Interaction State Machine: READING -> QUIZ_ACTIVE -> QUIZ_RESULT -> COMPLETED
   const [viewState, setViewState] = useState<ReaderState>('READING');
@@ -77,30 +67,14 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   const awardedQuestionsRef = useRef<Set<number>>(new Set());
 
   const quizSectionRef = useRef<HTMLDivElement | null>(null);
-  const settingsRef = useRef<HTMLDivElement | null>(null);
-
   const category = bitz ? getCategoryById(bitz.category || bitz.topic_id) : null;
   const quizQuestions: BitzQuizQuestion[] = bitz ? normalizeQuizToArray(bitz.quiz) : [];
   const totalQuestions = quizQuestions.length;
-
-  // Close reading settings popover on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setShowReadingSettings(false);
-      }
-    }
-    if (showReadingSettings) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showReadingSettings]);
 
   // Reset states on modal open
   useEffect(() => {
     if (isOpen && bitz) {
       setIsPlayingAudio(false);
-      setShowReadingSettings(false);
       setViewState('READING');
       setCurrentQuestionIndex(0);
       setSelectedOption(null);
@@ -300,127 +274,33 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
             isDark ? 'bg-[#06152B] border-[rgba(96,165,250,0.2)]' : 'bg-white border-slate-200'
           }`}
         >
-          {/* Left / Center: Clean reading experience context */}
-          <div className="flex items-center gap-2 min-w-0" />
-
-          {/* Action Icons */}
-          <div className="flex items-center gap-1 shrink-0">
-            {/* Reading Settings Trigger */}
-            <div className="relative" ref={settingsRef}>
-              <button
-                type="button"
-                onClick={() => setShowReadingSettings(!showReadingSettings)}
-                className={`p-2 rounded-full transition-all cursor-pointer ${
-                  showReadingSettings
-                    ? isDark
-                      ? 'bg-[#1677FF] text-white'
-                      : 'bg-blue-100 text-[#1677FF]'
-                    : isDark
-                    ? 'text-[#CBD5E1] hover:bg-[#0B2342] hover:text-white'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-[#0a213c]'
+          {/* Left / Category Context */}
+          <div className="flex items-center gap-2 min-w-0">
+            {category && (
+              <div
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
+                  isDark
+                    ? 'bg-[#0B2342] border-[rgba(96,165,250,0.3)]'
+                    : 'bg-blue-50 border-blue-100'
                 }`}
-                title="Reading settings"
-                aria-label="Reading settings"
               >
-                <Sliders className="w-4 h-4 stroke-[2.2]" />
-              </button>
-
-              {/* Reading Settings Dropdown Popover */}
-              {showReadingSettings && (
-                <div
-                  className={`absolute right-0 top-full mt-2 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl z-30 space-y-4 animate-scale-in ${
-                    isDark
-                      ? 'bg-[#06152B] border-[rgba(96,165,250,0.3)] text-white shadow-black/80'
-                      : 'bg-white border-slate-200 text-[#0a213c] shadow-xl'
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: category.color }}
+                />
+                <span
+                  className={`text-[11px] font-black uppercase tracking-wider ${
+                    isDark ? 'text-[#5AA9FF]' : 'text-[#0a213c]'
                   }`}
                 >
-                  <div className={`flex items-center justify-between border-b pb-2 ${isDark ? 'border-slate-700/50' : 'border-slate-200'}`}>
-                    <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-[#36D1FF]" />
-                      <span>Reading Settings</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={resetReadingSettings}
-                      className="text-[10px] font-bold text-[#36D1FF] hover:underline cursor-pointer"
-                    >
-                      Reset
-                    </button>
-                  </div>
+                  {category.name}
+                </span>
+              </div>
+            )}
+          </div>
 
-                  {/* 1. Text Size Control */}
-                  <div className="space-y-1.5">
-                    <span className={`text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Text Size
-                    </span>
-                    <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl border ${
-                      isDark ? 'bg-black/20 border-white/10' : 'bg-slate-100/80 border-slate-200'
-                    }`}>
-                      {([
-                        { id: 'small', label: 'Small', sub: 'A−' },
-                        { id: 'medium', label: 'Medium', sub: 'A' },
-                        { id: 'large', label: 'Large', sub: 'A+' }
-                      ] as const).map(({ id, label, sub }) => (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => setTextSize(id)}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
-                            readingSettings.textSize === id
-                              ? 'bg-[#1677FF] text-white shadow-xs font-black'
-                              : isDark
-                              ? 'text-slate-300 hover:text-white hover:bg-white/5'
-                              : 'text-slate-700 hover:text-[#0a213c] hover:bg-slate-200/60'
-                          }`}
-                        >
-                          <span>{label}</span>
-                          <span className={`text-[10px] ${readingSettings.textSize === id ? 'text-white/80' : 'text-slate-400'}`}>
-                            {sub}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 2. Theme Control */}
-                  <div className="space-y-1.5">
-                    <span className={`text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Theme
-                    </span>
-                    <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl border ${
-                      isDark ? 'bg-black/20 border-white/10' : 'bg-slate-100/80 border-slate-200'
-                    }`}>
-                      <button
-                        type="button"
-                        onClick={() => setTheme('dark')}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          isDark
-                            ? 'bg-[#1677FF] text-white shadow-xs font-black'
-                            : 'text-slate-700 hover:text-[#0a213c] hover:bg-slate-200/60'
-                        }`}
-                      >
-                        <Moon className="w-3.5 h-3.5 text-sky-400" />
-                        <span>Dark</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setTheme('light')}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          !isDark
-                            ? 'bg-[#1677FF] text-white shadow-xs font-black'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <Sun className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Light</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
+          {/* Action Icons: Bookmark, Share, Close */}
+          <div className="flex items-center gap-1 shrink-0">
             {/* Bookmark Save */}
             <button
               type="button"
