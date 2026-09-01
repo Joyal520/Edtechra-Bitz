@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { KnowledgeBitzItem, BitzDifficulty } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { useBitzTheme } from '@/context/BitzThemeContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { KnowledgeBitzDiscoveryCard } from './KnowledgeBitzDiscoveryCard';
 import { KnowledgeBitzReaderModal } from './KnowledgeBitzReaderModal';
@@ -160,6 +161,8 @@ export const ExploreFeed: React.FC = () => {
     setBitzList((prev) => prev.filter((b) => b.id !== bitzId));
   };
 
+  const { isDark } = useBitzTheme();
+
   const handleOpenReader = (bitz: KnowledgeBitzItem) => {
     setSelectedBitzForReader(bitz);
     setIsReaderOpen(true);
@@ -176,13 +179,17 @@ export const ExploreFeed: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search ideas, topics, facts..."
-            className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-300 rounded-2xl text-xs sm:text-sm font-semibold text-[#0a213c] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-[#026fc3] shadow-xs transition-all"
+            className={`w-full pl-10 pr-9 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all focus:outline-none focus:ring-2 ${
+              isDark
+                ? 'bg-[#0b1b36] border border-[#1e3a5f] text-white placeholder:text-slate-400 focus:ring-[#026fc3]/40 focus:border-[#026fc3] shadow-inner'
+                : 'bg-white border border-slate-300 text-[#0a213c] placeholder:text-slate-400 focus:ring-blue-500/25 focus:border-[#026fc3] shadow-xs'
+            }`}
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-[#0a213c]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-white"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -193,10 +200,14 @@ export const ExploreFeed: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsCustomizeOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-blue-50 border border-slate-300 hover:border-[#026fc3] rounded-2xl text-xs font-black text-[#0a213c] shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
+          className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer ${
+            isDark
+              ? 'bg-[#0b1b36] hover:bg-[#12284c] border border-[#1e3a5f] hover:border-[#026fc3] text-slate-200 hover:text-white'
+              : 'bg-white hover:bg-blue-50 border border-slate-300 hover:border-[#026fc3] text-[#0a213c]'
+          }`}
           title="Customize Your Feed"
         >
-          <SlidersHorizontal className="w-4 h-4 text-[#026fc3] stroke-[2.5]" />
+          <SlidersHorizontal className="w-4 h-4 text-[#38bdf8] stroke-[2.5]" />
           <span className="font-black">Customize</span>
         </button>
 
@@ -204,10 +215,14 @@ export const ExploreFeed: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsSavedOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-amber-50 border border-slate-300 hover:border-amber-400 rounded-2xl text-xs font-black text-[#0a213c] shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer"
+          className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer ${
+            isDark
+              ? 'bg-[#0b1b36] hover:bg-[#12284c] border border-[#1e3a5f] hover:border-amber-500/60 text-slate-200 hover:text-white'
+              : 'bg-white hover:bg-amber-50 border border-slate-300 hover:border-amber-400 text-[#0a213c]'
+          }`}
           title="My Saved Knowledge"
         >
-          <Bookmark className="w-4 h-4 text-amber-500 fill-amber-500/30 stroke-[2.5]" />
+          <Bookmark className="w-4 h-4 text-amber-400 fill-amber-400/30 stroke-[2.5]" />
           <span className="font-black">Saved</span>
         </button>
       </div>
@@ -223,11 +238,13 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTopic === 'all' && activeTab === 'for_you'
-              ? 'bg-[#026fc3] text-white shadow-xs'
+              ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+              : isDark
+              ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
           <span>For You</span>
         </button>
 
@@ -240,11 +257,13 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTab === 'trending'
-              ? 'bg-[#026fc3] text-white shadow-xs'
+              ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+              : isDark
+              ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
-          <Flame className="w-3.5 h-3.5" />
+          <Flame className="w-3.5 h-3.5 text-amber-400" />
           <span>Trending</span>
         </button>
 
@@ -262,7 +281,9 @@ export const ExploreFeed: React.FC = () => {
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
                 isActive
-                  ? 'bg-[#026fc3] text-white shadow-xs'
+                  ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+                  : isDark
+                  ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
                   : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
               }`}
             >
@@ -284,25 +305,31 @@ export const ExploreFeed: React.FC = () => {
             {[1, 2].map((n) => (
               <div
                 key={n}
-                className="bg-white rounded-3xl border border-slate-200 overflow-hidden animate-pulse p-4 sm:p-5 space-y-4 max-w-xl mx-auto w-full"
+                className={`rounded-3xl border overflow-hidden animate-pulse p-4 sm:p-5 space-y-4 max-w-xl mx-auto w-full ${
+                  isDark ? 'bg-[#0b172a] border-[#1e3a5f]' : 'bg-white border-slate-200'
+                }`}
               >
-                <div className="w-full aspect-square bg-slate-100 rounded-2xl" />
-                <div className="h-6 bg-slate-100 rounded-md w-3/4" />
+                <div className={`w-full aspect-square rounded-2xl ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
+                <div className={`h-6 rounded-md w-3/4 ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
                 <div className="space-y-2">
-                  <div className="h-4 bg-slate-100 rounded w-full" />
-                  <div className="h-4 bg-slate-100 rounded w-5/6" />
+                  <div className={`h-4 rounded w-full ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
+                  <div className={`h-4 rounded w-5/6 ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
                 </div>
               </div>
             ))}
           </div>
         ) : error ? (
           // Error State
-          <div className="p-8 text-center bg-rose-50 rounded-3xl border border-rose-200 space-y-3">
-            <AlertCircle className="w-10 h-10 text-rose-600 mx-auto" />
-            <h3 className="text-base font-black text-rose-950">
+          <div
+            className={`p-8 text-center rounded-3xl border space-y-3 ${
+              isDark ? 'bg-[#1a101b] border-rose-900/50' : 'bg-rose-50 border-rose-200'
+            }`}
+          >
+            <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
+            <h3 className="text-base font-black text-rose-400">
               Couldn't load Knowledge Feed
             </h3>
-            <p className="text-xs text-rose-800 font-semibold">{error}</p>
+            <p className="text-xs text-rose-300 font-semibold">{error}</p>
             <button
               type="button"
               onClick={() => fetchFeed(1, false)}
@@ -314,16 +341,24 @@ export const ExploreFeed: React.FC = () => {
           </div>
         ) : (bitzList.length === 0 && !allLearnedNotice) ? (
           // Empty State (No published facts in database for this filter)
-          <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-4 shadow-xs max-w-xl mx-auto">
-            <div className="w-16 h-16 bg-blue-50 text-[#026fc3] border border-blue-200 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
+          <div
+            className={`p-8 sm:p-12 text-center rounded-3xl border space-y-4 shadow-xs max-w-xl mx-auto ${
+              isDark ? 'bg-[#0b172a] border-[#1e3a5f] text-white' : 'bg-white border-slate-200 text-[#0a213c]'
+            }`}
+          >
+            <div className="w-16 h-16 bg-blue-500/10 text-[#38bdf8] border border-blue-500/25 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
               <Sparkles className="w-8 h-8 stroke-[2.5]" />
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-xl sm:text-2xl font-black text-[#0a213c] tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight">
                 No Knowledge Bitz available yet.
               </h3>
-              <p className="text-sm font-semibold text-slate-700 max-w-md mx-auto leading-relaxed">
+              <p
+                className={`text-sm font-semibold max-w-md mx-auto leading-relaxed ${
+                  isDark ? 'text-slate-300' : 'text-slate-700'
+                }`}
+              >
                 There are currently no published facts in this category. Check back soon or explore other topics!
               </p>
             </div>
@@ -336,7 +371,7 @@ export const ExploreFeed: React.FC = () => {
                   setSearchQuery('');
                   fetchFeed(1, false);
                 }}
-                className="px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                className="px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 stroke-[2.5]" />
                 <span>Explore All Topics</span>
@@ -345,16 +380,24 @@ export const ExploreFeed: React.FC = () => {
           </div>
         ) : allLearnedNotice ? (
           // Premium Completion State (User has mastered all facts in selection)
-          <div className="p-8 sm:p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-5 shadow-xs max-w-xl mx-auto">
-            <div className="w-16 h-16 bg-blue-50 text-[#026fc3] border border-blue-200 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
+          <div
+            className={`p-8 sm:p-12 text-center rounded-3xl border space-y-5 shadow-xs max-w-xl mx-auto ${
+              isDark ? 'bg-[#0b172a] border-[#1e3a5f] text-white' : 'bg-white border-slate-200 text-[#0a213c]'
+            }`}
+          >
+            <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-9 h-9 stroke-[2.5]" />
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-xl sm:text-2xl font-black text-[#0a213c] tracking-tight">
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight">
                 You're all caught up!
               </h3>
-              <p className="text-sm font-semibold text-slate-700 max-w-md mx-auto leading-relaxed">
+              <p
+                className={`text-sm font-semibold max-w-md mx-auto leading-relaxed ${
+                  isDark ? 'text-slate-300' : 'text-slate-700'
+                }`}
+              >
                 Great job! All published facts in your selected topics have been permanently mastered.
               </p>
             </div>
@@ -376,7 +419,11 @@ export const ExploreFeed: React.FC = () => {
                   setSearchQuery('');
                   fetchFeed(1, false);
                 }}
-                className="px-6 py-3 bg-white hover:bg-slate-50 border-2 border-slate-300 text-[#0a213c] text-xs sm:text-sm font-black rounded-2xl shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className={`px-6 py-3 border rounded-2xl text-xs sm:text-sm font-black shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                  isDark
+                    ? 'bg-[#0f2347] hover:bg-[#153060] border-[#1e4070] text-white'
+                    : 'bg-white hover:bg-slate-50 border-slate-300 text-[#0a213c]'
+                }`}
               >
                 <span>Explore Other Topics</span>
               </button>

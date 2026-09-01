@@ -1,8 +1,3 @@
-// ============================================================================
-// EDTECHRA-BITZ: Knowledge Bitz Discovery Card (V2)
-// 1:1 Square Media, CEFR badge, 20-30 word discovery fact, double-tap reader
-// ============================================================================
-
 import React, { useState, useRef, useCallback } from 'react';
 import {
   Heart,
@@ -15,6 +10,7 @@ import {
 import { KnowledgeBitzItem } from '@/types';
 import { getCategoryById } from '@/utils/bitzTopicsConfig';
 import { useAuth } from '@/context/AuthContext';
+import { useBitzTheme } from '@/context/BitzThemeContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { playCorrectAnswerSound } from '@/utils/reorderAudio';
 
@@ -33,6 +29,7 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
 }) => {
   const { session, requireAuth } = useAuth();
   const token = session?.access_token || null;
+  const { isDark } = useBitzTheme();
 
   const [isLiked, setIsLiked] = useState<boolean>(Boolean(bitz.is_liked_by_me));
   const [likesCount, setLikesCount] = useState<number>(bitz.likes_count || 0);
@@ -150,11 +147,15 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
   return (
     <article
       onClick={handleCardTap}
-      className="group relative bg-white rounded-3xl border border-slate-200/90 shadow-xs hover:shadow-lg hover:border-[#026fc3]/50 transition-all duration-300 overflow-hidden cursor-pointer select-none max-w-xl mx-auto w-full"
+      className={`group relative rounded-3xl border shadow-md transition-all duration-300 overflow-hidden cursor-pointer select-none max-w-xl mx-auto w-full ${
+        isDark
+          ? 'bg-[#0b172a] border-[#1e3a5f] hover:border-[#026fc3]/80 hover:shadow-[0_0_25px_rgba(2,111,195,0.25)]'
+          : 'bg-white border-slate-200/90 hover:shadow-lg hover:border-[#026fc3]/50'
+      }`}
       aria-label={`Knowledge Bitz: ${bitz.title}`}
     >
       {/* 1:1 Square Media Container */}
-      <div className="relative w-full aspect-square bg-slate-900 overflow-hidden">
+      <div className="relative w-full aspect-square bg-slate-950 overflow-hidden">
         {hasImage ? (
           <img
             src={bitz.visual_url!}
@@ -167,14 +168,14 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
           /* Premium dark-blue animated background for facts without image */
           <div className="w-full h-full relative flex flex-col items-center justify-center p-8 text-center overflow-hidden bg-gradient-to-br from-[#082847] via-[#024a87] to-[#0a1f38]">
             {/* Ambient decorative glowing rings */}
-            <div className="absolute w-72 h-72 rounded-full bg-blue-500/10 blur-2xl animate-pulse pointer-events-none" />
-            <div className="absolute w-48 h-48 rounded-full bg-indigo-500/15 blur-xl pointer-events-none -bottom-10 -right-10" />
+            <div className="absolute w-72 h-72 rounded-full bg-blue-500/15 blur-2xl animate-pulse pointer-events-none" />
+            <div className="absolute w-48 h-48 rounded-full bg-indigo-500/20 blur-xl pointer-events-none -bottom-10 -right-10" />
 
             <div className="relative z-10 flex flex-col items-center max-w-sm">
               <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-blue-200 mb-4 shadow-lg">
                 <Sparkles className="w-7 h-7 animate-pulse text-amber-300" />
               </div>
-              <span className="text-xs uppercase tracking-widest font-black text-blue-200/90 mb-2">
+              <span className="text-xs uppercase tracking-widest font-black text-sky-200/90 mb-2">
                 {category.name}
               </span>
               <h4 className="text-xl sm:text-2xl font-black text-white leading-tight tracking-tight">
@@ -185,12 +186,12 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
         )}
 
         {/* Subtle Vignette Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/40 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/40 pointer-events-none" />
 
         {/* Top Badges: Category Pill + CEFR Level Pill */}
         <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between pointer-events-none z-10">
           {/* Category Badge */}
-          <div className="flex items-center gap-1.5 bg-[#082847]/85 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 shadow-sm">
+          <div className="flex items-center gap-1.5 bg-[#082847]/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-md">
             <span
               className="w-2 h-2 rounded-full shrink-0"
               style={{ backgroundColor: category.color }}
@@ -201,7 +202,7 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
           </div>
 
           {/* CEFR Level Badge */}
-          <div className="flex items-center gap-1 bg-[#026fc3]/90 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-black tracking-wider border border-white/20 shadow-sm">
+          <div className="flex items-center gap-1 bg-[#026fc3]/95 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-black tracking-wider border border-white/25 shadow-md">
             <span>CEFR {bitz.cefr_level || 'B1'}</span>
           </div>
         </div>
@@ -217,13 +218,13 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
 
         {/* Bottom Cue Overlay on Media */}
         <div className="absolute bottom-3 left-3.5 right-3.5 flex items-center justify-between text-white text-xs pointer-events-none z-10">
-          <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border border-white/10 shadow-xs">
+          <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border border-white/15 shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span>Double tap to read 100-word bitz</span>
           </div>
 
           {bitz.sub_topic && (
-            <span className="bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white/90 truncate max-w-[120px]">
+            <span className="bg-white/25 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white truncate max-w-[130px] border border-white/10">
               {bitz.sub_topic}
             </span>
           )}
@@ -233,17 +234,31 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
       {/* Discovery Fact Content */}
       <div className="p-4 sm:p-5">
         {/* Hook Headline */}
-        <h3 className="text-lg sm:text-xl font-black text-[#0a213c] leading-snug tracking-tight mb-2 group-hover:text-[#026fc3] transition-colors">
+        <h3
+          className={`text-lg sm:text-xl font-black leading-snug tracking-tight mb-2 transition-colors ${
+            isDark
+              ? 'text-white group-hover:text-[#38bdf8]'
+              : 'text-[#0a213c] group-hover:text-[#026fc3]'
+          }`}
+        >
           {bitz.title}
         </h3>
 
         {/* 20–30 Word Discovery Fact */}
-        <p className="text-slate-700 text-sm sm:text-[15px] font-medium leading-relaxed mb-4">
+        <p
+          className={`text-sm sm:text-[15px] font-normal leading-relaxed mb-4 ${
+            isDark ? 'text-slate-200' : 'text-slate-700'
+          }`}
+        >
           {bitz.short_fact}
         </p>
 
         {/* Action Bar */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+        <div
+          className={`flex items-center justify-between pt-3 border-t ${
+            isDark ? 'border-[#172d4e]' : 'border-slate-100'
+          }`}
+        >
           <div className="flex items-center gap-1 sm:gap-2">
             {/* Like Button */}
             <button
@@ -251,13 +266,17 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
               onClick={handleLike}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer ${
                 isLiked
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                  ? isDark
+                    ? 'bg-rose-950/80 text-rose-300 border border-rose-800/80'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  : isDark
+                  ? 'text-slate-300 hover:bg-[#132849] hover:text-white'
                   : 'text-slate-700 hover:bg-slate-100 hover:text-[#0a213c]'
               }`}
               title="Like this fact"
               aria-label="Like"
             >
-              <Heart className={`w-4 h-4 ${isLiked ? 'fill-current text-rose-600' : 'stroke-[2.2]'}`} />
+              <Heart className={`w-4 h-4 ${isLiked ? 'fill-current text-rose-500' : 'stroke-[2.2]'}`} />
               <span>{likesCount > 0 ? likesCount : 'Like'}</span>
             </button>
 
@@ -267,13 +286,17 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
               onClick={handleSave}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 cursor-pointer ${
                 isSaved
-                  ? 'bg-blue-50 text-[#026fc3] border border-blue-200'
+                  ? isDark
+                    ? 'bg-blue-950/80 text-sky-300 border border-sky-800/80'
+                    : 'bg-blue-50 text-[#026fc3] border border-blue-200'
+                  : isDark
+                  ? 'text-slate-300 hover:bg-[#132849] hover:text-white'
                   : 'text-slate-700 hover:bg-slate-100 hover:text-[#0a213c]'
               }`}
               title="Save to My Knowledge"
               aria-label="Save"
             >
-              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current text-[#026fc3]' : 'stroke-[2.2]'}`} />
+              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current text-[#38bdf8]' : 'stroke-[2.2]'}`} />
               <span>{isSaved ? 'Saved' : 'Save'}</span>
             </button>
 
@@ -281,7 +304,11 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
             <button
               type="button"
               onClick={handleShare}
-              className="p-2 text-slate-600 hover:text-[#0a213c] hover:bg-slate-100 rounded-full transition-all active:scale-95 cursor-pointer"
+              className={`p-2 rounded-full transition-all active:scale-95 cursor-pointer ${
+                isDark
+                  ? 'text-slate-300 hover:text-white hover:bg-[#132849]'
+                  : 'text-slate-600 hover:text-[#0a213c] hover:bg-slate-100'
+              }`}
               title="Share fact"
               aria-label="Share"
             >
@@ -297,7 +324,7 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
               knowledgeBitzService.recordInteraction(bitz.id, 'opened', undefined, undefined, token);
               onOpenReader(bitz);
             }}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-full shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-full shadow-md shadow-blue-600/30 transition-all active:scale-95 cursor-pointer"
           >
             <span>Read</span>
             <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -306,7 +333,13 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
 
         {/* Share Toast */}
         {shareToast && (
-          <div className="mt-2 text-center text-xs font-bold text-emerald-800 bg-emerald-100 py-1 px-3 rounded-xl border border-emerald-200 animate-fade-in">
+          <div
+            className={`mt-2 text-center text-xs font-bold py-1 px-3 rounded-xl border animate-fade-in ${
+              isDark
+                ? 'bg-emerald-950/80 text-emerald-200 border-emerald-800'
+                : 'text-emerald-800 bg-emerald-100 border-emerald-200'
+            }`}
+          >
             {shareToast}
           </div>
         )}

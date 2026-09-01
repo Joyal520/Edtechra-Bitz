@@ -4,7 +4,7 @@
 // Deterministic validation — no AI calls.
 // ============================================================================
 
-import { BITZ_CATEGORY_MAP, isValidSubtopicForCategory } from './bitzTopicsConfig';
+import { BITZ_CATEGORY_MAP, isValidSubtopicForCategory } from './bitzTopicsConfig.ts';
 
 const VALID_CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const VALID_CATEGORIES = Object.keys(BITZ_CATEGORY_MAP);
