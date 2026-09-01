@@ -21,13 +21,14 @@ import {
   Share2,
   RotateCcw,
   Check,
-  Type,
-  Sliders
+  Sliders,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { KnowledgeBitzItem, BitzQuizQuestion, normalizeQuizToArray } from '@/types';
 import { getCategoryById } from '@/utils/bitzTopicsConfig';
 import { useAuth } from '@/context/AuthContext';
-import { useBitzTheme, BitzTextSize, BitzLineSpacing, BitzFontChoice } from '@/context/BitzThemeContext';
+import { useBitzTheme } from '@/context/BitzThemeContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { playCorrectAnswerSound, playCelebrationSound } from '@/utils/reorderAudio';
 import { triggerConfetti } from '@/utils/confetti';
@@ -51,18 +52,17 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   const token = session?.access_token || null;
   const {
     isDark,
+    setTheme,
     readingSettings,
     setTextSize,
-    setLineSpacing,
-    setFontFamily,
     resetReadingSettings
   } = useBitzTheme();
 
-  // Audio, Sharing, and Typography Settings Popover
+  // Audio, Sharing, and Reading Settings Popover
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const [showTypographySettings, setShowTypographySettings] = useState<boolean>(false);
+  const [showReadingSettings, setShowReadingSettings] = useState<boolean>(false);
 
   // Interaction State Machine: READING -> QUIZ_ACTIVE -> QUIZ_RESULT -> COMPLETED
   const [viewState, setViewState] = useState<ReaderState>('READING');
@@ -83,24 +83,24 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   const quizQuestions: BitzQuizQuestion[] = bitz ? normalizeQuizToArray(bitz.quiz) : [];
   const totalQuestions = quizQuestions.length;
 
-  // Close typography settings popover on click outside
+  // Close reading settings popover on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
-        setShowTypographySettings(false);
+        setShowReadingSettings(false);
       }
     }
-    if (showTypographySettings) {
+    if (showReadingSettings) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTypographySettings]);
+  }, [showReadingSettings]);
 
   // Reset states on modal open
   useEffect(() => {
     if (isOpen && bitz) {
       setIsPlayingAudio(false);
-      setShowTypographySettings(false);
+      setShowReadingSettings(false);
       setViewState('READING');
       setCurrentQuestionIndex(0);
       setSelectedOption(null);
@@ -300,77 +300,41 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
             isDark ? 'bg-[#06152B] border-[rgba(96,165,250,0.2)]' : 'bg-white border-slate-200'
           }`}
         >
-          {/* Metadata Badges */}
-          <div className="flex items-center gap-2 flex-wrap min-w-0">
-            {/* Category Badge */}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${
-                isDark
-                  ? 'bg-[#0B2342] border-[rgba(96,165,250,0.3)]'
-                  : 'bg-blue-50 border-blue-100'
-              }`}
-            >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: category.color }}
-              />
-              <span
-                className={`text-[11px] font-black uppercase tracking-wider ${
-                  isDark ? 'text-[#5AA9FF]' : 'text-[#0a213c]'
-                }`}
-              >
-                {category.name}
-              </span>
-            </div>
-
-            {/* CEFR Level Badge */}
-            <div className="bg-[#1677FF] text-white px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider shadow-xs">
-              CEFR {bitz.cefr_level || 'B1'}
-            </div>
-
-            {bitz.sub_topic && (
-              <span
-                className={`text-xs font-semibold truncate max-w-[130px] sm:max-w-[200px] ${
-                  isDark ? 'text-[#94A3B8]' : 'text-slate-500'
-                }`}
-              >
-                • {bitz.sub_topic}
-              </span>
-            )}
-          </div>
+          {/* Left / Center: Clean reading experience context */}
+          <div className="flex items-center gap-2 min-w-0" />
 
           {/* Action Icons */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* "Aa" Reading Typography Settings Trigger (Section 8) */}
+            {/* Reading Settings Trigger */}
             <div className="relative" ref={settingsRef}>
               <button
                 type="button"
-                onClick={() => setShowTypographySettings(!showTypographySettings)}
+                onClick={() => setShowReadingSettings(!showReadingSettings)}
                 className={`p-2 rounded-full transition-all cursor-pointer ${
-                  showTypographySettings
+                  showReadingSettings
                     ? isDark
                       ? 'bg-[#1677FF] text-white'
                       : 'bg-blue-100 text-[#1677FF]'
                     : isDark
                     ? 'text-[#CBD5E1] hover:bg-[#0B2342] hover:text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-[#0a213c]'
                 }`}
-                title="Reading Typography Settings (Aa)"
-                aria-label="Reading Typography Settings"
+                title="Reading settings"
+                aria-label="Reading settings"
               >
-                <Type className="w-4 h-4 stroke-[2.5]" />
+                <Sliders className="w-4 h-4 stroke-[2.2]" />
               </button>
 
-              {/* Typography Settings Dropdown Popover */}
-              {showTypographySettings && (
+              {/* Reading Settings Dropdown Popover */}
+              {showReadingSettings && (
                 <div
-                  className={`absolute right-0 top-full mt-2 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl z-30 space-y-3.5 animate-scale-in ${
+                  className={`absolute right-0 top-full mt-2 w-72 sm:w-80 p-4 rounded-2xl border shadow-2xl z-30 space-y-4 animate-scale-in ${
                     isDark
                       ? 'bg-[#06152B] border-[rgba(96,165,250,0.3)] text-white shadow-black/80'
                       : 'bg-white border-slate-200 text-[#0a213c] shadow-xl'
                   }`}
                 >
-                  <div className="flex items-center justify-between border-b pb-2 border-slate-700/40">
+                  <div className={`flex items-center justify-between border-b pb-2 ${isDark ? 'border-slate-700/50' : 'border-slate-200'}`}>
                     <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
                       <Sliders className="w-3.5 h-3.5 text-[#36D1FF]" />
                       <span>Reading Settings</span>
@@ -386,64 +350,71 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
                   {/* 1. Text Size Control */}
                   <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-slate-400">Text Size</span>
-                    <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-black/20 border border-white/10">
-                      {(['small', 'medium', 'large', 'xlarge'] as BitzTextSize[]).map((size) => (
+                    <span className={`text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Text Size
+                    </span>
+                    <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl border ${
+                      isDark ? 'bg-black/20 border-white/10' : 'bg-slate-100/80 border-slate-200'
+                    }`}>
+                      {([
+                        { id: 'small', label: 'Small', sub: 'A−' },
+                        { id: 'medium', label: 'Medium', sub: 'A' },
+                        { id: 'large', label: 'Large', sub: 'A+' }
+                      ] as const).map(({ id, label, sub }) => (
                         <button
-                          key={size}
+                          key={id}
                           type="button"
-                          onClick={() => setTextSize(size)}
-                          className={`py-1 rounded-lg text-[11px] font-black capitalize transition-all cursor-pointer ${
-                            readingSettings.textSize === size
-                              ? 'bg-[#1677FF] text-white shadow-xs'
-                              : 'text-slate-300 hover:text-white'
-                          }`}
-                        >
-                          {size === 'small' ? 'S' : size === 'medium' ? 'M' : size === 'large' ? 'L' : 'XL'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 2. Line Spacing Control */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-slate-400">Line Spacing</span>
-                    <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/20 border border-white/10">
-                      {(['compact', 'comfortable', 'relaxed'] as BitzLineSpacing[]).map((spacing) => (
-                        <button
-                          key={spacing}
-                          type="button"
-                          onClick={() => setLineSpacing(spacing)}
-                          className={`py-1 rounded-lg text-[10px] font-black capitalize transition-all cursor-pointer ${
-                            readingSettings.lineSpacing === spacing
-                              ? 'bg-[#1677FF] text-white shadow-xs'
-                              : 'text-slate-300 hover:text-white'
-                          }`}
-                        >
-                          {spacing}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 3. Font Family Choice */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold text-slate-400">Font Type</span>
-                    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-black/20 border border-white/10">
-                      {(['standard', 'reading'] as BitzFontChoice[]).map((font) => (
-                        <button
-                          key={font}
-                          type="button"
-                          onClick={() => setFontFamily(font)}
-                          className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            readingSettings.fontFamily === font
+                          onClick={() => setTextSize(id)}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                            readingSettings.textSize === id
                               ? 'bg-[#1677FF] text-white shadow-xs font-black'
-                              : 'text-slate-300 hover:text-white'
-                          } ${font === 'reading' ? 'font-serif' : 'font-sans'}`}
+                              : isDark
+                              ? 'text-slate-300 hover:text-white hover:bg-white/5'
+                              : 'text-slate-700 hover:text-[#0a213c] hover:bg-slate-200/60'
+                          }`}
                         >
-                          {font === 'standard' ? 'Standard' : 'Editorial Serif'}
+                          <span>{label}</span>
+                          <span className={`text-[10px] ${readingSettings.textSize === id ? 'text-white/80' : 'text-slate-400'}`}>
+                            {sub}
+                          </span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Theme Control */}
+                  <div className="space-y-1.5">
+                    <span className={`text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Theme
+                    </span>
+                    <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl border ${
+                      isDark ? 'bg-black/20 border-white/10' : 'bg-slate-100/80 border-slate-200'
+                    }`}>
+                      <button
+                        type="button"
+                        onClick={() => setTheme('dark')}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          isDark
+                            ? 'bg-[#1677FF] text-white shadow-xs font-black'
+                            : 'text-slate-700 hover:text-[#0a213c] hover:bg-slate-200/60'
+                        }`}
+                      >
+                        <Moon className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Dark</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTheme('light')}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          !isDark
+                            ? 'bg-[#1677FF] text-white shadow-xs font-black'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Sun className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Light</span>
+                      </button>
                     </div>
                   </div>
                 </div>

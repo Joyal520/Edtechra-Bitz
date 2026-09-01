@@ -195,8 +195,8 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
         {/* Subtle Vignette Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/45 pointer-events-none" />
 
-        {/* Top Badges: Category Pill + CEFR Level Pill */}
-        <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between pointer-events-none z-10">
+        {/* Top Badge: Category Pill */}
+        <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-start pointer-events-none z-10">
           {/* Category Badge */}
           <div className="flex items-center gap-1.5 bg-[#06152B]/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-md">
             <span
@@ -206,11 +206,6 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
             <span className="text-[11px] font-black text-white uppercase tracking-wider">
               {category.name}
             </span>
-          </div>
-
-          {/* CEFR Level Badge */}
-          <div className="flex items-center gap-1 bg-[#1677FF]/95 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[11px] font-black tracking-wider border border-white/25 shadow-md">
-            <span>CEFR {bitz.cefr_level || 'B1'}</span>
           </div>
         </div>
 
@@ -223,19 +218,6 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
           </div>
         )}
 
-        {/* Bottom Cue Overlay on Media */}
-        <div className="absolute bottom-3 left-3.5 right-3.5 flex items-center justify-between text-white text-xs pointer-events-none z-10">
-          <div className="flex items-center gap-1.5 bg-[#020817]/80 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold tracking-wide border border-white/15 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-[#36D1FF]" />
-            <span>Double tap to read more</span>
-          </div>
-
-          {bitz.sub_topic && (
-            <span className="bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white truncate max-w-[130px] border border-white/10">
-              {bitz.sub_topic}
-            </span>
-          )}
-        </div>
       </div>
 
       {/* Discovery Fact Content (Section 4: 20-30 word short_fact ONLY) */}

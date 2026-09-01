@@ -29,6 +29,10 @@
     <link rel="dns-prefetch" href="https://i.ytimg.com">
     <link rel="dns-prefetch" href="https://googlevideo.com">
 
+    <!-- Preload hero banner background for zero layout shift and instant LCP -->
+    <link rel="preload" as="image" href="/assets/edtechra-microlearning-header-desktop.webp" type="image/webp" media="(min-width: 769px)" fetchpriority="high">
+    <link rel="preload" as="image" href="/assets/edtechra-microlearning-header-mobile.webp" type="image/webp" media="(max-width: 768px)" fetchpriority="high">
+
     <style>
       /* Initial zero-delay splash screen before React hydration */
       #initial-splash {

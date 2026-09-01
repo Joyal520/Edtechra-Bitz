@@ -7,7 +7,6 @@ import {
   AlertCircle,
   Loader2,
   Trash2,
-  Type,
   ShieldCheck,
   GraduationCap,
   Sparkles,
@@ -28,14 +27,11 @@ interface UserSettingsModalProps {
   onClose: () => void;
 }
 
-export type TextSizeOption = 'small' | 'medium' | 'large' | 'extra-large';
-
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
   const { user, profile, isAdmin, updateUserProfile, session } = useAuth();
 
   const [displayName, setDisplayName] = useState<string>('');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string>('');
-  const [textSize, setTextSize] = useState<TextSizeOption>('medium');
   const [avatarCategory, setAvatarCategory] = useState<AvatarCategory>('all');
 
   // Filtered preset avatars based on selected category tab
@@ -60,7 +56,6 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
     if (isOpen && profile) {
       setDisplayName(profile.full_name || profile.name || user?.user_metadata?.full_name || '');
       setSelectedAvatarUrl(profile.avatar_url || profile.avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '');
-      setTextSize((profile.text_size as TextSizeOption) || 'medium');
       setSaveSuccess(false);
       setErrorMessage(null);
       setCropFile(null);
@@ -184,8 +179,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
     try {
       const res = await updateUserProfile({
         full_name: trimmedName,
-        avatar_url: selectedAvatarUrl || null,
-        text_size: textSize
+        avatar_url: selectedAvatarUrl || null
       });
 
       if (res.error) {
@@ -431,70 +425,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
                 </div>
               </div>
 
-              {/* 2. ACCESSIBILITY & LEARNING TEXT SIZE */}
-              <div className="space-y-3.5 pt-4 border-t border-stone-100">
-                <div className="flex items-center gap-2">
-                  <Type className="w-4 h-4 text-[#026fc3]" />
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    Learning Content Text Size
-                  </label>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Customizes the font size of Quick Quiz questions, 1-Minute Reading stories, and exercises.
-                </p>
-
-                {/* Text Size Radio Selector */}
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'small', label: 'Small (A−)', size: '12px' },
-                    { id: 'medium', label: 'Medium (A)', size: '14px' },
-                    { id: 'large', label: 'Large (A+)', size: '16px' }
-                  ].map((option) => {
-                    const isSelected = textSize === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          const nextSize = option.id as TextSizeOption;
-                          setTextSize(nextSize);
-                          // Live update body attribute for instant preview
-                          document.documentElement.setAttribute('data-text-size', nextSize);
-                          localStorage.setItem('edtechra_text_size', nextSize);
-                          window.dispatchEvent(
-                            new CustomEvent('edtechra:text-size-changed', { detail: nextSize })
-                          );
-                        }}
-                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-[#026fc3] bg-brand-50/70 text-[#026fc3] font-black shadow-2xs'
-                            : 'border-slate-200 bg-stone-50/50 hover:bg-stone-100/70 text-slate-700 font-bold'
-                        }`}
-                      >
-                        <div className="text-xs">{option.label}</div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{option.size}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Live Preview Card */}
-                <div className="p-3.5 rounded-2xl bg-stone-100/70 border border-stone-200/80 space-y-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Live Preview
-                  </div>
-                  <div className="p-3 rounded-xl bg-white border border-stone-200/80 shadow-2xs space-y-1">
-                    <p className="font-bold text-slate-900 leading-snug learning-content-text">
-                      🎯 &ldquo;Which sentence uses the correct past tense?&rdquo;
-                    </p>
-                    <p className="text-slate-600 leading-relaxed learning-content-text">
-                      📖 &ldquo;The early morning light illuminated the tranquil mountain path.&rdquo;
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. ACCOUNT STATUS */}
+              {/* 2. ACCOUNT STATUS */}
               <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between text-xs">
                 <div className="space-y-0.5">
                   <div className="font-bold text-slate-700">Account Email</div>
