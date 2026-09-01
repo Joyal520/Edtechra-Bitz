@@ -1021,9 +1021,16 @@ STRICT RESTRICTIONS:
           totalSaves
         };
 
+        const formattedBitz = (bitzData || []).map(b => ({
+          ...b,
+          image_url: b.visual_url || b.image_url || null,
+          visual_url: b.visual_url || b.image_url || null,
+          image_source: b.image_source || (b.visual_url ? 'custom' : 'none')
+        }));
+
         return {
           success: true,
-          bitz: bitzData || [],
+          bitz: formattedBitz,
           stats,
           total: totalCount !== null && totalCount !== undefined ? totalCount : (bitzData?.length || 0),
           page: pageNum,
@@ -1618,6 +1625,14 @@ STRICT RESTRICTIONS:
     };
 
     return await this.updateBitz(bitz.id, updates, supabaseClient);
+  }
+
+  /**
+   * Auto-assign a Pixabay image to a Bitz
+   */
+  async autoAssignImageToBitz(bitz, supabaseClient = null) {
+    if (!bitz) return null;
+    return await autoAssignPixabayImageToBitz(bitz, supabaseClient);
   }
 
   /**

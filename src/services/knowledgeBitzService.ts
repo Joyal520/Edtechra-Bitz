@@ -477,6 +477,29 @@ export const knowledgeBitzService = {
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to remove image.');
     return json;
+  },
+
+  async testPixabayIntegration(query = 'science nature', token?: string | null) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/admin/pixabay/test', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query })
+    });
+    return await res.json();
+  },
+
+  async autoImageBackfill(token?: string | null) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${ADMIN_API_BASE}/auto-image-backfill`, {
+      method: 'POST',
+      headers
+    });
+    return await res.json();
   }
 };
 

@@ -145,21 +145,6 @@ function cleanEnv(value) {
   return (value || '').replace(/^\uFEFF/, '').trim();
 }
 
-// Health & Environment Diagnostic Endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    env: {
-      hasSupabaseUrl: Boolean(supabaseUrl),
-      hasSupabaseServiceKey: Boolean(cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY)),
-      hasSupabaseAnonKey: Boolean(cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY)),
-      hasServerSupabase: Boolean(serverSupabase),
-      nodeEnv: process.env.NODE_ENV || 'unknown'
-    }
-  });
-});
-
 // Initialize server-side Supabase client
 const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY);
@@ -172,24 +157,59 @@ const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 // Initialize AI OCR Worksheet Grader Engine
 ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
 
-// Background cleanup worker: purge stale temporary OCR files older than 1 hour
-if (serverSupabase) {
+// Background cleanup workers: purge stale temporary OCR files and expired challenges (only in long-running environments, not in serverless)
+if (serverSupabase && process.env.VERCEL !== '1') {
   cleanupStaleTemporaryFiles(serverSupabase).catch(() => {});
   setInterval(() => {
     cleanupStaleTemporaryFiles(serverSupabase).catch(() => {});
   }, 30 * 60 * 1000);
-}
 
-// Initialize AI Challenge Competition Queue Worker
-aiChallengeQueue.init({ serverSupabase, serverOpenAI });
-
-// Background cleanup worker: purge expired submission files (7-day retention)
-if (serverSupabase) {
   cleanupExpiredChallengeFiles(serverSupabase).catch(() => {});
   setInterval(() => {
     cleanupExpiredChallengeFiles(serverSupabase).catch(() => {});
   }, 60 * 60 * 1000);
 }
+
+// Initialize AI Challenge Competition Queue Worker
+aiChallengeQueue.init({ serverSupabase, serverOpenAI });
+
+// Normalize URL path so that both /api/... and /... match Express routes reliably
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && req.originalUrl && req.originalUrl.startsWith('/api')) {
+    req.url = req.originalUrl;
+  }
+  next();
+});
+
+// Health & Environment Diagnostic Endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasSupabaseServiceKey: Boolean(cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY)),
+      hasSupabaseAnonKey: Boolean(cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY)),
+      hasServerSupabase: Boolean(serverSupabase),
+      hasPixabayKey: Boolean(cleanEnv(process.env.PIXABAY_API_KEY)),
+      nodeEnv: process.env.NODE_ENV || 'unknown'
+    }
+  });
+});
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasSupabaseServiceKey: Boolean(cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY)),
+      hasSupabaseAnonKey: Boolean(cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY)),
+      hasServerSupabase: Boolean(serverSupabase),
+      hasPixabayKey: Boolean(cleanEnv(process.env.PIXABAY_API_KEY)),
+      nodeEnv: process.env.NODE_ENV || 'unknown'
+    }
+  });
+});
 
 // Server Initialization Diagnostics (logged once at startup)
 console.log('[Server Init] Environment diagnostics:');
@@ -1089,14 +1109,16 @@ app.get('/api/youtube/progress/:userId', async (req, res) => {
   }
 });
 
-// Periodic background backup sync (runs every 60 minutes if server daemon is active)
+// Periodic background backup sync (runs every 60 minutes if server daemon is active and not in serverless)
 const BACKUP_SYNC_INTERVAL = 60 * 60 * 1000;
-setInterval(() => {
-  console.log('[Daemon Scheduler] Running periodic backup YouTube synchronization...');
-  syncYouTubeChannel('scheduled_backup').catch(err => {
-    console.error('[Daemon Scheduler Error]:', err.message);
-  });
-}, BACKUP_SYNC_INTERVAL);
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    console.log('[Daemon Scheduler] Running periodic backup YouTube synchronization...');
+    syncYouTubeChannel('scheduled_backup').catch(err => {
+      console.error('[Daemon Scheduler Error]:', err.message);
+    });
+  }, BACKUP_SYNC_INTERVAL);
+}
 
 // ============================================================================
 // API ROUTES: STUDENT POST FEED & CLOUDFLARE R2 STORAGE
@@ -6015,12 +6037,14 @@ app.post('/api/admin/moderation/posts/:id/action', async (req, res) => {
 // Admin-Only | Zero Gemini Validation | Resilient Server-Side Execution
 // ============================================================================
 
-// Background admin post queue scheduler tick: Process due items every 30 seconds
-setInterval(() => {
-  processPublishingQueue(serverSupabase).catch((err) => {
-    console.warn('[Admin Post Queue Scheduler Error]:', err.message);
-  });
-}, 30000);
+// Background admin post queue scheduler tick: Process due items every 30 seconds (non-serverless only)
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    processPublishingQueue(serverSupabase).catch((err) => {
+      console.warn('[Admin Post Queue Scheduler Error]:', err.message);
+    });
+  }, 30000);
+}
 
 // 1. POST /api/admin/posts/queue/presign-batch - Batch presign R2 upload URLs
 app.post('/api/admin/posts/queue/presign-batch', async (req, res) => {
@@ -12332,12 +12356,14 @@ function normalizeWordStr(word) {
   return normalizeVocabularyTitle(word);
 }
 
-// Background scheduler tick: Check scheduled items every 60s
-setInterval(() => {
-  publishScheduledVocabularyItems(serverSupabase).catch((err) => {
-    console.warn('[Scheduled Vocabulary Check Error]:', err.message);
-  });
-}, 60000);
+// Background scheduler tick: Check scheduled items every 60s (non-serverless only)
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
+  setInterval(() => {
+    publishScheduledVocabularyItems(serverSupabase).catch((err) => {
+      console.warn('[Scheduled Vocabulary Check Error]:', err.message);
+    });
+  }, 60000);
+}
 
 // ----------------------------------------------------------------------------
 // 1. GET /api/vocabulary/feed & /api/words-of-the-day/feed
@@ -14780,6 +14806,12 @@ app.post('/api/admin/bitz/presign-upload', async (req, res) => {
       objectKey: presigned.objectKey,
       headers: presigned.headers
     });
+  } catch (err) {
+    console.error('[API /api/admin/bitz/presign-upload Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 17. GET /api/images/pixabay-search & POST /api/images/pixabay-search - Proxy Pixabay Search
 const handlePixabaySearch = async (req, res) => {
   try {
@@ -14840,6 +14872,106 @@ app.post('/api/admin/bitz/:id/remove-image', async (req, res) => {
     return res.json({ success: true, data: result });
   } catch (err) {
     console.error('[API /api/admin/bitz/:id/remove-image Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 20. GET & POST /api/admin/pixabay/test - Admin Pixabay Diagnostic Endpoint
+const handlePixabayDiagnostic = async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+
+    const hasKey = Boolean(cleanEnv(process.env.PIXABAY_API_KEY));
+    const testQuery = req.query.query || req.body?.query || 'science nature';
+    
+    if (!hasKey) {
+      return res.json({
+        success: false,
+        configured: false,
+        apiReachable: false,
+        message: 'PIXABAY_API_KEY environment variable is not configured on the server.',
+        testQuery
+      });
+    }
+
+    const searchResult = await searchPixabay({
+      query: testQuery,
+      perPage: 3
+    });
+
+    const candidates = searchResult.hits || [];
+    const firstHit = candidates[0] || null;
+
+    return res.json({
+      success: searchResult.success,
+      configured: true,
+      apiReachable: searchResult.success,
+      testQuery,
+      totalHits: searchResult.total || 0,
+      candidatesCount: candidates.length,
+      candidateSample: firstHit ? {
+        id: firstHit.id,
+        tags: firstHit.tags,
+        previewUrl: firstHit.previewURL || firstHit.previewUrl,
+        webformatUrl: firstHit.webformatURL || firstHit.webformatUrl,
+        largeImageUrl: firstHit.largeImageURL || firstHit.largeImageUrl,
+        user: firstHit.user
+      } : null,
+      error: searchResult.error || null
+    });
+  } catch (err) {
+    console.error('[API /api/admin/pixabay/test Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+app.get('/api/admin/pixabay/test', handlePixabayDiagnostic);
+app.post('/api/admin/pixabay/test', handlePixabayDiagnostic);
+
+// 21. POST /api/admin/bitz/auto-image-backfill - Auto-assign Pixabay images to Bitz missing images
+app.post('/api/admin/bitz/auto-image-backfill', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(503).json({ success: false, error: 'Database client not initialized.' });
+    }
+
+    // Fetch all Bitz with visual_status = 'missing' or no visual_url
+    const { data: missingBitz, error: fetchErr } = await serverSupabase
+      .from('knowledge_bitz')
+      .select('*')
+      .or('visual_status.eq.missing,visual_status.eq.failed,visual_url.is.null');
+
+    if (fetchErr) {
+      return res.status(500).json({ success: false, error: fetchErr.message });
+    }
+
+    const results = [];
+    for (const item of (missingBitz || [])) {
+      try {
+        const updated = await knowledgeBitzService.autoAssignImageToBitz(item, serverSupabase);
+        results.push({ id: item.id, title: item.title, success: Boolean(updated?.visual_url), visual_url: updated?.visual_url || null });
+      } catch (err) {
+        results.push({ id: item.id, title: item.title, success: false, error: err.message });
+      }
+    }
+
+    return res.json({
+      success: true,
+      totalMissing: missingBitz?.length || 0,
+      processed: results.length,
+      updatedCount: results.filter(r => r.success).length,
+      results
+    });
+  } catch (err) {
+    console.error('[API /api/admin/bitz/auto-image-backfill Error]:', err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
