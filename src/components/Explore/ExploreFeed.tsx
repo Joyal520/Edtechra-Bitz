@@ -181,8 +181,8 @@ export const ExploreFeed: React.FC = () => {
             placeholder="Search ideas, topics, facts..."
             className={`w-full pl-10 pr-9 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all focus:outline-none focus:ring-2 ${
               isDark
-                ? 'bg-[#0b1b36] border border-[#1e3a5f] text-white placeholder:text-slate-400 focus:ring-[#026fc3]/40 focus:border-[#026fc3] shadow-inner'
-                : 'bg-white border border-slate-300 text-[#0a213c] placeholder:text-slate-400 focus:ring-blue-500/25 focus:border-[#026fc3] shadow-xs'
+                ? 'bg-[#06152B] border border-[rgba(96,165,250,0.28)] text-[#F8FAFC] placeholder:text-slate-400 focus:ring-[#1677FF]/40 focus:border-[#2D8CFF] shadow-inner'
+                : 'bg-white border border-slate-300 text-[#0a213c] placeholder:text-slate-400 focus:ring-blue-500/25 focus:border-[#1677FF] shadow-xs'
             }`}
           />
           {searchQuery && (
@@ -202,12 +202,12 @@ export const ExploreFeed: React.FC = () => {
           onClick={() => setIsCustomizeOpen(true)}
           className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer ${
             isDark
-              ? 'bg-[#0b1b36] hover:bg-[#12284c] border border-[#1e3a5f] hover:border-[#026fc3] text-slate-200 hover:text-white'
-              : 'bg-white hover:bg-blue-50 border border-slate-300 hover:border-[#026fc3] text-[#0a213c]'
+              ? 'bg-[#081B35] hover:bg-[#0B2342] border border-[rgba(96,165,250,0.28)] hover:border-[#36D1FF] text-[#CBD5E1] hover:text-white'
+              : 'bg-white hover:bg-blue-50 border border-slate-300 hover:border-[#1677FF] text-[#0a213c]'
           }`}
           title="Customize Your Feed"
         >
-          <SlidersHorizontal className="w-4 h-4 text-[#38bdf8] stroke-[2.5]" />
+          <SlidersHorizontal className="w-4 h-4 text-[#36D1FF] stroke-[2.5]" />
           <span className="font-black">Customize</span>
         </button>
 
@@ -217,7 +217,7 @@ export const ExploreFeed: React.FC = () => {
           onClick={() => setIsSavedOpen(true)}
           className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-xs transition-all active:scale-95 shrink-0 cursor-pointer ${
             isDark
-              ? 'bg-[#0b1b36] hover:bg-[#12284c] border border-[#1e3a5f] hover:border-amber-500/60 text-slate-200 hover:text-white'
+              ? 'bg-[#081B35] hover:bg-[#0B2342] border border-[rgba(96,165,250,0.28)] hover:border-amber-400/60 text-[#CBD5E1] hover:text-white'
               : 'bg-white hover:bg-amber-50 border border-slate-300 hover:border-amber-400 text-[#0a213c]'
           }`}
           title="My Saved Knowledge"
@@ -238,9 +238,9 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTopic === 'all' && activeTab === 'for_you'
-              ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+              ? 'bg-[#1677FF] text-white shadow-md shadow-blue-600/35'
               : isDark
-              ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
+              ? 'bg-[#081B35] text-[#CBD5E1] border border-[rgba(96,165,250,0.25)] hover:border-[#36D1FF]'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
@@ -257,9 +257,9 @@ export const ExploreFeed: React.FC = () => {
           }}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
             activeTab === 'trending'
-              ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+              ? 'bg-[#1677FF] text-white shadow-md shadow-blue-600/35'
               : isDark
-              ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
+              ? 'bg-[#081B35] text-[#CBD5E1] border border-[rgba(96,165,250,0.25)] hover:border-[#36D1FF]'
               : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
           }`}
         >
@@ -281,9 +281,9 @@ export const ExploreFeed: React.FC = () => {
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-black whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer ${
                 isActive
-                  ? 'bg-[#026fc3] text-white shadow-md shadow-blue-900/40'
+                  ? 'bg-[#1677FF] text-white shadow-md shadow-blue-600/35'
                   : isDark
-                  ? 'bg-[#0b1a33] text-slate-200 border border-[#1c3963] hover:border-[#2b538c]'
+                  ? 'bg-[#081B35] text-[#CBD5E1] border border-[rgba(96,165,250,0.25)] hover:border-[#36D1FF]'
                   : 'bg-white text-[#0a213c] border border-slate-300 hover:border-slate-400 shadow-2xs'
               }`}
             >
@@ -306,14 +306,14 @@ export const ExploreFeed: React.FC = () => {
               <div
                 key={n}
                 className={`rounded-3xl border overflow-hidden animate-pulse p-4 sm:p-5 space-y-4 max-w-xl mx-auto w-full ${
-                  isDark ? 'bg-[#0b172a] border-[#1e3a5f]' : 'bg-white border-slate-200'
+                  isDark ? 'bg-[#081B35] border-[rgba(96,165,250,0.28)]' : 'bg-white border-slate-200'
                 }`}
               >
-                <div className={`w-full aspect-square rounded-2xl ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
-                <div className={`h-6 rounded-md w-3/4 ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
+                <div className={`w-full aspect-square rounded-2xl ${isDark ? 'bg-[#0B2342]' : 'bg-slate-100'}`} />
+                <div className={`h-6 rounded-md w-3/4 ${isDark ? 'bg-[#0B2342]' : 'bg-slate-100'}`} />
                 <div className="space-y-2">
-                  <div className={`h-4 rounded w-full ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
-                  <div className={`h-4 rounded w-5/6 ${isDark ? 'bg-[#132442]' : 'bg-slate-100'}`} />
+                  <div className={`h-4 rounded w-full ${isDark ? 'bg-[#0B2342]' : 'bg-slate-100'}`} />
+                  <div className={`h-4 rounded w-5/6 ${isDark ? 'bg-[#0B2342]' : 'bg-slate-100'}`} />
                 </div>
               </div>
             ))}
@@ -333,7 +333,7 @@ export const ExploreFeed: React.FC = () => {
             <button
               type="button"
               onClick={() => fetchFeed(1, false)}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#1677FF] hover:bg-[#2D8CFF] text-white text-xs font-black rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry</span>
@@ -343,10 +343,10 @@ export const ExploreFeed: React.FC = () => {
           // Empty State (No published facts in database for this filter)
           <div
             className={`p-8 sm:p-12 text-center rounded-3xl border space-y-4 shadow-xs max-w-xl mx-auto ${
-              isDark ? 'bg-[#0b172a] border-[#1e3a5f] text-white' : 'bg-white border-slate-200 text-[#0a213c]'
+              isDark ? 'bg-[#081B35] border-[rgba(96,165,250,0.28)] text-[#F8FAFC]' : 'bg-white border-slate-200 text-[#0a213c]'
             }`}
           >
-            <div className="w-16 h-16 bg-blue-500/10 text-[#38bdf8] border border-blue-500/25 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 bg-[#1677FF]/15 text-[#36D1FF] border border-[#1677FF]/30 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
               <Sparkles className="w-8 h-8 stroke-[2.5]" />
             </div>
 
@@ -356,7 +356,7 @@ export const ExploreFeed: React.FC = () => {
               </h3>
               <p
                 className={`text-sm font-semibold max-w-md mx-auto leading-relaxed ${
-                  isDark ? 'text-slate-300' : 'text-slate-700'
+                  isDark ? 'text-[#CBD5E1]' : 'text-slate-700'
                 }`}
               >
                 There are currently no published facts in this category. Check back soon or explore other topics!
@@ -371,7 +371,7 @@ export const ExploreFeed: React.FC = () => {
                   setSearchQuery('');
                   fetchFeed(1, false);
                 }}
-                className="px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                className="px-6 py-3 bg-[#1677FF] hover:bg-[#2D8CFF] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/35 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 stroke-[2.5]" />
                 <span>Explore All Topics</span>
@@ -382,7 +382,7 @@ export const ExploreFeed: React.FC = () => {
           // Premium Completion State (User has mastered all facts in selection)
           <div
             className={`p-8 sm:p-12 text-center rounded-3xl border space-y-5 shadow-xs max-w-xl mx-auto ${
-              isDark ? 'bg-[#0b172a] border-[#1e3a5f] text-white' : 'bg-white border-slate-200 text-[#0a213c]'
+              isDark ? 'bg-[#081B35] border-[rgba(96,165,250,0.28)] text-[#F8FAFC]' : 'bg-white border-slate-200 text-[#0a213c]'
             }`}
           >
             <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-2xl shadow-xs flex items-center justify-center mx-auto">
@@ -395,7 +395,7 @@ export const ExploreFeed: React.FC = () => {
               </h3>
               <p
                 className={`text-sm font-semibold max-w-md mx-auto leading-relaxed ${
-                  isDark ? 'text-slate-300' : 'text-slate-700'
+                  isDark ? 'text-[#CBD5E1]' : 'text-slate-700'
                 }`}
               >
                 Great job! All published facts in your selected topics have been permanently mastered.
@@ -406,7 +406,7 @@ export const ExploreFeed: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCustomizeOpen(true)}
-                className="px-6 py-3 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                className="px-6 py-3 bg-[#1677FF] hover:bg-[#2D8CFF] text-white text-xs sm:text-sm font-black rounded-2xl shadow-md shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
               >
                 <SlidersHorizontal className="w-4 h-4 stroke-[2.5]" />
                 <span>Change My Interests</span>
@@ -421,7 +421,7 @@ export const ExploreFeed: React.FC = () => {
                 }}
                 className={`px-6 py-3 border rounded-2xl text-xs sm:text-sm font-black shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer ${
                   isDark
-                    ? 'bg-[#0f2347] hover:bg-[#153060] border-[#1e4070] text-white'
+                    ? 'bg-[#0B2342] hover:bg-[#122c54] border-[rgba(96,165,250,0.3)] text-white'
                     : 'bg-white hover:bg-slate-50 border-slate-300 text-[#0a213c]'
                 }`}
               >

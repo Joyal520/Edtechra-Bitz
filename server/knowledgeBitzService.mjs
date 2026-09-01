@@ -221,9 +221,8 @@ class KnowledgeBitzService {
       }
     }
 
-    // 2. Local Fallback Evaluation
-    const allBitz = this.getLocalBitz();
-    const bitz = allBitz.find(b => b.id === bitzId || b.bitz_code === bitzId);
+    // 2. Evaluation
+    const bitz = await this.getBitzById(bitzId, supabaseClient);
     if (!bitz) throw new Error('Knowledge Bitz not found');
 
     const history = readJson(HISTORY_CACHE_FILE, {});
@@ -289,7 +288,17 @@ class KnowledgeBitzService {
 
     if (xpAwarded > 0 && status === 'learned' && !alreadyLearned) {
       bitz.completions_count = (bitz.completions_count || 0) + 1;
-      this.saveLocalBitz(allBitz);
+      const allBitz = this.getLocalBitz();
+      const localIdx = allBitz.findIndex(b => b.id === bitz.id);
+      if (localIdx >= 0) {
+        allBitz[localIdx] = bitz;
+        this.saveLocalBitz(allBitz);
+      }
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('knowledge_bitz').update({ completions_count: bitz.completions_count }).eq('id', bitz.id);
+        } catch (e) {}
+      }
     }
 
     return {
@@ -545,10 +554,10 @@ class KnowledgeBitzService {
   async toggleLike(userId, bitzId, supabaseClient = null) {
     if (!bitzId) throw new Error('bitzId is required');
 
-    const allBitz = this.getLocalBitz();
-    const bitz = allBitz.find(b => b.id === bitzId || b.bitz_code === bitzId);
+    const bitz = await this.getBitzById(bitzId, supabaseClient);
     if (!bitz) throw new Error('Knowledge Bitz not found');
 
+    const allBitz = this.getLocalBitz();
     const likesMap = readJson(LIKES_CACHE_FILE, {});
     if (!likesMap[userId]) likesMap[userId] = [];
     const userLikes = new Set(likesMap[userId]);
@@ -564,7 +573,12 @@ class KnowledgeBitzService {
 
     likesMap[userId] = Array.from(userLikes);
     writeJson(LIKES_CACHE_FILE, likesMap);
-    this.saveLocalBitz(allBitz);
+
+    const localIdx = allBitz.findIndex(b => b.id === bitz.id);
+    if (localIdx >= 0) {
+      allBitz[localIdx] = bitz;
+      this.saveLocalBitz(allBitz);
+    }
 
     if (supabaseClient && userId && userId !== 'guest') {
       try {
@@ -586,10 +600,10 @@ class KnowledgeBitzService {
   async toggleSave(userId, bitzId, category = 'General', supabaseClient = null) {
     if (!bitzId) throw new Error('bitzId is required');
 
-    const allBitz = this.getLocalBitz();
-    const bitz = allBitz.find(b => b.id === bitzId || b.bitz_code === bitzId);
+    const bitz = await this.getBitzById(bitzId, supabaseClient);
     if (!bitz) throw new Error('Knowledge Bitz not found');
 
+    const allBitz = this.getLocalBitz();
     const bookmarksMap = readJson(BOOKMARKS_CACHE_FILE, {});
     if (!bookmarksMap[userId]) bookmarksMap[userId] = [];
     const userBookmarks = new Set(bookmarksMap[userId]);
@@ -605,7 +619,12 @@ class KnowledgeBitzService {
 
     bookmarksMap[userId] = Array.from(userBookmarks);
     writeJson(BOOKMARKS_CACHE_FILE, bookmarksMap);
-    this.saveLocalBitz(allBitz);
+
+    const localIdx = allBitz.findIndex(b => b.id === bitz.id);
+    if (localIdx >= 0) {
+      allBitz[localIdx] = bitz;
+      this.saveLocalBitz(allBitz);
+    }
 
     if (supabaseClient && userId && userId !== 'guest') {
       try {
@@ -634,7 +653,6 @@ class KnowledgeBitzService {
 
     const bookmarksMap = readJson(BOOKMARKS_CACHE_FILE, {});
     const userBookmarks = new Set(bookmarksMap[userId] || []);
-    const allBitz = this.getLocalBitz();
 
     if (supabaseClient) {
       try {
@@ -647,9 +665,28 @@ class KnowledgeBitzService {
         if (data) {
           data.forEach(d => userBookmarks.add(d.item_id));
         }
-      } catch (e) {}
+
+        const idsArray = Array.from(userBookmarks);
+        if (idsArray.length > 0) {
+          const { data: dbBitz } = await supabaseClient
+            .from('knowledge_bitz')
+            .select('*')
+            .in('id', idsArray);
+
+          if (dbBitz && dbBitz.length > 0) {
+            return dbBitz.map(b => ({
+              ...b,
+              is_liked_by_me: false,
+              is_saved_by_me: true
+            }));
+          }
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase getSavedBitz notice:', e.message);
+      }
     }
 
+    const allBitz = this.getLocalBitz();
     const savedItems = allBitz.filter(b => userBookmarks.has(b.id));
     return savedItems.map(b => ({
       ...b,

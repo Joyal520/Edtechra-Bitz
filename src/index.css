@@ -943,4 +943,64 @@
   animation: subtle-shake 0.35s ease-in-out;
 }
 
+/* ======================================================================== */
+/* EDTECHRA KNOWLEDGE BITZ DESIGN TOKENS (PREMIUM DARK BLUE SYSTEM)          */
+/* ======================================================================== */
+:root {
+  --bitz-bg-primary: #020817;
+  --bitz-bg-secondary: #06152B;
+  --bitz-bg-card: #081B35;
+  --bitz-bg-card-elevated: #0B2342;
+  --bitz-blue-primary: #1677FF;
+  --bitz-blue-bright: #2D8CFF;
+  --bitz-blue-soft: #5AA9FF;
+  --bitz-cyan-accent: #36D1FF;
+  --bitz-purple-accent: #8B5CF6;
+  --bitz-text-primary: #F8FAFC;
+  --bitz-text-secondary: #CBD5E1;
+  --bitz-text-muted: #94A3B8;
+  --bitz-border: rgba(96, 165, 250, 0.28);
+
+  /* Reading Experience Dynamic Typography Variables */
+  --reading-font-size: 18px;
+  --reading-line-height: 1.8;
+  --reading-content-width: 720px;
+  --reading-font-family: inherit;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --reading-font-size: 17px;
+  }
+}
+
+/* Subtle Glowing Light Wave & Particle Keyframes */
+@keyframes bitz-glow-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.08); }
+}
+
+@keyframes bitz-ambient-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(25px, -15px) scale(1.05); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.animate-bitz-glow {
+  animation: bitz-glow-pulse 6s ease-in-out infinite;
+}
+
+.animate-bitz-drift {
+  animation: bitz-ambient-drift 12s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bitz-glow,
+  .animate-bitz-drift,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
+}
+
 

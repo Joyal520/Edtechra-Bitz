@@ -18,7 +18,7 @@ const ExplorePageContent: React.FC = () => {
   return (
     <div
       className={`w-full min-h-screen transition-colors duration-300 ${
-        isDark ? 'bg-[#070f1e] text-slate-100' : 'bg-[#f8fafc] text-[#0a213c]'
+        isDark ? 'bg-[#020817] text-[#F8FAFC]' : 'bg-[#f8fafc] text-[#0a213c]'
       }`}
     >
       <div className="w-full max-w-3xl mx-auto py-2 sm:py-6 px-0 sm:px-4 space-y-4">
@@ -26,7 +26,7 @@ const ExplorePageContent: React.FC = () => {
         <header
           className={`mx-3 sm:mx-0 relative rounded-3xl overflow-hidden border shadow-xs transition-all duration-300 ${
             isDark
-              ? 'bg-[#0a1b35] border-[#1e3a5f] shadow-lg shadow-blue-950/40'
+              ? 'bg-[#081B35] border-[rgba(96,165,250,0.28)] shadow-xl shadow-blue-950/60'
               : 'bg-[#e8f1f8] border-slate-200 shadow-xs'
           }`}
         >
@@ -37,7 +37,7 @@ const ExplorePageContent: React.FC = () => {
           >
             {/* Background Image / Ambient Glow */}
             <div
-              className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay"
+              className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-overlay"
               style={{
                 backgroundImage: "url('/assets/ChatGPT%20Image%20Aug%2023,%202026,%2008_44_06%20PM.png')",
                 backgroundPosition: 'center 45%'
@@ -48,27 +48,27 @@ const ExplorePageContent: React.FC = () => {
             <div
               className={`absolute inset-0 pointer-events-none ${
                 isDark
-                  ? 'bg-gradient-to-t from-[#070f1e] via-[#0a1b35]/80 to-transparent'
+                  ? 'bg-gradient-to-t from-[#020817] via-[#06152B]/85 to-transparent'
                   : 'bg-radial from-white/90 via-white/40 to-transparent'
               }`}
             />
 
             {/* Centered Title */}
             <div className="relative z-10 px-4 sm:px-8 text-center max-w-[85%] sm:max-w-[75%] mx-auto space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#026fc3]/20 border border-[#026fc3]/40 text-[#38bdf8] text-[11px] font-black uppercase tracking-widest mb-1 shadow-xs">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#1677FF]/20 border border-[#1677FF]/40 text-[#36D1FF] text-[11px] font-black uppercase tracking-widest mb-1 shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                 <span>Knowledge Discovery</span>
               </div>
               <h1
                 className={`text-base xs:text-lg sm:text-2xl md:text-[28px] font-black tracking-tight leading-tight ${
-                  isDark ? 'text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]' : 'text-[#0a213c] drop-shadow-[0_2px_4px_rgba(255,255,255,1)]'
+                  isDark ? 'text-[#F8FAFC] drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]' : 'text-[#0a213c] drop-shadow-[0_2px_4px_rgba(255,255,255,1)]'
                 }`}
               >
                 EdTechra Micro Learning Zone
               </h1>
               <p
                 className={`text-xs sm:text-sm font-bold ${
-                  isDark ? 'text-sky-200/90 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]' : 'text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
+                  isDark ? 'text-[#CBD5E1] drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]' : 'text-slate-700 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
                 }`}
               >
                 Discover fascinating ideas • Master them in 1 minute
@@ -82,7 +82,7 @@ const ExplorePageContent: React.FC = () => {
                 onClick={toggleTheme}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition-all active:scale-95 cursor-pointer backdrop-blur-md shadow-xs ${
                   isDark
-                    ? 'bg-[#0f2347]/90 text-sky-200 border border-[#1e4070] hover:bg-[#153060] hover:text-white'
+                    ? 'bg-[#0B2342]/90 text-[#CBD5E1] border border-[rgba(96,165,250,0.3)] hover:bg-[#122c54] hover:text-white'
                     : 'bg-white/90 text-slate-700 border border-slate-300 hover:bg-slate-100 hover:text-[#0a213c]'
                 }`}
                 title={`Switch to ${isDark ? 'Light' : 'Dark'} theme`}
@@ -109,7 +109,7 @@ const ExplorePageContent: React.FC = () => {
           <div
             className={`inline-flex p-1 rounded-2xl border shadow-inner transition-colors ${
               isDark
-                ? 'bg-[#0b172a] border-[#1e3a5f]'
+                ? 'bg-[#081B35] border-[rgba(96,165,250,0.28)]'
                 : 'bg-slate-200/90 border-slate-300'
             }`}
           >
@@ -118,9 +118,9 @@ const ExplorePageContent: React.FC = () => {
               onClick={() => setFeedMode('knowledge')}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 feedMode === 'knowledge'
-                  ? 'bg-[#026fc3] text-white shadow-md shadow-blue-600/30'
+                  ? 'bg-[#1677FF] text-white shadow-md shadow-blue-600/35'
                   : isDark
-                  ? 'text-slate-300 hover:text-white font-extrabold'
+                  ? 'text-[#CBD5E1] hover:text-white font-extrabold'
                   : 'text-[#0a213c] hover:text-black font-extrabold'
               }`}
             >
@@ -133,9 +133,9 @@ const ExplorePageContent: React.FC = () => {
               onClick={() => setFeedMode('community')}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 feedMode === 'community'
-                  ? 'bg-[#026fc3] text-white shadow-md shadow-blue-600/30'
+                  ? 'bg-[#1677FF] text-white shadow-md shadow-blue-600/35'
                   : isDark
-                  ? 'text-slate-300 hover:text-white font-extrabold'
+                  ? 'text-[#CBD5E1] hover:text-white font-extrabold'
                   : 'text-[#0a213c] hover:text-black font-extrabold'
               }`}
             >

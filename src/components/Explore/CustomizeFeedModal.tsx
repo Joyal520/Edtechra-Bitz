@@ -143,24 +143,24 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
         {/* Modal Header */}
         <div
           className={`flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b ${
-            isDark ? 'bg-[#091526] border-[#1b3456]' : 'bg-white border-slate-200'
+            isDark ? 'bg-[#06152B] border-[rgba(96,165,250,0.2)]' : 'bg-white border-slate-200'
           }`}
         >
           <div className="flex items-center gap-3">
             <div
               className={`p-2.5 rounded-2xl border ${
                 isDark
-                  ? 'bg-blue-500/15 text-[#38bdf8] border-blue-500/30'
-                  : 'bg-blue-50 text-[#026fc3] border-blue-100'
+                  ? 'bg-[#1677FF]/20 text-[#36D1FF] border-[#1677FF]/40'
+                  : 'bg-blue-50 text-[#1677FF] border-blue-100'
               }`}
             >
               <SlidersHorizontal className="w-5 h-5 stroke-[2.5]" />
             </div>
             <div>
-              <h2 className={`text-base sm:text-lg font-black ${isDark ? 'text-white' : 'text-[#0a213c]'}`}>
+              <h2 className={`text-base sm:text-lg font-black ${isDark ? 'text-[#F8FAFC]' : 'text-[#0a213c]'}`}>
                 Customize Your Feed
               </h2>
-              <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <p className={`text-xs font-medium ${isDark ? 'text-[#CBD5E1]' : 'text-slate-600'}`}>
                 Choose the 10 core categories you want to discover.
               </p>
             </div>
@@ -172,7 +172,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
             aria-label="Close"
             className={`p-1.5 rounded-full transition-colors cursor-pointer ${
               isDark
-                ? 'text-slate-400 hover:text-white hover:bg-[#132849]'
+                ? 'text-[#CBD5E1] hover:text-white hover:bg-[#0B2342]'
                 : 'text-slate-500 hover:text-[#0a213c] hover:bg-slate-100'
             }`}
           >
@@ -186,12 +186,12 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
           <div
             className={`flex items-center justify-between p-3 rounded-2xl border ${
               isDark
-                ? 'bg-[#0f2347] border-[#1e4070]'
+                ? 'bg-[#0B2342] border-[rgba(96,165,250,0.25)]'
                 : 'bg-slate-50 border-slate-200'
             }`}
           >
-            <div className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-              Selected: <strong className="text-[#38bdf8] font-black">{selectedTopics.size}</strong> of {ALL_BITZ_CATEGORY_IDS.length} categories
+            <div className={`text-xs font-bold ${isDark ? 'text-[#CBD5E1]' : 'text-slate-800'}`}>
+              Selected: <strong className="text-[#36D1FF] font-black">{selectedTopics.size}</strong> of {ALL_BITZ_CATEGORY_IDS.length} categories
             </div>
 
             <button
@@ -199,13 +199,13 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
               onClick={handleToggleSelectAll}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border shadow-xs transition-all active:scale-95 cursor-pointer ${
                 isDark
-                  ? 'bg-[#132849] hover:bg-[#1a3560] border-[#1e3a5f] text-slate-200'
+                  ? 'bg-[#081B35] hover:bg-[#0B2342] border-[rgba(96,165,250,0.3)] text-[#CBD5E1]'
                   : 'bg-white hover:bg-slate-50 border-slate-300 text-[#0a213c]'
               }`}
             >
               {isAllSelected ? (
                 <>
-                  <CheckSquare className="w-4 h-4 text-[#38bdf8] stroke-[2.5]" />
+                  <CheckSquare className="w-4 h-4 text-[#36D1FF] stroke-[2.5]" />
                   <span>Deselect All</span>
                 </>
               ) : (
@@ -219,7 +219,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
 
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-[#026fc3] mb-2" />
+              <Loader2 className="w-8 h-8 animate-spin text-[#1677FF] mb-2" />
               <span className="text-xs font-bold">Loading categories...</span>
             </div>
           ) : (
@@ -236,10 +236,10 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
                     className={`flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all active:scale-98 cursor-pointer ${
                       isSelected
                         ? isDark
-                          ? 'bg-[#132849] border-[#026fc3] shadow-xs'
-                          : 'bg-blue-50/80 border-[#026fc3] shadow-xs'
+                          ? 'bg-[#0B2342] border-[#1677FF] shadow-xs'
+                          : 'bg-blue-50/80 border-[#1677FF] shadow-xs'
                         : isDark
-                        ? 'bg-[#0b172a] border-[#1c3963] hover:border-[#2b538c]'
+                        ? 'bg-[#06152B] border-[rgba(96,165,250,0.2)] hover:border-[#36D1FF]'
                         : 'bg-white border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -247,17 +247,17 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
                       <div
                         className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
                         style={{
-                          backgroundColor: isSelected ? `${category.color}25` : isDark ? '#142747' : '#f1f5f9',
-                          color: isSelected ? category.color : isDark ? '#94a3b8' : '#64748b'
+                          backgroundColor: isSelected ? `${category.color}25` : isDark ? '#081B35' : '#f1f5f9',
+                          color: isSelected ? category.color : isDark ? '#94A3B8' : '#64748b'
                         }}
                       >
                         {icon}
                       </div>
                       <div className="min-w-0">
-                        <span className={`text-xs sm:text-sm font-bold block truncate ${isDark ? 'text-white' : 'text-[#0a213c]'}`}>
+                        <span className={`text-xs sm:text-sm font-bold block truncate ${isDark ? 'text-[#F8FAFC]' : 'text-[#0a213c]'}`}>
                           {category.name}
                         </span>
-                        <span className={`text-[10px] block truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <span className={`text-[10px] block truncate ${isDark ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
                           {category.subtopics.length} subtopics
                         </span>
                       </div>
@@ -266,7 +266,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
                     <div
                       className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 ml-2 transition-colors ${
                         isSelected
-                          ? 'bg-[#026fc3] text-white'
+                          ? 'bg-[#1677FF] text-white'
                           : isDark
                           ? 'border-2 border-slate-600 bg-transparent'
                           : 'border-2 border-slate-300 bg-white'
@@ -298,7 +298,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
         <div
           className={`p-4 sm:p-5 border-t flex items-center justify-between ${
             isDark
-              ? 'bg-[#091526] border-[#1b3456]'
+              ? 'bg-[#06152B] border-[rgba(96,165,250,0.2)]'
               : 'bg-slate-50 border-slate-200'
           }`}
         >
@@ -307,7 +307,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
             onClick={onClose}
             className={`px-4 py-2 text-xs font-bold rounded-xl border transition-colors cursor-pointer ${
               isDark
-                ? 'bg-[#132849] hover:bg-[#1a3560] border-[#1e3a5f] text-slate-200'
+                ? 'bg-[#081B35] hover:bg-[#0B2342] border-[rgba(96,165,250,0.25)] text-[#CBD5E1]'
                 : 'bg-white hover:bg-slate-200/70 border-slate-300 text-slate-700'
             }`}
           >
@@ -318,7 +318,7 @@ export const CustomizeFeedModal: React.FC<CustomizeFeedModalProps> = ({
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#026fc3] hover:bg-[#025ea6] text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/30 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#1677FF] hover:bg-[#2D8CFF] text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/35 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
