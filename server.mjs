@@ -14487,6 +14487,19 @@ app.post('/api/bitz/preferences', async (req, res) => {
   }
 });
 
+// 3b. GET /api/bitz/user-stats - Get user's Knowledge Bitz dashboard stats & category progress
+app.get('/api/bitz/user-stats', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const stats = await knowledgeBitzService.getUserDashboardStats(userId, { supabaseClient: serverSupabase });
+    return res.json(stats);
+  } catch (err) {
+    console.error('[API /api/bitz/user-stats Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 4. GET /api/bitz/saved - Get saved Knowledge Bitz
 app.get('/api/bitz/saved', async (req, res) => {
   try {

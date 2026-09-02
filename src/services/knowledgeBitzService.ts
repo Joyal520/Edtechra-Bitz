@@ -306,6 +306,51 @@ export const knowledgeBitzService = {
     return [];
   },
 
+  /**
+   * Retrieves comprehensive Knowledge Bitz user dashboard stats (mastery, category progress, XP, continue learning)
+   */
+  async getUserDashboardStats(token?: string | null): Promise<{
+    success: boolean;
+    totalBitzXp: number;
+    masteredCount: number;
+    totalPublishedBitz: number;
+    completedCount: number;
+    savedCount: number;
+    categoryProgress: {
+      id: string;
+      name: string;
+      masteredCount: number;
+      totalCount: number;
+      percentage: number;
+    }[];
+    recentlyMastered: KnowledgeBitzItem[];
+    continueLearning: KnowledgeBitzItem | null;
+  }> {
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${API_BASE}/user-stats`, { headers });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[KnowledgeBitzService] Error fetching user dashboard stats:', e);
+    }
+
+    return {
+      success: true,
+      totalBitzXp: 0,
+      masteredCount: 0,
+      totalPublishedBitz: 0,
+      completedCount: 0,
+      savedCount: 0,
+      categoryProgress: [],
+      recentlyMastered: [],
+      continueLearning: null
+    };
+  },
+
   // --------------------------------------------------------------------------
   // ADMIN API CALLS
   // --------------------------------------------------------------------------

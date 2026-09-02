@@ -251,7 +251,7 @@ class KnowledgeBitzService {
           isCorrect = selectedOption.trim().toLowerCase() === String(correctAns).trim().toLowerCase();
 
           // If not previously answered this specific question
-          if (!quizAnswers[String(qIdx)]) {
+          if (quizAnswers[String(qIdx)] === undefined) {
             quizAnswers[String(qIdx)] = isCorrect;
             if (isCorrect && !alreadyLearned) {
               xpAwarded = 2; // 2 XP per correct answer
@@ -1769,6 +1769,174 @@ STRICT RESTRICTIONS:
   }
 
   /**
+   * Retrieves comprehensive Knowledge Bitz learner dashboard data for a user in a single efficient query.
+   */
+  async getUserDashboardStats(userId, { supabaseClient = null } = {}) {
+    if (!userId) throw new Error('userId is required');
+
+    // 1. Fetch all published Bitz
+    let publishedBitz = [];
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('knowledge_bitz')
+          .select('id,bitz_code,title,short_fact,reading_text,category,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          publishedBitz = data;
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase published bitz fetch notice:', e.message);
+      }
+    }
+    if (publishedBitz.length === 0) {
+      publishedBitz = this.getLocalBitz().filter(b => b.status === 'published' || !b.status);
+    }
+
+    // 2. Fetch user learning history
+    let bitzLearningRows = [];
+    if (supabaseClient && userId !== 'guest' && userId !== 'guest-user') {
+      try {
+        const { data, error } = await supabaseClient
+          .from('bitz_learning_history')
+          .select('bitz_id,status,quiz_attempted,quiz_correct,quiz_answers,xp_awarded,learned_at,last_interaction_at,updated_at')
+          .eq('user_id', userId);
+        if (!error && Array.isArray(data)) {
+          bitzLearningRows = data;
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase user history fetch notice:', e.message);
+      }
+    } else {
+      const allHistory = readJson(HISTORY_CACHE_FILE, {});
+      const userHistory = allHistory[userId] || {};
+      Object.entries(userHistory).forEach(([bitzId, item]) => {
+        bitzLearningRows.push({ ...item, bitz_id: bitzId });
+      });
+    }
+
+    // 3. Fetch user bookmarks
+    let savedCount = 0;
+    if (supabaseClient && userId !== 'guest' && userId !== 'guest-user') {
+      try {
+        const { count, error } = await supabaseClient
+          .from('user_bookmarks')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        if (!error && typeof count === 'number') {
+          savedCount = count;
+        }
+      } catch (e) {}
+    } else {
+      const allBookmarks = readJson(BOOKMARKS_CACHE_FILE, {});
+      const userBm = allBookmarks[userId] || {};
+      savedCount = Object.keys(userBm).length;
+    }
+
+    // 4. Calculate Mastered and Completed Sets
+    const masteredBitzIds = new Set();
+    const completedBitzIds = new Set();
+    let totalBitzXp = 0;
+
+    bitzLearningRows.forEach(row => {
+      const bId = row.bitz_id || row.bitzId;
+      totalBitzXp += (row.xp_awarded || 0);
+
+      // Mastery check: score >= 3 out of 5, or status === 'learned'
+      let isMastered = row.status === 'learned';
+      if (!isMastered && row.quiz_answers && typeof row.quiz_answers === 'object') {
+        const correctCount = Object.values(row.quiz_answers).filter(Boolean).length;
+        if (correctCount >= 3) {
+          isMastered = true;
+        }
+      }
+      if (isMastered) {
+        masteredBitzIds.add(bId);
+      }
+      if (row.status === 'read' || row.status === 'learned') {
+        completedBitzIds.add(bId);
+      }
+    });
+
+    // Helper to match category cleanly
+    const norm = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 5. Calculate Category Progress across 12 canonical categories
+    const categoryProgress = CANONICAL_BITZ_CATEGORIES.map(cat => {
+      const catNorm = norm(cat.name);
+      const catIdNorm = norm(cat.id);
+
+      const catBitz = publishedBitz.filter(b => {
+        const cN = norm(b.category);
+        const tN = norm(b.topic_id);
+        return cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm;
+      });
+
+      const totalCount = catBitz.length;
+      const masteredCount = catBitz.filter(b => masteredBitzIds.has(b.id)).length;
+      const percentage = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0;
+
+      return {
+        id: cat.id,
+        name: cat.name,
+        masteredCount,
+        totalCount,
+        percentage
+      };
+    });
+
+    // 6. Identify Recently Mastered
+    const recentlyMastered = [];
+    const sortedLearnedRows = [...bitzLearningRows]
+      .filter(r => masteredBitzIds.has(r.bitz_id || r.bitzId))
+      .sort((a, b) => new Date(b.learned_at || b.updated_at || 0) - new Date(a.learned_at || a.updated_at || 0));
+
+    sortedLearnedRows.slice(0, 5).forEach(row => {
+      const bId = row.bitz_id || row.bitzId;
+      const bitz = publishedBitz.find(b => b.id === bId);
+      if (bitz) {
+        recentlyMastered.push({
+          id: bitz.id,
+          bitz_code: bitz.bitz_code,
+          title: bitz.title,
+          short_fact: bitz.short_fact,
+          category: bitz.category,
+          sub_topic: bitz.sub_topic,
+          visual_url: bitz.visual_url,
+          learned_at: row.learned_at || row.updated_at
+        });
+      }
+    });
+
+    // 7. Identify Continue Learning (unmastered Bitz)
+    let continueLearning = null;
+    const inProgressRow = bitzLearningRows.find(r => {
+      const bId = r.bitz_id || r.bitzId;
+      return !masteredBitzIds.has(bId) && (r.status === 'opened' || r.status === 'read' || r.quiz_attempted);
+    });
+
+    if (inProgressRow) {
+      const bId = inProgressRow.bitz_id || inProgressRow.bitzId;
+      continueLearning = publishedBitz.find(b => b.id === bId) || null;
+    } else {
+      continueLearning = publishedBitz.find(b => !masteredBitzIds.has(b.id)) || null;
+    }
+
+    return {
+      success: true,
+      totalBitzXp,
+      masteredCount: masteredBitzIds.size,
+      totalPublishedBitz: publishedBitz.length,
+      completedCount: completedBitzIds.size,
+      savedCount,
+      categoryProgress,
+      recentlyMastered,
+      continueLearning
+    };
+  }
+
+  /**
    * Compute a simple hash for content deduplication (server-side).
    * Uses Node.js crypto module.
    */
@@ -1777,6 +1945,21 @@ STRICT RESTRICTIONS:
     return createHash('sha256').update(input).digest('hex');
   }
 }
+
+export const CANONICAL_BITZ_CATEGORIES = [
+  { id: 'science_nature', name: 'Science & Nature' },
+  { id: 'people_psychology', name: 'People & Psychology' },
+  { id: 'history_culture', name: 'History & Culture' },
+  { id: 'technology_ai', name: 'Technology & AI' },
+  { id: 'business_economics', name: 'Business & Economics' },
+  { id: 'health_body', name: 'Health & Human Body' },
+  { id: 'world_geography', name: 'World & Geography' },
+  { id: 'arts_entertainment', name: 'Arts, Books & Entertainment' },
+  { id: 'sports_games', name: 'Sports & Games' },
+  { id: 'life_skills_english', name: 'Life Skills & English' },
+  { id: 'personal_growth', name: 'Personal Growth' },
+  { id: 'mysteries_legends', name: 'Mysteries & Legends' }
+];
 
 export const knowledgeBitzService = new KnowledgeBitzService();
 

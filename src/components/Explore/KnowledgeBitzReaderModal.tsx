@@ -17,7 +17,7 @@ import {
   Check,
   Award
 } from 'lucide-react';
-import { KnowledgeBitzItem, BitzQuizQuestion, normalizeQuizToArray } from '@/types';
+import { KnowledgeBitzItem, BitzQuizQuestion, prepareBitzQuiz } from '@/types';
 import { getCategoryById } from '@/utils/bitzTopicsConfig';
 import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
@@ -48,6 +48,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
   // Interaction State Machine: READING -> QUIZ_ACTIVE -> QUIZ_RESULT -> COMPLETED
   const [viewState, setViewState] = useState<ReaderState>('READING');
+  const [quizQuestions, setQuizQuestions] = useState<BitzQuizQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCurrentCorrect, setIsCurrentCorrect] = useState<boolean | null>(null);
@@ -64,7 +65,6 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   const [scrollProgress, setScrollProgress] = useState<number>(0);
 
   const category = bitz ? getCategoryById(bitz.category || bitz.topic_id) : null;
-  const quizQuestions: BitzQuizQuestion[] = bitz ? normalizeQuizToArray(bitz.quiz) : [];
   const totalQuestions = quizQuestions.length;
 
   // Cleanup timers on unmount
@@ -93,6 +93,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
     if (isOpen && bitz) {
       clearAutoAdvanceTimer();
       setViewState('READING');
+      setQuizQuestions(prepareBitzQuiz(bitz.quiz, true));
       setCurrentQuestionIndex(0);
       setSelectedOption(null);
       setIsCurrentCorrect(null);
@@ -225,6 +226,13 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
           triggerConfetti();
           onLearned(bitz.id, nextEarnedXp);
         }
+
+        // Notify dashboard of XP & Mastery update
+        window.dispatchEvent(new CustomEvent('edtechra:activity_completed'));
+        window.dispatchEvent(new CustomEvent('edtechra:bitz_mastered', {
+          detail: { bitzId: bitz.id, isMastered: finalCorrectCount >= 3, correctCount: finalCorrectCount }
+        }));
+
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -236,6 +244,9 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   const handleReadAgain = () => {
     clearAutoAdvanceTimer();
     setViewState('READING');
+    if (bitz) {
+      setQuizQuestions(prepareBitzQuiz(bitz.quiz, true));
+    }
     setCurrentQuestionIndex(0);
     setSelectedOption(null);
     setIsCurrentCorrect(null);

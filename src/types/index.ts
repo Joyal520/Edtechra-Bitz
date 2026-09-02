@@ -114,6 +114,7 @@ export interface UserProfile {
   created_at: string;
   updated_at?: string;
   text_size?: 'small' | 'medium' | 'large' | 'extra-large' | string;
+  xp?: number;
   totalXp?: number;
   currentLevel?: number;
   streakDays?: number;

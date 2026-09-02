@@ -178,8 +178,20 @@ export interface BitzAdminStats {
 }
 
 // ============================================================================
-// Helper: normalize quiz to array format
+// Helper: normalize quiz and randomize answer positions safely
 // ============================================================================
+
+/**
+ * Fisher-Yates array shuffle algorithm.
+ */
+export function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 /**
  * Normalize quiz field to always be an array of BitzQuizQuestion[].
@@ -191,3 +203,49 @@ export function normalizeQuizToArray(quiz: any): BitzQuizQuestion[] {
   if (typeof quiz === 'object' && quiz.question) return [quiz];
   return [];
 }
+
+/**
+ * Prepares and normalizes quiz questions for interactive playback.
+ * - Ensures questions are formatted as an array.
+ * - Randomizes option positions using Fisher-Yates so that the correct answer does NOT always appear in position 1.
+ * - Preserves the exact correct_answer text identity so correctness comparison travels with the answer.
+ */
+export function prepareBitzQuiz(quiz: any, randomizeOptions: boolean = true): BitzQuizQuestion[] {
+  const rawArray = normalizeQuizToArray(quiz);
+  if (!rawArray || rawArray.length === 0) return [];
+
+  return rawArray.map((q) => {
+    if (!q || typeof q !== 'object') return q;
+    const rawOptions = Array.isArray(q.options)
+      ? [...q.options]
+      : (Array.isArray((q as any).choices) ? [...(q as any).choices] : []);
+    const correctAns = String(q.correct_answer || (q as any).correctAnswer || '').trim();
+
+    // Ensure correct answer is present in options
+    if (correctAns && !rawOptions.some(opt => String(opt).trim().toLowerCase() === correctAns.toLowerCase())) {
+      rawOptions.push(correctAns);
+    }
+
+    // Deduplicate options while preserving string values
+    const uniqueOptions: string[] = [];
+    const seen = new Set<string>();
+    rawOptions.forEach(opt => {
+      const clean = String(opt || '').trim();
+      const lower = clean.toLowerCase();
+      if (clean && !seen.has(lower)) {
+        seen.add(lower);
+        uniqueOptions.push(clean);
+      }
+    });
+
+    const finalOptions = randomizeOptions ? shuffleArray(uniqueOptions) : uniqueOptions;
+
+    return {
+      ...q,
+      options: finalOptions,
+      correct_answer: correctAns || (finalOptions[0] || ''),
+      xp: q.xp || 2
+    };
+  });
+}
+
