@@ -2043,9 +2043,28 @@ STRICT RESTRICTIONS:
       const catIdNorm = norm(cat.id);
 
       const catBitz = publishedBitz.filter(b => {
-        const cN = norm(b.category);
-        const tN = norm(b.topic_id);
-        return cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm;
+        const cN = norm(b.category || '');
+        const tN = norm(b.topic_id || '');
+        const sN = norm(b.sub_topic || '');
+        if (cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm) return true;
+        if (cN.includes(catIdNorm) || catIdNorm.includes(cN)) return true;
+        if (tN.includes(catIdNorm) || catIdNorm.includes(tN)) return true;
+
+        // Topic-specific alias checks
+        if (cat.id === 'science_nature' && (cN.includes('science') || tN.includes('science') || cN.includes('nature'))) return true;
+        if (cat.id === 'people_psychology' && (cN.includes('psycholog') || cN.includes('people') || tN.includes('psycholog'))) return true;
+        if (cat.id === 'history_culture' && (cN.includes('histor') || cN.includes('culture') || tN.includes('histor'))) return true;
+        if (cat.id === 'technology_ai' && (cN.includes('tech') || cN.includes('ai') || tN.includes('tech'))) return true;
+        if (cat.id === 'business_economics' && (cN.includes('business') || cN.includes('econom') || tN.includes('business'))) return true;
+        if (cat.id === 'health_body' && (cN.includes('health') || cN.includes('body') || tN.includes('health'))) return true;
+        if (cat.id === 'world_geography' && (cN.includes('geograph') || cN.includes('world') || tN.includes('geograph'))) return true;
+        if (cat.id === 'arts_entertainment' && (cN.includes('art') || cN.includes('entertain') || cN.includes('book'))) return true;
+        if (cat.id === 'sports_games' && (cN.includes('sport') || cN.includes('game') || tN.includes('sport'))) return true;
+        if (cat.id === 'life_skills_english' && (cN.includes('english') || cN.includes('skill') || cN.includes('language'))) return true;
+        if (cat.id === 'personal_growth' && (cN.includes('growth') || cN.includes('personal') || tN.includes('growth'))) return true;
+        if (cat.id === 'mysteries_legends' && (cN.includes('myster') || cN.includes('legend') || cN.includes('unsolved'))) return true;
+
+        return false;
       });
 
       const totalCount = catBitz.length;

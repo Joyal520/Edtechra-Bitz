@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   GraduationCap,
   Award,
-  Settings,
   Bookmark,
   BookOpen,
   Atom,
@@ -38,7 +37,6 @@ import { getTimeBasedGreeting } from '@/utils/greeting';
 import { quizService } from '@/services/quizService';
 import { postService } from '@/services/postService';
 import { PostUserStats } from '@/types/post';
-import { UserSettingsModal } from '@/components/UserSettingsModal';
 import { TopLearnersLeaderboard } from '@/components/Dashboard/TopLearnersLeaderboard';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { KnowledgeBitzItem } from '@/types';
@@ -80,7 +78,6 @@ interface BitzDashboardStatsState {
 export const DashboardPage: React.FC = () => {
   const { user, profile, isAdmin, isTeacher, openAuthModal, isLoading, session } = useAuth();
 
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [selectedBitzForReading, setSelectedBitzForReading] = useState<KnowledgeBitzItem | null>(null);
 
   // Knowledge Bitz real learning stats
@@ -127,7 +124,7 @@ export const DashboardPage: React.FC = () => {
       setBitzStatsError(null);
 
       const [bStats, fStats, qStats, pStats] = await Promise.all([
-        knowledgeBitzService.getUserDashboardStats(token),
+        knowledgeBitzService.getUserDashboardStats(token, user?.id),
         youtubeClient.getUserProgress(userId).catch(() => null),
         quizService.getUserQuizStats(userId, token).catch(() => null),
         postService.getUserPostStats(userId, token).catch(() => null)
@@ -280,19 +277,8 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-center">
-            {user && (
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#0e274d] hover:bg-[#133363] text-slate-200 border border-blue-800/40 text-xs font-bold rounded-2xl transition-all cursor-pointer shadow-sm"
-              >
-                <Settings className="w-4 h-4 text-cyan-400" />
-                <span>Settings</span>
-              </button>
-            )}
-
-            {isAdmin && (
+          {isAdmin && (
+            <div className="flex items-center gap-2.5 self-end sm:self-center">
               <Link
                 to="/admin"
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-900/40 hover:bg-purple-900/60 text-purple-200 border border-purple-600/40 text-xs font-bold rounded-2xl transition-all shadow-sm"
@@ -300,8 +286,8 @@ export const DashboardPage: React.FC = () => {
                 <ShieldCheck className="w-4 h-4 text-purple-300" />
                 <span>Admin Center</span>
               </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* 2. Top Statistics Cards */}
@@ -587,12 +573,6 @@ export const DashboardPage: React.FC = () => {
 
         {/* 5. Top 10 Learners Leaderboard */}
         <TopLearnersLeaderboard />
-
-        {/* User Profile & Preferences Settings Modal */}
-        <UserSettingsModal
-          isOpen={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-        />
 
         {/* Knowledge Bitz Full-Screen Reader & Quiz Modal */}
         {selectedBitzForReading && (

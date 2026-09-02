@@ -39,14 +39,14 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
   onClose,
   onLearned
 }) => {
-  const { session, requireAuth } = useAuth();
+  const { session, user, requireAuth } = useAuth();
   const token = session?.access_token || null;
 
   // Bookmarking & Sharing State
   const [isSaved, setIsSaved] = useState<boolean>(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
 
-  // Interaction State Machine: READING -> QUIZ_ACTIVE -> QUIZ_RESULT -> COMPLETED
+  // Reader & Auto-Quiz Machine States
   const [viewState, setViewState] = useState<ReaderState>('READING');
   const [quizQuestions, setQuizQuestions] = useState<BitzQuizQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
@@ -56,6 +56,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
   // Score & XP Tracking (2 XP per correct = max 10 XP)
   const [answeredMap, setAnsweredMap] = useState<Record<number, boolean>>({});
+  const answeredMapRef = useRef<Record<number, boolean>>({});
   const [earnedXp, setEarnedXp] = useState<number>(0);
   const awardedQuestionsRef = useRef<Set<number>>(new Set());
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,6 +100,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
       setIsCurrentCorrect(null);
       setServerExplanation(null);
       setAnsweredMap({});
+      answeredMapRef.current = {};
       setEarnedXp(0);
       awardedQuestionsRef.current.clear();
       setIsSaved(Boolean(bitz.is_saved_by_me));
@@ -175,6 +177,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
     if (isFirstAttempt) {
       awardedQuestionsRef.current.add(currentQuestionIndex);
+      answeredMapRef.current[currentQuestionIndex] = isCorrect;
       setAnsweredMap((prev) => ({
         ...prev,
         [currentQuestionIndex]: isCorrect
@@ -219,11 +222,9 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
         }
       } else {
         // Quiz completed — calculate final score & persist authoritative progress
-        const updatedAnsweredMap = {
-          ...answeredMap,
-          [currentQuestionIndex]: isCorrect
-        };
-        const finalCorrectCount = Object.values(updatedAnsweredMap).filter(Boolean).length;
+        answeredMapRef.current[currentQuestionIndex] = isCorrect;
+        const finalAnswers = { ...answeredMapRef.current };
+        const finalCorrectCount = Object.values(finalAnswers).filter(Boolean).length;
         const finalMastered = finalCorrectCount >= 3;
         const finalXpEarned = finalCorrectCount * 2;
 
@@ -231,7 +232,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
 
         // Build per-question answer record for server
         const quizAnswersRecord: Record<string, boolean> = {};
-        Object.entries(updatedAnsweredMap).forEach(([k, v]) => {
+        Object.entries(finalAnswers).forEach(([k, v]) => {
           quizAnswersRecord[k] = Boolean(v);
         });
 
@@ -247,7 +248,8 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
               mastered: finalMastered,
               quizAnswers: quizAnswersRecord
             },
-            token
+            token,
+            user?.id
           );
 
           if (completionRes && completionRes.xpEarned !== undefined) {
@@ -288,6 +290,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
     setIsCurrentCorrect(null);
     setServerExplanation(null);
     setAnsweredMap({});
+    answeredMapRef.current = {};
     setEarnedXp(0);
     awardedQuestionsRef.current.clear();
     setScrollProgress(0);

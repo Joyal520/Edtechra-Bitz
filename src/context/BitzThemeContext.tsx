@@ -122,25 +122,25 @@ export const BitzThemeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
 
-    // Font size mapping for 100-word reading text
-    let fontSizeValue = '18px';
-    if (readingSettings.textSize === 'small') fontSizeValue = isMobile ? '15px' : '16px';
-    else if (readingSettings.textSize === 'medium') fontSizeValue = isMobile ? '17px' : '18px';
-    else if (readingSettings.textSize === 'large') fontSizeValue = isMobile ? '19px' : '20px';
-    else if (readingSettings.textSize === 'xlarge') fontSizeValue = isMobile ? '21px' : '22px';
+    // Font size mapping for 100-word reading text (Medium is default, comfortable on mobile & desktop)
+    let fontSizeValue = '20px';
+    if (readingSettings.textSize === 'small') fontSizeValue = isMobile ? '16px' : '17px';
+    else if (readingSettings.textSize === 'medium') fontSizeValue = isMobile ? '18px' : '20px';
+    else if (readingSettings.textSize === 'large') fontSizeValue = isMobile ? '20px' : '22px';
+    else if (readingSettings.textSize === 'xlarge') fontSizeValue = isMobile ? '23px' : '25px';
 
-    // Line spacing mapping
+    // Line spacing mapping (Generous 1.7 - 1.9)
     let lineSpacingValue = '1.8';
-    if (readingSettings.lineSpacing === 'compact') lineSpacingValue = '1.6';
+    if (readingSettings.lineSpacing === 'compact') lineSpacingValue = '1.7';
     else if (readingSettings.lineSpacing === 'comfortable') lineSpacingValue = '1.8';
-    else if (readingSettings.lineSpacing === 'relaxed') lineSpacingValue = '2.0';
+    else if (readingSettings.lineSpacing === 'relaxed') lineSpacingValue = '1.9';
 
-    // Font family mapping
-    let fontFamilyValue = 'inherit';
+    // Font family mapping: Lora serif for reading, Manrope / standard UI for UI
+    let fontFamilyValue = 'Lora, Georgia, serif';
     if (readingSettings.fontFamily === 'reading') {
-      fontFamilyValue = 'Charter, Georgia, "Times New Roman", Merriweather, serif';
+      fontFamilyValue = 'Lora, Georgia, "Times New Roman", Merriweather, serif';
     } else {
-      fontFamilyValue = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      fontFamilyValue = 'Lora, Georgia, serif';
     }
 
     if (typeof document !== 'undefined') {

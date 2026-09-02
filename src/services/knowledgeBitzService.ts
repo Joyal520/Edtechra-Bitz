@@ -277,43 +277,102 @@ export const knowledgeBitzService = {
   async submitQuizCompletion(
     bitzId: string,
     payload: BitzQuizCompletionPayload,
-    token?: string | null
+    token?: string | null,
+    explicitUserId?: string | null
   ): Promise<BitzQuizCompletionResult> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const isMastered = payload.correctAnswers >= 3;
+    const targetXp = Math.min(10, payload.correctAnswers * 2);
+    const nowIso = new Date().toISOString();
 
-    try {
-      const res = await fetch(`${API_BASE}/${bitzId}/quiz-complete`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data;
-      }
-    } catch (e) {
-      console.warn('[KnowledgeBitzService] API quiz-complete error, checking Supabase fallback:', e);
-    }
+    let directResult: BitzQuizCompletionResult | null = null;
 
-    // Direct Supabase RPC Fallback
+    // 1. Direct Supabase RPC & Table Upsert
     if (supabase) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data, error } = await supabase.rpc('record_bitz_quiz_completion', {
+        let authUserId = explicitUserId;
+        if (!authUserId) {
+          const { data: { user } } = await supabase.auth.getUser();
+          authUserId = user?.id || null;
+        }
+
+        if (authUserId && authUserId !== 'guest' && authUserId !== 'guest-user') {
+          // 1a. Try atomic PostgreSQL RPC first
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('record_bitz_quiz_completion', {
             p_bitz_id: bitzId,
             p_correct_answers: payload.correctAnswers,
             p_total_questions: payload.totalQuestions || 5,
             p_quiz_answers: payload.quizAnswers || {},
-            p_user_id: user.id
+            p_user_id: authUserId
           });
-          if (!error && data) return data as BitzQuizCompletionResult;
+
+          if (!rpcErr && rpcData) {
+            directResult = rpcData as BitzQuizCompletionResult;
+          } else {
+            // 1b. Direct table upsert fallback
+            const { data: existing } = await supabase
+              .from('knowledge_bitz_progress')
+              .select('*')
+              .eq('user_id', authUserId)
+              .eq('bitz_id', bitzId)
+              .maybeSingle();
+
+            const existingXp = existing?.xp_earned || 0;
+            const xpToAward = Math.max(0, targetXp - existingXp);
+            const wasAlreadyMastered = Boolean(existing?.mastered);
+            const finalMastered = wasAlreadyMastered || isMastered;
+
+            const { error: upsertErr } = await supabase.from('knowledge_bitz_progress').upsert({
+              user_id: authUserId,
+              bitz_id: bitzId,
+              attempts: (existing?.attempts || 0) + 1,
+              correct_answers: Math.max(existing?.correct_answers || 0, payload.correctAnswers),
+              score: Math.max(existing?.score || 0, payload.correctAnswers),
+              xp_earned: Math.max(existingXp, targetXp),
+              completed: true,
+              mastered: finalMastered,
+              quiz_answers: payload.quizAnswers || {},
+              completed_at: existing?.completed_at || nowIso,
+              mastered_at: finalMastered ? (existing?.mastered_at || nowIso) : null,
+              updated_at: nowIso
+            }, { onConflict: 'user_id,bitz_id' });
+
+            if (!upsertErr) {
+              if (xpToAward > 0) {
+                const { data: prof } = await supabase.from('profiles').select('xp').eq('id', authUserId).maybeSingle();
+                await supabase.from('profiles').update({ xp: (prof?.xp || 0) + xpToAward }).eq('id', authUserId);
+              }
+
+              directResult = {
+                success: true,
+                bitzId,
+                score: Math.max(existing?.score || 0, payload.correctAnswers),
+                correctAnswers: Math.max(existing?.correct_answers || 0, payload.correctAnswers),
+                totalQuestions: payload.totalQuestions || 5,
+                xpEarned: Math.max(existingXp, targetXp),
+                xpAwardedNow: xpToAward,
+                mastered: finalMastered,
+                completed: true
+              };
+            }
+          }
         }
       } catch (sbErr) {
-        console.warn('[KnowledgeBitzService] Direct Supabase RPC quiz-complete notice:', sbErr);
+        console.warn('[KnowledgeBitzService] Direct Supabase persistence notice:', sbErr);
       }
     }
+
+    // 2. Also notify Express endpoint in background
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      fetch(`${API_BASE}/${bitzId}/quiz-complete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    } catch {}
+
+    if (directResult) return directResult;
 
     return {
       success: true,
@@ -323,7 +382,7 @@ export const knowledgeBitzService = {
       totalQuestions: payload.totalQuestions || 5,
       xpEarned: payload.xpEarned,
       xpAwardedNow: payload.xpEarned,
-      mastered: payload.mastered,
+      mastered: isMastered,
       completed: true
     };
   },
@@ -383,7 +442,7 @@ export const knowledgeBitzService = {
   /**
    * Retrieves comprehensive Knowledge Bitz user dashboard stats (mastery, category progress, XP, continue learning)
    */
-  async getUserDashboardStats(token?: string | null): Promise<{
+  async getUserDashboardStats(token?: string | null, explicitUserId?: string | null): Promise<{
     success: boolean;
     totalBitzXp: number;
     masteredCount: number;
@@ -400,10 +459,160 @@ export const knowledgeBitzService = {
     recentlyMastered: KnowledgeBitzItem[];
     continueLearning: KnowledgeBitzItem | null;
   }> {
+    // 1. Direct Supabase Query (Authoritative)
+    if (supabase) {
+      try {
+        let targetUserId = explicitUserId;
+        if (!targetUserId) {
+          const { data: { user } } = await supabase.auth.getUser();
+          targetUserId = user?.id || null;
+        }
+
+        // Fetch published bitz catalogue
+        const { data: bitzData, error: bitzErr } = await supabase
+          .from('knowledge_bitz')
+          .select('id,bitz_code,title,short_fact,reading_text,category,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
+
+        if (!bitzErr && Array.isArray(bitzData)) {
+          const publishedBitz: KnowledgeBitzItem[] = (bitzData as any as KnowledgeBitzItem[]) || [];
+          const publishedIdSet = new Set(publishedBitz.map(b => b.id));
+
+          let progressRows: any[] = [];
+          if (targetUserId && targetUserId !== 'guest' && targetUserId !== 'guest-user') {
+            const { data: kbpData } = await supabase
+              .from('knowledge_bitz_progress')
+              .select('bitz_id,attempts,correct_answers,score,xp_earned,completed,mastered,quiz_answers,completed_at,mastered_at,updated_at')
+              .eq('user_id', targetUserId);
+
+            if (Array.isArray(kbpData) && kbpData.length > 0) {
+              progressRows = kbpData;
+            } else {
+              const { data: blhData } = await supabase
+                .from('bitz_learning_history')
+                .select('bitz_id,status,quiz_attempted,quiz_correct,quiz_answers,xp_awarded,learned_at,last_interaction_at,updated_at')
+                .eq('user_id', targetUserId);
+              if (Array.isArray(blhData)) progressRows = blhData;
+            }
+          }
+
+          const masteredBitzIds = new Set<string>();
+          const completedBitzIds = new Set<string>();
+          let totalBitzXp = 0;
+
+          progressRows.forEach((row: any) => {
+            const bId = row.bitz_id;
+            totalBitzXp += (row.xp_earned || row.xp_awarded || 0);
+
+            let isMastered = row.mastered === true;
+            if (!isMastered && (row.status === 'learned' || (row.correct_answers !== undefined && row.correct_answers >= 3) || (row.score !== undefined && row.score >= 3))) {
+              isMastered = true;
+            }
+            if (!isMastered && row.quiz_answers && typeof row.quiz_answers === 'object') {
+              const correctCount = Object.values(row.quiz_answers).filter(Boolean).length;
+              if (correctCount >= 3) isMastered = true;
+            }
+
+            if (isMastered && publishedIdSet.has(bId)) {
+              masteredBitzIds.add(bId);
+            }
+            if ((row.completed === true || row.status === 'read' || row.status === 'learned') && publishedIdSet.has(bId)) {
+              completedBitzIds.add(bId);
+            }
+          });
+
+          // Helper to match category cleanly
+          const norm = (str: string) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const categoryProgress = CANONICAL_CATEGORIES.map(cat => {
+            const catNorm = norm(cat.name);
+            const catIdNorm = norm(cat.id);
+
+            const catBitz = publishedBitz.filter(b => {
+              const cN = norm(b.category || '');
+              const tN = norm(b.topic_id || '');
+              const sN = norm(b.sub_topic || '');
+              if (cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm || sN === catNorm || sN === catIdNorm) return true;
+              if (cN.includes(catIdNorm) || catIdNorm.includes(cN)) return true;
+              if (tN.includes(catIdNorm) || catIdNorm.includes(tN)) return true;
+              if (sN.includes(catIdNorm) || catIdNorm.includes(sN)) return true;
+
+              // Topic-specific alias checks
+              if (cat.id === 'science_nature' && (cN.includes('science') || tN.includes('science') || cN.includes('nature'))) return true;
+              if (cat.id === 'people_psychology' && (cN.includes('psycholog') || cN.includes('people') || tN.includes('psycholog'))) return true;
+              if (cat.id === 'history_culture' && (cN.includes('histor') || cN.includes('culture') || tN.includes('histor'))) return true;
+              if (cat.id === 'technology_ai' && (cN.includes('tech') || cN.includes('ai') || tN.includes('tech'))) return true;
+              if (cat.id === 'business_economics' && (cN.includes('business') || cN.includes('econom') || tN.includes('business'))) return true;
+              if (cat.id === 'health_body' && (cN.includes('health') || cN.includes('body') || tN.includes('health'))) return true;
+              if (cat.id === 'world_geography' && (cN.includes('geograph') || cN.includes('world') || tN.includes('geograph'))) return true;
+              if (cat.id === 'arts_entertainment' && (cN.includes('art') || cN.includes('entertain') || cN.includes('book'))) return true;
+              if (cat.id === 'sports_games' && (cN.includes('sport') || cN.includes('game') || tN.includes('sport'))) return true;
+              if (cat.id === 'life_skills_english' && (cN.includes('english') || cN.includes('skill') || cN.includes('language'))) return true;
+              if (cat.id === 'personal_growth' && (cN.includes('growth') || cN.includes('personal') || tN.includes('growth'))) return true;
+              if (cat.id === 'mysteries_legends' && (cN.includes('myster') || cN.includes('legend') || cN.includes('unsolved'))) return true;
+
+              return false;
+            });
+
+            const totalCount = catBitz.length;
+            const masteredCount = catBitz.filter(b => masteredBitzIds.has(b.id)).length;
+            const percentage = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0;
+
+            return {
+              id: cat.id,
+              name: cat.name,
+              masteredCount,
+              totalCount,
+              percentage
+            };
+          });
+
+          // Recently Mastered
+          const recentlyMastered: KnowledgeBitzItem[] = [];
+          const sortedLearnedRows = [...progressRows]
+            .filter(r => masteredBitzIds.has(r.bitz_id))
+            .sort((a, b) => new Date(b.mastered_at || b.learned_at || b.updated_at || 0).getTime() - new Date(a.mastered_at || a.learned_at || a.updated_at || 0).getTime());
+
+          sortedLearnedRows.slice(0, 5).forEach(row => {
+            const bitz = publishedBitz.find(b => b.id === row.bitz_id);
+            if (bitz) {
+              recentlyMastered.push({
+                ...bitz,
+                learned_at: row.mastered_at || row.learned_at || row.updated_at
+              });
+            }
+          });
+
+          // Continue Learning
+          let continueLearning: KnowledgeBitzItem | null = null;
+          const inProgressRow = progressRows.find(r => !masteredBitzIds.has(r.bitz_id) && (r.status === 'opened' || r.status === 'read' || r.attempts > 0 || r.quiz_attempted));
+          if (inProgressRow) {
+            continueLearning = publishedBitz.find(b => b.id === inProgressRow.bitz_id) || null;
+          } else {
+            continueLearning = publishedBitz.find(b => !masteredBitzIds.has(b.id)) || null;
+          }
+
+          return {
+            success: true,
+            totalBitzXp,
+            masteredCount: masteredBitzIds.size,
+            totalPublishedBitz: publishedBitz.length,
+            completedCount: completedBitzIds.size,
+            savedCount: 0,
+            categoryProgress,
+            recentlyMastered,
+            continueLearning
+          };
+        }
+      } catch (err) {
+        console.warn('[KnowledgeBitzService] Direct Supabase dashboard query error:', err);
+      }
+    }
+
+    // 2. Fallback to backend API
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    // 1. Try backend endpoint
     try {
       const res = await fetch(`${API_BASE}/user-stats`, { headers });
       if (res.ok) {
@@ -413,132 +622,7 @@ export const knowledgeBitzService = {
         }
       }
     } catch (e) {
-      console.warn('[KnowledgeBitzService] Error fetching user dashboard stats from API, using Supabase fallback:', e);
-    }
-
-    // 2. Direct Supabase Query Fallback
-    if (supabase) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const userId = user?.id || null;
-
-        // Fetch published bitz
-        const { data: bitzData } = await supabase
-          .from('knowledge_bitz')
-          .select('id,bitz_code,title,short_fact,reading_text,category,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
-          .eq('status', 'published')
-          .order('created_at', { ascending: false });
-
-        const publishedBitz: KnowledgeBitzItem[] = (bitzData as any as KnowledgeBitzItem[]) || [];
-        const publishedIdSet = new Set(publishedBitz.map(b => b.id));
-
-        let progressRows: any[] = [];
-        if (userId) {
-          const { data: kbpData } = await supabase
-            .from('knowledge_bitz_progress')
-            .select('bitz_id,attempts,correct_answers,score,xp_earned,completed,mastered,quiz_answers,completed_at,mastered_at,updated_at')
-            .eq('user_id', userId);
-
-          if (Array.isArray(kbpData) && kbpData.length > 0) {
-            progressRows = kbpData;
-          } else {
-            const { data: blhData } = await supabase
-              .from('bitz_learning_history')
-              .select('bitz_id,status,quiz_attempted,quiz_correct,quiz_answers,xp_awarded,learned_at,last_interaction_at,updated_at')
-              .eq('user_id', userId);
-            if (Array.isArray(blhData)) progressRows = blhData;
-          }
-        }
-
-        const masteredBitzIds = new Set<string>();
-        const completedBitzIds = new Set<string>();
-        let totalBitzXp = 0;
-
-        progressRows.forEach((row: any) => {
-          const bId = row.bitz_id;
-          totalBitzXp += (row.xp_earned || row.xp_awarded || 0);
-
-          let isMastered = row.mastered === true;
-          if (!isMastered && (row.status === 'learned' || (row.correct_answers !== undefined && row.correct_answers >= 3) || (row.score !== undefined && row.score >= 3))) {
-            isMastered = true;
-          }
-          if (!isMastered && row.quiz_answers && typeof row.quiz_answers === 'object') {
-            const correctCount = Object.values(row.quiz_answers).filter(Boolean).length;
-            if (correctCount >= 3) isMastered = true;
-          }
-
-          if (isMastered && publishedIdSet.has(bId)) {
-            masteredBitzIds.add(bId);
-          }
-          if ((row.completed === true || row.status === 'read' || row.status === 'learned') && publishedIdSet.has(bId)) {
-            completedBitzIds.add(bId);
-          }
-        });
-
-        // 12 Canonical Categories Progress
-        const norm = (str: string) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const categoryProgress = CANONICAL_CATEGORIES.map(cat => {
-          const catNorm = norm(cat.name);
-          const catIdNorm = norm(cat.id);
-
-          const catBitz = publishedBitz.filter(b => {
-            const cN = norm(b.category || '');
-            const tN = norm(b.topic_id || '');
-            return cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm;
-          });
-
-          const totalCount = catBitz.length;
-          const masteredCount = catBitz.filter(b => masteredBitzIds.has(b.id)).length;
-          const percentage = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0;
-
-          return {
-            id: cat.id,
-            name: cat.name,
-            masteredCount,
-            totalCount,
-            percentage
-          };
-        });
-
-        // Recently Mastered
-        const recentlyMastered: KnowledgeBitzItem[] = [];
-        const sortedLearnedRows = [...progressRows]
-          .filter(r => masteredBitzIds.has(r.bitz_id))
-          .sort((a, b) => new Date(b.mastered_at || b.learned_at || b.updated_at || 0).getTime() - new Date(a.mastered_at || a.learned_at || a.updated_at || 0).getTime());
-
-        sortedLearnedRows.slice(0, 5).forEach(row => {
-          const bitz = publishedBitz.find(b => b.id === row.bitz_id);
-          if (bitz) {
-            recentlyMastered.push({
-              ...bitz,
-              learned_at: row.mastered_at || row.learned_at || row.updated_at
-            });
-          }
-        });
-
-        // Continue Learning
-        let continueLearning: KnowledgeBitzItem | null = null;
-        const inProgressRow = progressRows.find(r => !masteredBitzIds.has(r.bitz_id) && (r.status === 'opened' || r.status === 'read' || r.attempts > 0 || r.quiz_attempted));
-        if (inProgressRow) {
-          continueLearning = publishedBitz.find(b => b.id === inProgressRow.bitz_id) || null;
-        } else {
-          continueLearning = publishedBitz.find(b => !masteredBitzIds.has(b.id)) || null;
-        }
-
-        return {
-          success: true,
-          totalBitzXp,
-          masteredCount: masteredBitzIds.size,
-          totalPublishedBitz: publishedBitz.length,
-          completedCount: completedBitzIds.size,
-          savedCount: 0,
-          categoryProgress,
-          recentlyMastered,
-          continueLearning
-        };
-      } catch (err) {
-        console.warn('[KnowledgeBitzService] Direct Supabase dashboard stats fallback error:', err);
-      }
+      console.warn('[KnowledgeBitzService] Error fetching user dashboard stats from API fallback:', e);
     }
 
     return {
