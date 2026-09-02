@@ -30,7 +30,11 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Manrope', 'Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['"DM Serif Display"', 'Georgia', 'serif'],
+        reading: ['Lora', 'Georgia', 'serif'],
+        serif: ['Lora', 'Georgia', 'serif'],
+        ui: ['Manrope', 'system-ui', 'sans-serif'],
       },
     },
   },

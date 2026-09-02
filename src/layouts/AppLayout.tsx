@@ -262,11 +262,11 @@ export const AppLayout: React.FC = () => {
               </button>
             )}
 
-            {/* Search Button (Hidden on Homepage) */}
+            {/* Search Button (Hidden on Homepage & Mobile Header) */}
             {!isHomePage && (
               <button
                 onClick={() => setSearchOpen(!searchOpen)}
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full hidden sm:flex items-center justify-center transition-colors cursor-pointer ${
                   isClassesPage
                     ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'

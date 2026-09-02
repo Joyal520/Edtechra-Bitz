@@ -14876,6 +14876,67 @@ app.post('/api/admin/bitz/:id/remove-image', async (req, res) => {
   }
 });
 
+// 19b. GET /api/admin/bitz/missing-images - Retrieve queue of Bitz records without valid images
+app.get('/api/admin/bitz/missing-images', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!isAuthorizedAdmin(authData, req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+    }
+
+    const limit = Number(req.query.limit) || 100;
+    const result = await knowledgeBitzService.getBitzMissingImages({ limit, supabaseClient: serverSupabase });
+    return res.json(result);
+  } catch (err) {
+    console.error('[API /api/admin/bitz/missing-images Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 19c. POST /api/admin/bitz/:id/upload-image - Manual admin image upload & Sharp WebP R2 optimization
+app.post(
+  '/api/admin/bitz/:id/upload-image',
+  express.raw({ type: ['image/*', 'application/octet-stream'], limit: '15mb' }),
+  async (req, res) => {
+    try {
+      const authData = await verifyAuthUser(req);
+      if (!isAuthorizedAdmin(authData, req)) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Administrator privileges required.' });
+      }
+
+      let buffer = null;
+
+      if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+        // Direct binary stream from client
+        buffer = req.body;
+      } else if (req.body && typeof req.body === 'object' && req.body.imageData) {
+        // JSON base64 fallback
+        const base64Clean = String(req.body.imageData).replace(/^data:image\/\w+;base64,/, '');
+        buffer = Buffer.from(base64Clean, 'base64');
+      }
+
+      if (!buffer || buffer.length === 0) {
+        return res.status(400).json({ success: false, error: 'Image data is required.' });
+      }
+
+      if (buffer.length > 15 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: 'Image exceeds maximum allowed size of 15 MB.' });
+      }
+
+      const result = await knowledgeBitzService.uploadBitzImageManual({
+        bitzId: req.params.id,
+        imageBuffer: buffer,
+        supabaseClient: serverSupabase
+      });
+
+      return res.json(result);
+    } catch (err) {
+      console.error(`[API /api/admin/bitz/${req.params.id}/upload-image Error]:`, err.message || err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 // 20. GET & POST /api/admin/pixabay/test - Admin Pixabay Diagnostic Endpoint
 const handlePixabayDiagnostic = async (req, res) => {
   try {

@@ -185,7 +185,7 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
               <span className="text-xs uppercase tracking-widest font-black text-[#5AA9FF] mb-2">
                 {category.name}
               </span>
-              <h4 className="text-xl sm:text-2xl font-black text-[#F8FAFC] leading-tight tracking-tight drop-shadow-md">
+              <h4 className="font-display text-xl sm:text-2xl font-normal text-[#F8FAFC] leading-tight tracking-tight drop-shadow-md">
                 {bitz.title}
               </h4>
             </div>
@@ -198,7 +198,7 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
         {/* Top Badge: Category Pill */}
         <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-start pointer-events-none z-10">
           {/* Category Badge */}
-          <div className="flex items-center gap-1.5 bg-[#06152B]/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-md">
+          <div className="flex items-center gap-1.5 bg-[#06152B]/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-md font-ui">
             <span
               className="w-2 h-2 rounded-full shrink-0"
               style={{ backgroundColor: category.color }}
@@ -222,9 +222,9 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
 
       {/* Discovery Fact Content (Section 4: 20-30 word short_fact ONLY) */}
       <div className="p-4 sm:p-5">
-        {/* Hook Headline */}
+        {/* Hook Headline: DM Serif Display */}
         <h3
-          className={`text-lg sm:text-xl font-black leading-snug tracking-tight mb-2 transition-colors ${
+          className={`font-display text-xl sm:text-2xl font-normal leading-snug tracking-tight mb-2 transition-colors ${
             isDark
               ? 'text-[#F8FAFC] group-hover:text-[#36D1FF]'
               : 'text-[#0a213c] group-hover:text-[#1677FF]'

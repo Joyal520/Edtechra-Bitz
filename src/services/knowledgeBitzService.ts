@@ -562,6 +562,77 @@ export const knowledgeBitzService = {
       headers
     });
     return await res.json();
+  },
+
+  async getMissingImagesQueue(limit = 100, token?: string | null): Promise<{ success: boolean; bitz: KnowledgeBitzItem[]; totalMissing: number }> {
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`${ADMIN_API_BASE}/missing-images?limit=${limit}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) return json;
+      }
+    } catch (e) {
+      console.warn('[KnowledgeBitzService] Missing images queue fetch notice:', e);
+    }
+
+    // Direct Supabase fallback
+    if (supabase) {
+      try {
+        const { data, count, error } = await supabase
+          .from('knowledge_bitz')
+          .select('*', { count: 'exact' })
+          .or('visual_url.is.null,visual_url.eq.""')
+          .order('created_at', { ascending: true })
+          .limit(limit);
+
+        if (!error && Array.isArray(data)) {
+          return {
+            success: true,
+            bitz: data as KnowledgeBitzItem[],
+            totalMissing: count ?? data.length
+          };
+        }
+      } catch (dbErr) {
+        console.warn('[KnowledgeBitzService] Fallback db query error:', dbErr);
+      }
+    }
+
+    return { success: true, bitz: [], totalMissing: 0 };
+  },
+
+  async uploadBitzManualImage(
+    bitzId: string,
+    imageSource: File | Blob | string,
+    token?: string | null
+  ): Promise<{ success: boolean; bitz: KnowledgeBitzItem; publicUrl: string }> {
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let body: BodyInit;
+
+    if (typeof imageSource === 'string') {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ imageData: imageSource });
+    } else {
+      headers['Content-Type'] = imageSource.type || 'application/octet-stream';
+      body = imageSource;
+    }
+
+    const res = await fetch(`${ADMIN_API_BASE}/${bitzId}/upload-image`, {
+      method: 'POST',
+      headers,
+      body
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Failed to upload and save image.');
+    }
+    return json;
   }
 };
+
 

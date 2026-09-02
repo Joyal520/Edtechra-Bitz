@@ -51,6 +51,7 @@ import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { downloadKnowledgeBitzCsv } from '@/utils/bitzCsvExporter';
 import { KnowledgeBitzReaderModal } from './Explore/KnowledgeBitzReaderModal';
 import { AiBitzCreationWizard } from './AiBitzCreationWizard';
+import { AdminAddImagesModal } from './AdminAddImagesModal';
 
 export const AdminKnowledgeBitzSection: React.FC = () => {
   const { session } = useAuth();
@@ -86,6 +87,7 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
 
   // Modals State
   const [aiWizardOpen, setAiWizardOpen] = useState<boolean>(false);
+  const [addImagesModalOpen, setAddImagesModalOpen] = useState<boolean>(false);
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [editingBitz, setEditingBitz] = useState<KnowledgeBitzItem | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState<boolean>(false);
@@ -615,6 +617,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
           >
             <Sparkles className="w-4 h-4 stroke-[2.5]" />
             <span>+ Create with AI</span>
+          </button>
+
+          {/* Add Images Assembly Line Workflow */}
+          <button
+            type="button"
+            onClick={() => setAddImagesModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-50 hover:bg-blue-100 border-2 border-blue-500 hover:border-blue-600 text-blue-900 text-xs font-black rounded-xl shadow-2xs transition-all active:scale-95 cursor-pointer"
+            title="Fast manual image assignment assembly-line workflow"
+          >
+            <ImageIcon className="w-4 h-4 text-blue-600 stroke-[2.5]" />
+            <span>🖼 Add Images</span>
           </button>
 
           <button
@@ -1670,6 +1683,30 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
         onClose={() => setAiWizardOpen(false)}
         onImportComplete={() => loadAdminBitz()}
         token={token}
+      />
+
+      {/* ADMIN ADD IMAGES ASSEMBLY-LINE MODAL */}
+      <AdminAddImagesModal
+        isOpen={addImagesModalOpen}
+        onClose={() => {
+          setAddImagesModalOpen(false);
+          loadAdminBitz();
+        }}
+        onBitzUpdated={(bitzId, publicUrl) => {
+          setBitzList((prev) =>
+            prev.map((b) =>
+              b.id === bitzId
+                ? {
+                    ...b,
+                    visual_url: publicUrl,
+                    image_url: publicUrl,
+                    visual_status: 'ready' as const,
+                    image_source: 'admin' as const
+                  }
+                : b
+            )
+          );
+        }}
       />
 
       {/* ADMIN PREVIEW MODAL */}

@@ -8,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { putBinaryContent, sanitizeSegment } from './r2Service.mjs';
+import { putBinaryContent, deleteObjects, sanitizeSegment } from './r2Service.mjs';
 import {
   autoAssignPixabayImageToBitz,
   downloadAndStoreImage,
@@ -259,8 +259,13 @@ class KnowledgeBitzService {
           }
 
           totalAnswered = Object.keys(quizAnswers).length;
+          const correctCount = Object.values(quizAnswers).filter(Boolean).length;
           if (totalAnswered >= bitz.quiz.length && !alreadyLearned) {
-            status = 'learned';
+            if (correctCount >= 3) {
+              status = 'learned';
+            } else {
+              status = 'read';
+            }
           }
         } else {
           // Legacy single quiz
@@ -1633,6 +1638,134 @@ STRICT RESTRICTIONS:
   async autoAssignImageToBitz(bitz, supabaseClient = null) {
     if (!bitz) return null;
     return await autoAssignPixabayImageToBitz(bitz, supabaseClient);
+  }
+
+  /**
+   * Retrieves real Bitz records without images (visual_url IS NULL OR visual_url = '' OR visual_status = 'missing') ordered oldest first.
+   * Only fetches necessary fields for the image workflow to optimize database performance.
+   */
+  async getBitzMissingImages({ limit = 100, supabaseClient = null } = {}) {
+    const selectFields = 'id,bitz_code,title,short_fact,category,sub_topic,difficulty,cefr_level,visual_url,visual_object_key,visual_status,image_source,created_at';
+    if (supabaseClient) {
+      try {
+        const { data, count, error } = await supabaseClient
+          .from('knowledge_bitz')
+          .select(selectFields, { count: 'exact' })
+          .or('visual_url.is.null,visual_url.eq."",visual_status.eq.missing')
+          .order('created_at', { ascending: true })
+          .limit(limit);
+
+        if (!error && Array.isArray(data)) {
+          return {
+            success: true,
+            bitz: data,
+            totalMissing: count !== null && count !== undefined ? count : data.length
+          };
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase getBitzMissingImages warning:', e.message);
+      }
+    }
+
+    // Local fallback
+    const allBitz = this.getLocalBitz();
+    const missing = allBitz
+      .filter(b => !b.visual_url || String(b.visual_url).trim() === '' || b.visual_status === 'missing')
+      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+    return {
+      success: true,
+      bitz: missing.slice(0, limit),
+      totalMissing: missing.length
+    };
+  }
+
+  /**
+   * Manual admin image upload:
+   * 1. Preserves aspect ratio, resizes to max 1024px (fit: inside), converts to WebP (quality 85) with Sharp
+   * 2. Uploads binary directly to Cloudflare R2 via AWS SigV4
+   * 3. Updates Supabase database record (ONLY image fields)
+   * 4. Cleans up orphaned R2 object if database update fails
+   * 5. Confirms database update succeeded before resolving
+   */
+  async uploadBitzImageManual({ bitzId, imageBuffer, supabaseClient = null }) {
+    if (!bitzId) throw new Error('bitzId is required');
+    if (!imageBuffer || imageBuffer.length === 0) throw new Error('Image data is required');
+
+    const bitz = await this.getBitzById(bitzId, supabaseClient);
+    if (!bitz) throw new Error('Knowledge Bitz not found.');
+
+    // 1. Sharp optimization: preserve aspect ratio, max 1024px, WebP quality 85
+    let optimizedBuffer = imageBuffer;
+    try {
+      const sharpModule = await import('sharp');
+      const sharpInstance = sharpModule.default || sharpModule;
+      optimizedBuffer = await sharpInstance(imageBuffer)
+        .resize({
+          width: 1024,
+          height: 1024,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .webp({ quality: 85, effort: 4 })
+        .toBuffer();
+    } catch (e) {
+      console.warn('[AdminImageUpload] Sharp manual image processing notice:', e.message);
+    }
+
+    // 2. Upload directly to Cloudflare R2
+    const cleanId = sanitizeSegment(bitz.id || bitz.bitz_code || 'bitz');
+    const objectKey = `bitz/images/${cleanId}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.webp`;
+
+    let uploadResult;
+    try {
+      uploadResult = await putBinaryContent(objectKey, optimizedBuffer, 'image/webp');
+      if (!uploadResult || !uploadResult.publicUrl) {
+        throw new Error('R2 response missing publicUrl.');
+      }
+      console.log(`[AdminImageUpload] Bitz ID: ${bitz.id} | R2 upload: SUCCESS | Key: ${objectKey}`);
+    } catch (r2Err) {
+      console.error(`[AdminImageUpload] Bitz ID: ${bitz.id} | R2 upload: FAILED - ${r2Err.message}`);
+      throw new Error(`Failed to upload image to Cloudflare R2: ${r2Err.message}`);
+    }
+
+    // 3. Update database record - ONLY image fields
+    const updates = {
+      visual_url: uploadResult.publicUrl,
+      visual_object_key: objectKey,
+      visual_status: 'ready',
+      image_source: 'admin',
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const updated = await this.updateBitz(bitz.id, updates, supabaseClient);
+      if (!updated || !updated.visual_url) {
+        throw new Error('Database returned empty update result.');
+      }
+      console.log(`[AdminImageUpload] Bitz ID: ${bitz.id} | Database update: SUCCESS`);
+
+      return {
+        success: true,
+        bitz: updated,
+        publicUrl: uploadResult.publicUrl,
+        objectKey
+      };
+    } catch (dbErr) {
+      console.error(`[AdminImageUpload] Bitz ID: ${bitz.id} | Database update: FAILED - ${dbErr.message}`);
+
+      // Attempt to clean up orphaned R2 object
+      if (objectKey) {
+        try {
+          await deleteObjects([objectKey]);
+          console.log(`[AdminImageUpload] Orphaned R2 object cleaned up: ${objectKey}`);
+        } catch (delErr) {
+          console.error(`[AdminImageUpload] CRITICAL: Failed to clean up orphaned R2 object: ${objectKey} - ${delErr.message}`);
+        }
+      }
+
+      throw new Error('Image uploaded to storage, but the Bitz database record could not be updated.');
+    }
   }
 
   /**
