@@ -43,6 +43,7 @@ import {
 } from '@/utils/bitzTopicsConfig';
 import {
   validateBitzBatch,
+  parseKnowledgeBitzJSON,
   type ValidatedBitzRecord
 } from '@/utils/bitzContentValidator';
 import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
@@ -516,21 +517,17 @@ export const AdminKnowledgeBitzSection: React.FC = () => {
       return;
     }
 
-    try {
-      const parsed = JSON.parse(text.trim());
-      const items = Array.isArray(parsed) ? parsed : parsed.bitz || parsed.facts || [];
-      if (!Array.isArray(items) || items.length === 0) {
-        setBulkJsonError('JSON must contain an array of fact objects (e.g. [ ... ] or { "bitz": [ ... ] }).');
-        setBulkValidatedRecords([]);
-        return;
-      }
-      setBulkJsonError(null);
-      const { results } = validateBitzBatch(items);
-      setBulkValidatedRecords(results);
-    } catch (e: any) {
-      setBulkJsonError(`Invalid JSON syntax: ${e.message}`);
+    const parseResult = parseKnowledgeBitzJSON(text);
+
+    if (!parseResult.success) {
+      setBulkJsonError(parseResult.error || 'Invalid JSON syntax.');
       setBulkValidatedRecords([]);
+      return;
     }
+
+    setBulkJsonError(null);
+    const { results } = validateBitzBatch(parseResult.records);
+    setBulkValidatedRecords(results);
   };
 
   // Bulk Fact Import Submission

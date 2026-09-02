@@ -365,3 +365,320 @@ export function validateBitzBatch(records: any[]): {
     }
   };
 }
+
+// ============================================================================
+// ROBUST JSON PARSER & DIAGNOSTICS FOR AI OUTPUT
+// ============================================================================
+
+export interface BitzJsonParseErrorDetails {
+  type: 'empty' | 'syntax' | 'trailing_content' | 'multiple_documents' | 'invalid_structure' | 'no_records';
+  message: string;
+  snippet?: string;
+  position?: number;
+  lineNumber?: number;
+  columnNumber?: number;
+  trailingText?: string;
+  suggestedAction?: string;
+}
+
+export interface BitzJsonParseResult {
+  success: boolean;
+  records: any[];
+  error: string | null;
+  errorDetails?: BitzJsonParseErrorDetails;
+  warning: string | null;
+  hasTrailingContent: boolean;
+  trailingText?: string;
+  isMultipleDocuments: boolean;
+  cleanedJson: string;
+}
+
+/**
+ * Helper to locate the exact end index of the first balanced JSON array or object.
+ * Handles strings, escaped quotes, and nested arrays/objects.
+ */
+function findJsonDocumentEnd(text: string, startIndex: number): number {
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === '[' || char === '{') {
+      stack.push(char);
+    } else if (char === ']') {
+      if (stack.length > 0 && stack[stack.length - 1] === '[') {
+        stack.pop();
+        if (stack.length === 0) {
+          return i;
+        }
+      }
+    } else if (char === '}') {
+      if (stack.length > 0 && stack[stack.length - 1] === '{') {
+        stack.pop();
+        if (stack.length === 0) {
+          return i;
+        }
+      }
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Defensive parser for AI-generated Knowledge Bitz JSON.
+ *
+ * Capabilities:
+ * 1. Strips UTF-8 BOM and invisible zero-width characters.
+ * 2. Detects and strips markdown code fences (```json ... ```).
+ * 3. Extracts first top-level JSON array/object cleanly.
+ * 4. Detects trailing content (e.g. conversational explanations or second JSON arrays)
+ *    and provides structured diagnostics instead of silently ignoring or crashing.
+ * 5. Formats clear syntax error messages with line/column/snippet.
+ */
+export function parseKnowledgeBitzJSON(rawText: string): BitzJsonParseResult {
+  if (!rawText || !rawText.trim()) {
+    return {
+      success: false,
+      records: [],
+      error: 'Please paste the JSON response.',
+      errorDetails: {
+        type: 'empty',
+        message: 'Input is empty.'
+      },
+      warning: null,
+      hasTrailingContent: false,
+      isMultipleDocuments: false,
+      cleanedJson: ''
+    };
+  }
+
+  // 1. Strip UTF-8 BOM and invisible characters
+  let text = rawText
+    .replace(/^[\uFEFF\u200B\u200C\u200D\u00A0]+/, '')
+    .replace(/[\u200B\u200C\u200D]/g, '')
+    .trim();
+
+  // 2. Extract content from markdown fences if entire text or top is wrapped
+  let hadMarkdownFences = false;
+  if (text.startsWith('```')) {
+    hadMarkdownFences = true;
+    text = text.replace(/^```(?:json)?\s*/i, '');
+    // If ending with ```, strip it
+    text = text.replace(/\s*```\s*$/i, '');
+    text = text.trim();
+  } else {
+    // Check if there is an embedded code block somewhere
+    const codeBlockMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(text);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      // Check if there is trailing content after this codeblock
+      const afterCodeBlock = text.substring(codeBlockMatch.index + codeBlockMatch[0].length).trim();
+      text = codeBlockMatch[1].trim();
+      hadMarkdownFences = true;
+      if (afterCodeBlock) {
+        text = text + '\n' + afterCodeBlock;
+      }
+    }
+  }
+
+  // 3. Find opening bracket for array [ or object {
+  const firstArrayIdx = text.indexOf('[');
+  const firstObjectIdx = text.indexOf('{');
+
+  let startIndex = -1;
+  if (firstArrayIdx !== -1 && (firstObjectIdx === -1 || firstArrayIdx < firstObjectIdx)) {
+    startIndex = firstArrayIdx;
+  } else if (firstObjectIdx !== -1) {
+    startIndex = firstObjectIdx;
+  }
+
+  if (startIndex === -1) {
+    return {
+      success: false,
+      records: [],
+      error: 'No JSON array or object found in the pasted text. Ensure the response starts with [ or { "bitz": [ ... ] }.',
+      errorDetails: {
+        type: 'invalid_structure',
+        message: 'Could not find an opening bracket "[" or "{" in the provided text.'
+      },
+      warning: null,
+      hasTrailingContent: false,
+      isMultipleDocuments: false,
+      cleanedJson: text
+    };
+  }
+
+  // 4. Locate the exact boundary of the first JSON document
+  const endIndex = findJsonDocumentEnd(text, startIndex);
+
+  let firstDocumentRaw = '';
+  let trailingRaw = '';
+
+  if (endIndex === -1) {
+    // Unbalanced brackets or truncated document
+    firstDocumentRaw = text.substring(startIndex).trim();
+    trailingRaw = '';
+  } else {
+    firstDocumentRaw = text.substring(startIndex, endIndex + 1).trim();
+    trailingRaw = text.substring(endIndex + 1).trim();
+  }
+
+  // Clean trailing markdown fence closing if present
+  if (trailingRaw.startsWith('```')) {
+    trailingRaw = trailingRaw.replace(/^```\s*/i, '').trim();
+  }
+
+  const hasTrailingContent = trailingRaw.length > 0;
+  let isMultipleDocuments = false;
+
+  if (hasTrailingContent) {
+    const nextBracket = trailingRaw.search(/\[|\{/);
+    if (nextBracket !== -1 && nextBracket < 20) {
+      isMultipleDocuments = true;
+    }
+  }
+
+  // 5. Attempt JSON.parse on the first document
+  let parsed: any;
+  try {
+    parsed = JSON.parse(firstDocumentRaw);
+  } catch (err: any) {
+    const errMsg = err?.message || 'Syntax error';
+    let line = 1;
+    let col = 1;
+    let snippet = '';
+
+    const matchPos = errMsg.match(/position\s+(\d+)/i);
+    if (matchPos && matchPos[1]) {
+      const pos = parseInt(matchPos[1], 10);
+      const linesBefore = firstDocumentRaw.substring(0, pos).split('\n');
+      line = linesBefore.length;
+      col = (linesBefore[linesBefore.length - 1] || '').length + 1;
+      const startSnip = Math.max(0, pos - 35);
+      const endSnip = Math.min(firstDocumentRaw.length, pos + 35);
+      snippet = firstDocumentRaw.substring(startSnip, endSnip);
+    }
+
+    return {
+      success: false,
+      records: [],
+      error: `Invalid JSON syntax: ${errMsg}${line > 1 ? ` (line ${line}, col ${col})` : ''}`,
+      errorDetails: {
+        type: 'syntax',
+        message: errMsg,
+        position: matchPos && matchPos[1] ? parseInt(matchPos[1], 10) : undefined,
+        lineNumber: line,
+        columnNumber: col,
+        snippet: snippet ? `...${snippet}...` : undefined,
+        suggestedAction: 'Check for unescaped quotes, trailing commas, or missing brackets.'
+      },
+      warning: null,
+      hasTrailingContent,
+      trailingText: hasTrailingContent ? trailingRaw : undefined,
+      isMultipleDocuments,
+      cleanedJson: firstDocumentRaw
+    };
+  }
+
+  // 6. Extract records array
+  let rawRecords: any[] = [];
+  if (Array.isArray(parsed)) {
+    rawRecords = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.bitz)) {
+      rawRecords = parsed.bitz;
+    } else if (Array.isArray(parsed.facts)) {
+      rawRecords = parsed.facts;
+    } else if (parsed.title && (parsed.reading_text || parsed.short_fact)) {
+      rawRecords = [parsed];
+    } else {
+      return {
+        success: false,
+        records: [],
+        error: 'JSON must contain an array of Knowledge Bitz records (e.g. [ ... ] or { "bitz": [ ... ] }).',
+        errorDetails: {
+          type: 'invalid_structure',
+          message: 'Parsed JSON is an object, but does not contain a "bitz" or "facts" array.'
+        },
+        warning: null,
+        hasTrailingContent,
+        trailingText: hasTrailingContent ? trailingRaw : undefined,
+        isMultipleDocuments,
+        cleanedJson: firstDocumentRaw
+      };
+    }
+  }
+
+  if (rawRecords.length === 0) {
+    return {
+      success: false,
+      records: [],
+      error: 'The JSON array is empty. Please paste at least one Knowledge Bitz record.',
+      errorDetails: {
+        type: 'no_records',
+        message: 'Received 0 records.'
+      },
+      warning: null,
+      hasTrailingContent,
+      trailingText: hasTrailingContent ? trailingRaw : undefined,
+      isMultipleDocuments,
+      cleanedJson: firstDocumentRaw
+    };
+  }
+
+  // 7. Check if trailing content was present
+  if (hasTrailingContent) {
+    const errorMsg = isMultipleDocuments
+      ? 'Multiple JSON documents detected. Found extra JSON content after the first JSON array. Please paste only a single JSON array.'
+      : 'Extra content found after the JSON array. Please paste only the JSON response.';
+
+    return {
+      success: false,
+      records: rawRecords,
+      error: errorMsg,
+      errorDetails: {
+        type: isMultipleDocuments ? 'multiple_documents' : 'trailing_content',
+        message: errorMsg,
+        trailingText: trailingRaw.length > 300 ? trailingRaw.substring(0, 300) + '...' : trailingRaw,
+        suggestedAction: 'Click "Auto-Strip Extra Content" to proceed with the valid array, or remove trailing text manually.'
+      },
+      warning: null,
+      hasTrailingContent: true,
+      trailingText: trailingRaw,
+      isMultipleDocuments,
+      cleanedJson: firstDocumentRaw
+    };
+  }
+
+  return {
+    success: true,
+    records: rawRecords,
+    error: null,
+    warning: hadMarkdownFences ? 'Markdown code fences were automatically removed.' : null,
+    hasTrailingContent: false,
+    isMultipleDocuments: false,
+    cleanedJson: firstDocumentRaw
+  };
+}
+

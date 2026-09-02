@@ -3,8 +3,8 @@
 // V2: 10 main categories, subtopics auto-assigned by AI, 5 quizzes, 100 words
 // ============================================================================
 
-import { getCategoryById } from './bitzTopicsConfig';
-import { getCefrLevelById } from './bitzCefrConfig';
+import { getCategoryById } from './bitzTopicsConfig.ts';
+import { getCefrLevelById } from './bitzCefrConfig.ts';
 
 export interface AiPromptConfig {
   categoryId: string;      // One of the 10 main category IDs
@@ -95,72 +95,75 @@ The 5 questions should test different aspects of the reading. Questions must be 
 - quiz MUST be an array of EXACTLY 5 question objects.
 - Every fact must be scientifically/historically accurate.
 - Avoid controversial, political, religious, or sensitive content.
-- Do NOT include markdown, code fences, or explanatory text outside the JSON.
 
-## Output Format
+=============================================================================
+STRICT MACHINE-READABLE OUTPUT FORMAT: SINGLE JSON ARRAY ONLY
+=============================================================================
+You MUST return ONLY a single valid JSON array starting with [ and ending with ].
+Do NOT wrap the array in an object (e.g. do NOT use {"bitz": [...]}).
+Do NOT use Markdown code fences (NO \`\`\` or \`\`\`json).
+Do NOT include any introduction, greeting, headings, or explanation before the JSON array.
+Do NOT include any conclusion, notes, summary, or commentary after the JSON array.
+Do NOT include comments or multiple JSON documents.
 
-Return ONLY a valid JSON object with this exact structure (no markdown wrapping, no code fences, no explanations):
+JSON Schema:
+[
+  {
+    "title": "A curiosity-driven headline",
+    "short_fact": "A 20-30 word supporting explanation.",
+    "reading_text": "A clear educational explanation of EXACTLY 100 words.",
+    "category": "${category.name}",
+    "subtopic": "${category.subtopics[0]?.name || 'General'}",
+    "difficulty": "Easy",
+    "cefr_level": "${cefr.id}",
+    "source_citation": "Authoritative reference source or 'Requires administrator review'",
+    "quiz": [
+      {
+        "question": "Question 1 derived from reading text?",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correct_answer": "Option A",
+        "explanation": "Why Option A is correct.",
+        "xp": 2
+      },
+      {
+        "question": "Question 2 derived from reading text?",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correct_answer": "Option A",
+        "explanation": "Why Option A is correct.",
+        "xp": 2
+      },
+      {
+        "question": "Question 3 derived from reading text?",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correct_answer": "Option A",
+        "explanation": "Why Option A is correct.",
+        "xp": 2
+      },
+      {
+        "question": "Question 4 derived from reading text?",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correct_answer": "Option A",
+        "explanation": "Why Option A is correct.",
+        "xp": 2
+      },
+      {
+        "question": "Question 5 derived from reading text?",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correct_answer": "Option A",
+        "explanation": "Why Option A is correct.",
+        "xp": 2
+      }
+    ]
+  }
+]
 
-{
-  "bitz": [
-    {
-      "title": "...",
-      "short_fact": "... (20-30 words) ...",
-      "reading_text": "... (EXACTLY 100 words) ...",
-      "category": "${category.name}",
-      "subtopic": "... (one of: ${subtopicsList}) ...",
-      "difficulty": "Easy",
-      "cefr_level": "${cefr.id}",
-      "source_citation": "...",
-      "quiz": [
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correct_answer": "...",
-          "explanation": "...",
-          "xp": 2
-        },
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correct_answer": "...",
-          "explanation": "...",
-          "xp": 2
-        },
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correct_answer": "...",
-          "explanation": "...",
-          "xp": 2
-        },
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correct_answer": "...",
-          "explanation": "...",
-          "xp": 2
-        },
-        {
-          "question": "...",
-          "options": ["...", "...", "...", "..."],
-          "correct_answer": "...",
-          "explanation": "...",
-          "xp": 2
-        }
-      ]
-    }
-  ]
-}
-
-Generate exactly ${config.quantity} unique, high-quality, factually accurate Knowledge Bitz. Quality is more important than quantity — if you cannot generate ${config.quantity} unique, accurate facts, generate fewer but ensure each one is excellent.
-
+Generate exactly ${config.quantity} unique, high-quality, factually accurate Knowledge Bitz in this JSON array.
 CRITICAL REMINDERS:
 - short_fact = 20–30 words (count!)
 - reading_text = EXACTLY 100 words (count every word!)
 - quiz = EXACTLY 5 questions, each with 4 options, 1 correct_answer, explanation, xp=2
 
-Return ONLY the JSON. No other text.`;
+Return ONLY the raw JSON array. Start with [ and end with ].`;
 }
 
 // ============================================================================

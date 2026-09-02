@@ -12,7 +12,12 @@ import {
 import { BITZ_CATEGORIES } from '@/utils/bitzTopicsConfig';
 import { CEFR_LEVELS } from '@/utils/bitzCefrConfig';
 import { generateBitzAiPrompt } from '@/utils/bitzAiPromptGenerator';
-import { validateBitzBatch, ValidatedBitzRecord } from '@/utils/bitzContentValidator';
+import { 
+  validateBitzBatch, 
+  parseKnowledgeBitzJSON, 
+  type ValidatedBitzRecord, 
+  type BitzJsonParseResult 
+} from '@/utils/bitzContentValidator';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 
 export interface AiBitzCreationWizardProps {
@@ -43,6 +48,7 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
   
   // Step 3 State
   const [jsonInput, setJsonInput] = useState<string>('');
+  const [parseResult, setParseResult] = useState<BitzJsonParseResult | null>(null);
   
   // Step 4 State (Validation Results)
   const [validatedRecords, setValidatedRecords] = useState<ValidatedBitzRecord[]>([]);
@@ -57,6 +63,7 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
     if (isOpen) {
       setStep(1);
       setJsonInput('');
+      setParseResult(null);
       setValidatedRecords([]);
       setJsonError(null);
       setImportResult(null);
@@ -91,35 +98,28 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
 
   const handleValidateJson = () => {
     setJsonError(null);
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonInput);
-    } catch (e: any) {
-      setJsonError(`Invalid JSON syntax: ${e.message}`);
-      return;
-    }
+    const result = parseKnowledgeBitzJSON(jsonInput);
+    setParseResult(result);
 
-    let rawRecords: any[] = [];
-    if (Array.isArray(parsed)) {
-      rawRecords = parsed;
-    } else if (parsed?.bitz && Array.isArray(parsed.bitz)) {
-      rawRecords = parsed.bitz;
-    } else if (parsed?.facts && Array.isArray(parsed.facts)) {
-      rawRecords = parsed.facts;
-    } else {
-      setJsonError('Could not find an array of records in the JSON provided. Ensure the response contains a "bitz" array.');
-      return;
-    }
-
-    if (rawRecords.length === 0) {
-      setJsonError('The JSON array is empty. Please paste at least one Knowledge Bitz record.');
+    if (!result.success) {
+      setJsonError(result.error || 'Failed to parse JSON response.');
       return;
     }
 
     // Run canonical validation
-    const { results } = validateBitzBatch(rawRecords);
+    const { results } = validateBitzBatch(result.records);
     setValidatedRecords(results);
     setStep(4);
+  };
+
+  const handleAutoStripAndValidate = () => {
+    if (parseResult?.cleanedJson && parseResult.records.length > 0) {
+      setJsonInput(parseResult.cleanedJson);
+      setJsonError(null);
+      const { results } = validateBitzBatch(parseResult.records);
+      setValidatedRecords(results);
+      setStep(4);
+    }
   };
 
   const handleImport = async () => {
@@ -342,19 +342,60 @@ export const AiBitzCreationWizard: React.FC<AiBitzCreationWizardProps> = ({
               </div>
               
               {jsonError && (
-                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3">
-                  <AlertCircle className="shrink-0 mt-0.5 text-rose-600" size={20} />
-                  <div>
-                    <h4 className="font-black text-sm">JSON Parsing Error</h4>
-                    <p className="text-xs mt-1 font-medium">{jsonError}</p>
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 space-y-3 shadow-xs animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="shrink-0 mt-0.5 text-rose-600" size={20} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-black text-sm">
+                        {parseResult?.hasTrailingContent 
+                          ? (parseResult.isMultipleDocuments ? 'Multiple JSON Documents Detected' : 'Trailing Content Detected')
+                          : 'JSON Parsing Error'}
+                      </h4>
+                      <p className="text-xs mt-1 font-medium leading-relaxed">{jsonError}</p>
+                      
+                      {parseResult?.errorDetails?.snippet && (
+                        <div className="mt-2 p-2.5 bg-rose-100/70 rounded-xl border border-rose-200 text-[11px] font-mono font-bold text-rose-950 overflow-x-auto">
+                          <span className="text-rose-700">Near position: </span>
+                          <span>{parseResult.errorDetails.snippet}</span>
+                        </div>
+                      )}
+
+                      {parseResult?.hasTrailingContent && parseResult.trailingText && (
+                        <div className="mt-2 p-2.5 bg-rose-100/70 rounded-xl border border-rose-200 text-[11px] font-mono text-rose-950 max-h-24 overflow-y-auto">
+                          <span className="font-bold text-rose-800">Detected trailing text:</span>
+                          <pre className="mt-1 whitespace-pre-wrap text-[10px] text-rose-900 leading-tight">
+                            {parseResult.trailingText.substring(0, 300)}{parseResult.trailingText.length > 300 ? '...' : ''}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {parseResult?.hasTrailingContent && parseResult.records && parseResult.records.length > 0 && (
+                    <div className="pt-2 border-t border-rose-200/70 flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-rose-700">
+                        Valid initial JSON array found with {parseResult.records.length} record{parseResult.records.length === 1 ? '' : 's'}.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAutoStripAndValidate}
+                        className="px-4 py-2 bg-[#026fc3] hover:bg-[#025ea6] text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <Sparkles size={14} />
+                        Auto-Strip Extra Content & Validate
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
               <textarea
                 value={jsonInput}
-                onChange={(e) => setJsonInput(e.target.value)}
-                placeholder='Paste the JSON response here, e.g. { "bitz": [ ... ] }'
+                onChange={(e) => {
+                  setJsonInput(e.target.value);
+                  if (jsonError) setJsonError(null);
+                }}
+                placeholder={`Paste the JSON array response here, e.g.\n[\n  {\n    "title": "...",\n    "short_fact": "...",\n    "reading_text": "...",\n    "category": "${selectedCategoryId}",\n    "subtopic": "...",\n    "difficulty": "Easy",\n    "cefr_level": "${selectedCefr}",\n    "source_citation": "...",\n    "quiz": [ ... 5 questions ... ]\n  }\n]`}
                 className="flex-1 min-h-[300px] w-full border border-slate-300 bg-white text-[#0a213c] placeholder:text-slate-400 rounded-2xl p-4 sm:p-5 font-mono text-xs sm:text-sm focus:ring-2 focus:ring-[#026fc3]/25 focus:border-[#026fc3] outline-none resize-none shadow-inner font-semibold"
               />
             </div>
