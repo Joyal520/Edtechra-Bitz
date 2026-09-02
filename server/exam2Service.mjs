@@ -917,10 +917,11 @@ export async function republishExamToClassrooms(serverSupabase, {
 
   const classroomMap = new Map((classrooms || []).map(c => [c.id, c]));
 
-  const durationStr = publishSettings.duration || `${sourceExam.duration_minutes || 60} Minutes`;
+  const safePublishSettings = publishSettings || {};
+  const durationStr = safePublishSettings.duration || `${sourceExam.duration_minutes || 60} Minutes`;
   const durationMinutes = Number(parseInt(durationStr, 10)) || sourceExam.duration_minutes || 60;
-  const startsAt = publishSettings.startDate ? new Date(`${publishSettings.startDate}T${publishSettings.startTime || '00:00:00'}`).toISOString() : null;
-  const endsAt = publishSettings.endDate ? new Date(`${publishSettings.endDate}T${publishSettings.endTime || '23:59:59'}`).toISOString() : null;
+  const startsAt = safePublishSettings.startDate ? new Date(`${safePublishSettings.startDate}T${safePublishSettings.startTime || '00:00:00'}`).toISOString() : null;
+  const endsAt = safePublishSettings.endDate ? new Date(`${safePublishSettings.endDate}T${safePublishSettings.endTime || '23:59:59'}`).toISOString() : null;
 
   const rootParentId = sourceExam.parent_exam_id || sourceExam.id;
   const publications = [];

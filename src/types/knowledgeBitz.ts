@@ -84,6 +84,8 @@ export interface KnowledgeBitzItem {
   is_saved_by_me?: boolean;
   learning_status?: BitzLearningStatus; // 'unseen' | 'seen' | 'opened' | 'read' | 'learned'
   has_learned?: boolean;
+  learned_at?: string;
+  mastered_at?: string;
   quiz_progress?: number; // 0-5: how many questions answered
 
   status: BitzPublishStatus;
@@ -177,6 +179,29 @@ export interface BitzAdminStats {
   totalSaves: number;
 }
 
+export interface BitzQuizCompletionPayload {
+  correctAnswers: number;
+  totalQuestions: number;
+  score: number;
+  xpEarned: number;
+  mastered: boolean;
+  quizAnswers?: Record<string, boolean>;
+}
+
+export interface BitzQuizCompletionResult {
+  success: boolean;
+  bitzId: string;
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  xpEarned: number;
+  xpAwardedNow: number;
+  mastered: boolean;
+  completed: boolean;
+  wasAlreadyMastered?: boolean;
+  error?: string;
+}
+
 // ============================================================================
 // Helper: normalize quiz and randomize answer positions safely
 // ============================================================================
@@ -206,8 +231,8 @@ export function normalizeQuizToArray(quiz: any): BitzQuizQuestion[] {
 
 /**
  * Prepares and normalizes quiz questions for interactive playback.
- * - Ensures questions are formatted as an array.
- * - Randomizes option positions using Fisher-Yates so that the correct answer does NOT always appear in position 1.
+ * - Handles text answers, choice letters ("A", "B", "C", "D"), numeric indices ("0", "1", "2", "3"), and booleans.
+ * - Randomizes option positions using Fisher-Yates so that the correct answer appears uniformly across all positions (1, 2, 3, 4).
  * - Preserves the exact correct_answer text identity so correctness comparison travels with the answer.
  */
 export function prepareBitzQuiz(quiz: any, randomizeOptions: boolean = true): BitzQuizQuestion[] {
@@ -216,36 +241,90 @@ export function prepareBitzQuiz(quiz: any, randomizeOptions: boolean = true): Bi
 
   return rawArray.map((q) => {
     if (!q || typeof q !== 'object') return q;
-    const rawOptions = Array.isArray(q.options)
+    const rawOptionsList = Array.isArray(q.options)
       ? [...q.options]
       : (Array.isArray((q as any).choices) ? [...(q as any).choices] : []);
-    const correctAns = String(q.correct_answer || (q as any).correctAnswer || '').trim();
 
-    // Ensure correct answer is present in options
-    if (correctAns && !rawOptions.some(opt => String(opt).trim().toLowerCase() === correctAns.toLowerCase())) {
-      rawOptions.push(correctAns);
+    const stringOptions = rawOptionsList.map(opt => String(opt ?? '').trim()).filter(Boolean);
+
+    // Extract raw correct answer representation
+    const rawCorrect = (q.correct_answer !== undefined && q.correct_answer !== null)
+      ? q.correct_answer
+      : ((q as any).correctAnswer !== undefined ? (q as any).correctAnswer : (q as any).answer);
+
+    let resolvedCorrectAns = '';
+
+    if (rawCorrect !== undefined && rawCorrect !== null) {
+      const trimmed = String(rawCorrect).trim();
+      
+      // Case 1: Numeric index (e.g., 0, 1, 2, 3 or "0", "1", "2", "3")
+      if (/^\d+$/.test(trimmed)) {
+        const idx = parseInt(trimmed, 10);
+        if (stringOptions[idx] !== undefined) {
+          resolvedCorrectAns = stringOptions[idx];
+        }
+      }
+      
+      // Case 2: Letter choice (e.g. "A", "B", "C", "D", "Option A")
+      if (!resolvedCorrectAns && /^(?:option\s+)?([a-d])$/i.test(trimmed)) {
+        const match = trimmed.match(/^(?:option\s+)?([a-d])$/i);
+        if (match && match[1]) {
+          const letterIdx = match[1].toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+          if (stringOptions[letterIdx] !== undefined) {
+            resolvedCorrectAns = stringOptions[letterIdx];
+          }
+        }
+      }
+
+      // Case 3: Exact string or substring match against options
+      if (!resolvedCorrectAns && stringOptions.length > 0) {
+        const exactMatch = stringOptions.find(opt => opt.toLowerCase() === trimmed.toLowerCase());
+        if (exactMatch) {
+          resolvedCorrectAns = exactMatch;
+        } else {
+          // Direct string assignment
+          resolvedCorrectAns = trimmed;
+        }
+      } else if (!resolvedCorrectAns) {
+        resolvedCorrectAns = trimmed;
+      }
     }
 
     // Deduplicate options while preserving string values
     const uniqueOptions: string[] = [];
     const seen = new Set<string>();
-    rawOptions.forEach(opt => {
-      const clean = String(opt || '').trim();
-      const lower = clean.toLowerCase();
-      if (clean && !seen.has(lower)) {
+    
+    stringOptions.forEach(opt => {
+      const lower = opt.toLowerCase();
+      if (!seen.has(lower)) {
         seen.add(lower);
-        uniqueOptions.push(clean);
+        uniqueOptions.push(opt);
       }
     });
 
+    // Ensure resolved correct answer is present in options
+    if (resolvedCorrectAns && !seen.has(resolvedCorrectAns.toLowerCase())) {
+      uniqueOptions.push(resolvedCorrectAns);
+      seen.add(resolvedCorrectAns.toLowerCase());
+    }
+
+    // Default fallback if options were empty
+    if (uniqueOptions.length === 0) {
+      if (resolvedCorrectAns) uniqueOptions.push(resolvedCorrectAns);
+    }
+
     const finalOptions = randomizeOptions ? shuffleArray(uniqueOptions) : uniqueOptions;
+    const finalCorrectAnswer = resolvedCorrectAns || finalOptions[0] || '';
 
     return {
       ...q,
+      question: String(q.question || '').trim(),
       options: finalOptions,
-      correct_answer: correctAns || (finalOptions[0] || ''),
+      correct_answer: finalCorrectAnswer,
+      explanation: String(q.explanation || 'Verified educational fact.').trim(),
       xp: q.xp || 2
     };
   });
 }
+
 

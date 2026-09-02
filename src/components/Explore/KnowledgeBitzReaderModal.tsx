@@ -205,7 +205,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
     clearAutoAdvanceTimer();
     const pauseDuration = isCorrect ? 1400 : 2000; // Brief pause to read explanation
 
-    autoAdvanceTimerRef.current = setTimeout(() => {
+    autoAdvanceTimerRef.current = setTimeout(async () => {
       if (currentQuestionIndex < totalQuestions - 1) {
         setCurrentQuestionIndex((prev) => prev + 1);
         setSelectedOption(null);
@@ -218,19 +218,55 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
           scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
         }
       } else {
-        // Quiz completed
+        // Quiz completed — calculate final score & persist authoritative progress
+        const updatedAnsweredMap = {
+          ...answeredMap,
+          [currentQuestionIndex]: isCorrect
+        };
+        const finalCorrectCount = Object.values(updatedAnsweredMap).filter(Boolean).length;
+        const finalMastered = finalCorrectCount >= 3;
+        const finalXpEarned = finalCorrectCount * 2;
+
         setViewState('COMPLETED');
-        const finalCorrectCount = isCorrect ? correctCount + 1 : correctCount;
-        if (finalCorrectCount >= 3) {
+
+        // Build per-question answer record for server
+        const quizAnswersRecord: Record<string, boolean> = {};
+        Object.entries(updatedAnsweredMap).forEach(([k, v]) => {
+          quizAnswersRecord[k] = Boolean(v);
+        });
+
+        // Authoritatively persist progress to Supabase
+        try {
+          const completionRes = await knowledgeBitzService.submitQuizCompletion(
+            bitz.id,
+            {
+              correctAnswers: finalCorrectCount,
+              totalQuestions,
+              score: finalCorrectCount,
+              xpEarned: finalXpEarned,
+              mastered: finalMastered,
+              quizAnswers: quizAnswersRecord
+            },
+            token
+          );
+
+          if (completionRes && completionRes.xpEarned !== undefined) {
+            setEarnedXp(completionRes.xpEarned);
+          }
+        } catch (compErr) {
+          console.error('[KnowledgeBitzReaderModal] Quiz completion persistence error:', compErr);
+        }
+
+        if (finalMastered) {
           playCelebrationSound();
           triggerConfetti();
-          onLearned(bitz.id, nextEarnedXp);
+          onLearned(bitz.id, finalXpEarned);
         }
 
         // Notify dashboard of XP & Mastery update
         window.dispatchEvent(new CustomEvent('edtechra:activity_completed'));
         window.dispatchEvent(new CustomEvent('edtechra:bitz_mastered', {
-          detail: { bitzId: bitz.id, isMastered: finalCorrectCount >= 3, correctCount: finalCorrectCount }
+          detail: { bitzId: bitz.id, isMastered: finalMastered, correctCount: finalCorrectCount, xpEarned: finalXpEarned }
         }));
 
         if (scrollContainerRef.current) {

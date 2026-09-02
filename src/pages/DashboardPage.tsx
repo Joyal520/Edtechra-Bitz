@@ -203,8 +203,12 @@ export const DashboardPage: React.FC = () => {
   const isUserTeacher = isTeacher || profile?.role === 'teacher';
 
   // Overall Mastery Percentage
-  const totalPublished = bitzStats.totalPublishedBitz || 84;
-  const overallMasteryPercent = totalPublished > 0 ? Math.min(100, Math.round((bitzStats.masteredCount / totalPublished) * 100)) : 0;
+  const totalPublished = bitzStats.totalPublishedBitz;
+  const overallMasteryPercent = totalPublished > 0
+    ? (bitzStats.masteredCount >= totalPublished
+        ? 100
+        : Math.round((bitzStats.masteredCount / totalPublished) * 1000) / 10)
+    : 0;
 
   return (
     <div className="min-h-screen bg-[#071328] text-slate-100 selection:bg-[#026fc3] selection:text-white pb-16">
@@ -433,6 +437,7 @@ export const DashboardPage: React.FC = () => {
               {bitzStats.categoryProgress.map((cat) => {
                 const IconComponent = CATEGORY_ICON_MAP[cat.id] || BookOpen;
                 const hasMastered = cat.masteredCount > 0;
+                const hasItems = cat.totalCount > 0;
 
                 return (
                   <Link
@@ -450,7 +455,7 @@ export const DashboardPage: React.FC = () => {
                         </span>
                       </div>
                       <span className="text-[11px] font-mono font-bold text-slate-400 group-hover:text-slate-200">
-                        {cat.masteredCount} / {cat.totalCount}
+                        {hasItems ? `${cat.masteredCount} / ${cat.totalCount}` : 'No Bitz yet'}
                       </span>
                     </div>
 
@@ -458,11 +463,11 @@ export const DashboardPage: React.FC = () => {
                       <div className="h-1.5 flex-1 bg-[#050e1a] rounded-full overflow-hidden">
                         <div
                           className={`h-full ${hasMastered ? 'bg-gradient-to-r from-[#0284c7] to-[#38bdf8]' : 'bg-slate-700/40'} rounded-full transition-all duration-500`}
-                          style={{ width: `${Math.max(cat.percentage > 0 ? 4 : 0, cat.percentage)}%` }}
+                          style={{ width: `${hasItems ? Math.max(cat.percentage > 0 ? 4 : 0, cat.percentage) : 0}%` }}
                         />
                       </div>
-                      <span className="text-[10px] font-mono font-bold text-slate-400 w-7 text-right">
-                        {cat.percentage}%
+                      <span className="text-[10px] font-mono font-bold text-slate-400 w-9 text-right">
+                        {hasItems ? `${cat.percentage}%` : '—'}
                       </span>
                     </div>
                   </Link>

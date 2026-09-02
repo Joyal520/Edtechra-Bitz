@@ -14569,6 +14569,30 @@ app.post('/api/bitz/:id/quiz-attempt', async (req, res) => {
   }
 });
 
+// 7b. POST /api/bitz/:id/quiz-complete - Authoritative final quiz completion & mastery persistence
+app.post('/api/bitz/:id/quiz-complete', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const userId = authData?.user?.id || 'guest';
+    const bitzId = req.params.id;
+    const { correctAnswers, totalQuestions, score, xpEarned, mastered, quizAnswers } = req.body;
+
+    const result = await knowledgeBitzService.recordQuizCompletion({
+      userId,
+      bitzId,
+      correctAnswers: correctAnswers !== undefined ? correctAnswers : score,
+      totalQuestions: totalQuestions || 5,
+      quizAnswers: quizAnswers || {},
+      supabaseClient: serverSupabase
+    });
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[API /api/bitz/:id/quiz-complete Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to persist quiz completion.' });
+  }
+});
+
 // 8. POST /api/bitz/:id/like - Toggle like
 app.post('/api/bitz/:id/like', async (req, res) => {
   try {

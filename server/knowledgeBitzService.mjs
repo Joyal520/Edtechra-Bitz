@@ -325,7 +325,164 @@ class KnowledgeBitzService {
     };
   }
 
-  syncLocalHistory(userId, bitzId, status, xpAwarded = 0) {
+  /**
+   * Server-authoritative final quiz completion:
+   * Enforces 3/5 mastery rule, awards +2 XP per correct answer with anti-farming protection,
+   * updates knowledge_bitz_progress and profile XP.
+   */
+  async recordQuizCompletion({
+    userId,
+    bitzId,
+    correctAnswers = 0,
+    totalQuestions = 5,
+    quizAnswers = {},
+    supabaseClient = null
+  }) {
+    if (!bitzId) throw new Error('bitzId is required');
+
+    const safeTotal = Math.max(1, totalQuestions || 5);
+    const safeCorrect = Math.min(safeTotal, Math.max(0, correctAnswers || 0));
+    const isMastered = safeCorrect >= 3;
+    const targetXp = Math.min(10, safeCorrect * 2); // 2 XP per correct, max 10 XP
+
+    // 1. Try Supabase RPC if available
+    if (supabaseClient && userId && userId !== 'guest' && userId !== 'guest-user') {
+      try {
+        const { data, error } = await supabaseClient.rpc('record_bitz_quiz_completion', {
+          p_bitz_id: bitzId,
+          p_correct_answers: safeCorrect,
+          p_total_questions: safeTotal,
+          p_quiz_answers: quizAnswers,
+          p_user_id: userId
+        });
+
+        if (!error && data && data.success) {
+          this.syncLocalHistory(userId, bitzId, data.mastered ? 'learned' : 'read', data.xpAwardedNow || 0, {
+            correct_answers: data.correctAnswers,
+            score: data.score,
+            mastered: data.mastered,
+            completed: data.completed,
+            quiz_answers: quizAnswers
+          });
+          return data;
+        } else if (error) {
+          console.warn('[KnowledgeBitzService] Supabase RPC quiz completion notice:', error.message);
+        }
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Supabase RPC quiz completion exception:', e.message);
+      }
+    }
+
+    // 2. Direct Supabase Table Fallback
+    if (supabaseClient && userId && userId !== 'guest' && userId !== 'guest-user') {
+      try {
+        const { data: existingRow } = await supabaseClient
+          .from('knowledge_bitz_progress')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('bitz_id', bitzId)
+          .maybeSingle();
+
+        const existingXp = existingRow?.xp_earned || 0;
+        const xpToAward = Math.max(0, targetXp - existingXp);
+        const wasAlreadyMastered = Boolean(existingRow?.mastered);
+        const finalMastered = wasAlreadyMastered || isMastered;
+
+        const nowIso = new Date().toISOString();
+        const payload = {
+          user_id: userId,
+          bitz_id: bitzId,
+          attempts: (existingRow?.attempts || 0) + 1,
+          correct_answers: Math.max(existingRow?.correct_answers || 0, safeCorrect),
+          score: Math.max(existingRow?.score || 0, safeCorrect),
+          xp_earned: Math.max(existingXp, targetXp),
+          completed: true,
+          mastered: finalMastered,
+          quiz_answers: quizAnswers,
+          completed_at: existingRow?.completed_at || nowIso,
+          mastered_at: finalMastered ? (existingRow?.mastered_at || nowIso) : null,
+          updated_at: nowIso
+        };
+
+        await supabaseClient
+          .from('knowledge_bitz_progress')
+          .upsert(payload, { onConflict: 'user_id,bitz_id' });
+
+        if (xpToAward > 0) {
+          try {
+            const { data: prof } = await supabaseClient.from('profiles').select('xp').eq('id', userId).maybeSingle();
+            await supabaseClient.from('profiles').update({ xp: (prof?.xp || 0) + xpToAward }).eq('id', userId);
+          } catch (e) {}
+        }
+
+        this.syncLocalHistory(userId, bitzId, finalMastered ? 'learned' : 'read', xpToAward, {
+          correct_answers: payload.correct_answers,
+          score: payload.score,
+          mastered: payload.mastered,
+          completed: true,
+          quiz_answers: quizAnswers
+        });
+
+        return {
+          success: true,
+          bitzId,
+          score: payload.score,
+          correctAnswers: payload.correct_answers,
+          totalQuestions: safeTotal,
+          xpEarned: payload.xp_earned,
+          xpAwardedNow: xpToAward,
+          mastered: finalMastered,
+          completed: true,
+          wasAlreadyMastered
+        };
+      } catch (e) {
+        console.warn('[KnowledgeBitzService] Direct Supabase progress fallback notice:', e.message);
+      }
+    }
+
+    // 3. Local In-Memory / File Cache Fallback
+    const history = readJson(HISTORY_CACHE_FILE, {});
+    if (!history[userId]) history[userId] = {};
+    const existing = history[userId][bitzId] || {};
+    const existingXp = existing.xp_earned || existing.xp_awarded || 0;
+    const xpToAward = Math.max(0, targetXp - existingXp);
+    const wasAlreadyMastered = Boolean(existing.mastered || existing.status === 'learned');
+    const finalMastered = wasAlreadyMastered || isMastered;
+
+    const nowIso = new Date().toISOString();
+    history[userId][bitzId] = {
+      ...existing,
+      bitzId,
+      status: finalMastered ? 'learned' : 'read',
+      attempts: (existing.attempts || 0) + 1,
+      correct_answers: Math.max(existing.correct_answers || 0, safeCorrect),
+      score: Math.max(existing.score || 0, safeCorrect),
+      xp_earned: Math.max(existingXp, targetXp),
+      xp_awarded: Math.max(existingXp, targetXp),
+      completed: true,
+      mastered: finalMastered,
+      quiz_answers: quizAnswers,
+      completed_at: existing.completed_at || nowIso,
+      mastered_at: finalMastered ? (existing.mastered_at || nowIso) : null,
+      updated_at: nowIso
+    };
+    writeJson(HISTORY_CACHE_FILE, history);
+
+    return {
+      success: true,
+      bitzId,
+      score: Math.max(existing.score || 0, safeCorrect),
+      correctAnswers: Math.max(existing.correct_answers || 0, safeCorrect),
+      totalQuestions: safeTotal,
+      xpEarned: Math.max(existingXp, targetXp),
+      xpAwardedNow: xpToAward,
+      mastered: finalMastered,
+      completed: true,
+      wasAlreadyMastered
+    };
+  }
+
+  syncLocalHistory(userId, bitzId, status, xpAwarded = 0, extra = {}) {
     if (!userId || userId === 'guest') return;
     const history = readJson(HISTORY_CACHE_FILE, {});
     if (!history[userId]) history[userId] = {};
@@ -334,6 +491,7 @@ class KnowledgeBitzService {
       ...existing,
       bitzId,
       status,
+      ...extra,
       xp_awarded: (existing.xp_awarded || 0) + xpAwarded,
       updated_at: new Date().toISOString()
     };
@@ -1794,19 +1952,30 @@ STRICT RESTRICTIONS:
       publishedBitz = this.getLocalBitz().filter(b => b.status === 'published' || !b.status);
     }
 
-    // 2. Fetch user learning history
+    // 2. Fetch user progress records (Primary: knowledge_bitz_progress, Fallback: bitz_learning_history)
     let bitzLearningRows = [];
     if (supabaseClient && userId !== 'guest' && userId !== 'guest-user') {
       try {
-        const { data, error } = await supabaseClient
-          .from('bitz_learning_history')
-          .select('bitz_id,status,quiz_attempted,quiz_correct,quiz_answers,xp_awarded,learned_at,last_interaction_at,updated_at')
+        const { data: progressData, error: progressErr } = await supabaseClient
+          .from('knowledge_bitz_progress')
+          .select('bitz_id,attempts,correct_answers,score,xp_earned,completed,mastered,quiz_answers,completed_at,mastered_at,updated_at')
           .eq('user_id', userId);
-        if (!error && Array.isArray(data)) {
-          bitzLearningRows = data;
+
+        if (!progressErr && Array.isArray(progressData) && progressData.length > 0) {
+          bitzLearningRows = progressData;
+        } else {
+          // Fallback to legacy bitz_learning_history if progress table is empty/migrating
+          const { data: historyData, error: historyErr } = await supabaseClient
+            .from('bitz_learning_history')
+            .select('bitz_id,status,quiz_attempted,quiz_correct,quiz_answers,xp_awarded,learned_at,last_interaction_at,updated_at')
+            .eq('user_id', userId);
+
+          if (!historyErr && Array.isArray(historyData)) {
+            bitzLearningRows = historyData;
+          }
         }
       } catch (e) {
-        console.warn('[KnowledgeBitzService] Supabase user history fetch notice:', e.message);
+        console.warn('[KnowledgeBitzService] Supabase user progress fetch notice:', e.message);
       }
     } else {
       const allHistory = readJson(HISTORY_CACHE_FILE, {});
@@ -1834,27 +2003,33 @@ STRICT RESTRICTIONS:
       savedCount = Object.keys(userBm).length;
     }
 
-    // 4. Calculate Mastered and Completed Sets
+    // 4. Calculate Mastered and Completed Sets against published catalogue
+    const publishedIdSet = new Set(publishedBitz.map(b => b.id));
     const masteredBitzIds = new Set();
     const completedBitzIds = new Set();
     let totalBitzXp = 0;
 
     bitzLearningRows.forEach(row => {
       const bId = row.bitz_id || row.bitzId;
-      totalBitzXp += (row.xp_awarded || 0);
+      totalBitzXp += (row.xp_earned || row.xp_awarded || 0);
 
-      // Mastery check: score >= 3 out of 5, or status === 'learned'
-      let isMastered = row.status === 'learned';
+      // Mastery check: explicit mastered boolean, correct_answers >= 3, or status === 'learned'
+      let isMastered = row.mastered === true;
+      if (!isMastered && (row.status === 'learned' || (row.correct_answers !== undefined && row.correct_answers >= 3) || (row.score !== undefined && row.score >= 3))) {
+        isMastered = true;
+      }
       if (!isMastered && row.quiz_answers && typeof row.quiz_answers === 'object') {
         const correctCount = Object.values(row.quiz_answers).filter(Boolean).length;
         if (correctCount >= 3) {
           isMastered = true;
         }
       }
-      if (isMastered) {
+
+      // Only count if it's part of the published catalogue
+      if (isMastered && publishedIdSet.has(bId)) {
         masteredBitzIds.add(bId);
       }
-      if (row.status === 'read' || row.status === 'learned') {
+      if ((row.completed === true || row.status === 'read' || row.status === 'learned') && publishedIdSet.has(bId)) {
         completedBitzIds.add(bId);
       }
     });
