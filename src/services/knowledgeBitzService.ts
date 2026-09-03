@@ -18,23 +18,12 @@ import {
   BitzQuizCompletionResult
 } from '@/types';
 
+import { BITZ_CATEGORIES, resolveBitzCanonicalCategory } from '@/utils/bitzTopicsConfig';
+
 const API_BASE = '/api/bitz';
 const ADMIN_API_BASE = '/api/admin/bitz';
 
-const CANONICAL_CATEGORIES = [
-  { id: 'science_nature', name: 'Science & Nature' },
-  { id: 'people_psychology', name: 'People & Psychology' },
-  { id: 'history_culture', name: 'History & Culture' },
-  { id: 'technology_ai', name: 'Technology & AI' },
-  { id: 'business_economics', name: 'Business & Economics' },
-  { id: 'health_body', name: 'Health & Human Body' },
-  { id: 'world_geography', name: 'World & Geography' },
-  { id: 'arts_entertainment', name: 'Arts, Books & Entertainment' },
-  { id: 'sports_games', name: 'Sports & Games' },
-  { id: 'life_skills_english', name: 'Life Skills & English' },
-  { id: 'personal_growth', name: 'Personal Growth' },
-  { id: 'mysteries_legends', name: 'Mysteries & Legends' }
-];
+const CANONICAL_CATEGORIES = BITZ_CATEGORIES.map(c => ({ id: c.id, name: c.name }));
 
 export const knowledgeBitzService = {
   /**
@@ -449,10 +438,28 @@ export const knowledgeBitzService = {
     totalPublishedBitz: number;
     completedCount: number;
     savedCount: number;
+    overall?: {
+      mastered: number;
+      total: number;
+      percentage: number;
+    };
+    categories?: {
+      id: string;
+      name: string;
+      category?: string;
+      mastered?: number;
+      masteredCount: number;
+      total?: number;
+      totalCount: number;
+      percentage: number;
+    }[];
     categoryProgress: {
       id: string;
       name: string;
+      category?: string;
+      mastered?: number;
       masteredCount: number;
+      total?: number;
       totalCount: number;
       percentage: number;
     }[];
@@ -471,7 +478,7 @@ export const knowledgeBitzService = {
         // Fetch published bitz catalogue
         const { data: bitzData, error: bitzErr } = await supabase
           .from('knowledge_bitz')
-          .select('id,bitz_code,title,short_fact,reading_text,category,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
+          .select('id,bitz_code,title,short_fact,reading_text,category,topic_id,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
           .eq('status', 'published')
           .order('created_at', { ascending: false });
 
@@ -522,46 +529,20 @@ export const knowledgeBitzService = {
             }
           });
 
-          // Helper to match category cleanly
-          const norm = (str: string) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Calculate Independent Category Progress using authoritative resolver
           const categoryProgress = CANONICAL_CATEGORIES.map(cat => {
-            const catNorm = norm(cat.name);
-            const catIdNorm = norm(cat.id);
-
-            const catBitz = publishedBitz.filter(b => {
-              const cN = norm(b.category || '');
-              const tN = norm(b.topic_id || '');
-              const sN = norm(b.sub_topic || '');
-              if (cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm || sN === catNorm || sN === catIdNorm) return true;
-              if (cN.includes(catIdNorm) || catIdNorm.includes(cN)) return true;
-              if (tN.includes(catIdNorm) || catIdNorm.includes(tN)) return true;
-              if (sN.includes(catIdNorm) || catIdNorm.includes(sN)) return true;
-
-              // Topic-specific alias checks
-              if (cat.id === 'science_nature' && (cN.includes('science') || tN.includes('science') || cN.includes('nature'))) return true;
-              if (cat.id === 'people_psychology' && (cN.includes('psycholog') || cN.includes('people') || tN.includes('psycholog'))) return true;
-              if (cat.id === 'history_culture' && (cN.includes('histor') || cN.includes('culture') || tN.includes('histor'))) return true;
-              if (cat.id === 'technology_ai' && (cN.includes('tech') || cN.includes('ai') || tN.includes('tech'))) return true;
-              if (cat.id === 'business_economics' && (cN.includes('business') || cN.includes('econom') || tN.includes('business'))) return true;
-              if (cat.id === 'health_body' && (cN.includes('health') || cN.includes('body') || tN.includes('health'))) return true;
-              if (cat.id === 'world_geography' && (cN.includes('geograph') || cN.includes('world') || tN.includes('geograph'))) return true;
-              if (cat.id === 'arts_entertainment' && (cN.includes('art') || cN.includes('entertain') || cN.includes('book'))) return true;
-              if (cat.id === 'sports_games' && (cN.includes('sport') || cN.includes('game') || tN.includes('sport'))) return true;
-              if (cat.id === 'life_skills_english' && (cN.includes('english') || cN.includes('skill') || cN.includes('language'))) return true;
-              if (cat.id === 'personal_growth' && (cN.includes('growth') || cN.includes('personal') || tN.includes('growth'))) return true;
-              if (cat.id === 'mysteries_legends' && (cN.includes('myster') || cN.includes('legend') || cN.includes('unsolved'))) return true;
-
-              return false;
-            });
-
+            const catBitz = publishedBitz.filter(b => resolveBitzCanonicalCategory(b) === cat.id);
             const totalCount = catBitz.length;
             const masteredCount = catBitz.filter(b => masteredBitzIds.has(b.id)).length;
-            const percentage = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0;
+            const percentage = totalCount > 0 ? Math.min(100, Math.round((masteredCount / totalCount) * 100)) : 0;
 
             return {
               id: cat.id,
               name: cat.name,
+              category: cat.name,
+              mastered: masteredCount,
               masteredCount,
+              total: totalCount,
               totalCount,
               percentage
             };
@@ -599,6 +580,12 @@ export const knowledgeBitzService = {
             totalPublishedBitz: publishedBitz.length,
             completedCount: completedBitzIds.size,
             savedCount: 0,
+            overall: {
+              mastered: masteredBitzIds.size,
+              total: publishedBitz.length,
+              percentage: publishedBitz.length > 0 ? Math.round((masteredBitzIds.size / publishedBitz.length) * 1000) / 10 : 0
+            },
+            categories: categoryProgress,
             categoryProgress,
             recentlyMastered,
             continueLearning

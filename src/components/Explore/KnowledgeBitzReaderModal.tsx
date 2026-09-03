@@ -23,6 +23,7 @@ import { useAuth } from '@/context/AuthContext';
 import { knowledgeBitzService } from '@/services/knowledgeBitzService';
 import { playCorrectAnswerSound, playCelebrationSound } from '@/utils/reorderAudio';
 import { triggerConfetti } from '@/utils/confetti';
+import { BitzReadingView } from './reader';
 
 interface KnowledgeBitzReaderModalProps {
   bitz: KnowledgeBitzItem | null;
@@ -339,12 +340,6 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
     }
   };
 
-  // Split reading text into paragraphs if newline exists, or format cleanly
-  const paragraphs = (bitz.reading_text || '')
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-[#020817] text-[#F8FAFC] h-[100dvh] min-h-[100dvh] w-full overflow-hidden animate-fade-in select-none"
@@ -360,60 +355,62 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
         />
       </div>
 
-      {/* 2. Top Header Bar (Subtle Bitz Identity & Controls) */}
-      <header className="px-4 sm:px-6 py-3 sm:py-3.5 bg-[#030d1d]/90 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between shrink-0 z-20">
-        {/* Left: Subtle Bitz Identity */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/60 shadow-xs">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: category.color || '#38bdf8' }}
-            />
-            <span className="font-ui text-[11px] font-black uppercase tracking-wider text-sky-300">
-              {category.name || 'Knowledge Bitz'}
-            </span>
+      {/* 2. Top Header Bar (Shown during Quiz & Completion) */}
+      {viewState !== 'READING' && (
+        <header className="px-4 sm:px-6 py-3 sm:py-3.5 bg-[#030d1d]/90 backdrop-blur-md border-b border-slate-800/80 flex items-center justify-between shrink-0 z-20">
+          {/* Left: Subtle Bitz Identity */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/60 shadow-xs">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: category.color || '#38bdf8' }}
+              />
+              <span className="font-ui text-[11px] font-black uppercase tracking-wider text-sky-300">
+                {category.name || 'Knowledge Bitz'}
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Right Action Icons: Bookmark, Share, Close */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Bookmark */}
-          <button
-            type="button"
-            onClick={handleToggleSave}
-            className={`p-2 rounded-full transition-colors cursor-pointer ${
-              isSaved
-                ? 'text-[#36D1FF] bg-sky-950/70 border border-sky-800/60'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-            title="Save Bitz"
-            aria-label="Save Bitz"
-          >
-            <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-          </button>
+          {/* Right Action Icons: Bookmark, Share, Close */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Bookmark */}
+            <button
+              type="button"
+              onClick={handleToggleSave}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${
+                isSaved
+                  ? 'text-[#36D1FF] bg-sky-950/70 border border-sky-800/60'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+              title="Save Bitz"
+              aria-label="Save Bitz"
+            >
+              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+            </button>
 
-          {/* Share */}
-          <button
-            type="button"
-            onClick={handleShare}
-            className="p-2 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
-            title="Share"
-            aria-label="Share Bitz"
-          >
-            <Share2 className="w-4 h-4" />
-          </button>
+            {/* Share */}
+            <button
+              type="button"
+              onClick={handleShare}
+              className="p-2 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
+              title="Share"
+              aria-label="Share Bitz"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
 
-          {/* Close */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer ml-1"
-            aria-label="Close reader"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
+            {/* Close */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer ml-1"
+              aria-label="Close reader"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* 3. Single Controlled Scroll Container */}
       <main
@@ -421,78 +418,26 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto min-h-0 w-full scroll-smooth select-text"
       >
-        <div className="max-w-[680px] mx-auto px-5 sm:px-8 py-6 sm:py-8 w-full min-h-full flex flex-col justify-between pb-[max(2.5rem,env(safe-area-inset-bottom))]">
-          {/* ================================================================ */}
-          {/* STATE 1: READING VIEW                                           */}
-          {/* ================================================================ */}
-          {viewState === 'READING' && (
-            <div className="space-y-6 animate-fade-in flex-1 flex flex-col justify-between">
-              <div className="space-y-6">
-                {/* Bitz Title: DM Serif Display */}
-                <h1 className="font-display text-2xl sm:text-3xl md:text-4xl text-[#F8FAFC] leading-[1.25] tracking-tight font-normal">
-                  {bitz.title}
-                </h1>
+        {/* ================================================================ */}
+        {/* STATE 1: 3-QUESTION READING VIEW (Matches Reference UI)          */}
+        {/* ================================================================ */}
+        {viewState === 'READING' && (
+          <BitzReadingView
+            bitz={bitz}
+            isSaved={isSaved}
+            onToggleSave={handleToggleSave}
+            onShare={handleShare}
+            onClose={onClose}
+            onStartQuiz={handleStartQuiz}
+            hasQuiz={totalQuestions > 0}
+          />
+        )}
 
-                {/* 100-Word Reading Body: Lora (Left-aligned, 18px on mobile, 1.75 line-height) */}
-                <div className="font-reading text-[17px] sm:text-[18px] md:text-[19px] leading-[1.75] text-slate-200 select-text text-left font-normal space-y-4">
-                  {paragraphs.map((p, idx) => (
-                    <p key={idx} className="tracking-normal">
-                      {p}
-                    </p>
-                  ))}
-                </div>
-
-                {/* Key Vocabulary (if present) */}
-                {bitz.vocabulary && bitz.vocabulary.length > 0 && (
-                  <div className="rounded-2xl p-4 sm:p-5 space-y-2.5 bg-slate-900/80 border border-slate-800">
-                    <div className="font-ui flex items-center gap-1.5 text-xs font-black text-amber-400 uppercase tracking-wider">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400 stroke-[2.5]" />
-                      <span>Key Vocabulary</span>
-                    </div>
-                    <div className="space-y-2">
-                      {bitz.vocabulary.map((v, idx) => (
-                        <div key={idx} className="font-ui text-xs sm:text-sm leading-relaxed">
-                          <strong className="text-white font-bold">{v.word}:</strong>{' '}
-                          <span className="text-slate-300 font-normal">{v.definition}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Source Citation */}
-                {bitz.source_citation && (
-                  <div className="font-ui text-xs text-slate-400 italic flex items-center gap-1.5 pt-1">
-                    <span>Source:</span>
-                    <span className="font-medium text-slate-300">{bitz.source_citation}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Reading Controls: Done (Left) & Compact Cute Quiz Button (Right) */}
-              <div className="flex items-center justify-between pt-8 mt-6 border-t border-slate-800/80 gap-3">
-                {/* Done Button */}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="font-ui px-4 py-2 rounded-full text-xs sm:text-sm font-semibold bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all active:scale-95 cursor-pointer"
-                >
-                  Done
-                </button>
-
-                {/* Compact Quiz Pill Button */}
-                {totalQuestions > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleStartQuiz}
-                    className="font-ui flex items-center gap-1.5 px-5 py-2 rounded-full text-xs sm:text-sm font-bold bg-gradient-to-r from-[#1677FF] to-[#026fc3] hover:from-[#2D8CFF] hover:to-[#1677FF] text-white shadow-md shadow-blue-600/30 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <span>✦ Quiz →</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+        {/* ================================================================ */}
+        {/* STATES 2 & 3: QUIZ & COMPLETION (Centered Container)             */}
+        {/* ================================================================ */}
+        {viewState !== 'READING' && (
+          <div className="max-w-[680px] mx-auto px-5 sm:px-8 py-6 sm:py-8 w-full min-h-full flex flex-col justify-between pb-[max(2.5rem,env(safe-area-inset-bottom))]">
 
           {/* ================================================================ */}
           {/* STATE 2: AUTOMATIC QUIZ VIEW                                    */}
@@ -735,6 +680,7 @@ export const KnowledgeBitzReaderModal: React.FC<KnowledgeBitzReaderModalProps> =
             </div>
           )}
         </div>
+      )}
       </main>
 
       {/* Share Toast */}

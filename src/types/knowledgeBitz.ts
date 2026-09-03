@@ -42,12 +42,21 @@ export interface BitzVocabularyWord {
   example?: string;
 }
 
+export interface BitzReadingSection {
+  number: number;
+  question: string;
+  answer: string;
+}
+
 export interface KnowledgeBitzItem {
   id: string;
   bitz_code: string; // e.g. "B000001"
   title: string; // Hook / Big Headline
+  subtitle?: string | null; // Optional subtitle (e.g. "Why we value our own things more")
   short_fact: string; // 20–30 word discovery preview
-  reading_text: string; // Exactly 100-word reading explanation
+  reading_text: string; // Exactly 100-word reading explanation (backward compatibility)
+  reading_sections?: BitzReadingSection[] | null; // Exactly 3 Question + Answer learning sections
+  key_takeaway?: string | null; // Core educational takeaway
   topic_id: string; // legacy subtopic identifier (e.g. 'biology', 'space')
   category: string; // Master categories (e.g. 'Science & Nature', 'Personal Growth', 'Mysteries & Legends')
   sub_topic?: string | null; // Internal subtopic (e.g. 'Mindset & Habits', 'Ancient Mysteries')
@@ -96,8 +105,11 @@ export interface KnowledgeBitzItem {
 
 export interface CreateKnowledgeBitzInput {
   title: string;
+  subtitle?: string;
   short_fact: string;
   reading_text: string;
+  reading_sections?: BitzReadingSection[];
+  key_takeaway?: string;
   topic_id: string;
   category?: string;
   sub_topic?: string;
@@ -146,8 +158,11 @@ export interface BitzLearningStateResult {
 
 export interface BitzBulkImportRecord {
   title: string;
+  subtitle?: string;
   short_fact: string;
   reading_text: string;
+  reading_sections?: BitzReadingSection[];
+  key_takeaway?: string;
   topic_id: string;
   category?: string;
   sub_topic?: string;

@@ -1292,8 +1292,11 @@ STRICT RESTRICTIONS:
     const newBitz = {
       id,
       title: input.title.trim(),
+      subtitle: input.subtitle ? String(input.subtitle).trim() : null,
       short_fact: input.short_fact.trim(),
       reading_text: input.reading_text.trim(),
+      reading_sections: Array.isArray(input.reading_sections) ? input.reading_sections : null,
+      key_takeaway: input.key_takeaway ? String(input.key_takeaway).trim() : null,
       topic_id: input.topic_id || 'science',
       category: input.category || 'Science & Nature',
       sub_topic: input.sub_topic || '',
@@ -1638,8 +1641,11 @@ STRICT RESTRICTIONS:
       const newBitz = {
         id: crypto.randomUUID(),
         title,
+        subtitle: row.subtitle ? String(row.subtitle).trim() : null,
         short_fact: shortFact,
         reading_text: readingText,
+        reading_sections: Array.isArray(row.reading_sections) ? row.reading_sections : null,
+        key_takeaway: row.key_takeaway ? String(row.key_takeaway).trim() : null,
         topic_id: String(row.topic_id || 'science').toLowerCase().trim(),
         category: row.category || row.category_id || row.categoryGroup || 'Science & Nature',
         sub_topic: row.sub_topic || row.subtopic || 'General',
@@ -1938,7 +1944,7 @@ STRICT RESTRICTIONS:
       try {
         const { data, error } = await supabaseClient
           .from('knowledge_bitz')
-          .select('id,bitz_code,title,short_fact,reading_text,category,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
+          .select('id,bitz_code,title,short_fact,reading_text,category,topic_id,sub_topic,difficulty,cefr_level,visual_url,status,created_at')
           .eq('status', 'published')
           .order('created_at', { ascending: false });
         if (!error && Array.isArray(data)) {
@@ -2034,47 +2040,20 @@ STRICT RESTRICTIONS:
       }
     });
 
-    // Helper to match category cleanly
-    const norm = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    // 5. Calculate Category Progress across 12 canonical categories
+    // 5. Calculate Independent Category Progress across 12 canonical categories
     const categoryProgress = CANONICAL_BITZ_CATEGORIES.map(cat => {
-      const catNorm = norm(cat.name);
-      const catIdNorm = norm(cat.id);
-
-      const catBitz = publishedBitz.filter(b => {
-        const cN = norm(b.category || '');
-        const tN = norm(b.topic_id || '');
-        const sN = norm(b.sub_topic || '');
-        if (cN === catNorm || cN === catIdNorm || tN === catNorm || tN === catIdNorm) return true;
-        if (cN.includes(catIdNorm) || catIdNorm.includes(cN)) return true;
-        if (tN.includes(catIdNorm) || catIdNorm.includes(tN)) return true;
-
-        // Topic-specific alias checks
-        if (cat.id === 'science_nature' && (cN.includes('science') || tN.includes('science') || cN.includes('nature'))) return true;
-        if (cat.id === 'people_psychology' && (cN.includes('psycholog') || cN.includes('people') || tN.includes('psycholog'))) return true;
-        if (cat.id === 'history_culture' && (cN.includes('histor') || cN.includes('culture') || tN.includes('histor'))) return true;
-        if (cat.id === 'technology_ai' && (cN.includes('tech') || cN.includes('ai') || tN.includes('tech'))) return true;
-        if (cat.id === 'business_economics' && (cN.includes('business') || cN.includes('econom') || tN.includes('business'))) return true;
-        if (cat.id === 'health_body' && (cN.includes('health') || cN.includes('body') || tN.includes('health'))) return true;
-        if (cat.id === 'world_geography' && (cN.includes('geograph') || cN.includes('world') || tN.includes('geograph'))) return true;
-        if (cat.id === 'arts_entertainment' && (cN.includes('art') || cN.includes('entertain') || cN.includes('book'))) return true;
-        if (cat.id === 'sports_games' && (cN.includes('sport') || cN.includes('game') || tN.includes('sport'))) return true;
-        if (cat.id === 'life_skills_english' && (cN.includes('english') || cN.includes('skill') || cN.includes('language'))) return true;
-        if (cat.id === 'personal_growth' && (cN.includes('growth') || cN.includes('personal') || tN.includes('growth'))) return true;
-        if (cat.id === 'mysteries_legends' && (cN.includes('myster') || cN.includes('legend') || cN.includes('unsolved'))) return true;
-
-        return false;
-      });
-
+      const catBitz = publishedBitz.filter(b => resolveBitzCanonicalCategory(b) === cat.id);
       const totalCount = catBitz.length;
       const masteredCount = catBitz.filter(b => masteredBitzIds.has(b.id)).length;
-      const percentage = totalCount > 0 ? Math.round((masteredCount / totalCount) * 100) : 0;
+      const percentage = totalCount > 0 ? Math.min(100, Math.round((masteredCount / totalCount) * 100)) : 0;
 
       return {
         id: cat.id,
         name: cat.name,
+        category: cat.name,
+        mastered: masteredCount,
         masteredCount,
+        total: totalCount,
         totalCount,
         percentage
       };
@@ -2124,6 +2103,12 @@ STRICT RESTRICTIONS:
       totalPublishedBitz: publishedBitz.length,
       completedCount: completedBitzIds.size,
       savedCount,
+      overall: {
+        mastered: masteredBitzIds.size,
+        total: publishedBitz.length,
+        percentage: publishedBitz.length > 0 ? Math.round((masteredBitzIds.size / publishedBitz.length) * 1000) / 10 : 0
+      },
+      categories: categoryProgress,
       categoryProgress,
       recentlyMastered,
       continueLearning
@@ -2155,5 +2140,116 @@ export const CANONICAL_BITZ_CATEGORIES = [
   { id: 'mysteries_legends', name: 'Mysteries & Legends' }
 ];
 
+export const LEGACY_TOPIC_MAP = {
+  science: 'science_nature',
+  biology: 'science_nature',
+  physics: 'science_nature',
+  chemistry: 'science_nature',
+  space: 'science_nature',
+  nature: 'science_nature',
+  wildlife: 'science_nature',
+  psychology: 'people_psychology',
+  sociology: 'people_psychology',
+  philosophy: 'people_psychology',
+  history: 'history_culture',
+  culture: 'history_culture',
+  civics: 'history_culture',
+  ai: 'technology_ai',
+  tech: 'technology_ai',
+  coding: 'technology_ai',
+  innovation: 'technology_ai',
+  cybersecurity: 'technology_ai',
+  robotics: 'technology_ai',
+  business: 'business_economics',
+  economics: 'business_economics',
+  productivity: 'business_economics',
+  health: 'health_body',
+  medicine: 'health_body',
+  anatomy: 'health_body',
+  nutrition: 'health_body',
+  geography: 'world_geography',
+  travel: 'world_geography',
+  entertainment: 'arts_entertainment',
+  art: 'arts_entertainment',
+  literature: 'arts_entertainment',
+  music: 'arts_entertainment',
+  sports: 'sports_games',
+  'life-skills': 'life_skills_english',
+  learning: 'life_skills_english',
+  english: 'life_skills_english',
+  'personal-growth': 'personal_growth',
+  personal_growth: 'personal_growth',
+  mindset: 'personal_growth',
+  habits: 'personal_growth',
+  'mysteries-legends': 'mysteries_legends',
+  mysteries_legends: 'mysteries_legends',
+  mysteries: 'mysteries_legends',
+  legends: 'mysteries_legends'
+};
+
+export function resolveBitzCanonicalCategory(itemOrCategory) {
+  if (!itemOrCategory) return null;
+
+  let rawCat = '';
+  let rawSub = '';
+  let rawTopic = '';
+
+  if (typeof itemOrCategory === 'string') {
+    rawCat = itemOrCategory.trim();
+  } else {
+    rawCat = (itemOrCategory.category || '').trim();
+    rawSub = (itemOrCategory.sub_topic || '').trim();
+    rawTopic = (itemOrCategory.topic_id || '').trim();
+  }
+
+  // 1. Direct match on category name, ID, or slug
+  if (rawCat) {
+    const catLower = rawCat.toLowerCase();
+    const catMatch = CANONICAL_BITZ_CATEGORIES.find(
+      (c) =>
+        c.name.toLowerCase() === catLower ||
+        c.id.toLowerCase() === catLower ||
+        c.id.replace(/_/g, '-').toLowerCase() === catLower
+    );
+    if (catMatch) return catMatch.id;
+
+    if (LEGACY_TOPIC_MAP[catLower]) {
+      return LEGACY_TOPIC_MAP[catLower];
+    }
+  }
+
+  // 2. Direct match on subtopic
+  if (rawSub) {
+    const subLower = rawSub.toLowerCase();
+    const subCatMatch = CANONICAL_BITZ_CATEGORIES.find(
+      (c) => c.name.toLowerCase() === subLower || c.id.toLowerCase() === subLower
+    );
+    if (subCatMatch) return subCatMatch.id;
+
+    if (LEGACY_TOPIC_MAP[subLower]) {
+      return LEGACY_TOPIC_MAP[subLower];
+    }
+  }
+
+  // 3. Match on topic_id if category was not specified or did not match
+  if (rawTopic) {
+    const topicLower = rawTopic.toLowerCase();
+    const topicMatch = CANONICAL_BITZ_CATEGORIES.find(
+      (c) =>
+        c.id.toLowerCase() === topicLower ||
+        c.name.toLowerCase() === topicLower ||
+        c.id.replace(/_/g, '-').toLowerCase() === topicLower
+    );
+    if (topicMatch) return topicMatch.id;
+
+    if (LEGACY_TOPIC_MAP[topicLower]) {
+      return LEGACY_TOPIC_MAP[topicLower];
+    }
+  }
+
+  return null;
+}
+
 export const knowledgeBitzService = new KnowledgeBitzService();
+
 

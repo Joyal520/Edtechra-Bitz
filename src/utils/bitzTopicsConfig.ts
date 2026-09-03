@@ -384,6 +384,91 @@ export function resolveCategoryId(value?: string | null): string {
   return 'science_nature';
 }
 
+/**
+ * Authoritatively resolves any Knowledge Bitz item or category string to one of the 12 canonical category IDs.
+ * Returns null if the item cannot be reliably mapped to any canonical category.
+ *
+ * Evaluation order:
+ * 1. Matches bitz.category against canonical names, IDs, or slugs (exact, case-insensitive).
+ * 2. Checks LEGACY_TOPIC_TO_CATEGORY_MAP for bitz.category.
+ * 3. Checks ALL_BITZ_SUBTOPICS for bitz.category or bitz.sub_topic.
+ * 4. Checks bitz.topic_id ONLY if category was not provided or didn't match.
+ * (Never uses substring includes("") which causes false-positive cross-category matches).
+ */
+export function resolveBitzCanonicalCategory(
+  itemOrCategory: { category?: string | null; topic_id?: string | null; sub_topic?: string | null } | string | null | undefined
+): string | null {
+  if (!itemOrCategory) return null;
+
+  let rawCat = '';
+  let rawSub = '';
+  let rawTopic = '';
+
+  if (typeof itemOrCategory === 'string') {
+    rawCat = itemOrCategory.trim();
+  } else {
+    rawCat = (itemOrCategory.category || '').trim();
+    rawSub = (itemOrCategory.sub_topic || '').trim();
+    rawTopic = (itemOrCategory.topic_id || '').trim();
+  }
+
+  // 1. Check direct category match
+  if (rawCat) {
+    const catLower = rawCat.toLowerCase();
+    const catMatch = BITZ_CATEGORIES.find(
+      (c) =>
+        c.name.toLowerCase() === catLower ||
+        c.id.toLowerCase() === catLower ||
+        c.slug.toLowerCase() === catLower
+    );
+    if (catMatch) return catMatch.id;
+
+    if (LEGACY_TOPIC_TO_CATEGORY_MAP[catLower]) {
+      return LEGACY_TOPIC_TO_CATEGORY_MAP[catLower];
+    }
+  }
+
+  // 2. Check subtopic match
+  if (rawSub) {
+    const subLower = rawSub.toLowerCase();
+    const subMatch = ALL_BITZ_SUBTOPICS.find(
+      (st) =>
+        st.subtopicId.toLowerCase() === subLower ||
+        st.subtopicName.toLowerCase() === subLower
+    );
+    if (subMatch) return subMatch.categoryId;
+  }
+
+  // Also check if rawCat was a subtopic name
+  if (rawCat) {
+    const catLower = rawCat.toLowerCase();
+    const subMatch = ALL_BITZ_SUBTOPICS.find(
+      (st) =>
+        st.subtopicId.toLowerCase() === catLower ||
+        st.subtopicName.toLowerCase() === catLower
+    );
+    if (subMatch) return subMatch.categoryId;
+  }
+
+  // 3. Check topic_id if category was not specified or did not match
+  if (rawTopic) {
+    const topicLower = rawTopic.toLowerCase();
+    const topicMatch = BITZ_CATEGORIES.find(
+      (c) =>
+        c.id.toLowerCase() === topicLower ||
+        c.slug.toLowerCase() === topicLower ||
+        c.name.toLowerCase() === topicLower
+    );
+    if (topicMatch) return topicMatch.id;
+
+    if (LEGACY_TOPIC_TO_CATEGORY_MAP[topicLower]) {
+      return LEGACY_TOPIC_TO_CATEGORY_MAP[topicLower];
+    }
+  }
+
+  return null;
+}
+
 // ============================================================================
 // BACKWARD COMPAT EXPORTS — Keep old names working for existing imports
 // These are used by existing components that import these symbols.

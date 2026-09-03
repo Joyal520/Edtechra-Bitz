@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { BITZ_CATEGORY_MAP, isValidSubtopicForCategory } from './bitzTopicsConfig.ts';
+import { getBitzReadingData, formatReadingSectionsToText } from './bitzReadingData.ts';
 
 const VALID_CEFR_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const VALID_CATEGORIES = Object.keys(BITZ_CATEGORY_MAP);
@@ -91,6 +92,63 @@ export function validateReading(text: string): ValidationIssue[] {
       message: `Reading word count: ${wc} words. Target is 90–110 words.`
     });
   }
+  return issues;
+}
+
+/**
+ * Validate reading_sections: must be an array of exactly 3 objects with non-empty question and answer.
+ * Target word count across all 3 answers combined is approximately 100 words (90–110 words target).
+ */
+export function validateReadingSections(sections: any): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  if (!sections) {
+    issues.push({ type: 'error', field: 'reading_sections', message: 'Reading sections (reading_sections) is missing.' });
+    return issues;
+  }
+
+  if (!Array.isArray(sections)) {
+    issues.push({ type: 'error', field: 'reading_sections', message: 'Reading sections must be an array of exactly 3 Question+Answer objects.' });
+    return issues;
+  }
+
+  if (sections.length !== 3) {
+    issues.push({
+      type: 'error',
+      field: 'reading_sections',
+      message: `Reading sections count: ${sections.length}/3. Required: exactly 3 Question+Answer sections.`
+    });
+  }
+
+  let totalAnswerWords = 0;
+
+  sections.forEach((sec, i) => {
+    const prefix = `reading_sections[${i}]`;
+    if (!sec || typeof sec !== 'object') {
+      issues.push({ type: 'error', field: prefix, message: `Reading section ${i + 1} is not a valid object.` });
+      return;
+    }
+
+    if (!sec.question || typeof sec.question !== 'string' || sec.question.trim().length === 0) {
+      issues.push({ type: 'error', field: `${prefix}.question`, message: `Reading section ${i + 1}: question is empty or missing.` });
+    }
+
+    if (!sec.answer || typeof sec.answer !== 'string' || sec.answer.trim().length === 0) {
+      issues.push({ type: 'error', field: `${prefix}.answer`, message: `Reading section ${i + 1}: answer is empty or missing.` });
+    } else {
+      totalAnswerWords += countWords(sec.answer);
+    }
+  });
+
+  if (sections.length === 3 && totalAnswerWords > 0) {
+    if (totalAnswerWords < 75 || totalAnswerWords > 130) {
+      issues.push({
+        type: 'warning',
+        field: 'reading_sections',
+        message: `Combined answers word count: ${totalAnswerWords} words. Target is approximately 100 words (90–110 words).`
+      });
+    }
+  }
+
   return issues;
 }
 
@@ -209,9 +267,48 @@ export function validateBitzRecord(record: any, index: number): ValidatedBitzRec
   const shortFact = String(record.short_fact || record.shortFact || record.summary || record.fact || '').trim();
   issues.push(...validateShortFact(shortFact).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
 
-  // 3. Reading text (approximately 100 words: 90–110 target)
-  const readingText = String(record.reading_text || record.reading || record.reading_content || record.content || '').trim();
-  issues.push(...validateReading(readingText).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
+  // 3. Reading sections & Reading text (3 Q&A sections, ~100 words)
+  let readingSections = Array.isArray(record.reading_sections) ? record.reading_sections : null;
+  let readingText = String(record.reading_text || record.reading || record.reading_content || record.content || '').trim();
+
+  if (readingSections && readingSections.length === 3) {
+    issues.push(...validateReadingSections(readingSections).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
+    if (!readingText) {
+      readingText = formatReadingSectionsToText(readingSections);
+    }
+  } else if (readingText) {
+    issues.push(...validateReading(readingText).map((i) => ({ ...i, message: `Fact #${index + 1}: ${i.message}` })));
+    // Gracefully derive reading_sections for canonical record
+    const derived = getBitzReadingData({
+      id: '',
+      bitz_code: '',
+      title,
+      short_fact: shortFact,
+      reading_text: readingText,
+      topic_id: '',
+      category: '',
+      difficulty: 'Easy',
+      cefr_level: (record.cefr_level || 'B1') as any,
+      reading_time_sec: 30,
+      visual_status: 'missing',
+      xp_value: 10,
+      likes_count: 0,
+      saves_count: 0,
+      shares_count: 0,
+      views_count: 0,
+      completions_count: 0,
+      status: 'draft',
+      created_at: '',
+      updated_at: ''
+    });
+    readingSections = derived.sections;
+  } else {
+    issues.push({ type: 'error', field: 'reading_text', message: `Fact #${index + 1}: Reading text (reading_text) or reading_sections is missing.` });
+  }
+
+  // Subtitle & Key Takeaway
+  const subtitle = record.subtitle ? String(record.subtitle).trim() : null;
+  const keyTakeaway = record.key_takeaway ? String(record.key_takeaway).trim() : null;
 
   // 4. Category validation
   const rawCat = record.category || record.category_id || record.categoryGroup || '';
@@ -281,8 +378,11 @@ export function validateBitzRecord(record: any, index: number): ValidatedBitzRec
   // Build canonical record
   const canonical = {
     title,
+    subtitle,
     short_fact: shortFact,
     reading_text: readingText,
+    reading_sections: readingSections,
+    key_takeaway: keyTakeaway,
     category: resolvedCategory,
     sub_topic: subtopic || 'General',
     difficulty: ['Easy', 'Medium', 'Hard'].includes(record.difficulty) ? record.difficulty : 'Easy',

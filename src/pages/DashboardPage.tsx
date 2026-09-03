@@ -441,7 +441,7 @@ export const DashboardPage: React.FC = () => {
                         </span>
                       </div>
                       <span className="text-[11px] font-mono font-bold text-slate-400 group-hover:text-slate-200">
-                        {hasItems ? `${cat.masteredCount} / ${cat.totalCount}` : 'No Bitz yet'}
+                        {hasItems ? `${cat.masteredCount} / ${cat.totalCount} mastered` : 'No Bitz yet'}
                       </span>
                     </div>
 
