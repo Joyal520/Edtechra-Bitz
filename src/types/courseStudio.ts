@@ -10,6 +10,7 @@ export type EpisodeType = 'lesson' | 'practice' | 'assessment' | 'revision';
 
 export type BlockType =
   | 'text'
+  | 'heading'
   | 'text_image'
   | 'text_video'
   | 'image'
@@ -20,18 +21,89 @@ export type BlockType =
   | 'audio'
   | 'callout'
   | 'code'
-  | 'quote';
+  | 'quote'
+  | 'list'
+  | 'divider'
+  | 'interactive_question';
 
 export type QuestionType =
   | 'multiple_choice'
+  | 'multiple_select'
   | 'true_false'
+  | 'yes_no'
   | 'fill_blank'
+  | 'multiple_fill_blanks'
   | 'matching'
+  | 'matching_pairs'
   | 'sentence_builder'
+  | 'sentence_reordering'
+  | 'word_ordering'
   | 'ordering'
+  | 'story_sequence'
+  | 'image_selection'
+  | 'dropdown_selection'
+  | 'drag_to_complete'
+  | 'drag_drop_matching'
+  | 'categorisation'
+  | 'odd_one_out'
   | 'short_answer'
   | 'cloze_passage'
-  | 'essay';
+  | 'essay'
+  | 'comprehension';
+
+export type ComprehensionType =
+  | 'literal'
+  | 'main_idea'
+  | 'detail'
+  | 'wh_question'
+  | 'vocab_context'
+  | 'meaning_context'
+  | 'reference'
+  | 'inference'
+  | 'cause_effect'
+  | 'compare_contrast'
+  | 'sequence'
+  | 'author_purpose'
+  | 'evidence_based'
+  | 'short_answer'
+  | 'explain'
+  | 'summarize';
+
+export interface ComprehensionMetadata {
+  comprehension_type?: ComprehensionType;
+  passage_ref?: string;
+  passage_text?: string;
+  evidence_quote?: string;
+  reference_target?: string;
+}
+
+export interface OpenEndedRubricCriterion {
+  name: string;
+  score: number;
+  maxScore: number;
+  comment?: string;
+}
+
+export interface StudentQuestionResponse {
+  questionId: string;
+  answer: any;
+  status: 'unanswered' | 'evaluating' | 'correct' | 'incorrect';
+  score: number;
+  maxScore: number;
+  feedback: string;
+  strengths?: string[];
+  improvements?: string[];
+  criteria?: OpenEndedRubricCriterion[];
+  evaluatedAt?: string;
+}
+
+export interface StudentAttemptSession {
+  episodeId: string;
+  responses: Record<string, StudentQuestionResponse>;
+  totalScore: number;
+  maxPossibleScore: number;
+  isComplete: boolean;
+}
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 export type MasteryStatus = 'strong' | 'good' | 'needs_support' | 'at_risk';
@@ -172,6 +244,10 @@ export interface CourseQuestion {
   max_words?: number;
   evaluation_criteria?: string[];
   essay_result?: EssayEvaluationResult;
+  comprehension_metadata?: ComprehensionMetadata;
+  content_ref?: string;
+  rubric?: OpenEndedRubricCriterion[];
+  keywords?: string[];
   created_at?: string;
   updated_at?: string;
 }

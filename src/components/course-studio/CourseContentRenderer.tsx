@@ -8,25 +8,16 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  CheckCircle2,
-  XCircle,
   Sparkles,
-  Check,
-  X,
   Volume2,
   VolumeX,
   ArrowRight,
-  Send,
   Award
 } from 'lucide-react';
-import { CourseBlock, CourseQuestion, QuestionType } from '@/types/courseStudio';
+import { CourseBlock, CourseQuestion, StudentQuestionResponse } from '@/types/courseStudio';
 import { FormattedLessonText, TextScale } from '@/utils/courseTextFormatting';
-import { QUESTION_TYPE_LABELS } from '@/utils/questionSchemaValidator';
 import { courseAudio } from '@/utils/courseAudio';
-import { triggerConfettiBurst } from '@/utils/courseConfetti';
-import { DraggableOrderingQuestion } from '@/components/course-studio/DraggableOrderingQuestion';
-import { ClozePassageQuestion } from '@/components/course-studio/ClozePassageQuestion';
-import { EssayQuestion } from '@/components/course-studio/EssayQuestion';
+import { ComprehensiveQuestionRenderer } from '@/components/course-studio/ComprehensiveQuestionRenderer';
 
 interface Props {
   blocks: CourseBlock[];
@@ -52,7 +43,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
   onQuestionAnswer,
   onCompleteLesson,
   userAnswers = {},
-  feedbackState = {}
+  feedbackState = {},
+  isStudentView = true
 }) => {
   // Filter out any invalid / dummy placeholder questions from rendering
   const validQuestions = questions.filter(
@@ -61,11 +53,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>(userAnswers);
   const [localFeedback, setLocalFeedback] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>(feedbackState);
-  const [submittingIds, setSubmittingIds] = useState<Set<string>>(new Set());
-  const [shakeId, setShakeId] = useState<string | null>(null);
-  
-  // Custom inputs for typed questions
-  const [textInputs, setTextInputs] = useState<Record<string, string>>({});
+  const [studentResponses, setStudentResponses] = useState<Record<string, StudentQuestionResponse>>({});
   const [soundEnabled, setSoundEnabled] = useState<boolean>(courseAudio.isSoundEnabled());
 
   // Sync external answers if component updates
@@ -81,97 +69,66 @@ export const CourseContentRenderer: React.FC<Props> = ({
     }
   }, [feedbackState]);
 
+  // Seed studentResponses from userAnswers/feedbackState if present
+  useEffect(() => {
+    if (Object.keys(userAnswers).length > 0 || Object.keys(feedbackState).length > 0) {
+      setStudentResponses(prev => {
+        const next = { ...prev };
+        validQuestions.forEach(q => {
+          const qId = q.id;
+          if (!qId) return;
+          const ans = userAnswers[qId];
+          const fb = feedbackState[qId];
+          if ((ans || fb) && !next[qId]) {
+            next[qId] = {
+              questionId: qId,
+              answer: ans || fb?.selected || '',
+              status: fb ? (fb.isCorrect ? 'correct' : 'incorrect') : 'unanswered',
+              score: fb?.isCorrect ? (q.points || 10) : 0,
+              maxScore: q.points || 10,
+              feedback: fb?.isCorrect ? 'Correct!' : 'Incorrect.'
+            };
+          }
+        });
+        return next;
+      });
+    }
+  }, [userAnswers, feedbackState, validQuestions]);
+
+  const handleStudentResponse = (res: StudentQuestionResponse, q: CourseQuestion) => {
+    setStudentResponses(prev => ({
+      ...prev,
+      [res.questionId]: res
+    }));
+
+    // Mirror to legacy callbacks for backward compatibility
+    setLocalAnswers(prev => ({ ...prev, [res.questionId]: typeof res.answer === 'string' ? res.answer : JSON.stringify(res.answer) }));
+    setLocalFeedback(prev => ({
+      ...prev,
+      [res.questionId]: {
+        isCorrect: res.status === 'correct',
+        showExplanation: true,
+        selected: typeof res.answer === 'string' ? res.answer : ''
+      }
+    }));
+
+    if (onQuestionAnswer) {
+      onQuestionAnswer(
+        res.questionId,
+        typeof res.answer === 'string' ? res.answer : JSON.stringify(res.answer),
+        res.status === 'correct',
+        res.score,
+        q
+      );
+    }
+  };
+
   const handleToggleSound = () => {
     const next = courseAudio.toggleSound();
     setSoundEnabled(next);
   };
 
-  // --------------------------------------------------------------------------
-  // ONE ATTEMPT EVALUATION ENGINE
-  // --------------------------------------------------------------------------
-  const handleEvaluateAnswer = (
-    question: CourseQuestion,
-    studentAnswer: string,
-    targetElement?: HTMLElement | null
-  ) => {
-    const qId = question.id;
 
-    // CRITICAL: Strict anti-retry lock - once answered or currently submitting, reject!
-    if (localAnswers[qId] || localFeedback[qId] || submittingIds.has(qId)) {
-      return;
-    }
-
-    // Mark as submitting immediately to prevent rapid double-clicks
-    setSubmittingIds(prev => new Set(prev).add(qId));
-    courseAudio.playSelectSound();
-
-    let isCorrect = false;
-    const cleanStudent = studentAnswer.trim().toLowerCase();
-    const cleanCorrect = (question.correct_answer || '').trim().toLowerCase();
-
-    if (question.question_type === 'multiple_choice' || question.question_type === 'true_false' || question.question_type === 'fill_blank') {
-      isCorrect = cleanStudent === cleanCorrect;
-    } else if (question.question_type === 'short_answer') {
-      const acceptable = Array.isArray(question.options)
-        ? question.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || '').trim().toLowerCase())
-        : [];
-      isCorrect = cleanStudent === cleanCorrect || acceptable.includes(cleanStudent);
-    } else if (question.question_type === 'ordering') {
-      // Compare sequence
-      const correctSeq = Array.isArray(question.options) ? question.options.join('|||').toLowerCase() : '';
-      isCorrect = studentAnswer.toLowerCase() === correctSeq;
-    } else {
-      isCorrect = cleanStudent === cleanCorrect;
-    }
-
-    const pointsAwarded = isCorrect ? (question.points || 10) : 0;
-
-    // Trigger audio and visual effects
-    if (isCorrect) {
-      setTimeout(() => {
-        courseAudio.playCorrectSound();
-        triggerConfettiBurst(targetElement, 36);
-      }, 50);
-    } else {
-      setShakeId(qId);
-      setTimeout(() => {
-        courseAudio.playIncorrectSound();
-      }, 50);
-      setTimeout(() => {
-        setShakeId(null);
-      }, 600);
-    }
-
-    // Permanently lock state in React memory
-    setLocalAnswers(prev => ({ ...prev, [qId]: studentAnswer }));
-    setLocalFeedback(prev => ({
-      ...prev,
-      [qId]: {
-        isCorrect,
-        showExplanation: true,
-        selected: studentAnswer
-      }
-    }));
-
-    setSubmittingIds(prev => {
-      const next = new Set(prev);
-      next.delete(qId);
-      return next;
-    });
-
-    if (onQuestionAnswer) {
-      onQuestionAnswer(qId, studentAnswer, isCorrect, pointsAwarded, question);
-    }
-
-    // Check if this was the last question in the set
-    const answeredCount = Object.keys(localAnswers).length + 1;
-    if (answeredCount >= validQuestions.length && validQuestions.length > 0) {
-      setTimeout(() => {
-        courseAudio.playCompleteSound();
-        triggerConfettiBurst(null, 50);
-      }, 800);
-    }
-  };
 
   const getYouTubeEmbedUrl = (urlOrId: string) => {
     if (!urlOrId) return '';
@@ -196,14 +153,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
   };
 
   // Progress metrics
-  const answeredTotal = Object.keys(localFeedback).length;
-  const correctTotal = Object.values(localFeedback).filter(f => f.isCorrect).length;
-  const incorrectTotal = answeredTotal - correctTotal;
+  const answeredTotal = Math.max(
+    Object.keys(localAnswers).length,
+    Object.keys(localFeedback).length,
+    Object.keys(studentResponses).length
+  );
+  const correctTotal = Object.values(studentResponses).filter(r => r.status === 'correct').length ||
+    Object.values(localFeedback).filter(f => f.isCorrect).length;
+  const incorrectTotal = Math.max(0, answeredTotal - correctTotal);
   const totalPointsPossible = validQuestions.reduce((sum, q) => sum + (q.points || 10), 0);
-  const earnedPoints = validQuestions.reduce((sum, q) => {
-    const fb = localFeedback[q.id];
-    return sum + (fb?.isCorrect ? (q.points || 10) : 0);
-  }, 0);
+  const earnedPoints = Object.values(studentResponses).reduce((sum, r) => sum + (r.score || 0), 0) ||
+    validQuestions.reduce((sum, q) => {
+      const fb = localFeedback[q.id];
+      return sum + (fb?.isCorrect ? (q.points || 10) : 0);
+    }, 0);
   const isAllAnswered = validQuestions.length > 0 && answeredTotal >= validQuestions.length;
 
   return (
@@ -433,6 +396,114 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
+          // G. STANDALONE EDITORIAL HEADING
+          if (block_type === 'heading') {
+            const h = content as any;
+            const level = h.level || 'h2';
+            const headingText = h.text || h.title || '';
+            if (!headingText.trim()) return null;
+
+            if (level === 'h1') {
+              return (
+                <h1 key={block.id || idx} className="text-2xl sm:text-3xl font-extrabold tracking-tight text-inherit pt-6 pb-2 text-left reader-h1">
+                  {headingText}
+                </h1>
+              );
+            }
+            if (level === 'h3') {
+              return (
+                <h3 key={block.id || idx} className="text-base sm:text-lg font-bold tracking-tight text-inherit pt-3 pb-1 text-left reader-h3">
+                  {headingText}
+                </h3>
+              );
+            }
+            return (
+              <h2 key={block.id || idx} className="text-xl sm:text-2xl font-bold tracking-tight text-inherit pt-4 pb-1.5 text-left reader-h2">
+                {headingText}
+              </h2>
+            );
+          }
+
+          // H. INSPIRATIONAL OR EDITORIAL QUOTE
+          if (block_type === 'quote') {
+            const q = content as any;
+            const quoteText = q.text || q.quote || '';
+            const author = q.author || q.source || '';
+            if (!quoteText.trim()) return null;
+
+            return (
+              <figure key={block.id || idx} className="w-full my-5 sm:my-7 p-4 sm:p-5 rounded-2xl bg-[var(--theme-surface-subtle)] border-l-4 border-l-[var(--theme-accent)] text-inherit space-y-2">
+                <blockquote className="text-sm sm:text-base font-serif italic leading-relaxed opacity-95">
+                  “{quoteText}”
+                </blockquote>
+                {author && (
+                  <figcaption className="text-xs font-bold text-theme-accent tracking-wide text-right">
+                    — {author}
+                  </figcaption>
+                )}
+              </figure>
+            );
+          }
+
+          // I. CALLOUT / INFO BOX
+          if (block_type === 'callout') {
+            const callout = content as any;
+            const variant = callout.variant || callout.type || 'tip';
+            const title = callout.title || (variant === 'tip' ? '💡 Tip' : variant === 'warning' ? '⚠️ Warning' : variant === 'important' ? '⭐ Important' : '📌 Note');
+            const calloutText = callout.text || callout.message || '';
+
+            let borderStyle = 'border-sky-300 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-950/30 text-sky-950 dark:text-sky-100';
+            if (variant === 'warning') borderStyle = 'border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100';
+            if (variant === 'important') borderStyle = 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100';
+
+            return (
+              <div key={block.id || idx} className={`w-full my-4 sm:my-6 p-4 sm:p-5 rounded-2xl border ${borderStyle} space-y-1.5 shadow-2xs`}>
+                <div className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                  <span>{title}</span>
+                </div>
+                <div className="text-xs sm:text-sm leading-relaxed">
+                  <FormattedLessonText text={calloutText} textScale={textScale} />
+                </div>
+              </div>
+            );
+          }
+
+          // J. EDITORIAL DIVIDER
+          if (block_type === 'divider') {
+            return (
+              <div key={block.id || idx} className="w-full flex items-center justify-center gap-3 my-6 sm:my-8 opacity-40 select-none">
+                <span className="w-16 h-px bg-current" />
+                <span className="text-xs text-theme-accent">✦</span>
+                <span className="w-16 h-px bg-current" />
+              </div>
+            );
+          }
+
+          // K. AUDIO PLAYER
+          if (block_type === 'audio') {
+            const audio = content as any;
+            const audioUrl = audio.url || '';
+            const title = audio.title || 'Audio Narration';
+
+            return (
+              <div key={block.id || idx} className="w-full my-4 sm:my-6 p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-primary)] flex items-center gap-4 shadow-xs">
+                <div className="w-10 h-10 rounded-xl bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] flex items-center justify-center shrink-0 shadow-xs">
+                  <Volume2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-theme-primary truncate">{title}</p>
+                  {audioUrl ? (
+                    <audio controls className="w-full h-8 mt-1.5 rounded-lg" src={audioUrl}>
+                      Your browser does not support audio playback.
+                    </audio>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 italic">No audio source configured</span>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
           return null;
         })}
       </div>
@@ -485,295 +556,19 @@ export const CourseContentRenderer: React.FC<Props> = ({
           {/* Interactive Question Cards Stream */}
           <div className="w-full space-y-5 sm:space-y-6">
             {validQuestions.map((q, qIndex) => {
-              const qId = q.id;
-              const feedback = localFeedback[qId];
-              const selectedAnswer = localAnswers[qId];
-              const isLocked = Boolean(selectedAnswer || feedback);
-              const isSubmitting = submittingIds.has(qId);
-              const isShaking = shakeId === qId;
-              const qType = (q.question_type || 'multiple_choice') as QuestionType;
-
-              // Normalize options array
-              const optionsList: string[] = Array.isArray(q.options)
-                ? q.options.map(opt => (typeof opt === 'string' ? opt : (opt as any)?.text || ''))
-                : [];
+              const effectiveQId = q.id || `q_${qIndex}`;
+              const qWithId = { ...q, id: effectiveQId };
+              const qResponse = studentResponses[effectiveQId];
 
               return (
-                <div
-                  key={qId || qIndex}
-                  id={`question-card-${qId}`}
-                  className={`w-full rounded-2xl sm:rounded-3xl p-4 sm:p-6 surface-card space-y-3.5 transition-all box-border border border-[var(--theme-border-primary)] shadow-xs ${
-                    isShaking ? 'animate-shake ring-2 ring-rose-400' : ''
-                  }`}
-                >
-                  {/* Question Card Header */}
-                  <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[var(--theme-border-subtle)]">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge">
-                        QUESTION {String(qIndex + 1).padStart(2, '0')}
-                      </span>
-                      <span className="text-[10px] font-black opacity-80 uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] reader-badge">
-                        {QUESTION_TYPE_LABELS[qType] || qType}
-                      </span>
-                    </div>
-
-                    <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black shrink-0 border border-[var(--theme-border-subtle)] reader-badge">
-                      {q.points || 10} PTS
-                    </span>
-                  </div>
-
-                  {/* Question Prompt */}
-                  <h4 className="font-bold text-theme-primary leading-snug text-left reader-question">
-                    {q.question_text}
-                  </h4>
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 1. MULTIPLE CHOICE ANSWER CARDS                          */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'multiple_choice' && (
-                    <div className="w-full space-y-2 pt-0.5">
-                      {optionsList.map((optText, optIdx) => {
-                        const letter = String.fromCharCode(65 + optIdx);
-                        const isSelected = selectedAnswer === optText;
-                        const isCorrectOption = optText.trim().toLowerCase() === (q.correct_answer || '').trim().toLowerCase();
-
-                        // Dynamic state styling
-                        let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
-                        let badgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-accent border border-[var(--theme-border-subtle)]';
-
-                        if (isLocked) {
-                          if (isSelected) {
-                            if (feedback?.isCorrect) {
-                              cardStyle = 'surface-answer-selected-correct';
-                              badgeStyle = 'bg-emerald-600 text-white shadow-xs border-0';
-                            } else {
-                              cardStyle = 'surface-answer-selected-incorrect';
-                              badgeStyle = 'bg-rose-600 text-white shadow-xs border-0';
-                            }
-                          } else if (!feedback?.isCorrect && isCorrectOption) {
-                            // Reveal the correct option if the student was wrong
-                            cardStyle = 'surface-answer-revealed-correct';
-                            badgeStyle = 'bg-emerald-500/20 text-emerald-800 border border-emerald-500/40';
-                          } else {
-                            cardStyle = 'opacity-40 border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)] text-theme-muted';
-                            badgeStyle = 'bg-[var(--theme-surface-subtle)] text-theme-muted';
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={optIdx}
-                            type="button"
-                            disabled={isLocked || isSubmitting}
-                            onClick={(e) => handleEvaluateAnswer(q, optText, e.currentTarget)}
-                            className={`w-full min-h-[52px] p-3.5 sm:p-4 rounded-2xl border text-left reader-option transition-all flex items-center gap-3.5 box-border ${
-                              isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
-                            } ${cardStyle}`}
-                          >
-                            <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-colors ${badgeStyle}`}>
-                              {isSelected ? (
-                                feedback?.isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />
-                              ) : (
-                                letter
-                              )}
-                            </span>
-
-                            <span className="flex-1 leading-relaxed break-words font-medium reader-option">
-                              {optText}
-                            </span>
-
-                            {/* Correct Answer Badge when revealed */}
-                            {isLocked && !feedback?.isCorrect && isCorrectOption && (
-                              <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-300 uppercase px-2.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50 shrink-0 border border-emerald-300/80 reader-badge">
-                                Correct Answer
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 2. TRUE / FALSE ANSWER CARDS                             */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'true_false' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      {['True', 'False'].map(choice => {
-                        const isSelected = selectedAnswer === choice;
-                        const isCorrectChoice = choice.toLowerCase() === (q.correct_answer || '').toLowerCase();
-
-                        let cardStyle = 'surface-answer-option text-theme-primary shadow-2xs';
-                        let icon = choice === 'True' ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" /> : <X className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />;
-
-                        if (isLocked) {
-                          if (isSelected) {
-                            if (feedback?.isCorrect) {
-                              cardStyle = 'surface-answer-selected-correct font-black';
-                            } else {
-                              cardStyle = 'surface-answer-selected-incorrect font-black';
-                            }
-                          } else if (!feedback?.isCorrect && isCorrectChoice) {
-                            cardStyle = 'surface-answer-revealed-correct font-black';
-                          } else {
-                            cardStyle = 'opacity-40 border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)] text-theme-muted';
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={choice}
-                            type="button"
-                            disabled={isLocked || isSubmitting}
-                            onClick={(e) => handleEvaluateAnswer(q, choice, e.currentTarget)}
-                            className={`min-h-[54px] p-3.5 sm:p-4 rounded-2xl border text-center font-black transition-all flex items-center justify-center gap-2.5 reader-option ${
-                              isLocked ? 'cursor-not-allowed' : 'cursor-pointer'
-                            } ${cardStyle}`}
-                          >
-                            <span>{icon}</span>
-                            <span className="uppercase tracking-wider font-extrabold text-sm sm:text-base">{choice}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 3. FILL IN THE BLANK / SHORT ANSWER                      */}
-                  {/* -------------------------------------------------------- */}
-                  {(qType === 'fill_blank' || qType === 'short_answer') && (
-                    <div className="pt-1 space-y-3">
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        <input
-                          type="text"
-                          disabled={isLocked || isSubmitting}
-                          value={textInputs[qId] || selectedAnswer || ''}
-                          onChange={e => setTextInputs(prev => ({ ...prev, [qId]: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' && textInputs[qId]?.trim() && !isLocked) {
-                              handleEvaluateAnswer(q, textInputs[qId], e.currentTarget);
-                            }
-                          }}
-                          placeholder={qType === 'fill_blank' ? 'Type the missing word...' : 'Type your answer here...'}
-                          className={`flex-1 px-4 py-3 rounded-2xl border reader-input font-medium transition-all ${
-                            isLocked
-                              ? feedback?.isCorrect
-                                ? 'bg-[var(--theme-success-bg)] border-2 border-[var(--theme-success-border)] text-[var(--theme-success-text)] font-bold'
-                                : 'bg-[var(--theme-error-bg)] border-2 border-[var(--theme-error-border)] text-[var(--theme-error-text)] font-bold'
-                              : 'input-theme text-theme-primary'
-                          }`}
-                        />
-                        {!isLocked && (
-                          <button
-                            type="button"
-                            disabled={!textInputs[qId]?.trim() || isSubmitting}
-                            onClick={(e) => handleEvaluateAnswer(q, textInputs[qId] || '', e.currentTarget)}
-                            className="min-h-[44px] px-6 py-3 rounded-2xl btn-theme-primary text-xs font-black transition-all cursor-pointer disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs reader-button"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Submit</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 4. ORDERING SEQUENCE (DRAG & ARRANGE SENTENCE BLOCKS)     */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'ordering' && (
-                    <DraggableOrderingQuestion
-                      question={q}
-                      isLocked={isLocked}
-                      isSubmitting={isSubmitting}
-                      selectedAnswer={selectedAnswer}
-                      feedback={feedback}
-                      onEvaluateAnswer={handleEvaluateAnswer}
-                    />
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 5. MATCHING PAIRS                                        */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'matching' && (
-                    <div className="pt-1 space-y-2">
-                      <div className="space-y-2">
-                        {optionsList.map((pairStr, pIdx) => (
-                          <div key={pIdx} className="flex items-center justify-between p-3.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-primary)] text-theme-primary text-xs reader-body">
-                            <span className="font-bold">{pairStr.split('->')[0]?.trim()}</span>
-                            <span className="text-theme-accent font-bold text-base px-2">⇄</span>
-                            <span className="font-medium text-theme-secondary">{pairStr.split('->')[1]?.trim()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 6. CLOZE PASSAGE (INTERACTIVE READING WITH BLANKS)       */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'cloze_passage' && (
-                    <ClozePassageQuestion
-                      question={q}
-                      isLocked={isLocked}
-                      isSubmitting={isSubmitting}
-                      selectedAnswer={selectedAnswer}
-                      feedback={feedback}
-                      onEvaluateAnswer={handleEvaluateAnswer}
-                    />
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* 7. ESSAY / DESCRIPTIVE RESPONSE (AI EVALUATED)           */}
-                  {/* -------------------------------------------------------- */}
-                  {qType === 'essay' && (
-                    <EssayQuestion
-                      question={q}
-                      isLocked={isLocked}
-                      isSubmitting={isSubmitting}
-                      selectedAnswer={selectedAnswer}
-                      feedback={feedback}
-                      onEvaluateAnswer={handleEvaluateAnswer}
-                    />
-                  )}
-
-                  {/* -------------------------------------------------------- */}
-                  {/* REFINED EXPLANATION CARD (Locked state for standard Qs)  */}
-                  {/* -------------------------------------------------------- */}
-                  {qType !== 'ordering' && qType !== 'cloze_passage' && qType !== 'essay' && feedback?.showExplanation && (
-                    <div
-                      className={`p-4 sm:p-5 rounded-2xl text-xs sm:text-sm leading-relaxed border transition-all animate-in fade-in duration-200 reader-explanation ${
-                        feedback.isCorrect
-                          ? 'bg-[var(--theme-success-bg)] border-[var(--theme-success-border)] text-[var(--theme-success-text)]'
-                          : 'bg-[var(--theme-error-bg)] border-[var(--theme-error-border)] text-[var(--theme-error-text)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 font-black mb-1.5">
-                        {feedback.isCorrect ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                            <span>✓ Correct! Great job!</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-                            <span>✕ Incorrect</span>
-                          </>
-                        )}
-                      </div>
-
-                      {q.explanation ? (
-                        <p className="opacity-95 leading-relaxed font-medium">{q.explanation}</p>
-                      ) : (
-                        <p className="opacity-95 leading-relaxed font-medium">
-                          {feedback.isCorrect
-                            ? 'You got this right! Great job following the lesson.'
-                            : `The correct answer was: ${q.correct_answer || 'See lesson content above.'}`}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ComprehensiveQuestionRenderer
+                  key={effectiveQId}
+                  question={qWithId}
+                  index={qIndex}
+                  response={qResponse}
+                  onAnswerSubmit={(res) => handleStudentResponse(res, qWithId)}
+                  isStudentView={isStudentView}
+                />
               );
             })}
           </div>

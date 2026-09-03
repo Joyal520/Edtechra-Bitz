@@ -222,7 +222,9 @@ Return STRICTLY valid JSON with no Markdown wrappers matching this schema:
           const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
           const parsed = parseCleanJson(rawText);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
-            return parsed;
+            return {
+              questions: ensureQuestionIntegrity(parsed.questions, difficulty)
+            };
           }
         }
       } catch (err) {
@@ -246,7 +248,9 @@ Return STRICTLY valid JSON with no Markdown wrappers matching this schema:
       });
       const parsed = JSON.parse(completion.choices[0].message.content);
       if (parsed && Array.isArray(parsed.questions)) {
-        return parsed;
+        return {
+          questions: ensureQuestionIntegrity(parsed.questions, difficulty)
+        };
       }
     } catch (openAiErr) {
       console.warn('[CourseStudioAI] OpenAI questions error:', openAiErr.message);
@@ -254,7 +258,29 @@ Return STRICTLY valid JSON with no Markdown wrappers matching this schema:
   }
 
   // 3. Fallback Local Question Synthesizer
-  return buildLocalRuleBasedQuestions(contentText, questionCount, subject, difficulty);
+  const localRes = buildLocalRuleBasedQuestions(contentText, questionCount, subject, difficulty);
+  return {
+    questions: ensureQuestionIntegrity(localRes?.questions || [], difficulty)
+  };
+}
+
+function ensureQuestionIntegrity(parsedQuestions, defaultDifficulty = 'medium') {
+  if (!Array.isArray(parsedQuestions)) return [];
+  return parsedQuestions.map((q, idx) => ({
+    id: q.id && String(q.id).length > 8 ? String(q.id) : crypto.randomUUID(),
+    question_text: String(q.question_text || q.question || 'Practice question').trim(),
+    question_type: q.question_type || q.type || 'multiple_choice',
+    options: Array.isArray(q.options) ? q.options : [],
+    correct_answer: String(q.correct_answer || q.answer || ''),
+    explanation: q.explanation || '',
+    skill: q.skill || 'Reading & Comprehension',
+    concept: q.concept || 'Key Takeaway',
+    difficulty: q.difficulty || defaultDifficulty,
+    points: typeof q.points === 'number' ? q.points : 10,
+    order_index: typeof q.order_index === 'number' ? q.order_index : idx,
+    passage: q.passage || '',
+    content_ref: q.content_ref || q.passage_ref || ''
+  }));
 }
 
 // ----------------------------------------------------------------------------

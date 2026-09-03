@@ -3199,7 +3199,10 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
         }
       });
 
+      const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+
       const toInsert = deduplicated.map((q, idx) => ({
+        id: isUuid(q.id) ? q.id : crypto.randomUUID(),
         episode_id,
         course_id: courseId,
         block_id: q.block_id || null,

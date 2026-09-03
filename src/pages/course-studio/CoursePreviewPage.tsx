@@ -598,6 +598,7 @@ export const CoursePreviewPage: React.FC = () => {
                 onChangeBlocks={handleBlocksChange}
                 onChangeQuestions={handleQuestionsChange}
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
+                themeId={themeId}
               />
             ) : (
               <CourseContentRenderer

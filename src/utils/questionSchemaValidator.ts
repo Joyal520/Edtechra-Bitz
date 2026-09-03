@@ -59,14 +59,28 @@ export interface ValidationResult {
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   multiple_choice: 'Multiple Choice',
+  multiple_select: 'Multiple Select',
   true_false: 'True / False',
+  yes_no: 'Yes / No',
   fill_blank: 'Fill in the Blank',
+  multiple_fill_blanks: 'Multiple Fill in the Blanks',
   matching: 'Matching',
+  matching_pairs: 'Matching Pairs',
   sentence_builder: 'Sentence Builder',
+  sentence_reordering: 'Sentence Reordering',
+  word_ordering: 'Word Ordering',
   ordering: 'Ordering Sequence',
+  story_sequence: 'Story Sequence',
+  image_selection: 'Image Selection',
+  dropdown_selection: 'Dropdown Selection',
+  drag_to_complete: 'Drag to Complete',
+  drag_drop_matching: 'Drag & Drop Matching',
+  categorisation: 'Categorisation',
+  odd_one_out: 'Odd One Out',
   short_answer: 'Short Answer',
   cloze_passage: 'Cloze Passage',
-  essay: 'Essay / Descriptive Response'
+  essay: 'Essay / Descriptive Response',
+  comprehension: 'Comprehension Question'
 };
 
 /**
@@ -98,7 +112,7 @@ export function getPlanItemTotalMarks(item: QuestionPlanItem): number {
   return (item.count || 1) * points;
 }
 
-const TYPE_EXAMPLE_TEMPLATES: Record<QuestionType, any> = {
+const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
   multiple_choice: {
     type: 'multiple_choice',
     questions: [

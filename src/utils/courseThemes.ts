@@ -21,6 +21,10 @@ export interface ThemePreset {
   accent: string;
   badgeBg: string;
   isDark?: boolean;
+  // Hex definitions for WCAG contrast calculation
+  bgHex: string;
+  cardBgHex: string;
+  textHex: string;
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
@@ -36,7 +40,10 @@ export const THEME_PRESETS: ThemePreset[] = [
     headerBg: 'bg-[#090e17]/95 backdrop-blur-md',
     accent: '#38bdf8',
     badgeBg: 'bg-[#38bdf8]/15 text-[#38bdf8]',
-    isDark: true
+    isDark: true,
+    bgHex: '#090e17',
+    cardBgHex: '#111b2b',
+    textHex: '#f8fafc'
   },
   {
     id: 'ocean-blue',
@@ -50,7 +57,10 @@ export const THEME_PRESETS: ThemePreset[] = [
     headerBg: 'bg-[#0a192f]/95 backdrop-blur-md',
     accent: '#38bdf8',
     badgeBg: 'bg-sky-500/15 text-[#38bdf8]',
-    isDark: true
+    isDark: true,
+    bgHex: '#0a192f',
+    cardBgHex: '#0f243d',
+    textHex: '#f0f9ff'
   },
   {
     id: 'morning-mist',
@@ -64,7 +74,10 @@ export const THEME_PRESETS: ThemePreset[] = [
     headerBg: 'bg-[#eaf5ff]/95 backdrop-blur-md',
     accent: '#026fc3',
     badgeBg: 'bg-sky-500/10 text-[#026fc3]',
-    isDark: false
+    isDark: false,
+    bgHex: '#eaf5ff',
+    cardBgHex: '#ffffff',
+    textHex: '#0f172a'
   },
   {
     id: 'aurora-blue',
@@ -78,7 +91,10 @@ export const THEME_PRESETS: ThemePreset[] = [
     headerBg: 'bg-[#0b112c]/95 backdrop-blur-md',
     accent: '#60a5fa',
     badgeBg: 'bg-blue-500/15 text-[#60a5fa]',
-    isDark: true
+    isDark: true,
+    bgHex: '#0b112c',
+    cardBgHex: '#131c42',
+    textHex: '#f8fafc'
   },
   {
     id: 'cloud-light',
@@ -92,7 +108,10 @@ export const THEME_PRESETS: ThemePreset[] = [
     headerBg: 'bg-[#f8fafc]/95 backdrop-blur-md',
     accent: '#026fc3',
     badgeBg: 'bg-[#026fc3]/10 text-[#026fc3]',
-    isDark: false
+    isDark: false,
+    bgHex: '#f8fafc',
+    cardBgHex: '#ffffff',
+    textHex: '#0f172a'
   }
 ];
 
@@ -104,4 +123,15 @@ export function getThemePreset(id?: string): ThemePreset {
   if (id === 'night-dark') return THEME_PRESETS[0];
   if (id === 'edtechra-sky') return THEME_PRESETS[4];
   return THEME_PRESETS.find(p => p.id === id) || THEME_PRESETS[0];
+}
+
+import { isDarkBackground } from './contrastValidator';
+
+/**
+ * Checks contrast and returns guaranteed readable text color for the active theme surface
+ */
+export function getThemeReadableTextColor(themeId?: string, isCardSurface = true): string {
+  const theme = getThemePreset(themeId);
+  const surfaceHex = isCardSurface ? theme.cardBgHex : theme.bgHex;
+  return isDarkBackground(surfaceHex) ? '#f8fafc' : '#0f172a';
 }

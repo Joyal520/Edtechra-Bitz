@@ -40,7 +40,7 @@ async function fetchImageAsBase64(imageUrl) {
 /**
  * Deterministic Heuristic Fallback Evaluator when AI keys are offline
  */
-function evaluateEssayDeterministically({ question_text, student_response, min_words = 50, max_words = 150, evaluation_criteria = [] }) {
+export function evaluateEssayDeterministically({ question_text, student_response, min_words = 50, max_words = 150, evaluation_criteria = [] }) {
   const text = (student_response || '').trim();
   const words = text ? text.split(/\s+/).filter(w => w.length > 0) : [];
   const wordCount = words.length;
