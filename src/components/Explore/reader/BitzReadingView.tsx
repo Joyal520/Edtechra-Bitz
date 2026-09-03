@@ -59,7 +59,7 @@ export const BitzReadingView: React.FC<BitzReadingViewProps> = ({
       />
 
       {/* 2. Main Reading Content Container */}
-      <div className="pt-6 sm:pt-8 flex-1">
+      <div className="pt-4 sm:pt-8 flex-1">
         {/* ================================================================ */}
         {/* DESKTOP LAYOUT (>= 1024px): TWO COLUMNS                          */}
         {/* ================================================================ */}
@@ -104,7 +104,7 @@ export const BitzReadingView: React.FC<BitzReadingViewProps> = ({
         {/* ================================================================ */}
         {/* MOBILE & TABLET LAYOUT (< 1024px): ADAPTIVE SINGLE COLUMN        */}
         {/* ================================================================ */}
-        <div className="lg:hidden space-y-4 sm:space-y-5">
+        <div className="lg:hidden space-y-3.5 sm:space-y-4">
           {/* Compact Visual Image (placed before Q&A cards) */}
           {bitz.visual_url && (
             <BitzReadingVisual

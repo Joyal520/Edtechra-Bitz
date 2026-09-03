@@ -115,7 +115,7 @@ export const BitzReadingHeader: React.FC<BitzReadingHeaderProps> = ({
       </div>
 
       {/* 2. Category Badge & Progress Badges Row */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
         {/* Category Badge with Colored Bullet Dot */}
         <div className="inline-flex items-center gap-2">
           <span
@@ -132,15 +132,15 @@ export const BitzReadingHeader: React.FC<BitzReadingHeaderProps> = ({
         </div>
 
         {/* Right Badges: Reading 1 of 1 and +XP */}
-        <div className="flex items-center gap-2">
+        <div className="inline-flex items-center gap-1.5 sm:gap-2">
           {/* Reading 1 of 1 Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#071733]/90 border border-sky-900/40 text-sky-300 text-xs font-ui font-semibold shadow-xs">
+          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-[#071733]/90 border border-sky-900/40 text-sky-300 text-xs font-ui font-semibold shadow-xs">
             <BookOpen className="w-3.5 h-3.5 text-sky-400 stroke-[2.2]" />
             <span>Reading 1 of 1</span>
           </div>
 
           {/* +XP Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#071733]/90 border border-sky-900/40 text-amber-300 text-xs font-ui font-bold shadow-xs">
+          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-[#071733]/90 border border-sky-900/40 text-amber-300 text-xs font-ui font-bold shadow-xs">
             <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 stroke-[1.5]" />
             <span>+{xpValue} XP</span>
           </div>

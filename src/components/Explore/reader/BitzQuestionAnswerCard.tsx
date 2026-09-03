@@ -1,14 +1,13 @@
 // ============================================================================
-// EDTECHRA-BITZ: BitzQuestionAnswerCard
-// Renders one of the 3 learning cards with progressive accent colors:
+// EDTECHRA-BITZ: BitzQuestionAnswerCard (Refined Reading UI)
+// Renders one of the 3 learning cards with progressive numbered badges:
 // 01: Magenta / Pink
 // 02: Cyan / Blue
 // 03: Green / Emerald
-// Left-aligned, stylish typography (Lora for answers, Manrope for questions).
+// Clean, icon-free cards with strong question headings and justified Lora answers.
 // ============================================================================
 
 import React from 'react';
-import { Lightbulb, Coffee, TrendingUp } from 'lucide-react';
 import { BitzReadingSection } from '@/types/knowledgeBitz';
 import { useBitzTheme } from '@/context/BitzThemeContext';
 
@@ -20,13 +19,9 @@ interface BitzQuestionAnswerCardProps {
 interface CardAccent {
   numberBg: string;
   numberText: string;
-  iconBg: string;
-  iconBorder: string;
-  iconColor: string;
   cardBorder: string;
   hoverBorder: string;
   glowClass: string;
-  IconComponent: React.ComponentType<{ className?: string }>;
 }
 
 const CARD_ACCENTS: CardAccent[] = [
@@ -34,37 +29,25 @@ const CARD_ACCENTS: CardAccent[] = [
   {
     numberBg: 'bg-[#db2777]', // rose/pink-600
     numberText: 'text-white',
-    iconBg: 'bg-pink-950/50',
-    iconBorder: 'border-pink-500/30',
-    iconColor: 'text-pink-300',
     cardBorder: 'border-pink-500/20',
     hoverBorder: 'hover:border-pink-400/40',
-    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(219,39,119,0.15)]',
-    IconComponent: Lightbulb
+    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(219,39,119,0.15)]'
   },
   // Question 2: Cyan / Blue Accent
   {
     numberBg: 'bg-[#0284c7]', // sky-600
     numberText: 'text-white',
-    iconBg: 'bg-sky-950/50',
-    iconBorder: 'border-sky-500/30',
-    iconColor: 'text-sky-300',
     cardBorder: 'border-sky-500/20',
     hoverBorder: 'hover:border-sky-400/40',
-    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(2,132,199,0.15)]',
-    IconComponent: Coffee
+    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(2,132,199,0.15)]'
   },
   // Question 3: Green / Teal Accent
   {
     numberBg: 'bg-[#059669]', // emerald-600
     numberText: 'text-white',
-    iconBg: 'bg-emerald-950/50',
-    iconBorder: 'border-emerald-500/30',
-    iconColor: 'text-emerald-300',
     cardBorder: 'border-emerald-500/20',
     hoverBorder: 'hover:border-emerald-400/40',
-    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(5,150,105,0.15)]',
-    IconComponent: TrendingUp
+    glowClass: 'hover:shadow-[0_4px_24px_-4px_rgba(5,150,105,0.15)]'
   }
 ];
 
@@ -74,68 +57,58 @@ export const BitzQuestionAnswerCard: React.FC<BitzQuestionAnswerCardProps> = ({
 }) => {
   const { readingSettings } = useBitzTheme();
   const accent = CARD_ACCENTS[index % CARD_ACCENTS.length];
-  const Icon = accent.IconComponent;
 
   // Format 1 -> "01", 2 -> "02", 3 -> "03"
   const formattedNumber = String(section.number || index + 1).padStart(2, '0');
 
-  // Dynamic font sizing adhering strictly to specification:
-  // Desktop: Answer 19–21px (medium ~20px), Question 20–24px (medium ~22px)
-  // Mobile:  Answer 17–19px (medium ~18px), Question 18–21px (medium ~19px)
+  // Dynamic font sizing:
+  // Desktop: Answer ~18px, Question ~20–22px
+  // Mobile:  Answer ~16–17px, Question ~17–19px
   const textSize = readingSettings?.textSize || 'medium';
 
-  let questionSizeClass = 'text-[18px] sm:text-[21px]';
-  let answerSizeClass = 'text-[17px] sm:text-[19px]';
+  let questionSizeClass = 'text-[17px] sm:text-[21px]';
+  let answerSizeClass = 'text-[16px] sm:text-[18px]';
 
   if (textSize === 'small') {
-    questionSizeClass = 'text-[17px] sm:text-[19px]';
-    answerSizeClass = 'text-[16px] sm:text-[18px]';
+    questionSizeClass = 'text-[16px] sm:text-[19px]';
+    answerSizeClass = 'text-[15px] sm:text-[17px]';
   } else if (textSize === 'large') {
-    questionSizeClass = 'text-[20px] sm:text-[23px]';
-    answerSizeClass = 'text-[18px] sm:text-[21px]';
+    questionSizeClass = 'text-[18px] sm:text-[22px]';
+    answerSizeClass = 'text-[17px] sm:text-[19px]';
   } else if (textSize === 'xlarge') {
-    questionSizeClass = 'text-[22px] sm:text-[25px]';
-    answerSizeClass = 'text-[20px] sm:text-[23px]';
+    questionSizeClass = 'text-[19px] sm:text-[24px]';
+    answerSizeClass = 'text-[18px] sm:text-[21px]';
   }
 
   return (
     <article
-      className={`group relative rounded-2xl sm:rounded-3xl p-5 sm:p-6 bg-gradient-to-br from-[#06142a]/95 via-[#071833]/90 to-[#040e24]/95 border ${accent.cardBorder} ${accent.hoverBorder} ${accent.glowClass} transition-all duration-200 hover:-translate-y-0.5 shadow-md shadow-black/20 select-text`}
+      className={`group relative rounded-2xl sm:rounded-3xl p-4 sm:p-5 sm:p-6 bg-gradient-to-br from-[#06142a]/95 via-[#071833]/90 to-[#040e24]/95 border ${accent.cardBorder} ${accent.hoverBorder} ${accent.glowClass} transition-all duration-200 hover:-translate-y-0.5 shadow-md shadow-black/20 select-text`}
       aria-label={`Question ${formattedNumber}: ${section.question}`}
     >
-      {/* Header Row: Number Badge + Question + Accent Icon */}
-      <div className="flex items-start justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
-        <div className="flex items-start gap-3 sm:gap-4 flex-1">
-          {/* Circular Number Badge (01, 02, 03) */}
-          <div
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full shrink-0 flex items-center justify-center font-ui font-black text-xs sm:text-sm tracking-tight shadow-sm ${accent.numberBg} ${accent.numberText}`}
-            aria-hidden="true"
-          >
-            {formattedNumber}
-          </div>
-
-          {/* Question: Bold White Manrope Typography */}
-          <h2
-            className={`font-ui font-bold text-white leading-snug tracking-tight text-left flex-1 pt-0.5 ${questionSizeClass}`}
-          >
-            {section.question}
-          </h2>
-        </div>
-
-        {/* Small Topic Category Icon on Right */}
+      {/* Question Row: Numbered Circle (Left) + Question (Full remaining width, NO right icon) */}
+      <div className="flex items-start gap-3 sm:gap-3.5 mb-2.5 sm:mb-3">
+        {/* Compact Circular Number Badge (34-36px mobile, 40-42px desktop) */}
         <div
-          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full shrink-0 flex items-center justify-center border shadow-xs ${accent.iconBg} ${accent.iconBorder} ${accent.iconColor}`}
+          className={`w-[34px] h-[34px] sm:w-[40px] sm:h-[40px] rounded-full shrink-0 flex items-center justify-center font-ui font-black text-xs sm:text-sm tracking-tight shadow-xs mt-0.5 sm:mt-0 ${accent.numberBg} ${accent.numberText}`}
           aria-hidden="true"
         >
-          <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.2]" />
+          {formattedNumber}
         </div>
+
+        {/* Question Heading: Strong, bold white, natural wrapping across available width */}
+        <h2
+          className={`font-ui font-bold text-white leading-[1.28] sm:leading-[1.32] tracking-tight text-left flex-1 pt-0.5 sm:pt-1 ${questionSizeClass}`}
+        >
+          {section.question}
+        </h2>
       </div>
 
-      {/* Answer Body: Lora Serif, STRICTLY Left-Aligned, Line-Height 1.7 */}
-      <div className="pl-0 sm:pl-12 sm:pr-2">
+      {/* Answer Body: Lora Serif, PROPERLY JUSTIFIED on both desktop & mobile */}
+      {/* Pl-0 on mobile for maximum readable text column; sm:pl-[50px] on desktop to align under question */}
+      <div className="pl-0 sm:pl-[50px]">
         <p
-          className={`font-reading text-slate-200 leading-[1.72] tracking-normal text-left font-normal select-text ${answerSizeClass}`}
-          style={{ textAlign: 'left' }}
+          className={`font-reading text-slate-200 leading-[1.62] sm:leading-[1.72] tracking-normal font-normal select-text text-justify hyphens-auto ${answerSizeClass}`}
+          style={{ textAlign: 'justify', textJustify: 'inter-word' }}
         >
           {section.answer}
         </p>
