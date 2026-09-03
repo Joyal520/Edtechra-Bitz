@@ -17,6 +17,10 @@ import {
   AILessonGenerationResponse,
   AIQuestionGenerationPayload,
   AIQuestionGenerationResponse,
+  AICoursePlanPayload,
+  AICoursePlanResponse,
+  AIStructuredLessonPayload,
+  AIStructuredLessonResponse,
   CourseAssignmentSettings,
   EssayEvaluationResult
 } from '@/types/courseStudio';
@@ -404,6 +408,30 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to improve text.');
+    return json.data;
+  },
+
+  async generateCoursePlanWithAI(payload: AICoursePlanPayload): Promise<AICoursePlanResponse> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/ai/generate-course-plan`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to generate course plan with AI.');
+    return json.data;
+  },
+
+  async generateStructuredLessonWithAI(payload: AIStructuredLessonPayload): Promise<AIStructuredLessonResponse> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/ai/generate-structured-lesson`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to generate structured lesson with AI.');
     return json.data;
   },
 

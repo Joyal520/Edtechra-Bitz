@@ -5,7 +5,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   BookOpen,
@@ -18,13 +18,19 @@ import {
   Map,
   Lock,
   Check,
-  CheckCircle2
+  CheckCircle2,
+  Edit3,
+  Eye,
+  Send
 } from 'lucide-react';
-import { Course, CourseEpisode, RoadmapLessonItem } from '@/types/courseStudio';
+import { Course, CourseEpisode, RoadmapLessonItem, CourseBlock, CourseQuestion } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { CourseContentRenderer } from '@/components/course-studio/CourseContentRenderer';
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
+import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
+import { DirectLessonEditor } from '@/components/course-studio/DirectLessonEditor';
+import { AILessonAssistantModal } from '@/components/course-studio/AILessonAssistantModal';
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
@@ -32,13 +38,26 @@ import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
 
 export const CoursePreviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
+  const [isEditMode, setIsEditMode] = useState<boolean>(() => searchParams.get('edit') === '1');
   const [showDrawer, setShowDrawer] = useState(false);
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+
+  // Active In-Place Editing State
+  const [currentBlocks, setCurrentBlocks] = useState<CourseBlock[]>([]);
+  const [currentQuestions, setCurrentQuestions] = useState<CourseQuestion[]>([]);
+  const [currentEpisodeTitle, setCurrentEpisodeTitle] = useState('');
+  const [currentEpisodeMins, setCurrentEpisodeMins] = useState(15);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const [themeId, setThemeId] = useState<string>(() => {
     return localStorage.getItem('edtechra_course_theme') || DEFAULT_THEME_ID;
   });
@@ -94,6 +113,81 @@ export const CoursePreviewPage: React.FC = () => {
       const progress = scrollHeight <= clientHeight ? 100 : Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
       setScrollProgress(progress);
     }
+  };
+
+  // Synchronize active episode content when selectedEpisode changes
+  useEffect(() => {
+    if (selectedEpisode) {
+      setCurrentBlocks(selectedEpisode.blocks || []);
+      setCurrentQuestions(selectedEpisode.questions || []);
+      setCurrentEpisodeTitle(selectedEpisode.title || '');
+      setCurrentEpisodeMins(selectedEpisode.estimated_minutes || 15);
+      setSavingStatus('saved');
+    }
+  }, [selectedEpisode?.id]);
+
+  // Debounced Autosave to Supabase (saves blocks, questions & metadata)
+  const triggerAutosave = (
+    nextBlocks: CourseBlock[],
+    nextQuestions: CourseQuestion[],
+    nextTitle: string,
+    nextMins: number
+  ) => {
+    if (!course || !selectedEpisode) return;
+    setSavingStatus('unsaved');
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      setSavingStatus('saving');
+      try {
+        await Promise.all([
+          courseStudioService.saveEpisodeBlocks(course.id, selectedEpisode.id, nextBlocks),
+          courseStudioService.saveEpisodeQuestions(course.id, selectedEpisode.id, nextQuestions),
+          courseStudioService.updateEpisode(course.id, selectedEpisode.id, {
+            title: nextTitle,
+            estimated_minutes: nextMins
+          })
+        ]);
+
+        // Sync local selectedEpisode state so preview and edit are instantly identical
+        setSelectedEpisode(prev =>
+          prev
+            ? {
+                ...prev,
+                title: nextTitle,
+                estimated_minutes: nextMins,
+                blocks: nextBlocks,
+                questions: nextQuestions
+              }
+            : null
+        );
+
+        setSavingStatus('saved');
+      } catch (err) {
+        console.error('[CoursePreview] Autosave error:', err);
+        setSavingStatus('unsaved');
+      }
+    }, 800);
+  };
+
+  const handleBlocksChange = (newBlocks: CourseBlock[]) => {
+    setCurrentBlocks(newBlocks);
+    triggerAutosave(newBlocks, currentQuestions, currentEpisodeTitle, currentEpisodeMins);
+  };
+
+  const handleQuestionsChange = (newQuestions: CourseQuestion[]) => {
+    setCurrentQuestions(newQuestions);
+    triggerAutosave(currentBlocks, newQuestions, currentEpisodeTitle, currentEpisodeMins);
+  };
+
+  const handleUpdateEpisodeTitle = (newTitle: string) => {
+    setCurrentEpisodeTitle(newTitle);
+    triggerAutosave(currentBlocks, currentQuestions, newTitle, currentEpisodeMins);
+  };
+
+  const handleUpdateEpisodeMins = (newMins: number) => {
+    setCurrentEpisodeMins(newMins);
+    triggerAutosave(currentBlocks, currentQuestions, currentEpisodeTitle, newMins);
   };
 
   // Font size scale cycler with persistence
@@ -233,17 +327,53 @@ export const CoursePreviewPage: React.FC = () => {
       {/* 2. COMPACT EDITORIAL TOP BAR */}
       <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b border-[var(--theme-border-subtle)] text-theme-primary transition-colors`}>
         
-        {/* Left: ← Course & Roadmap Toggle */}
+        {/* Left: ← Exit to Studio, Edit/Preview Mode Switch, Roadmap Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => navigate(`/course-studio/${course.id}`)}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
-            title="Exit Preview"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            title="Return to Studio Outline"
           >
             <ArrowLeft className="w-4 h-4 text-theme-accent" />
-            <span className="hidden sm:inline">Editor</span>
+            <span className="hidden sm:inline">Studio</span>
           </button>
+
+          {/* DUAL MODE SWITCH: [ ✏️ Edit ] [ 👁️ Preview ] */}
+          <div className="flex items-center rounded-xl bg-[var(--theme-surface-subtle)] p-0.5 border border-[var(--theme-border-subtle)] shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditMode(true);
+                setSearchParams({ edit: '1' });
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                isEditMode
+                  ? 'bg-[#026fc3] text-white shadow-xs font-black'
+                  : 'text-theme-primary hover:bg-current/10'
+              }`}
+              title="Interactive Live Lesson Editor"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditMode(false);
+                setSearchParams({});
+              }}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                !isEditMode
+                  ? 'bg-white/90 dark:bg-stone-800 text-slate-900 dark:text-white shadow-xs font-black'
+                  : 'text-theme-primary hover:bg-current/10'
+              }`}
+              title="Clean Student Preview View"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Preview</span>
+            </button>
+          </div>
 
           {/* Toggle between Reading & Roadmap */}
           <button
@@ -271,17 +401,57 @@ export const CoursePreviewPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Center: Chapter Info */}
-        <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
-          <p className="text-xs font-serif italic text-theme-secondary truncate">
-            {viewMode === 'roadmap'
-              ? `${course.title} • Roadmap`
-              : `Lesson ${currentInfo?.epIndex || 1} • ${selectedEpisode.title}`}
-          </p>
+        {/* Center: Autosave Status & AI Assistant (In Edit Mode) or Chapter Info */}
+        <div className="flex items-center gap-2">
+          {isEditMode ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-600 dark:text-slate-300 border border-stone-200/60 flex items-center gap-1">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    savingStatus === 'saving'
+                      ? 'bg-amber-400 animate-ping'
+                      : savingStatus === 'unsaved'
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                />
+                <span className="capitalize">{savingStatus}</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setAiAssistantOpen(true)}
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-xs font-black shadow-xs cursor-pointer border border-sky-300/30"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                <span>✨ AI Designer</span>
+              </button>
+            </div>
+          ) : (
+            <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
+              <p className="text-xs font-serif italic text-theme-secondary truncate">
+                {viewMode === 'roadmap'
+                  ? `${course.title} • Roadmap`
+                  : `Lesson ${currentInfo?.epIndex || 1} • ${selectedEpisode.title}`}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Right: Progress %, Font Size, Theme Popover, Bookmark */}
+        {/* Right: Publish Button (Edit Mode), Progress %, Font Size, Theme Popover */}
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={() => setPublishModalOpen(true)}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs font-black shadow-xs cursor-pointer"
+              title="Publish course & assign to classrooms"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Publish</span>
+            </button>
+          )}
+
           {/* Reading % Badge */}
           <span className="text-[11px] font-mono font-bold opacity-80 px-1 py-0.5 text-theme-primary">
             {viewMode === 'roadmap' ? `${roadmapData?.progressPercent || 0}%` : `${scrollProgress}%`}
@@ -371,7 +541,21 @@ export const CoursePreviewPage: React.FC = () => {
                 <span className="opacity-40">•</span>
                 <span className="opacity-80 text-current flex items-center gap-1">
                   <Clock className="w-3 h-3 text-[#026fc3]" />
-                  {selectedEpisode.estimated_minutes || 15} min read
+                  {isEditMode ? (
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={currentEpisodeMins}
+                        onChange={e => handleUpdateEpisodeMins(parseInt(e.target.value, 10) || 15)}
+                        className="w-12 px-1 py-0.5 text-xs font-bold rounded border border-stone-300 bg-white text-slate-800"
+                      />
+                      <span>mins</span>
+                    </span>
+                  ) : (
+                    <span>{selectedEpisode.estimated_minutes || 15} min read</span>
+                  )}
                 </span>
                 {isEpisodeCompleted && (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30">
@@ -380,9 +564,24 @@ export const CoursePreviewPage: React.FC = () => {
                 )}
               </div>
 
-              <h1 className="font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title">
-                {selectedEpisode.title}
-              </h1>
+              {isEditMode ? (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={currentEpisodeTitle}
+                    onChange={e => handleUpdateEpisodeTitle(e.target.value)}
+                    placeholder="Lesson Title"
+                    className="w-full text-2xl sm:text-3xl font-black tracking-tight text-inherit bg-transparent border-b-2 border-dashed border-[#026fc3]/40 focus:border-[#026fc3] focus:outline-none pb-1"
+                  />
+                  <p className="text-[11px] text-slate-400 font-sans">
+                    Edit lesson title directly. Changes autosave to course curriculum.
+                  </p>
+                </div>
+              ) : (
+                <h1 className="font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title">
+                  {selectedEpisode.title}
+                </h1>
+              )}
 
               {course.short_description && (
                 <p className="text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl reader-quote">
@@ -391,21 +590,31 @@ export const CoursePreviewPage: React.FC = () => {
               )}
             </header>
 
-            {/* SHARED EDITORIAL CONTENT RENDERER */}
-            <CourseContentRenderer
-              blocks={selectedEpisode.blocks || []}
-              questions={selectedEpisode.questions || []}
-              isStudentView={true}
-              textScale={textScale}
-              onCompleteLesson={handleCompleteEpisode}
-            />
+            {/* DUAL CONTENT ENGINE: DIRECT PREVIEW EDITOR vs CLEAN STUDENT VIEW */}
+            {isEditMode ? (
+              <DirectLessonEditor
+                blocks={currentBlocks}
+                questions={currentQuestions}
+                onChangeBlocks={handleBlocksChange}
+                onChangeQuestions={handleQuestionsChange}
+                onOpenAiAssistant={() => setAiAssistantOpen(true)}
+              />
+            ) : (
+              <CourseContentRenderer
+                blocks={selectedEpisode.blocks || []}
+                questions={selectedEpisode.questions || []}
+                isStudentView={true}
+                textScale={textScale}
+                onCompleteLesson={handleCompleteEpisode}
+              />
+            )}
 
             {/* MINIMAL EDITORIAL LESSON FOOTER */}
             <footer className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 pt-8 sm:pt-12 mt-8 sm:mt-12 border-t border-current/15">
               <button
                 type="button"
                 onClick={() => setViewMode('roadmap')}
-                className="text-xs font-bold text-[#026fc3] hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-[#026fc3] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Map className="w-3.5 h-3.5" />
                 <span>View Course Roadmap</span>
@@ -536,6 +745,29 @@ export const CoursePreviewPage: React.FC = () => {
         totalLessonsCount={roadmapData?.totalLessons || 1}
         dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
         onContinue={handleAfterCelebrationContinue}
+      />
+
+      {/* 6. IN-PREVIEW AI LESSON ASSISTANT MODAL */}
+      <AILessonAssistantModal
+        isOpen={aiAssistantOpen}
+        onClose={() => setAiAssistantOpen(false)}
+        courseTitle={course.title}
+        unitTitle={currentInfo?.unitTitle || 'Unit 1'}
+        lessonTitle={currentEpisodeTitle}
+        currentLessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
+        onApplyBlocks={handleBlocksChange}
+        onApplyQuestions={handleQuestionsChange}
+      />
+
+      {/* 7. COURSE PUBLISH & ASSIGN MODAL */}
+      <CoursePublishModal
+        isOpen={publishModalOpen}
+        onClose={() => setPublishModalOpen(false)}
+        course={course}
+        onSuccess={() => {
+          setPublishModalOpen(false);
+          setCourse(prev => (prev ? { ...prev, status: 'published' } : null));
+        }}
       />
 
     </div>

@@ -495,3 +495,69 @@ export interface AIQuestionGenerationResponse {
     points: number;
   }>;
 }
+
+export interface AICoursePlanEpisode {
+  title: string;
+  objective: string;
+  can_do?: string;
+  focus_skills?: string[];
+}
+
+export interface AICoursePlanUnit {
+  title: string;
+  description: string;
+  episodes: AICoursePlanEpisode[];
+}
+
+export interface AICoursePlanPayload {
+  prompt: string;
+  target_level?: string;
+  age_group?: string;
+  units_count?: number;
+  lessons_per_unit?: number;
+  learning_styles?: string[];
+  subject?: string;
+}
+
+export interface AICoursePlanResponse {
+  title: string;
+  short_description: string;
+  subject: string;
+  grade_level: string;
+  target_level?: string;
+  age_group?: string;
+  units: AICoursePlanUnit[];
+}
+
+export interface AIStructuredLessonPayload {
+  course_title: string;
+  unit_title: string;
+  lesson_title: string;
+  target_level?: string;
+  objective?: string;
+  subject?: string;
+  instructions?: string;
+}
+
+export interface AIStructuredLessonResponse {
+  title: string;
+  summary: string;
+  can_do?: string;
+  estimated_minutes?: number;
+  blocks: Array<{
+    block_type: BlockType;
+    content: BlockContent;
+  }>;
+  suggested_questions?: Array<{
+    question_text: string;
+    question_type: QuestionType;
+    options: string[];
+    correct_answer: string;
+    explanation: string;
+    skill: string;
+    concept: string;
+    difficulty: DifficultyLevel;
+    points: number;
+  }>;
+}
+

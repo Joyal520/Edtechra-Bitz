@@ -23,6 +23,7 @@ import { courseStudioService } from '@/services/courseStudioService';
 import { useAuth } from '@/context/AuthContext';
 import { CreateCourseModal } from '@/components/course-studio/CreateCourseModal';
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
+import { AICourseDesignerModal } from '@/components/course-studio/AICourseDesignerModal';
 import { BotanicalPaperCutFrame } from '@/components/classes/ClassroomIllustrations';
 
 export const CourseStudioDashboardPage: React.FC = () => {
@@ -34,6 +35,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft'>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
 
   useEffect(() => {
@@ -134,12 +136,27 @@ export const CourseStudioDashboardPage: React.FC = () => {
                       openAuthModal('login', { type: 'action', action: 'create_course' });
                       return;
                     }
+                    setAiModalOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black shadow-lg border border-sky-300/30 active:scale-95 transition-all cursor-pointer ring-2 ring-sky-400/30"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>✨ Create with AI</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      openAuthModal('login', { type: 'action', action: 'create_course' });
+                      return;
+                    }
                     setCreateModalOpen(true);
                   }}
                   className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#10b981] hover:bg-[#059669] text-white rounded-2xl text-xs font-black shadow-lg border border-emerald-400/30 active:scale-95 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Create Digital Course</span>
+                  <span>+ Create Manually</span>
                 </button>
 
                 <button
@@ -434,6 +451,12 @@ export const CourseStudioDashboardPage: React.FC = () => {
       </main>
 
       {/* MODALS */}
+      <AICourseDesignerModal
+        isOpen={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onCourseCreated={handleCreateSuccess}
+      />
+
       <CreateCourseModal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}

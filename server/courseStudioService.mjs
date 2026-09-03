@@ -308,6 +308,259 @@ Return JSON format:
 }
 
 // ----------------------------------------------------------------------------
+// 3B. AI COURSE DESIGNER: CURRICULUM PLAN GENERATOR
+// ----------------------------------------------------------------------------
+
+export async function generateCoursePlanWithAI(options = {}) {
+  const promptText = options.coursePrompt || options.prompt || '';
+  const targetLevel = options.targetLevel || options.target_level || 'A1 Beginner';
+  const ageGroup = options.ageGroup || options.age_group || 'Teens & Adults';
+  const unitsCount = Math.min(12, Math.max(1, parseInt(options.unitsCount || options.units_count || 6, 10)));
+  const lessonsPerUnit = Math.min(6, Math.max(1, parseInt(options.lessonsPerUnit || options.lessons_per_unit || 4, 10)));
+  const learningStyles = options.learningStyles || options.learning_styles || ['reading', 'vocabulary', 'grammar', 'speaking', 'writing', 'quizzes'];
+  const subject = options.subject || 'English';
+  const geminiApiKey = options.geminiApiKey || process.env.GEMINI_API_KEY;
+  const openaiApiKey = options.openaiApiKey || process.env.OPENAI_API_KEY;
+  const serverOpenAI = options.serverOpenAI || null;
+
+  if (!promptText || !promptText.trim()) {
+    throw new Error('Please describe the course you wish to create.');
+  }
+
+  const systemInstruction = `You are a world-class CEFR curriculum designer and pedagogy expert for ${subject}.
+Design an organized, cohesive, highly motivating course plan matching the teacher's goal:
+"${promptText.trim()}"
+
+COURSE SPECIFICATIONS:
+- Subject: ${subject}
+- Target CEFR Level: ${targetLevel}
+- Learner Age Group: ${ageGroup}
+- Structure: Exactly ${unitsCount} Units
+- Scope: Exactly ${lessonsPerUnit} Lessons per Unit
+- Core Pedagogical Pillars: ${learningStyles.join(', ')}
+
+PEDAGOGICAL RULES:
+1. Ensure gradual, logical skill and vocabulary progression matching ${targetLevel}.
+2. For A1/A2 levels, focus on practical communication, everyday situations, realistic examples, and short, natural sentences.
+3. Every lesson must have a clear communicative "can_do" objective (e.g. "I can introduce myself to a new friend", "I can order food in a cafe").
+4. Provide realistic, inspiring unit and lesson titles.
+5. Return STRICTLY valid JSON with NO Markdown fences or markdown backticks matching this schema:
+{
+  "title": "Course Title",
+  "short_description": "2-3 sentence overview of what students will achieve in this course.",
+  "subject": "${subject}",
+  "grade_level": "${targetLevel}",
+  "target_level": "${targetLevel}",
+  "age_group": "${ageGroup}",
+  "units": [
+    {
+      "title": "Unit 1: Title",
+      "description": "Clear unit objective and themes covered",
+      "episodes": [
+        {
+          "title": "Lesson 1: Title",
+          "objective": "Clear communicative goal",
+          "can_do": "I can...",
+          "focus_skills": ["Vocabulary", "Speaking", "Grammar"]
+        }
+      ]
+    }
+  ]
+}`;
+
+  // 1. Try Google Gemini with Candidate Models
+  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY;
+  if (gemKey) {
+    for (const modelName of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemInstruction }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 5000 }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const parsed = parseCleanJson(rawText);
+          if (parsed && Array.isArray(parsed.units) && parsed.units.length > 0) {
+            return parsed;
+          }
+        }
+      } catch (err) {
+        console.warn(`[CourseStudioAI] Gemini Course Plan error (${modelName}):`, err.message);
+      }
+    }
+  }
+
+  // 2. Try OpenAI Fallback
+  if (serverOpenAI || openaiApiKey) {
+    try {
+      const client = serverOpenAI || new (await import('openai')).default({ apiKey: openaiApiKey });
+      const completion = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an educational curriculum designer that outputs strictly valid JSON.' },
+          { role: 'user', content: systemInstruction }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
+      });
+      const parsed = JSON.parse(completion.choices[0].message.content);
+      if (parsed && Array.isArray(parsed.units) && parsed.units.length > 0) {
+        return parsed;
+      }
+    } catch (openAiErr) {
+      console.warn('[CourseStudioAI] OpenAI Course Plan fallback error:', openAiErr.message);
+    }
+  }
+
+  // 3. Deterministic Local Curriculum Generator (Zero failure fallback)
+  return buildLocalRuleBasedCoursePlan(promptText, targetLevel, ageGroup, unitsCount, lessonsPerUnit, subject);
+}
+
+// ----------------------------------------------------------------------------
+// 3C. AI LESSON DESIGNER: STRUCTURED DIGITAL LESSON GENERATOR
+// ----------------------------------------------------------------------------
+
+export async function generateStructuredLessonWithAI(options = {}) {
+  const courseTitle = options.courseTitle || options.course_title || 'English Course';
+  const unitTitle = options.unitTitle || options.unit_title || 'Unit 1';
+  const lessonTitle = options.lessonTitle || options.lesson_title || 'Lesson 1';
+  const targetLevel = options.targetLevel || options.target_level || 'A1 Beginner';
+  const objective = options.objective || options.can_do || 'Communicate effectively in English';
+  const subject = options.subject || 'English';
+  const instructions = options.instructions || '';
+  const geminiApiKey = options.geminiApiKey || process.env.GEMINI_API_KEY;
+  const openaiApiKey = options.openaiApiKey || process.env.OPENAI_API_KEY;
+  const serverOpenAI = options.serverOpenAI || null;
+
+  const prompt = `You are a digital textbook author creating an interactive digital lesson for ${targetLevel} learners in ${subject}.
+Course: "${courseTitle}"
+Unit: "${unitTitle}"
+Lesson Title: "${lessonTitle}"
+Learning Objective: "${objective}"
+Special Instructions: ${instructions || 'Ensure clean formatting, short sentences, and engaging digital textbook layout.'}
+
+INSTRUCTIONS:
+1. Divide the lesson into 3 to 4 sequential Course Blocks:
+   - Block 1: "Introduction & Context" (block_type: "text", formatted with Markdown # and ## headings, welcoming paragraph, and learning goals).
+   - Block 2: "Key Vocabulary" (block_type: "text", formatted with a clean Markdown GFM table with columns | Word | Meaning | Example |).
+   - Block 3: "Story / Dialogue in Action" (block_type: "text_image", with Markdown text dialogue, and an image object with position "above", "left", or "right", caption, and image_prompt describing what illustration fits).
+   - Block 4: "Grammar & Communication Rules" (block_type: "text", with bullet points and bold keywords).
+2. Generate 3 to 4 interactive practice questions directly grounded in the lesson content:
+   - Question types: "multiple_choice", "true_false", "fill_blank", "short_answer", "ordering".
+   - Include: question_text, question_type, options, correct_answer, explanation, skill, concept, difficulty (${targetLevel.toLowerCase().includes('a1') ? 'easy' : 'medium'}), points (10).
+3. Return STRICTLY valid JSON with NO Markdown fences or markdown backticks matching this schema:
+{
+  "title": "${lessonTitle}",
+  "summary": "${objective}",
+  "can_do": "${objective}",
+  "estimated_minutes": 15,
+  "blocks": [
+    {
+      "block_type": "text",
+      "content": {
+        "title": "Welcome & Objective",
+        "text": "# ${lessonTitle}\\n\\n..."
+      }
+    },
+    {
+      "block_type": "text",
+      "content": {
+        "title": "Essential Vocabulary",
+        "text": "## Useful Words\\n\\n| Word | Meaning | Example |\\n|---|---|---|\\n| hello | greeting | Hello! Nice to meet you. |"
+      }
+    },
+    {
+      "block_type": "text_image",
+      "content": {
+        "title": "Story in Action",
+        "text": "### Practice Conversation\\n\\n...",
+        "image": {
+          "url": "https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80",
+          "position": "above",
+          "caption": "Students learning in a classroom",
+          "image_prompt": "Friendly diverse students practicing conversation in a bright classroom"
+        }
+      }
+    }
+  ],
+  "suggested_questions": [
+    {
+      "question_text": "...",
+      "question_type": "multiple_choice",
+      "options": ["...", "...", "...", "..."],
+      "correct_answer": "...",
+      "explanation": "...",
+      "skill": "Comprehension",
+      "concept": "Vocabulary in Context",
+      "difficulty": "easy",
+      "points": 10
+    }
+  ]
+}`;
+
+  // 1. Try Gemini
+  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY;
+  if (gemKey) {
+    for (const modelName of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4000 }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const parsed = parseCleanJson(rawText);
+          if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+            return parsed;
+          }
+        }
+      } catch (err) {
+        console.warn(`[CourseStudioAI] Gemini Structured Lesson error (${modelName}):`, err.message);
+      }
+    }
+  }
+
+  // 2. Try OpenAI Fallback
+  if (serverOpenAI || openaiApiKey) {
+    try {
+      const client = serverOpenAI || new (await import('openai')).default({ apiKey: openaiApiKey });
+      const completion = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an educational lesson designer that outputs strictly valid JSON.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' }
+      });
+      const parsed = JSON.parse(completion.choices[0].message.content);
+      if (parsed && Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+        return parsed;
+      }
+    } catch (openAiErr) {
+      console.warn('[CourseStudioAI] OpenAI structured lesson fallback error:', openAiErr.message);
+    }
+  }
+
+  // 3. Deterministic Local Structured Lesson Chunker
+  return buildLocalRuleBasedStructuredLesson(lessonTitle, unitTitle, targetLevel, objective, subject);
+}
+
+// ----------------------------------------------------------------------------
 // 4. DETERMINISTIC CONCEPT MASTERY ENGINE
 // ----------------------------------------------------------------------------
 
@@ -692,4 +945,130 @@ function buildLocalRuleBasedQuestions(contentText, count, subject, difficulty) {
   }
 
   return { questions };
+}
+
+function buildLocalRuleBasedCoursePlan(promptText, targetLevel, ageGroup, unitsCount, lessonsPerUnit, subject) {
+  const cleanPrompt = promptText.trim().replace(/^["']|["']$/g, '');
+  const title = cleanPrompt.length > 50 ? `${cleanPrompt.slice(0, 47)}...` : cleanPrompt;
+
+  const defaultUnitThemes = [
+    { name: 'Me, My Identity & Greetings', canDo: 'introduce myself and greet others politely' },
+    { name: 'My Family, Friends & People', canDo: 'describe family members and basic appearances' },
+    { name: 'My Home, Classroom & Surroundings', canDo: 'talk about objects in a room and locations' },
+    { name: 'Daily Routines, Habits & Time', canDo: 'describe my daily schedule and tell the time' },
+    { name: 'Food, Drinks & Ordering at a Cafe', canDo: 'order meals and express food preferences' },
+    { name: 'Hobbies, Sports & Free Time', canDo: 'share what I enjoy doing on weekends' },
+    { name: 'Getting Around Town & Travel', canDo: 'ask for and follow simple directions' },
+    { name: 'Weather, Clothes & Seasons', canDo: 'describe today\'s weather and what to wear' },
+    { name: 'Health, Well-being & Daily Care', canDo: 'explain how I feel and ask for help' },
+    { name: 'Shopping, Numbers & Prices', canDo: 'ask for prices and make simple purchases' },
+    { name: 'Work, Careers & Ambitions', canDo: 'describe everyday jobs and workplaces' },
+    { name: 'Stories, Memories & Future Plans', canDo: 'share a memorable experience and future goals' }
+  ];
+
+  const units = [];
+  for (let u = 0; u < unitsCount; u++) {
+    const theme = defaultUnitThemes[u % defaultUnitThemes.length];
+    const unitTitle = `Unit ${u + 1} — ${theme.name}`;
+    const episodes = [];
+
+    for (let ep = 0; ep < lessonsPerUnit; ep++) {
+      const epNum = ep + 1;
+      episodes.push({
+        title: `Lesson ${epNum}: Key Skills in ${theme.name.split('&')[0].trim()}`,
+        objective: `Practice practical communication to ${theme.canDo}.`,
+        can_do: `I can ${theme.canDo}.`,
+        focus_skills: ['Vocabulary', 'Speaking', 'Grammar']
+      });
+    }
+
+    units.push({
+      title: unitTitle,
+      description: `Students learn essential vocabulary and conversational structures to ${theme.canDo}.`,
+      episodes
+    });
+  }
+
+  return {
+    title: title || `${subject} for ${targetLevel}`,
+    short_description: `Comprehensive digital course designed for ${ageGroup} at ${targetLevel} level.`,
+    subject,
+    grade_level: targetLevel,
+    target_level: targetLevel,
+    age_group: ageGroup,
+    units
+  };
+}
+
+function buildLocalRuleBasedStructuredLesson(lessonTitle, unitTitle, targetLevel, objective, subject) {
+  return {
+    title: lessonTitle,
+    summary: objective,
+    can_do: objective,
+    estimated_minutes: 15,
+    blocks: [
+      {
+        block_type: 'text',
+        content: {
+          title: 'Lesson Introduction',
+          text: `# ${lessonTitle}\n\nWelcome to this digital lesson in **${unitTitle}**!\n\n### Learning Goals\n- Understand core concepts and practical vocabulary.\n- Practice natural communicative examples.\n- Test your knowledge with interactive check questions.`
+        }
+      },
+      {
+        block_type: 'text',
+        content: {
+          title: 'Key Vocabulary',
+          text: `## Essential Words\n\n| Word | Meaning | Example |\n|:---|:---|:---|\n| practice | to do something repeatedly to improve | I practice English every morning. |\n| student | a person who is learning | She is a diligent student. |\n| conversation | a friendly talk between people | We had a great conversation today. |\n| success | achieving your goal | Consistency is the key to success. |`
+        }
+      },
+      {
+        block_type: 'text_image',
+        content: {
+          title: 'Dialogue in Action',
+          text: `### Real-Life Scenario\n\n**Alex**: Hello! How is your lesson going today?\n\n**Taylor**: Hi Alex! It is going great. I am learning new practical phrases.\n\n**Alex**: That sounds wonderful! Remember to practice speaking them out loud.`,
+          image: {
+            url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80',
+            position: 'above',
+            caption: 'Students collaborating and communicating in English.'
+          }
+        }
+      },
+      {
+        block_type: 'text',
+        content: {
+          title: 'Key Takeaways',
+          text: `## What to Remember\n\n- **Use short, clear sentences** when introducing yourself.\n- Pay attention to **subject-verb agreement**.\n- Review the vocabulary table before taking the quiz below.`
+        }
+      }
+    ],
+    suggested_questions: [
+      {
+        question_text: `What is the most effective way to improve according to this lesson?`,
+        question_type: 'multiple_choice',
+        options: [
+          'Practice consistently and speak out loud',
+          'Only read without speaking',
+          'Memorize without understanding meaning',
+          'Skip vocabulary reviews'
+        ],
+        correct_answer: 'Practice consistently and speak out loud',
+        explanation: 'The lesson highlights active practice and speaking phrases aloud.',
+        skill: 'Comprehension',
+        concept: 'Study Habits',
+        difficulty: 'easy',
+        points: 10
+      },
+      {
+        question_text: `Short, clear sentences are recommended for clear communication.`,
+        question_type: 'true_false',
+        options: ['True', 'False'],
+        correct_answer: 'True',
+        explanation: 'Direct, clear sentences enhance clarity for language learners.',
+        skill: 'Grammar',
+        concept: 'Sentence Structure',
+        difficulty: 'easy',
+        points: 10
+      }
+    ]
+  };
 }

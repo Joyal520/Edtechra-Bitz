@@ -64,6 +64,8 @@ import {
   buildLessonFromMaterial,
   generateCourseQuestionsWithAI,
   improveCourseContentWithAI,
+  generateCoursePlanWithAI,
+  generateStructuredLessonWithAI,
   compileCrossClassroomAnalytics,
   calculateConceptMastery
 } from './server/courseStudioService.mjs';
@@ -3478,6 +3480,79 @@ app.post('/api/course-studio/ai/improve-content', async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to improve content.' });
+  }
+});
+
+// 20B. POST /api/course-studio/ai/generate-course-plan - Generate structured CEFR curriculum plan
+app.post('/api/course-studio/ai/generate-course-plan', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      prompt,
+      course_prompt,
+      target_level = 'A1 Beginner',
+      age_group = 'Teens & Adults',
+      units_count = 6,
+      lessons_per_unit = 4,
+      learning_styles = ['reading', 'vocabulary', 'grammar', 'speaking', 'writing', 'quizzes'],
+      subject = 'English'
+    } = req.body;
+
+    const result = await generateCoursePlanWithAI({
+      coursePrompt: course_prompt || prompt,
+      targetLevel: target_level,
+      ageGroup: age_group,
+      unitsCount: units_count,
+      lessonsPerUnit: lessons_per_unit,
+      learningStyles: learning_styles,
+      subject,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in AI generate course plan:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate course plan with AI.' });
+  }
+});
+
+// 20C. POST /api/course-studio/ai/generate-structured-lesson - Generate complete digital textbook lesson
+app.post('/api/course-studio/ai/generate-structured-lesson', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      course_title = 'English Course',
+      unit_title = 'Unit 1',
+      lesson_title = 'Lesson 1',
+      target_level = 'A1 Beginner',
+      objective = '',
+      subject = 'English',
+      instructions = ''
+    } = req.body;
+
+    const result = await generateStructuredLessonWithAI({
+      courseTitle: course_title,
+      unitTitle: unit_title,
+      lessonTitle: lesson_title,
+      targetLevel: target_level,
+      objective,
+      subject,
+      instructions,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in AI generate structured lesson:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate lesson with AI.' });
   }
 });
 
