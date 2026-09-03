@@ -45,6 +45,7 @@ import {
 import { courseStudioService } from '@/services/courseStudioService';
 import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
+import { MarkdownGuideModal } from '@/components/course-studio/MarkdownGuideModal';
 
 export const CourseEditorPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -67,6 +68,7 @@ export const CourseEditorPage: React.FC = () => {
   const [showAddSectionMenu, setShowAddSectionMenu] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [showQuestionPlanModal, setShowQuestionPlanModal] = useState(false);
+  const [showMarkdownGuideModal, setShowMarkdownGuideModal] = useState(false);
   const [rightPanelTab, setRightPanelTab] = useState<'ai' | 'settings'>('ai');
   const [uploadingBlockIndex, setUploadingBlockIndex] = useState<number | null>(null);
 
@@ -1164,14 +1166,28 @@ export const CourseEditorPage: React.FC = () => {
 
                       {/* 1. TEXT SECTION */}
                       {block.block_type === 'text' && (
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between pb-0.5">
+                            <span className="text-[11px] font-bold text-slate-400">Lesson Text Body</span>
+                            <button
+                              type="button"
+                              onClick={() => setShowMarkdownGuideModal(true)}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-[#026fc3] hover:text-[#025da4] cursor-pointer hover:underline transition-colors"
+                            >
+                              <HelpCircle className="w-3.5 h-3.5" />
+                              <span>Markdown Guide</span>
+                            </button>
+                          </div>
                           <textarea
-                            rows={6}
+                            rows={7}
                             value={(block.content as any)?.text || ''}
                             onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
-                            placeholder="Type or paste lesson text here (supports **bold**, *italic*, bullet lists, etc.)..."
-                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none placeholder:text-slate-400"
+                            placeholder="Type or paste lesson content here..."
+                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none placeholder:text-slate-400 font-sans"
                           />
+                          <p className="text-[11.5px] text-slate-500">
+                            Markdown supported: headings, lists, tables, images, bold text and more.
+                          </p>
                         </div>
                       )}
 
@@ -1244,13 +1260,29 @@ export const CourseEditorPage: React.FC = () => {
                           </div>
 
                           {/* Text Body */}
-                          <textarea
-                            rows={6}
-                            value={(block.content as any)?.text || ''}
-                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
-                            placeholder="Type or paste lesson text here..."
-                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                          />
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <span className="text-[11px] font-bold text-slate-400">Lesson Text Body</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowMarkdownGuideModal(true)}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-[#026fc3] hover:text-[#025da4] cursor-pointer hover:underline transition-colors"
+                              >
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <span>Markdown Guide</span>
+                              </button>
+                            </div>
+                            <textarea
+                              rows={6}
+                              value={(block.content as any)?.text || ''}
+                              onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
+                              placeholder="Type or paste lesson content here..."
+                              className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none font-sans"
+                            />
+                            <p className="text-[11.5px] text-slate-500">
+                              Markdown supported: headings, lists, tables, images, bold text and more.
+                            </p>
+                          </div>
                         </div>
                       )}
 
@@ -1285,21 +1317,37 @@ export const CourseEditorPage: React.FC = () => {
                               type="text"
                               value={(block.content as any)?.video?.url || ''}
                               onChange={e => {
-                                const nextVid = { ...(block.content as any)?.video, url: e.target.value };
-                                handleUpdateBlockContent(bIdx, { ...block.content, video: nextVid });
+                                  const nextVid = { ...(block.content as any)?.video, url: e.target.value };
+                                  handleUpdateBlockContent(bIdx, { ...block.content, video: nextVid });
                               }}
                               placeholder="YouTube URL (e.g. https://www.youtube.com/watch?v=... or /shorts/...)"
                               className="w-full px-3 py-2 rounded-lg bg-white border border-stone-200 text-xs font-mono"
                             />
                           </div>
 
-                          <textarea
-                            rows={6}
-                            value={(block.content as any)?.text || ''}
-                            onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
-                            placeholder="Type or paste lesson text here..."
-                            className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                          />
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between pb-0.5">
+                              <span className="text-[11px] font-bold text-slate-400">Lesson Text Body</span>
+                              <button
+                                type="button"
+                                onClick={() => setShowMarkdownGuideModal(true)}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-[#026fc3] hover:text-[#025da4] cursor-pointer hover:underline transition-colors"
+                              >
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <span>Markdown Guide</span>
+                              </button>
+                            </div>
+                            <textarea
+                              rows={6}
+                              value={(block.content as any)?.text || ''}
+                              onChange={e => handleUpdateBlockContent(bIdx, { ...block.content, text: e.target.value })}
+                              placeholder="Type or paste lesson content here..."
+                              className="w-full p-3 rounded-xl border border-stone-200 text-[14px] leading-[1.75] text-slate-800 focus:ring-2 focus:ring-[#026fc3] focus:outline-none font-sans"
+                            />
+                            <p className="text-[11.5px] text-slate-500">
+                              Markdown supported: headings, lists, tables, images, bold text and more.
+                            </p>
+                          </div>
                         </div>
                       )}
 
@@ -2337,6 +2385,12 @@ export const CourseEditorPage: React.FC = () => {
           setSuccessBanner('Course successfully published and assigned to selected classrooms!');
           setTimeout(() => setSuccessBanner(null), 3500);
         }}
+      />
+
+      {/* IN-EDITOR MARKDOWN GUIDE MODAL */}
+      <MarkdownGuideModal
+        isOpen={showMarkdownGuideModal}
+        onClose={() => setShowMarkdownGuideModal(false)}
       />
 
     </div>

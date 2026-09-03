@@ -240,6 +240,24 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const bodyText = item.text || item.markdown || '';
             const pos = img.position || 'above';
 
+            const renderImageFigure = (extraClasses = '') => (
+              <figure className={`w-full my-3 sm:my-5 ${extraClasses}`}>
+                <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border-y sm:border border-sky-100 dark:border-slate-700">
+                  <img
+                    src={img.url}
+                    alt={img.alt || img.caption || 'Story illustration'}
+                    className="w-full h-auto object-cover max-h-[480px] block"
+                    loading="lazy"
+                  />
+                </div>
+                {img.caption && (
+                  <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif reader-caption">
+                    {img.caption}
+                  </figcaption>
+                )}
+              </figure>
+            );
+
             return (
               <section key={block.id || idx} className="w-full space-y-4 clear-both">
                 {item.title && (
@@ -248,49 +266,36 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </h3>
                 )}
 
-                {(pos === 'above' || pos === 'left' || pos === 'right') && img.url && (
-                  <figure className={`w-full my-4 sm:my-6 ${
-                    pos === 'left'
-                      ? 'md:float-left md:w-[42%] md:max-w-[320px] md:mr-8 md:mb-6'
-                      : pos === 'right'
-                      ? 'md:float-right md:w-[42%] md:max-w-[320px] md:ml-8 md:mb-6'
-                      : 'max-w-[800px] mx-auto media-breakout-mobile'
-                  }`}>
-                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border-y sm:border border-sky-100 dark:border-slate-700">
-                      <img
-                        src={img.url}
-                        alt={img.alt || img.caption || 'Story illustration'}
-                        className="w-full h-auto object-cover max-h-[480px] block"
-                        loading="lazy"
-                      />
+                {/* 1. ABOVE: [IMAGE] then [TEXT] */}
+                {pos === 'above' && img.url && renderImageFigure('max-w-[800px] mx-auto media-breakout-mobile')}
+
+                {/* 2. LEFT: Desktop [IMAGE] [TEXT], Mobile stacked */}
+                {pos === 'left' && img.url ? (
+                  <div className="w-full flex flex-col md:flex-row items-start gap-5 sm:gap-6 my-3 sm:my-5">
+                    <div className="w-full md:w-[42%] md:max-w-[320px] shrink-0">
+                      {renderImageFigure('my-0')}
                     </div>
-                    {img.caption && (
-                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif reader-caption">
-                        {img.caption}
-                      </figcaption>
-                    )}
-                  </figure>
+                    <div className="w-full flex-1 min-w-0">
+                      <FormattedLessonText text={bodyText} textScale={textScale} />
+                    </div>
+                  </div>
+                ) : pos === 'right' && img.url ? (
+                  /* 3. RIGHT: Desktop [TEXT] [IMAGE], Mobile stacked */
+                  <div className="w-full flex flex-col md:flex-row-reverse items-start gap-5 sm:gap-6 my-3 sm:my-5">
+                    <div className="w-full md:w-[42%] md:max-w-[320px] shrink-0">
+                      {renderImageFigure('my-0')}
+                    </div>
+                    <div className="w-full flex-1 min-w-0">
+                      <FormattedLessonText text={bodyText} textScale={textScale} />
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Stacked (Above or Below) */
+                  <FormattedLessonText text={bodyText} textScale={textScale} />
                 )}
 
-                <FormattedLessonText text={bodyText} textScale={textScale} />
-
-                {pos === 'below' && img.url && (
-                  <figure className="w-full my-4 sm:my-6 max-w-[800px] mx-auto media-breakout-mobile">
-                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border-y sm:border border-sky-100 dark:border-slate-700">
-                      <img
-                        src={img.url}
-                        alt={img.alt || img.caption || 'Story illustration'}
-                        className="w-full h-auto object-cover max-h-[480px] block"
-                        loading="lazy"
-                      />
-                    </div>
-                    {img.caption && (
-                      <figcaption className="text-xs text-center mt-2 italic opacity-75 leading-relaxed font-serif reader-caption">
-                        {img.caption}
-                      </figcaption>
-                    )}
-                  </figure>
-                )}
+                {/* 4. BELOW: [TEXT] then [IMAGE] */}
+                {pos === 'below' && img.url && renderImageFigure('max-w-[800px] mx-auto media-breakout-mobile')}
               </section>
             );
           }
@@ -303,6 +308,20 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const pos = vid.position || 'above';
             const embedUrl = getYouTubeEmbedUrl(vid.url || vid.video_id);
 
+            const renderVideoFrame = (extraClasses = '') => (
+              <div className={`w-full my-3 sm:my-5 ${extraClasses}`}>
+                <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video border-y sm:border border-slate-200 dark:border-slate-800">
+                  <iframe
+                    src={embedUrl}
+                    title={vid.title || 'Lesson Video'}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-full border-0"
+                  />
+                </div>
+              </div>
+            );
+
             return (
               <section key={block.id || idx} className="w-full space-y-4 clear-both">
                 {item.title && (
@@ -311,41 +330,31 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </h3>
                 )}
 
-                {(pos === 'above' || pos === 'left' || pos === 'right') && embedUrl && (
-                  <div className={`w-full my-4 sm:my-6 ${
-                    pos === 'left'
-                      ? 'md:float-left md:w-[48%] md:max-w-[360px] md:mr-8 md:mb-6'
-                      : pos === 'right'
-                      ? 'md:float-right md:w-[48%] md:max-w-[360px] md:ml-8 md:mb-6'
-                      : 'max-w-2xl mx-auto media-breakout-mobile'
-                  }`}>
-                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video border-y sm:border border-slate-200 dark:border-slate-800">
-                      <iframe
-                        src={embedUrl}
-                        title={vid.title || 'Lesson Video'}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full border-0"
-                      />
+                {pos === 'above' && embedUrl && renderVideoFrame('max-w-2xl mx-auto media-breakout-mobile')}
+
+                {pos === 'left' && embedUrl ? (
+                  <div className="w-full flex flex-col md:flex-row items-start gap-5 sm:gap-6 my-3 sm:my-5">
+                    <div className="w-full md:w-[48%] md:max-w-[360px] shrink-0">
+                      {renderVideoFrame('my-0')}
+                    </div>
+                    <div className="w-full flex-1 min-w-0">
+                      <FormattedLessonText text={bodyText} textScale={textScale} />
                     </div>
                   </div>
-                )}
-
-                <FormattedLessonText text={bodyText} textScale={textScale} />
-
-                {pos === 'below' && embedUrl && (
-                  <div className="w-full my-4 sm:my-6 max-w-2xl mx-auto media-breakout-mobile">
-                    <div className="w-full rounded-none sm:rounded-2xl overflow-hidden bg-black shadow-md aspect-video border-y sm:border border-slate-200 dark:border-slate-800">
-                      <iframe
-                        src={embedUrl}
-                        title={vid.title || 'Lesson Video'}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full border-0"
-                      />
+                ) : pos === 'right' && embedUrl ? (
+                  <div className="w-full flex flex-col md:flex-row-reverse items-start gap-5 sm:gap-6 my-3 sm:my-5">
+                    <div className="w-full md:w-[48%] md:max-w-[360px] shrink-0">
+                      {renderVideoFrame('my-0')}
+                    </div>
+                    <div className="w-full flex-1 min-w-0">
+                      <FormattedLessonText text={bodyText} textScale={textScale} />
                     </div>
                   </div>
+                ) : (
+                  <FormattedLessonText text={bodyText} textScale={textScale} />
                 )}
+
+                {pos === 'below' && embedUrl && renderVideoFrame('max-w-2xl mx-auto media-breakout-mobile')}
               </section>
             );
           }
