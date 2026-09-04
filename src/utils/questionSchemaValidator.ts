@@ -66,6 +66,24 @@ export interface QuestionCategoryDefinition {
   types: QuestionType[];
 }
 
+export const IMPLEMENTED_QUESTION_TYPES: Set<QuestionType> = new Set([
+  'multiple_choice',
+  'true_false',
+  'fill_blank',
+  'cloze_passage',
+  'matching',
+  'ordering',
+  'sentence_builder',
+  'short_answer',
+  'wh_question',
+  'comprehension',
+  'essay'
+]);
+
+export function isQuestionTypeImplemented(type: QuestionType): boolean {
+  return IMPLEMENTED_QUESTION_TYPES.has(type);
+}
+
 export const QUESTION_CATEGORIES: QuestionCategoryDefinition[] = [
   {
     id: 'category_a',
@@ -112,9 +130,16 @@ export const QUESTION_CATEGORIES: QuestionCategoryDefinition[] = [
   {
     id: 'category_g',
     code: 'G',
-    name: 'Comprehension, WH & Language Production',
-    description: 'Text-anchored WH comprehension, short answers, essay writing, and AI speaking feedback',
-    types: ['wh_question', 'comprehension', 'short_answer', 'essay', 'speaking', 'grammar_correction', 'word_choice']
+    name: 'Comprehension & WH Questions',
+    description: 'Text-anchored WH comprehension, literal inference, and short answers',
+    types: ['wh_question', 'comprehension', 'short_answer']
+  },
+  {
+    id: 'category_h',
+    code: 'H',
+    name: 'Production & Open-Ended',
+    description: 'Essay writing, speaking assessment, grammar correction, and word choice',
+    types: ['essay', 'speaking', 'grammar_correction', 'word_choice']
   }
 ];
 
@@ -621,18 +646,64 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
   try {
     parsed = JSON.parse(cleanString);
   } catch (err: any) {
+    // Extract line and column numbers from error message or character position
+    let lineInfo = '';
+    const posMatch = err.message.match(/position (\d+)/i);
+    if (posMatch) {
+      const pos = parseInt(posMatch[1], 10);
+      const linesUpToPos = cleanString.substring(0, pos).split('\n');
+      const lineNum = linesUpToPos.length;
+      const colNum = linesUpToPos[linesUpToPos.length - 1].length + 1;
+      lineInfo = ` at line ${lineNum}, column ${colNum}`;
+    } else {
+      const lineMatch = err.message.match(/line (\d+)/i);
+      if (lineMatch) {
+        lineInfo = ` at line ${lineMatch[1]}`;
+      }
+    }
     return {
       isValid: false,
-      errors: [`Invalid JSON syntax: ${err.message}`],
+      errors: [`Invalid JSON syntax${lineInfo}: ${err.message}`],
       warnings: [],
       summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };
   }
 
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  // Support flexible top-level structures:
+  // 1. Array of questions: [ { type: '...', ... } ]
+  // 2. Object with "questions" array: { questions: [ { type: '...', ... } ] }
+  // 3. Object with "question_sets" array: { question_sets: [ { type: '...', questions: [...] } ] }
+  if (Array.isArray(parsed)) {
+    const setsMap = new Map<string, any[]>();
+    for (const q of parsed) {
+      if (q && typeof q === 'object') {
+        const t = q.type || q.question_type || 'multiple_choice';
+        if (!setsMap.has(t)) setsMap.set(t, []);
+        setsMap.get(t)!.push(q);
+      }
+    }
+    parsed = {
+      schema_version: '1.0',
+      question_sets: Array.from(setsMap.entries()).map(([type, questions]) => ({ type, questions }))
+    };
+  } else if (typeof parsed === 'object' && parsed !== null) {
+    if (!Array.isArray(parsed.question_sets) && Array.isArray(parsed.questions)) {
+      const setsMap = new Map<string, any[]>();
+      for (const q of parsed.questions) {
+        if (q && typeof q === 'object') {
+          const t = q.type || q.question_type || 'multiple_choice';
+          if (!setsMap.has(t)) setsMap.set(t, []);
+          setsMap.get(t)!.push(q);
+        }
+      }
+      parsed.question_sets = Array.from(setsMap.entries()).map(([type, questions]) => ({ type, questions }));
+    }
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
     return {
       isValid: false,
-      errors: ['Root JSON must be an object with "question_sets" array.'],
+      errors: ['Root JSON must be an object with "question_sets" or "questions" array.'],
       warnings: [],
       summary: { totalQuestions: 0, totalActivities: 0, totalMarks: 0, byType: {} }
     };

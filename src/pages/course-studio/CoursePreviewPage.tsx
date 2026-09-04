@@ -31,6 +31,7 @@ import { LessonCompletionModal } from '@/components/course-studio/LessonCompleti
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 import { DirectLessonEditor } from '@/components/course-studio/DirectLessonEditor';
 import { AILessonAssistantModal } from '@/components/course-studio/AILessonAssistantModal';
+import { AddQuestionsModal } from '@/components/course-studio/AddQuestionsModal';
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
@@ -49,6 +50,7 @@ export const CoursePreviewPage: React.FC = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
+  const [addQuestionsModalOpen, setAddQuestionsModalOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
 
   // Active In-Place Editing State
@@ -598,12 +600,13 @@ export const CoursePreviewPage: React.FC = () => {
                 onChangeBlocks={handleBlocksChange}
                 onChangeQuestions={handleQuestionsChange}
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
+                onOpenAddQuestions={() => setAddQuestionsModalOpen(true)}
                 themeId={themeId}
               />
             ) : (
               <CourseContentRenderer
-                blocks={selectedEpisode.blocks || []}
-                questions={selectedEpisode.questions || []}
+                blocks={currentBlocks.length > 0 ? currentBlocks : (selectedEpisode.blocks || [])}
+                questions={currentQuestions.length > 0 ? currentQuestions : (selectedEpisode.questions || [])}
                 isStudentView={true}
                 textScale={textScale}
                 onCompleteLesson={handleCompleteEpisode}
@@ -770,6 +773,24 @@ export const CoursePreviewPage: React.FC = () => {
           setCourse(prev => (prev ? { ...prev, status: 'published' } : null));
         }}
       />
+
+      {/* 8. PREMIUM ADD QUESTIONS MODAL (PARTS 7–15) */}
+      {selectedEpisode && course && (
+        <AddQuestionsModal
+          isOpen={addQuestionsModalOpen}
+          onClose={() => setAddQuestionsModalOpen(false)}
+          courseTitle={course.title}
+          unitTitle={course.units?.find(u => u.episodes?.some(e => e.id === selectedEpisode.id))?.title || 'Unit'}
+          episodeTitle={currentEpisodeTitle || selectedEpisode.title || 'Lesson'}
+          episodeId={selectedEpisode.id}
+          courseId={course.id}
+          lessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
+          onImportQuestions={imported => {
+            const next = [...currentQuestions, ...imported];
+            handleQuestionsChange(next);
+          }}
+        />
+      )}
 
     </div>
   );

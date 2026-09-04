@@ -31,7 +31,7 @@ import {
   BlockType,
   QuestionType
 } from '@/types/courseStudio';
-import { MarkdownRenderer } from '@/components/common/MarkdownRenderer';
+import { FormattedLessonText } from '@/utils/courseTextFormatting';
 import { courseStudioService } from '@/services/courseStudioService';
 import { MarkdownGuideModal } from '@/components/course-studio/MarkdownGuideModal';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
@@ -51,6 +51,7 @@ interface DirectLessonEditorProps {
   onChangeBlocks: (blocks: CourseBlock[]) => void;
   onChangeQuestions: (questions: CourseQuestion[]) => void;
   onOpenAiAssistant: () => void;
+  onOpenAddQuestions?: () => void;
   themeId?: string;
 }
 
@@ -60,6 +61,7 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
   onChangeBlocks,
   onChangeQuestions,
   onOpenAiAssistant,
+  onOpenAddQuestions,
   themeId = 'midnight-navy'
 }) => {
   // Active editing block tracking (index)
@@ -263,6 +265,31 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
     if (activeEditingQuestionIdx === qIdx) setActiveEditingQuestionIdx(null);
   };
 
+  const moveQuestion = (qIdx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? qIdx - 1 : qIdx + 1;
+    if (targetIdx < 0 || targetIdx >= questions.length) return;
+    const next = [...questions];
+    const [moved] = next.splice(qIdx, 1);
+    next.splice(targetIdx, 0, moved);
+    onChangeQuestions(next);
+    if (activeEditingQuestionIdx === qIdx) {
+      setActiveEditingQuestionIdx(targetIdx);
+    }
+  };
+
+  const duplicateQuestion = (qIdx: number) => {
+    const original = questions[qIdx];
+    const duplicated: CourseQuestion = {
+      ...JSON.parse(JSON.stringify(original)),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `q_${Date.now()}`,
+      order_index: questions.length
+    };
+    const next = [...questions];
+    next.splice(qIdx + 1, 0, duplicated);
+    onChangeQuestions(next);
+    setActiveEditingQuestionIdx(qIdx + 1);
+  };
+
   return (
     <div className="w-full space-y-8 font-sans antialiased text-theme-primary">
       {/* Hidden File Input for R2 Uploads */}
@@ -427,7 +454,7 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                       className="cursor-pointer hover:bg-sky-50/10 p-2 rounded-xl transition-colors"
                       title="Click to edit text"
                     >
-                      <MarkdownRenderer content={blockContent.text || ''} />
+                      <FormattedLessonText text={blockContent.text || ''} />
                     </div>
                   )}
                 </div>
@@ -490,33 +517,106 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                     </div>
                   )}
 
-                  {/* Render Image in selected position */}
-                  {blockContent.image?.url && (
-                    <figure className="text-center my-2">
-                      <img
-                        src={blockContent.image.url}
-                        alt={blockContent.image.caption || 'Illustration'}
-                        className="w-full max-h-[360px] object-cover rounded-xl shadow-xs mx-auto"
-                      />
-                      {blockContent.image.caption && (
-                        <figcaption className="text-xs text-theme-muted italic mt-1 font-serif">
-                          {blockContent.image.caption}
-                        </figcaption>
-                      )}
-                    </figure>
-                  )}
-
-                  {/* In-Place Text Editor */}
+                  {/* In-Place Text Editor when editing */}
                   {isEditing ? (
-                    <CanvaInlineTextEditor
-                      value={blockContent.text || ''}
-                      onChange={newText => updateBlockContent(bIdx, { ...blockContent, text: newText })}
-                      surfaceBgColor={surfaceHex}
-                      placeholder="Type story explanation..."
-                    />
+                    <div className="space-y-3">
+                      {blockContent.image?.url && (
+                        <figure className="text-center my-2">
+                          <img
+                            src={blockContent.image.url}
+                            alt={blockContent.image.caption || 'Illustration'}
+                            className="w-full max-h-[360px] object-cover rounded-xl shadow-xs mx-auto"
+                          />
+                          {blockContent.image.caption && (
+                            <figcaption className="text-xs text-theme-muted italic mt-1 font-serif">
+                              {blockContent.image.caption}
+                            </figcaption>
+                          )}
+                        </figure>
+                      )}
+                      <CanvaInlineTextEditor
+                        value={blockContent.text || ''}
+                        onChange={newText => updateBlockContent(bIdx, { ...blockContent, text: newText })}
+                        surfaceBgColor={surfaceHex}
+                        placeholder="Type story explanation..."
+                      />
+                    </div>
                   ) : (
+                    /* Position-aware preview when closed / not editing */
                     <div onClick={() => setActiveEditingBlockIdx(bIdx)} className="cursor-pointer">
-                      <MarkdownRenderer content={blockContent.text || ''} />
+                      {(() => {
+                        const img = blockContent.image || {};
+                        const pos = img.position || 'above';
+                        const renderFigure = (extraClasses = '') => (
+                          <figure className={`text-center my-2 ${extraClasses}`}>
+                            <img
+                              src={img.url}
+                              alt={img.caption || 'Illustration'}
+                              className="w-full max-h-[360px] object-cover rounded-xl shadow-xs mx-auto"
+                            />
+                            {img.caption && (
+                              <figcaption className="text-xs text-theme-muted italic mt-1 font-serif">
+                                {img.caption}
+                              </figcaption>
+                            )}
+                          </figure>
+                        );
+
+                        if (!img.url) {
+                          return <FormattedLessonText text={blockContent.text || ''} />;
+                        }
+
+                        if (pos === 'above') {
+                          return (
+                            <div className="space-y-3">
+                              {renderFigure()}
+                              <FormattedLessonText text={blockContent.text || ''} />
+                            </div>
+                          );
+                        }
+
+                        if (pos === 'below') {
+                          return (
+                            <div className="space-y-3">
+                              <FormattedLessonText text={blockContent.text || ''} />
+                              {renderFigure()}
+                            </div>
+                          );
+                        }
+
+                        if (pos === 'left') {
+                          return (
+                            <div className="flex flex-col md:flex-row items-start gap-4 my-2">
+                              <div className="w-full md:w-[40%] shrink-0">
+                                {renderFigure('my-0')}
+                              </div>
+                              <div className="w-full flex-1 min-w-0">
+                                <FormattedLessonText text={blockContent.text || ''} />
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (pos === 'right') {
+                          return (
+                            <div className="flex flex-col md:flex-row-reverse items-start gap-4 my-2">
+                              <div className="w-full md:w-[40%] shrink-0">
+                                {renderFigure('my-0')}
+                              </div>
+                              <div className="w-full flex-1 min-w-0">
+                                <FormattedLessonText text={blockContent.text || ''} />
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-3">
+                            {renderFigure()}
+                            <FormattedLessonText text={blockContent.text || ''} />
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -720,7 +820,7 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                       onClick={() => setActiveEditingBlockIdx(bIdx)}
                       className="cursor-pointer hover:bg-sky-50/10 p-2 rounded-xl transition-colors"
                     >
-                      <MarkdownRenderer content={blockContent.text || ''} />
+                      <FormattedLessonText text={blockContent.text || ''} />
                     </div>
                   )}
                 </div>
@@ -871,11 +971,11 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onOpenAiAssistant}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--theme-surface-interactive)] hover:bg-[var(--theme-surface-interactive-hover)] text-theme-accent text-xs font-black border border-[var(--theme-border-primary)] cursor-pointer"
+              onClick={onOpenAddQuestions || onOpenAiAssistant}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs font-black shadow-xs cursor-pointer transition-all"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Generate Questions with AI</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>ADD QUESTIONS</span>
             </button>
           </div>
         </div>
@@ -906,9 +1006,38 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                         • {q.skill}
                       </span>
                     )}
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                      {q.points || 10} pts
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveQuestion(qIdx, 'up')}
+                      disabled={qIdx === 0}
+                      className="p-1 text-theme-muted hover:text-theme-primary disabled:opacity-25 rounded cursor-pointer disabled:cursor-not-allowed"
+                      title="Move Question Up"
+                    >
+                      <MoveUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveQuestion(qIdx, 'down')}
+                      disabled={qIdx === questions.length - 1}
+                      className="p-1 text-theme-muted hover:text-theme-primary disabled:opacity-25 rounded cursor-pointer disabled:cursor-not-allowed"
+                      title="Move Question Down"
+                    >
+                      <MoveDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => duplicateQuestion(qIdx)}
+                      className="p-1 text-theme-muted hover:text-[#026fc3] rounded cursor-pointer"
+                      title="Duplicate Question"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => setActiveEditingQuestionIdx(isEditingQ ? null : qIdx)}
@@ -1159,8 +1288,17 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
           })}
         </div>
 
-        {/* Add Question Button */}
-        <div className="pt-2 flex items-center justify-center relative">
+        {/* Add Question Actions */}
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-3 relative">
+          <button
+            type="button"
+            onClick={onOpenAddQuestions || onOpenAiAssistant}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs font-bold shadow-xs cursor-pointer transition-all"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>ADD QUESTIONS (AI BUILDER)</span>
+          </button>
+
           <div className="relative">
             <button
               type="button"
@@ -1168,7 +1306,7 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[var(--theme-surface-card)] hover:bg-[var(--theme-surface-interactive-hover)] border border-[var(--theme-border-primary)] text-theme-primary text-xs font-bold shadow-2xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Question Manually</span>
+              <span>+ Add Manually</span>
             </button>
 
             {showAddQuestionMenu && (

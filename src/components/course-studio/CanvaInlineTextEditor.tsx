@@ -23,7 +23,9 @@ import {
   RotateCw,
   RemoveFormatting,
   ChevronDown,
-  AlertTriangle
+  AlertTriangle,
+  List,
+  ListOrdered
 } from 'lucide-react';
 import {
   evaluateContrast,
@@ -64,7 +66,9 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
     strikeThrough: false,
     align: 'left',
     fontName: 'sans-serif',
-    fontSize: '14px'
+    fontSize: '14px',
+    unorderedList: false,
+    orderedList: false
   });
 
   // Keep internal HTML synchronized with value prop initially or on external change
@@ -94,7 +98,9 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
           ? 'justify'
           : 'left',
         fontName: document.queryCommandValue('fontName') || 'sans-serif',
-        fontSize: document.queryCommandValue('fontSize') || '14px'
+        fontSize: document.queryCommandValue('fontSize') || '14px',
+        unorderedList: document.queryCommandState('insertUnorderedList'),
+        orderedList: document.queryCommandState('insertOrderedList')
       });
     } catch {
       // queryCommandState might fail on edge browsers
@@ -435,6 +441,30 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
             title="Justify"
           >
             <AlignJustify className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-stone-200 dark:bg-slate-700 my-auto" />
+
+          {/* List Formatting */}
+          <button
+            type="button"
+            onClick={() => execFormat('insertUnorderedList')}
+            className={`p-1 rounded-md cursor-pointer ${
+              activeFormats.unorderedList ? 'bg-[#026fc3] text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+            }`}
+            title="Bullet List"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => execFormat('insertOrderedList')}
+            className={`p-1 rounded-md cursor-pointer ${
+              activeFormats.orderedList ? 'bg-[#026fc3] text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+            }`}
+            title="Numbered List"
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
           </button>
 
           <div className="w-px h-4 bg-stone-200 dark:bg-slate-700 my-auto" />
