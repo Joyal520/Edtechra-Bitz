@@ -2649,8 +2649,26 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
 
     const questionsByEpisode = new Map();
     (questions || []).forEach(q => {
+      let extra = {};
+      if (typeof q.options === 'object' && q.options !== null && !Array.isArray(q.options)) {
+        extra = {
+          wh_type: q.options.wh_type,
+          passage: q.options.passage,
+          expected_answer: q.options.expected_answer,
+          acceptable_answers: q.options.acceptable_answers,
+          options: q.options.options || []
+        };
+      }
+      const enrichedQ = {
+        ...q,
+        ...extra,
+        passage: q.passage || extra.passage || undefined,
+        wh_type: q.wh_type || extra.wh_type || undefined,
+        expected_answer: q.expected_answer || extra.expected_answer || undefined,
+        acceptable_answers: q.acceptable_answers || extra.acceptable_answers || undefined
+      };
       if (!questionsByEpisode.has(q.episode_id)) questionsByEpisode.set(q.episode_id, []);
-      questionsByEpisode.get(q.episode_id).push(q);
+      questionsByEpisode.get(q.episode_id).push(enrichedQ);
     });
 
     const episodesByUnit = new Map();
@@ -3202,22 +3220,55 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
 
       const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
-      const toInsert = deduplicated.map((q, idx) => ({
-        id: isUuid(q.id) ? q.id : crypto.randomUUID(),
-        episode_id,
-        course_id: courseId,
-        block_id: q.block_id || null,
-        question_text: q.question_text,
-        question_type: q.question_type || 'multiple_choice',
-        options: (typeof q.options === 'object' && q.options !== null) || Array.isArray(q.options) ? q.options : [],
-        correct_answer: q.correct_answer || (q.question_type === 'essay' ? 'AI Evaluated' : 'Answer'),
-        explanation: q.explanation || '',
-        skill: q.skill || 'General',
-        concept: q.concept || 'General',
-        difficulty: q.difficulty || 'medium',
-        points: q.points || 10,
-        order_index: idx
-      }));
+      const toInsert = deduplicated.map((q, idx) => {
+        let optionsToSave = (typeof q.options === 'object' && q.options !== null) || Array.isArray(q.options) ? q.options : [];
+        if (q.question_type === 'wh_question' || q.wh_type || q.passage) {
+          optionsToSave = {
+            options: Array.isArray(q.options) ? q.options : (typeof q.options === 'object' && q.options?.options ? q.options.options : []),
+            acceptable_answers: Array.isArray(q.acceptable_answers) ? q.acceptable_answers : (typeof q.options === 'object' && Array.isArray(q.options?.acceptable_answers) ? q.options.acceptable_answers : []),
+            expected_answer: q.expected_answer || q.correct_answer || (typeof q.options === 'object' && q.options?.expected_answer) || '',
+            wh_type: q.wh_type || (typeof q.options === 'object' && q.options?.wh_type) || 'what',
+            passage: q.passage || (typeof q.options === 'object' && q.options?.passage) || ''
+          };
+        }
+        return {
+          id: isUuid(q.id) ? q.id : crypto.randomUUID(),
+          episode_id,
+          course_id: courseId,
+          block_id: q.block_id || null,
+          question_text: q.question_text,
+          question_type: q.question_type || 'multiple_choice',
+          options: optionsToSave,
+          correct_answer: q.correct_answer || (q.question_type === 'essay' ? 'AI Evaluated' : 'Answer'),
+          explanation: q.explanation || '',
+          skill: q.skill || 'General',
+          concept: q.concept || 'General',
+          difficulty: q.difficulty || 'medium',
+          points: q.points || 10,
+          order_index: typeof q.order_index === 'number' ? q.order_index : idx
+        };
+      });
+
+      const enrichReturned = (arr) => (arr || []).map((q, idx) => {
+        let extra = {};
+        if (typeof q.options === 'object' && q.options !== null && !Array.isArray(q.options)) {
+          extra = {
+            wh_type: q.options.wh_type,
+            passage: q.options.passage,
+            expected_answer: q.options.expected_answer,
+            acceptable_answers: q.options.acceptable_answers,
+            options: q.options.options || []
+          };
+        }
+        return {
+          ...q,
+          ...extra,
+          passage: q.passage || extra.passage,
+          wh_type: q.wh_type || extra.wh_type,
+          expected_answer: q.expected_answer || extra.expected_answer,
+          acceptable_answers: q.acceptable_answers || extra.acceptable_answers
+        };
+      });
 
       const { data: saved, error } = await serverSupabase
         .from('course_questions')
@@ -3260,13 +3311,13 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
               ...q,
               question_type: toInsert[idx].question_type
             }));
-            return res.json({ success: true, questions: normalized });
+            return res.json({ success: true, questions: enrichReturned(normalized) });
           }
           console.error('Fallback insert error in course_questions:', fbError);
         }
         throw error;
       }
-      return res.json({ success: true, questions: saved });
+      return res.json({ success: true, questions: enrichReturned(saved) });
     }
 
     res.json({ success: true, questions: [] });

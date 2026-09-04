@@ -46,8 +46,8 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
   if (!text) return [];
 
   // Match: images (![alt](url)), links ([label](url)), bold-italic (***text***),
-  // bold (**text** or __text__), italic (*text* or _text_), strikethrough (~~text~~), inline code (`code`)
-  const inlineRegex = /(!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)|(?:\*\*\*|___).*?(?:\*\*\*|___)|(?:\*\*|__).*?(?:\*\*|__)|(?:(?<!\w)\*(?!\s).*?(?<!\s)\*(?!\w)|(?<!\w)_(?!\s).*?(?<!\s)_(?!\w))|~~.*?~~|`.*?`)/g;
+  // bold (**text** or __text__), italic (*text* or _text_), strikethrough (~~text~~), inline code (`code`), underline (<u>text</u>)
+  const inlineRegex = /(!\[.*?\]\(.*?\)|\[.*?\]\(.*?\)|(?:\*\*\*|___).*?(?:\*\*\*|___)|(?:\*\*|__).*?(?:\*\*|__)|(?:(?<!\w)\*(?!\s).*?(?<!\s)\*(?!\w)|(?<!\w)_(?!\s).*?(?<!\s)_(?!\w))|~~.*?~~|`.*?`|<u>.*?<\/u>)/g;
 
   const tokens = text.split(inlineRegex);
 
@@ -159,8 +159,20 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
       );
     }
 
-    // 8. Plain Text node
-    return <React.Fragment key={`txt-${index}`}>{token}</React.Fragment>;
+    // 8. Underline: <u>text</u>
+    if (token.startsWith('<u>') && token.endsWith('</u>') && token.length >= 7) {
+      return (
+        <u key={`u-${index}`} className="underline underline-offset-2 text-inherit">
+          {parseInlineMarkdown(token.slice(3, -4))}
+        </u>
+      );
+    }
+
+    // 9. Plain Text node: Clean any residual raw HTML wrapper tags (<div>, <span>, etc.) so raw tags never print as visible text
+    const cleanTokenText = token.replace(/<\/?[a-zA-Z][^>]*>/g, '').replace(/&nbsp;/g, ' ');
+    if (!cleanTokenText) return null;
+
+    return <React.Fragment key={`txt-${index}`}>{cleanTokenText}</React.Fragment>;
   });
 }
 

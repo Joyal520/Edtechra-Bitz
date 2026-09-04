@@ -364,12 +364,20 @@ const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
     type: 'wh_question',
     questions: [
       {
-        question: 'Where is Emily from?',
-        wh_type: 'where',
-        expected_answer: 'Emily is from London.',
-        acceptable_answers: ['London', 'She is from London', 'She lives in London'],
-        passage: 'Emily lives in London with her family and loves visiting museums.',
-        explanation: 'The passage explicitly states that Emily lives in London.',
+        question: 'Who does Emily live with?',
+        wh_type: 'who',
+        expected_answer: 'She lives with her family.',
+        acceptable_answers: [
+          'with her family',
+          'her family',
+          'with her parents',
+          'her parents',
+          'She lives with her parents',
+          'with mom and dad',
+          'with her mother and father'
+        ],
+        passage: 'Emily lives in London with her family in a small house near a green park.',
+        explanation: 'The passage explicitly states that Emily lives with her family.',
         difficulty: 'medium',
         points: 10
       }
@@ -455,7 +463,7 @@ export function buildAiQuestionPrompt(params: {
       const whDesc = whType === 'mixed_wh'
         ? 'balanced variety of WH questions (Who, What, Where, When, Why, How)'
         : `${whType.toUpperCase()} questions`;
-      prompt += `${index + 1}. WH Comprehension — Create ${count} ${whDesc} strictly anchored to the reading passage. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers" (array of alternate valid phrasings), "passage" (exact excerpt), and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. WH Comprehension — Create ${count} ${whDesc} strictly anchored to the reading passage. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers" (array of 5–8 alternate valid phrasings and common synonyms), "passage" (exact excerpt), and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else {
       const count = item.count || 1;
       prompt += `${index + 1}. ${label} — ${count} question${count > 1 ? 's' : ''} (Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
@@ -476,12 +484,13 @@ export function buildAiQuestionPrompt(params: {
   prompt += `1. Generate ONLY the requested question types listed above. Do NOT include unused question types or empty question sets.\n`;
   prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0.\n`;
   prompt += `3. Do not include markdown code block backticks if possible, or wrap inside standard \`\`\`json block.\n`;
-  prompt += `4. For Ordering: Generate the exact number of activities requested, with each activity containing the exact requested number of sentence blocks in the "items" array.\n`;
-  prompt += `5. For Cloze Passage: Generate EXACTLY ONE question containing a complete passage and a "blanks" array with the EXACT requested number of blanks. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
-  prompt += `6. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
-  prompt += `7. For WH Comprehension: Include "question", "wh_type", "expected_answer", "acceptable_answers" (array), "passage" (exact quote from text), and "explanation".\n`;
-  prompt += `8. Include "points" for every question matching the teacher's selected marks.\n`;
-  prompt += `9. Provide a clear educational explanation for every question.\n\n`;
+  prompt += `4. For Multiple Choice: Balance the position of the correct answer evenly across options A, B, C, and D. Do NOT always place the correct answer as option A or the first choice.\n`;
+  prompt += `5. For Ordering: Generate the exact number of activities requested, with each activity containing the exact requested number of sentence blocks in the "items" array.\n`;
+  prompt += `6. For Cloze Passage: Generate EXACTLY ONE question containing a complete passage and a "blanks" array with the EXACT requested number of blanks. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
+  prompt += `7. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
+  prompt += `8. For WH Comprehension: Include "question", "wh_type", "expected_answer", "acceptable_answers" (5–8 natural variations and synonyms), "passage" (exact quote from text), and "explanation".\n`;
+  prompt += `9. Include "points" for every question matching the teacher's selected marks.\n`;
+  prompt += `10. Provide a clear educational explanation for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
   const exampleQuestionSets = plan.items.map(item => {
@@ -987,8 +996,38 @@ export function convertValidatedJsonToCourseQuestions(
           options: normalized,
           correct_answer: q.correct_answer ?? q.correctAnswer ?? q.answer
         });
-        optionsList = normalized;
-        correctAnswerStr = resolved ? resolved.id : String(q.correct_answer ?? '');
+
+        // Fisher-Yates shuffle options to eliminate Option A / index 0 bias
+        if (normalized.length > 1) {
+          const shuffled = [...normalized];
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+
+          // Re-assign stable letter IDs 'A', 'B', 'C', 'D' based on shuffled positions
+          const reindexed = shuffled.map((opt, idx) => ({
+            id: String.fromCharCode(65 + idx),
+            text: opt.text
+          }));
+
+          // Re-map correct_answer to point to the new ID of the correct option
+          if (resolved) {
+            const newCorrectOpt = reindexed.find(opt => opt.text === resolved.text);
+            if (newCorrectOpt) {
+              correctAnswerStr = newCorrectOpt.id;
+            } else {
+              correctAnswerStr = resolved.id;
+            }
+          } else {
+            correctAnswerStr = String(q.correct_answer ?? 'A');
+          }
+
+          optionsList = reindexed;
+        } else {
+          optionsList = normalized;
+          correctAnswerStr = resolved ? resolved.id : String(q.correct_answer ?? '');
+        }
       } else if (qType === 'true_false' || qType === 'yes_no') {
         optionsList = qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No'];
         const isTrue = q.correct_answer === true || String(q.correct_answer).toLowerCase() === 'true' || String(q.correct_answer).toLowerCase() === 'yes';
@@ -1003,7 +1042,13 @@ export function convertValidatedJsonToCourseQuestions(
           ? q.acceptable_answers.map((a: any) => String(a).trim())
           : (expectedAns ? [expectedAns] : []);
         passageText = q.passage || q.context || undefined;
-        optionsList = acceptableAns;
+        optionsList = {
+          options: acceptableAns,
+          acceptable_answers: acceptableAns,
+          expected_answer: expectedAns,
+          wh_type: whType,
+          passage: passageText
+        };
         correctAnswerStr = expectedAns;
 
         result.push({
@@ -1012,7 +1057,7 @@ export function convertValidatedJsonToCourseQuestions(
           course_id: courseId,
           question_text: qText,
           question_type: 'wh_question',
-          options: acceptableAns,
+          options: optionsList,
           correct_answer: expectedAns,
           expected_answer: expectedAns,
           acceptable_answers: acceptableAns,

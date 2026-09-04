@@ -54,6 +54,18 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const resolvedCorrect = resolveCorrectOption(question);
   const optionsList: string[] = normalizedOptions.map(opt => opt.text);
 
+  // Extract passage & WH metadata supporting both direct properties and options JSONB object
+  const passageText =
+    question.passage ||
+    (typeof question.options === 'object' && question.options !== null && (question.options as any).passage) ||
+    question.content_ref ||
+    null;
+
+  const whType =
+    question.wh_type ||
+    (typeof question.options === 'object' && question.options !== null && (question.options as any).wh_type) ||
+    (qType === 'wh_question' ? 'Comprehension' : null);
+
   // Local interaction states strictly keyed to this instance
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [fillInput, setFillInput] = useState<string>('');
@@ -127,7 +139,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         question_text: question.question_text,
         student_response: openEndedText.trim(),
         image_url: question.image_url,
-        lesson_context: question.passage || question.explanation || '',
+        lesson_context: passageText || question.explanation || '',
         min_words: question.min_words || 15,
         max_words: question.max_words || 200,
         evaluation_criteria: question.evaluation_criteria || ['grammar', 'vocabulary', 'relevance', 'completeness']
@@ -183,16 +195,28 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     setIsEvaluatingAi(true);
     setAiError(null);
 
+    const expectedAns =
+      question.expected_answer ||
+      question.correct_answer ||
+      (typeof question.options === 'object' && (question.options as any)?.expected_answer) ||
+      '';
+
+    const acceptableAnswers = Array.isArray(question.acceptable_answers)
+      ? question.acceptable_answers
+      : (typeof question.options === 'object' && Array.isArray((question.options as any)?.acceptable_answers)
+          ? (question.options as any).acceptable_answers
+          : []);
+
     try {
       const evaluation = await courseStudioService.evaluateQuestionAnswer({
         question_text: question.question_text,
         student_answer: fillInput.trim(),
-        expected_answer: question.expected_answer || question.correct_answer,
-        acceptable_answers: question.acceptable_answers || [],
+        expected_answer: expectedAns,
+        acceptable_answers: acceptableAnswers,
         evaluation_criteria: question.evaluation_criteria || question.evaluation?.criteria || [],
-        passage: question.passage || question.content_ref || '',
+        passage: passageText || '',
         max_score: question.points || 10,
-        wh_type: question.wh_type,
+        wh_type: whType || undefined,
         cefr_level: 'A1'
       });
 
@@ -264,16 +288,16 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         </div>
       </div>
 
-      {/* COMPREHENSION PASSAGE ANCHOR (IF REFERENCED) */}
-      {(question.passage || question.content_ref) && (
-        <div className="p-3.5 rounded-xl bg-[var(--theme-surface-subtle)] border-l-4 border-l-[#026fc3] text-xs leading-relaxed text-theme-primary space-y-1">
-          <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] flex items-center gap-1">
-            <BookOpen className="w-3 h-3" />
-            <span>Reading Passage Reference</span>
-          </span>
-          <p className="italic font-serif opacity-90">
-            "{question.passage || question.content_ref}"
-          </p>
+      {/* READING PASSAGE REFERENCE CALLOUT */}
+      {passageText && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border-l-4 border-l-[#026fc3] border border-sky-200/40 dark:border-sky-800/40 text-xs leading-relaxed text-theme-primary space-y-1.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#026fc3] dark:text-sky-400">
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>READING PASSAGE REFERENCE</span>
+          </div>
+          <blockquote className="italic font-serif text-sm opacity-95 text-theme-primary pl-2 border-l-2 border-sky-400/40">
+            "{passageText}"
+          </blockquote>
         </div>
       )}
 
@@ -612,13 +636,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* ------------------------------------------------------------------- */}
       {(qType === 'wh_question' || (qType === 'comprehension' && normalizedOptions.length === 0)) && (
         <div className="space-y-3 pt-1">
-          {question.wh_type && (
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
-                WH Question: {question.wh_type.toUpperCase()}
+          {whType && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800 shadow-2xs">
+                WH QUESTION: {String(whType).toUpperCase()}
               </span>
-              <span className="text-xs text-theme-secondary">
-                Answer in your own words based on the passage.
+              <span className="text-xs text-theme-secondary font-medium">
+                Answer in your own words based on the reading passage.
               </span>
             </div>
           )}

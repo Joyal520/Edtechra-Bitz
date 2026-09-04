@@ -229,10 +229,13 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </h3>
                 )}
 
-                {/* 1. ABOVE: [IMAGE] then [TEXT] */}
-                {pos === 'above' && img.url && renderImageFigure('max-w-[800px] mx-auto media-breakout-mobile')}
+                {/* 1. ABOVE or FULL WIDTH: [IMAGE] then [TEXT] */}
+                {(pos === 'above' || pos === 'full_width') && img.url && renderImageFigure('max-w-[800px] mx-auto media-breakout-mobile')}
 
-                {/* 2. LEFT: Desktop [IMAGE] [TEXT], Mobile stacked */}
+                {/* 2. CENTER: [CENTERED IMAGE] then [TEXT] */}
+                {pos === 'center' && img.url && renderImageFigure('max-w-[480px] mx-auto')}
+
+                {/* 3. LEFT: Desktop [IMAGE] [TEXT], Mobile stacked */}
                 {pos === 'left' && img.url ? (
                   <div className="w-full flex flex-col md:flex-row items-start gap-5 sm:gap-6 my-3 sm:my-5">
                     <div className="w-full md:w-[42%] md:max-w-[320px] shrink-0">
@@ -243,7 +246,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     </div>
                   </div>
                 ) : pos === 'right' && img.url ? (
-                  /* 3. RIGHT: Desktop [TEXT] [IMAGE], Mobile stacked */
+                  /* 4. RIGHT: Desktop [TEXT] [IMAGE], Mobile stacked */
                   <div className="w-full flex flex-col md:flex-row-reverse items-start gap-5 sm:gap-6 my-3 sm:my-5">
                     <div className="w-full md:w-[42%] md:max-w-[320px] shrink-0">
                       {renderImageFigure('my-0')}
@@ -253,11 +256,11 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     </div>
                   </div>
                 ) : (
-                  /* Standard Stacked (Above or Below) */
+                  /* Standard Stacked (Above, Below, or Center) */
                   <FormattedLessonText text={bodyText} textScale={textScale} />
                 )}
 
-                {/* 4. BELOW: [TEXT] then [IMAGE] */}
+                {/* 5. BELOW: [TEXT] then [IMAGE] */}
                 {pos === 'below' && img.url && renderImageFigure('max-w-[800px] mx-auto media-breakout-mobile')}
               </section>
             );

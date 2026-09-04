@@ -30,8 +30,7 @@ import {
 import {
   evaluateContrast,
   SAFE_TEXT_COLORS,
-  SAFE_HIGHLIGHT_COLORS,
-  getSurfaceDefaultTextColor
+  SAFE_HIGHLIGHT_COLORS
 } from '@/utils/contrastValidator';
 
 interface CanvaInlineTextEditorProps {
@@ -224,8 +223,6 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
       onChange(editorRef.current.innerHTML);
     }
   };
-
-  const defaultTextColor = getSurfaceDefaultTextColor(surfaceBgColor);
 
   return (
     <div className={`relative w-full group/editor ${className}`}>
@@ -639,11 +636,11 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
         }}
         data-placeholder={placeholder}
         style={{
-          backgroundColor: surfaceBgColor || 'transparent',
-          color: defaultTextColor,
-          caretColor: '#026fc3'
+          backgroundColor: 'var(--theme-input-bg, #0d1522)',
+          color: 'var(--theme-input-text, #f8fafc)',
+          caretColor: 'var(--theme-input-caret, #026fc3)'
         }}
-        className="canva-editor-surface w-full min-h-[90px] p-3 focus:outline-none rounded-xl leading-relaxed transition-all font-sans border border-stone-200/50 dark:border-slate-700/50 focus:border-[#026fc3] focus:ring-2 focus:ring-[#026fc3]/20 empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none text-left selection:bg-sky-500/25 selection:text-current"
+        className="canva-editor-surface w-full min-h-[90px] p-3 focus:outline-none rounded-xl leading-relaxed transition-all font-sans border border-[var(--theme-border-primary)] focus:border-[#026fc3] focus:ring-2 focus:ring-[#026fc3]/20 empty:before:content-[attr(data-placeholder)] empty:before:text-theme-muted empty:before:pointer-events-none text-left selection:bg-sky-500/25 selection:text-current"
       />
     </div>
   );

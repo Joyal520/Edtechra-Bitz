@@ -320,6 +320,140 @@ export function isOptionMatchingStudentAnswer(
   return false;
 }
 
+// ============================================================================
+// SEMANTIC WH & READING COMPREHENSION EVALUATION ENGINE
+// ============================================================================
+
+const SEMANTIC_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+  'do', 'does', 'did', 'has', 'have', 'had', 'in', 'at', 'on', 'to', 'for',
+  'of', 'with', 'by', 'from', 'she', 'he', 'it', 'they', 'her', 'his', 'my',
+  'their', 'its', 'and', 'or', 'that', 'this', 'there', 'here', 'as', 'so'
+]);
+
+const PHRASE_SYNONYMS: Array<[RegExp, string]> = [
+  [/\b(mom\s+and\s+dad|mother\s+and\s+father|mom\s+&\s+dad|mum\s+and\s+dad)\b/gi, 'family'],
+  [/\b(parents|parent|relatives)\b/gi, 'family'],
+  [/\b(mother|father|mom|dad|mum)\b/gi, 'family'],
+  [/\b(likes\s+to|loves\s+to|enjoys\s+to|is\s+fond\s+of)\b/gi, 'like'],
+  [/\b(likes|loves|love|enjoy|enjoys)\b/gi, 'like'],
+  [/\b(pupil|pupils|learner|learners|schoolboy|schoolgirl)\b/gi, 'student'],
+  [/\b(home|flat|apartment|residence)\b/gi, 'house'],
+  [/\b(resides|reside|lives|stay|stays)\b/gi, 'live'],
+  [/\b(kind|nice|helpful|warm|friendly)\b/gi, 'friendly'],
+  [/\b(large|huge)\b/gi, 'big'],
+  [/\b(little|tiny)\b/gi, 'small'],
+  [/\b(starts|begin|begins|start)\b/gi, 'start'],
+  [/\b(finishes|finish|ends|end|completes|complete)\b/gi, 'end'],
+  [/\b(rapid|fast)\b/gi, 'quick'],
+  [/\b(correct|accurate)\b/gi, 'right'],
+  [/\b(talk|speaks|talks|speak)\b/gi, 'speak'],
+  [/\btown\b/gi, 'city'],
+  [/\b(child|children|kids)\b/gi, 'kid']
+];
+
+function lightStemWord(word: string): string {
+  let w = word.toLowerCase();
+  if (w.endsWith('ing') && w.length > 5) {
+    w = w.slice(0, -3);
+  } else if (w.endsWith('ed') && w.length > 4) {
+    w = w.slice(0, -2);
+  } else if (w.endsWith('es') && w.length > 4) {
+    w = w.slice(0, -2);
+  } else if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) {
+    w = w.slice(0, -1);
+  }
+  return w;
+}
+
+function canonicalizeText(text: string): string {
+  let s = cleanTextForComparison(text);
+  for (const [pattern, replacement] of PHRASE_SYNONYMS) {
+    s = s.replace(pattern, replacement);
+  }
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function extractKeyTokens(canonicalText: string): string[] {
+  const words = canonicalText.split(' ').filter(Boolean);
+  const keyWords = words
+    .filter(w => !SEMANTIC_STOP_WORDS.has(w) && w.length > 1)
+    .map(lightStemWord);
+  return Array.from(new Set(keyWords));
+}
+
+/**
+ * Checks whether a student's answer semantically matches an expected WH or comprehension answer.
+ * Handles synonyms (parents <-> family, home <-> house, likes <-> enjoys),
+ * beginner grammar omissions ("She from London"), and token-set overlaps.
+ */
+export function isSemanticWhMatch(
+  studentAnswer: string,
+  expectedAnswer: string,
+  acceptableAnswers: string[] = []
+): boolean {
+  const student = String(studentAnswer || '').trim();
+  if (!student) return false;
+
+  const allAcceptable = [
+    expectedAnswer,
+    ...acceptableAnswers
+  ].filter(s => Boolean(s && String(s).trim()));
+
+  const cleanStudent = cleanTextForComparison(student);
+  if (!cleanStudent) return false;
+
+  // 1. Direct exact or substring match against any acceptable answer
+  for (const candidate of allAcceptable) {
+    const cleanCand = cleanTextForComparison(candidate);
+    if (!cleanCand) continue;
+    if (cleanStudent === cleanCand) return true;
+    if (cleanStudent.includes(cleanCand)) return true;
+    if (cleanCand.includes(cleanStudent) && cleanStudent.length > 3) return true;
+  }
+
+  // 2. Canonicalized synonym match (e.g. "with her parents" -> "with her family")
+  const canStudent = canonicalizeText(student);
+  for (const candidate of allAcceptable) {
+    const canCand = canonicalizeText(candidate);
+    if (!canCand) continue;
+    if (canStudent === canCand) return true;
+    if (canStudent.includes(canCand)) return true;
+    if (canCand.includes(canStudent) && canStudent.length > 3) return true;
+  }
+
+  // 3. Token-set key concept overlap
+  const studentTokens = extractKeyTokens(canStudent);
+  if (studentTokens.length === 0) return false;
+
+  for (const candidate of allAcceptable) {
+    const canCand = canonicalizeText(candidate);
+    const candTokens = extractKeyTokens(canCand);
+    if (candTokens.length === 0) continue;
+
+    const matchedTokens = candTokens.filter(ct =>
+      studentTokens.some(st => st === ct || (ct.length > 3 && (st.includes(ct) || ct.includes(st))))
+    );
+
+    // Single key token (e.g. "London" or "family"): must match exactly
+    if (candTokens.length === 1 && matchedTokens.length === 1) {
+      return true;
+    }
+
+    // Two key tokens (e.g. "read books"): both must match
+    if (candTokens.length === 2 && matchedTokens.length >= 2) {
+      return true;
+    }
+
+    // Three or more key tokens: allow 80% recall (e.g. 2 of 3)
+    if (candTokens.length >= 3 && matchedTokens.length >= candTokens.length - 1) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Evaluates a student answer deterministically.
  */
@@ -498,41 +632,43 @@ export function evaluateQuestionAnswer(
     };
   }
 
-  // 7. WH QUESTION & READING COMPREHENSION
+  // 7. WH QUESTION & READING COMPREHENSION (SEMANTIC EVALUATOR)
   if (qType === 'wh_question' || qType === 'comprehension' || qType === 'short_answer') {
     const studentStr = String(studentAnswer || '').trim();
-    const cleanStudent = cleanTextForComparison(studentStr);
-    const expectedAns = rawCorrect || (question as any).expected_answer || (question as any).expectedAnswer || '';
-    const cleanExpected = cleanTextForComparison(expectedAns);
+    const expectedAns =
+      rawCorrect ||
+      (question as any).expected_answer ||
+      (question as any).expectedAnswer ||
+      (typeof question.options === 'object' && (question.options as any)?.expected_answer) ||
+      '';
 
-    const acceptableList: string[] = [
-      cleanExpected,
-      ...(Array.isArray((question as any).acceptable_answers)
-        ? (question as any).acceptable_answers.map(cleanTextForComparison)
-        : []),
-      ...(Array.isArray((question as any).acceptableAnswers)
-        ? (question as any).acceptableAnswers.map(cleanTextForComparison)
-        : []),
-      ...(Array.isArray(question.options)
-        ? question.options.map((opt: any) => cleanTextForComparison(typeof opt === 'string' ? opt : opt?.text || ''))
-        : [])
-    ].filter(Boolean);
+    const whOptions = (typeof question.options === 'object' && question.options !== null && !Array.isArray(question.options))
+      ? (question.options as any)
+      : {};
 
-    // Exact match against model or any acceptable phrasing
-    const exactMatch = acceptableList.some(acc => cleanStudent === acc);
-    // Substring match: e.g. "Emily lives in London" contains "London" or "London" matches "in London"
-    const containsExpected =
-      cleanExpected.length > 2 &&
-      (cleanStudent.includes(cleanExpected) || (cleanExpected.includes(cleanStudent) && cleanStudent.length > 3));
+    const rawCandidates: any[] = [
+      expectedAns,
+      whOptions.expected_answer,
+      whOptions.expectedAnswer,
+      ...(Array.isArray((question as any).acceptable_answers) ? (question as any).acceptable_answers : []),
+      ...(Array.isArray((question as any).acceptableAnswers) ? (question as any).acceptableAnswers : []),
+      ...(Array.isArray(whOptions.acceptable_answers) ? whOptions.acceptable_answers : []),
+      ...(Array.isArray(whOptions.acceptableAnswers) ? whOptions.acceptableAnswers : []),
+      ...(Array.isArray(question.options) ? question.options : (Array.isArray(whOptions.options) ? whOptions.options : []))
+    ];
 
-    const isCorrect = Boolean(cleanStudent) && (exactMatch || containsExpected);
+    const acceptableList: string[] = rawCandidates
+      .map(c => typeof c === 'string' ? c : (c?.text || ''))
+      .filter(s => Boolean(s && String(s).trim()));
+
+    const isCorrect = isSemanticWhMatch(studentStr, expectedAns, acceptableList);
 
     return {
       isCorrect,
       score: isCorrect ? maxScore : 0,
       maxScore,
       feedback: isCorrect
-        ? `Correct! ${explanation || 'Accurately answered based on the lesson.'}`.trim()
+        ? `Correct! ${explanation || (expectedAns ? `Identified: ${expectedAns}` : 'Accurately answered.')}`.trim()
         : `Expected: "${expectedAns}". ${explanation}`.trim(),
       languageFeedback: null
     };

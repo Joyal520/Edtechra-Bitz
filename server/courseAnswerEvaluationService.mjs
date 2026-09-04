@@ -25,6 +25,64 @@ function cleanText(str) {
     .trim();
 }
 
+const SEMANTIC_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being',
+  'do', 'does', 'did', 'has', 'have', 'had', 'in', 'at', 'on', 'to', 'for',
+  'of', 'with', 'by', 'from', 'she', 'he', 'it', 'they', 'her', 'his', 'my',
+  'their', 'its', 'and', 'or', 'that', 'this', 'there', 'here', 'as', 'so'
+]);
+
+const PHRASE_SYNONYMS = [
+  [/\b(mom\s+and\s+dad|mother\s+and\s+father|mom\s+&\s+dad|mum\s+and\s+dad)\b/gi, 'family'],
+  [/\b(parents|parent|relatives)\b/gi, 'family'],
+  [/\b(mother|father|mom|dad|mum)\b/gi, 'family'],
+  [/\b(likes\s+to|loves\s+to|enjoys\s+to|is\s+fond\s+of)\b/gi, 'like'],
+  [/\b(likes|loves|love|enjoy|enjoys)\b/gi, 'like'],
+  [/\b(pupil|pupils|learner|learners|schoolboy|schoolgirl)\b/gi, 'student'],
+  [/\b(home|flat|apartment|residence)\b/gi, 'house'],
+  [/\b(resides|reside|lives|stay|stays)\b/gi, 'live'],
+  [/\b(kind|nice|helpful|warm|friendly)\b/gi, 'friendly'],
+  [/\b(large|huge)\b/gi, 'big'],
+  [/\b(little|tiny)\b/gi, 'small'],
+  [/\b(starts|begin|begins|start)\b/gi, 'start'],
+  [/\b(finishes|finish|ends|end|completes|complete)\b/gi, 'end'],
+  [/\b(rapid|fast)\b/gi, 'quick'],
+  [/\b(correct|accurate)\b/gi, 'right'],
+  [/\b(talk|speaks|talks|speak)\b/gi, 'speak'],
+  [/\btown\b/gi, 'city'],
+  [/\b(child|children|kids)\b/gi, 'kid']
+];
+
+function lightStem(word) {
+  let w = word.toLowerCase();
+  if (w.endsWith('ing') && w.length > 5) {
+    w = w.slice(0, -3);
+  } else if (w.endsWith('ed') && w.length > 4) {
+    w = w.slice(0, -2);
+  } else if (w.endsWith('es') && w.length > 4) {
+    w = w.slice(0, -2);
+  } else if (w.endsWith('s') && !w.endsWith('ss') && w.length > 3) {
+    w = w.slice(0, -1);
+  }
+  return w;
+}
+
+function canonicalize(text) {
+  let s = cleanText(text);
+  for (const [pattern, replacement] of PHRASE_SYNONYMS) {
+    s = s.replace(pattern, replacement);
+  }
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function extractKeyTokens(canonicalText) {
+  const words = canonicalText.split(' ').filter(Boolean);
+  const keyWords = words
+    .filter(w => !SEMANTIC_STOP_WORDS.has(w) && w.length > 1)
+    .map(lightStem);
+  return Array.from(new Set(keyWords));
+}
+
 /**
  * Deterministic Semantic Fallback Evaluator.
  * Used when API keys are unconfigured or offline, ensuring tests and core functionality always work.
@@ -100,7 +158,64 @@ export function evaluateAnswerDeterministically({
     };
   }
 
-  // 4. Minor grammar omission in beginner English
+  // 4. Canonicalized synonym match (e.g. "with her parents" -> "with her family")
+  const canStudent = canonicalize(student);
+  const allAcceptableWithExpected = [expected_answer, ...acceptable_answers].filter(Boolean);
+
+  for (const candidate of allAcceptableWithExpected) {
+    const canCand = canonicalize(candidate);
+    if (!canCand) continue;
+    if (canStudent === canCand || canStudent.includes(canCand) || (canCand.includes(canStudent) && canStudent.length > 3)) {
+      return {
+        score: max_score,
+        maxScore: max_score,
+        correct: true,
+        feedback: `Correct! ${expected_answer || candidate}`,
+        languageFeedback: null,
+        ai_provider: 'deterministic_evaluator'
+      };
+    }
+  }
+
+  // 5. Token-set key concept overlap
+  const studentTokens = extractKeyTokens(canStudent);
+  if (studentTokens.length > 0) {
+    for (const candidate of allAcceptableWithExpected) {
+      const canCand = canonicalize(candidate);
+      const candTokens = extractKeyTokens(canCand);
+      if (candTokens.length === 0) continue;
+
+      const matchedTokens = candTokens.filter(ct =>
+        studentTokens.some(st => st === ct || (ct.length > 3 && (st.includes(ct) || ct.includes(st))))
+      );
+
+      // Single key token (e.g. "family" vs "parents" -> "family"): must match
+      if (candTokens.length === 1 && matchedTokens.length === 1) {
+        return {
+          score: max_score,
+          maxScore: max_score,
+          correct: true,
+          feedback: `Correct! ${expected_answer || candidate}`,
+          languageFeedback: null,
+          ai_provider: 'deterministic_evaluator'
+        };
+      }
+
+      // Two or more key tokens
+      if (candTokens.length >= 2 && matchedTokens.length >= candTokens.length - (candTokens.length >= 3 ? 1 : 0)) {
+        return {
+          score: max_score,
+          maxScore: max_score,
+          correct: true,
+          feedback: `Correct! ${expected_answer || candidate}`,
+          languageFeedback: null,
+          ai_provider: 'deterministic_evaluator'
+        };
+      }
+    }
+  }
+
+  // 6. Minor grammar omission in beginner English
   // e.g. Question: "Where is Emily from?", Expected: "London", Student: "She from London."
   if (cleanExpected && cleanStudent.includes(cleanExpected)) {
     let langFb = null;
@@ -130,7 +245,7 @@ export function evaluateAnswerDeterministically({
     };
   }
 
-  // 5. Factually incorrect
+  // 7. Factually incorrect
   return {
     score: 0,
     maxScore: max_score,

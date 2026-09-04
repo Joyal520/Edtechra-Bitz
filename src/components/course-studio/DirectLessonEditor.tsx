@@ -261,7 +261,8 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
 
   const deleteQuestion = (qIdx: number) => {
     const next = questions.filter((_, i) => i !== qIdx);
-    onChangeQuestions(next);
+    const reindexed = next.map((q, i) => ({ ...q, order_index: i }));
+    onChangeQuestions(reindexed);
     if (activeEditingQuestionIdx === qIdx) setActiveEditingQuestionIdx(null);
   };
 
@@ -271,7 +272,8 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
     const next = [...questions];
     const [moved] = next.splice(qIdx, 1);
     next.splice(targetIdx, 0, moved);
-    onChangeQuestions(next);
+    const reindexed = next.map((q, i) => ({ ...q, order_index: i }));
+    onChangeQuestions(reindexed);
     if (activeEditingQuestionIdx === qIdx) {
       setActiveEditingQuestionIdx(targetIdx);
     }
@@ -281,12 +283,12 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
     const original = questions[qIdx];
     const duplicated: CourseQuestion = {
       ...JSON.parse(JSON.stringify(original)),
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `q_${Date.now()}`,
-      order_index: questions.length
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `q_${Date.now()}`
     };
     const next = [...questions];
     next.splice(qIdx + 1, 0, duplicated);
-    onChangeQuestions(next);
+    const reindexed = next.map((q, i) => ({ ...q, order_index: i }));
+    onChangeQuestions(reindexed);
     setActiveEditingQuestionIdx(qIdx + 1);
   };
 
@@ -445,8 +447,19 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                         value={blockContent.text || ''}
                         onChange={newText => updateBlockContent(bIdx, { ...blockContent, text: newText })}
                         surfaceBgColor={surfaceHex}
-                        placeholder="Type or format lesson text directly..."
+                        placeholder="Type or paste lesson content here..."
                       />
+                      <div className="flex flex-wrap items-center justify-between text-xs text-theme-muted pt-1 gap-2">
+                        <span>Markdown formatting is supported: headings, lists, tables, bold text and more.</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowMarkdownGuide(true)}
+                          className="inline-flex items-center gap-1 font-bold text-theme-accent hover:underline cursor-pointer shrink-0"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Markdown Guide</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div
@@ -485,10 +498,11 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                               }}
                               className="px-2 py-1 rounded-lg border border-[var(--theme-border-primary)] text-xs font-bold bg-[var(--theme-surface-input)] text-theme-primary"
                             >
-                              <option value="above">Above Text</option>
+                              <option value="above">Above Text (Full Width)</option>
                               <option value="below">Below Text</option>
                               <option value="left">Float Left</option>
                               <option value="right">Float Right</option>
+                              <option value="center">Center</option>
                             </select>
                           </div>
 
@@ -540,6 +554,17 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                         surfaceBgColor={surfaceHex}
                         placeholder="Type story explanation..."
                       />
+                      <div className="flex flex-wrap items-center justify-between text-xs text-theme-muted pt-1 gap-2">
+                        <span>Markdown formatting is supported: headings, lists, tables, bold text and more.</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowMarkdownGuide(true)}
+                          className="inline-flex items-center gap-1 font-bold text-theme-accent hover:underline cursor-pointer shrink-0"
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Markdown Guide</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     /* Position-aware preview when closed / not editing */
@@ -566,10 +591,19 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                           return <FormattedLessonText text={blockContent.text || ''} />;
                         }
 
-                        if (pos === 'above') {
+                        if (pos === 'above' || pos === 'full_width') {
                           return (
                             <div className="space-y-3">
                               {renderFigure()}
+                              <FormattedLessonText text={blockContent.text || ''} />
+                            </div>
+                          );
+                        }
+
+                        if (pos === 'center') {
+                          return (
+                            <div className="space-y-3">
+                              {renderFigure('max-w-md mx-auto')}
                               <FormattedLessonText text={blockContent.text || ''} />
                             </div>
                           );
@@ -1006,9 +1040,25 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                         • {q.skill}
                       </span>
                     )}
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                      {q.points || 10} pts
-                    </span>
+                    <label
+                      className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 cursor-pointer"
+                      title="Click to edit points in-place"
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={q.points || 10}
+                        onChange={e => {
+                          e.stopPropagation();
+                          const pts = Math.max(1, parseInt(e.target.value, 10) || 1);
+                          updateQuestion(qIdx, { points: pts });
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="w-8 bg-transparent text-center font-bold focus:outline-none focus:bg-white/40 dark:focus:bg-black/40 rounded"
+                      />
+                      <span>pts</span>
+                    </label>
                   </div>
 
                   <div className="flex items-center gap-1">
