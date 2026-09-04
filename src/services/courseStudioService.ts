@@ -524,5 +524,35 @@ export const courseStudioService = {
       throw new Error(json.error || 'Failed to evaluate essay response.');
     }
     return json.evaluation;
+  },
+
+  async evaluateQuestionAnswer(payload: {
+    question_text: string;
+    student_answer: string;
+    expected_answer?: string;
+    acceptable_answers?: string[];
+    evaluation_criteria?: string[];
+    passage?: string;
+    max_score?: number;
+    wh_type?: string;
+    cefr_level?: string;
+  }): Promise<{
+    score: number;
+    maxScore: number;
+    correct: boolean;
+    feedback: string;
+    languageFeedback?: string | null;
+  }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/ai/evaluate-answer`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Failed to evaluate answer.');
+    }
+    return json.evaluation;
   }
 };

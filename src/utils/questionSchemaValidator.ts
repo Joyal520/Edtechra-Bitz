@@ -10,8 +10,13 @@ import {
   CourseQuestion,
   DifficultyLevel,
   QuestionType,
-  ClozeBlank
+  ClozeBlank,
+  WhType
 } from '@/types/courseStudio';
+import {
+  normalizeQuestionOptions,
+  resolveCorrectOption
+} from '@/utils/questionGrading';
 
 export interface QuestionPlanItem {
   id: string;
@@ -20,9 +25,17 @@ export interface QuestionPlanItem {
   instructions?: string;
   points: number; // Marks per question (or marks per activity for Ordering / Cloze)
   
-  // Generic question count (MCQ, TF, Fill in Blank, Matching, Short Answer, Essay)
+  // Generic question count (MCQ, TF, Fill in Blank, Matching, Short Answer, Essay, WH)
   count: number;
   
+  // WH Question specific
+  wh_type?: WhType;
+  cefr_level?: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+  ai_evaluated?: boolean;
+  expected_answer?: string;
+  acceptable_answers?: string[];
+  passage?: string;
+
   // Cloze Passage specific: Number of blanks in the single passage
   blankCount?: number;
   
@@ -39,10 +52,71 @@ export interface QuestionPlanItem {
 
 export interface QuestionPlan {
   items: QuestionPlanItem[];
+  cefr_level?: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
   video_transcript?: string;
   image_description?: string;
   teacher_instructions?: string;
 }
+
+export interface QuestionCategoryDefinition {
+  id: string;
+  code: string; // 'A', 'B', 'C', 'D', 'E', 'F', 'G'
+  name: string;
+  description: string;
+  types: QuestionType[];
+}
+
+export const QUESTION_CATEGORIES: QuestionCategoryDefinition[] = [
+  {
+    id: 'category_a',
+    code: 'A',
+    name: 'Multiple Choice & Selection',
+    description: 'Single-choice and multi-select objective questions with distractors',
+    types: ['multiple_choice', 'multiple_select']
+  },
+  {
+    id: 'category_b',
+    code: 'B',
+    name: 'True / False & Binary',
+    description: 'Fact verification, binary true/false and yes/no judgment',
+    types: ['true_false', 'yes_no']
+  },
+  {
+    id: 'category_c',
+    code: 'C',
+    name: 'Fill in the Blank & Cloze',
+    description: 'Single blank, multi-blank, and embedded cloze reading passages',
+    types: ['fill_blank', 'multiple_fill_blanks', 'cloze_passage']
+  },
+  {
+    id: 'category_d',
+    code: 'D',
+    name: 'Matching & Association',
+    description: 'Direct pairs, category classification, and associative concept matching',
+    types: ['matching', 'matching_pairs', 'drag_drop_matching', 'categorisation']
+  },
+  {
+    id: 'category_e',
+    code: 'E',
+    name: 'Ordering & Sequencing',
+    description: 'Chronological timeline, sentence rebuilding, and word reordering',
+    types: ['ordering', 'sentence_builder', 'sentence_reordering', 'word_ordering', 'story_sequence']
+  },
+  {
+    id: 'category_f',
+    code: 'F',
+    name: 'Identification & Odd One Out',
+    description: 'Odd item elimination, visual identification, and inline dropdowns',
+    types: ['odd_one_out', 'image_selection', 'dropdown_selection', 'drag_to_complete']
+  },
+  {
+    id: 'category_g',
+    code: 'G',
+    name: 'Comprehension, WH & Language Production',
+    description: 'Text-anchored WH comprehension, short answers, essay writing, and AI speaking feedback',
+    types: ['wh_question', 'comprehension', 'short_answer', 'essay', 'speaking', 'grammar_correction', 'word_choice']
+  }
+];
 
 export interface ValidationResult {
   isValid: boolean;
@@ -80,7 +154,11 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   short_answer: 'Short Answer',
   cloze_passage: 'Cloze Passage',
   essay: 'Essay / Descriptive Response',
-  comprehension: 'Comprehension Question'
+  comprehension: 'Comprehension Question',
+  wh_question: 'WH Question (Comprehension)',
+  speaking: 'Speaking Response',
+  word_choice: 'Word Choice',
+  grammar_correction: 'Grammar Correction'
 };
 
 /**
@@ -256,6 +334,21 @@ const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
         points: 20
       }
     ]
+  },
+  wh_question: {
+    type: 'wh_question',
+    questions: [
+      {
+        question: 'Where is Emily from?',
+        wh_type: 'where',
+        expected_answer: 'Emily is from London.',
+        acceptable_answers: ['London', 'She is from London', 'She lives in London'],
+        passage: 'Emily lives in London with her family and loves visiting museums.',
+        explanation: 'The passage explicitly states that Emily lives in London.',
+        difficulty: 'medium',
+        points: 10
+      }
+    ]
   }
 };
 
@@ -270,6 +363,7 @@ export function buildAiQuestionPrompt(params: {
   videoTranscript?: string;
   imageDescription?: string;
   plan: QuestionPlan;
+  cefrLevel?: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 }): string {
   const {
     courseTitle,
@@ -278,10 +372,16 @@ export function buildAiQuestionPrompt(params: {
     lessonText,
     videoTranscript,
     imageDescription,
-    plan
+    plan,
+    cefrLevel: directCefr
   } = params;
 
+  const targetCefr = directCefr || plan.cefr_level || 'A1';
+  // Strip HTML tags so the external AI gets pure, clean text without markdown or HTML corruption
+  const cleanLessonText = (lessonText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
   let prompt = `You are an educational assessment generator for EdTechra Course Studio.\n`;
+  prompt += `Target CEFR Level: ${targetCefr}. Align question complexity, grammar structures, and vocabulary strictly to ${targetCefr} language learners.\n`;
   prompt += `Create high-quality practice questions based ONLY on the source material provided below.\n`;
   prompt += `Do not introduce external facts or unsupported assumptions.\n\n`;
 
@@ -290,12 +390,13 @@ export function buildAiQuestionPrompt(params: {
   prompt += `============================================================\n`;
   prompt += `Course: ${courseTitle}\n`;
   prompt += `Unit: ${unitTitle}\n`;
-  prompt += `Lesson: ${episodeTitle}\n\n`;
+  prompt += `Lesson: ${episodeTitle}\n`;
+  prompt += `Target CEFR Level: ${targetCefr}\n\n`;
 
   prompt += `============================================================\n`;
   prompt += `SOURCE MATERIAL\n`;
   prompt += `============================================================\n`;
-  prompt += `LESSON TEXT:\n"""\n${lessonText.trim() || '(No lesson text provided)'}\n"""\n\n`;
+  prompt += `LESSON TEXT:\n"""\n${cleanLessonText || '(No lesson text provided)'}\n"""\n\n`;
 
   if (videoTranscript && videoTranscript.trim()) {
     prompt += `VIDEO TRANSCRIPT:\n"""\n${videoTranscript.trim()}\n"""\n\n`;
@@ -323,6 +424,13 @@ export function buildAiQuestionPrompt(params: {
     } else if (item.type === 'essay') {
       const count = item.count || 1;
       prompt += `${index + 1}. Essay / Descriptive Response — ${count} question${count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words, Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
+    } else if (item.type === 'wh_question') {
+      const count = item.count || 1;
+      const whType = item.wh_type || 'mixed_wh';
+      const whDesc = whType === 'mixed_wh'
+        ? 'balanced variety of WH questions (Who, What, Where, When, Why, How)'
+        : `${whType.toUpperCase()} questions`;
+      prompt += `${index + 1}. WH Comprehension — Create ${count} ${whDesc} strictly anchored to the reading passage. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers" (array of alternate valid phrasings), "passage" (exact excerpt), and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else {
       const count = item.count || 1;
       prompt += `${index + 1}. ${label} — ${count} question${count > 1 ? 's' : ''} (Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
@@ -346,8 +454,9 @@ export function buildAiQuestionPrompt(params: {
   prompt += `4. For Ordering: Generate the exact number of activities requested, with each activity containing the exact requested number of sentence blocks in the "items" array.\n`;
   prompt += `5. For Cloze Passage: Generate EXACTLY ONE question containing a complete passage and a "blanks" array with the EXACT requested number of blanks. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
   prompt += `6. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
-  prompt += `7. Include "points" for every question matching the teacher's selected marks.\n`;
-  prompt += `8. Provide a clear educational explanation for every question.\n\n`;
+  prompt += `7. For WH Comprehension: Include "question", "wh_type", "expected_answer", "acceptable_answers" (array), "passage" (exact quote from text), and "explanation".\n`;
+  prompt += `8. Include "points" for every question matching the teacher's selected marks.\n`;
+  prompt += `9. Provide a clear educational explanation for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
   const exampleQuestionSets = plan.items.map(item => {
@@ -431,6 +540,25 @@ export function buildAiQuestionPrompt(params: {
               'vocabulary'
             ],
             explanation: 'Provide a clear descriptive response grounded in the lesson visual and themes.',
+            difficulty: item.difficulty || 'medium',
+            points: points
+          }
+        ]
+      };
+    }
+
+    if (item.type === 'wh_question') {
+      const whType = item.wh_type === 'mixed_wh' ? 'where' : (item.wh_type || 'where');
+      return {
+        type: 'wh_question',
+        questions: [
+          {
+            question: 'Where is Emily from?',
+            wh_type: whType,
+            expected_answer: 'Emily is from London.',
+            acceptable_answers: ['London', 'She is from London', 'She lives in London'],
+            passage: 'Emily lives in London with her family.',
+            explanation: 'The passage mentions that Emily lives in London.',
             difficulty: item.difficulty || 'medium',
             points: points
           }
@@ -527,14 +655,32 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
   const validTypes: QuestionType[] = [
     'multiple_choice',
+    'multiple_select',
     'true_false',
+    'yes_no',
     'fill_blank',
+    'multiple_fill_blanks',
     'matching',
+    'matching_pairs',
     'sentence_builder',
+    'sentence_reordering',
+    'word_ordering',
     'ordering',
+    'story_sequence',
+    'image_selection',
+    'dropdown_selection',
+    'drag_to_complete',
+    'drag_drop_matching',
+    'categorisation',
+    'odd_one_out',
     'short_answer',
     'cloze_passage',
-    'essay'
+    'essay',
+    'wh_question',
+    'comprehension',
+    'speaking',
+    'grammar_correction',
+    'word_choice'
   ];
 
   const planTypes = (plan?.items || []).map(item => item.type);
@@ -578,6 +724,16 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       const pts = typeof q.points === 'number' ? q.points : (typeKey === 'essay' || typeKey === 'cloze_passage' ? 20 : 10);
       totalMarks += pts;
 
+      // Flexible field normalization for untrusted AI JSON
+      const promptCandidate = q.question || q.questionText || q.prompt || q.statement || q.sentence || '';
+      if (!q.question && promptCandidate) q.question = promptCandidate;
+
+      const correctCandidate = q.correct_answer !== undefined ? q.correct_answer : (q.correctAnswer !== undefined ? q.correctAnswer : (q.answer !== undefined ? q.answer : q.expected_answer));
+      if (q.correct_answer === undefined && correctCandidate !== undefined) q.correct_answer = correctCandidate;
+
+      const optionsCandidate = q.options || q.choices || q.pairs || q.items;
+      if (!q.options && optionsCandidate) q.options = optionsCandidate;
+
       if (typeKey === 'multiple_choice') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
           errors.push(`${qNum}: Missing "question" text.`);
@@ -588,7 +744,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         if (q.correct_answer === undefined || q.correct_answer === null || String(q.correct_answer).trim() === '') {
           errors.push(`${qNum}: Missing "correct_answer".`);
         }
-      } else if (typeKey === 'true_false') {
+      } else if (typeKey === 'true_false' || typeKey === 'yes_no') {
         const text = q.statement || q.question;
         if (!text || typeof text !== 'string' || !text.trim()) {
           errors.push(`${qNum}: Missing "statement" or "question" text.`);
@@ -620,6 +776,15 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         }
         if (!q.correct_answer && (!Array.isArray(q.acceptable_answers) || q.acceptable_answers.length === 0)) {
           errors.push(`${qNum}: Missing "correct_answer" or "acceptable_answers".`);
+        }
+      } else if (typeKey === 'wh_question' || typeKey === 'comprehension') {
+        if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
+          errors.push(`${qNum}: Missing "question" prompt.`);
+        }
+        const hasExpected = q.expected_answer || q.correct_answer || q.answer;
+        const hasAcceptable = Array.isArray(q.acceptable_answers) && q.acceptable_answers.length > 0;
+        if (!hasExpected && !hasAcceptable) {
+          errors.push(`${qNum}: Missing "expected_answer" or "correct_answer".`);
         }
       } else if (typeKey === 'cloze_passage') {
         const passage = q.passage || q.question_text || q.text;
@@ -745,13 +910,57 @@ export function convertValidatedJsonToCourseQuestions(
       const points = typeof q.points === 'number' ? q.points : (qType === 'essay' || qType === 'cloze_passage' ? 20 : 10);
 
       if (qType === 'multiple_choice') {
-        optionsList = Array.isArray(q.options)
-          ? q.options.map((opt: any) => (typeof opt === 'string' ? opt : opt.text || ''))
-          : [];
-      } else if (qType === 'true_false') {
-        optionsList = ['True', 'False'];
-        const isTrue = q.correct_answer === true || String(q.correct_answer).toLowerCase() === 'true';
-        correctAnswerStr = isTrue ? 'True' : 'False';
+        const rawOptions = q.options || q.choices || [];
+        const normalized = normalizeQuestionOptions(rawOptions);
+        const resolved = resolveCorrectOption({
+          options: normalized,
+          correct_answer: q.correct_answer ?? q.correctAnswer ?? q.answer
+        });
+        optionsList = normalized;
+        correctAnswerStr = resolved ? resolved.id : String(q.correct_answer ?? '');
+      } else if (qType === 'true_false' || qType === 'yes_no') {
+        optionsList = qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No'];
+        const isTrue = q.correct_answer === true || String(q.correct_answer).toLowerCase() === 'true' || String(q.correct_answer).toLowerCase() === 'yes';
+        correctAnswerStr = qType === 'true_false' ? (isTrue ? 'True' : 'False') : (isTrue ? 'Yes' : 'No');
+      } else if (qType === 'multiple_select') {
+        optionsList = Array.isArray(q.options) ? q.options : [];
+        correctAnswerStr = Array.isArray(q.correct_answer) ? q.correct_answer.join(', ') : String(q.correct_answer ?? '');
+      } else if (qType === 'wh_question' || (qType === 'comprehension' && (!q.options || q.options.length === 0))) {
+        const whType = (q.wh_type || 'what').toLowerCase();
+        const expectedAns = String(q.expected_answer || q.correct_answer || q.answer || '').trim();
+        const acceptableAns = Array.isArray(q.acceptable_answers)
+          ? q.acceptable_answers.map((a: any) => String(a).trim())
+          : (expectedAns ? [expectedAns] : []);
+        passageText = q.passage || q.context || undefined;
+        optionsList = acceptableAns;
+        correctAnswerStr = expectedAns;
+
+        result.push({
+          id: `q_${Date.now()}_${orderIndex}`,
+          episode_id: episodeId,
+          course_id: courseId,
+          question_text: qText,
+          question_type: 'wh_question',
+          options: acceptableAns,
+          correct_answer: expectedAns,
+          expected_answer: expectedAns,
+          acceptable_answers: acceptableAns,
+          wh_type: whType as WhType,
+          passage: passageText,
+          explanation: q.explanation || '',
+          skill: q.skill || 'Reading Comprehension',
+          concept: q.concept || 'WH Question',
+          difficulty: (q.difficulty as DifficultyLevel) || 'medium',
+          points: points,
+          order_index: orderIndex++,
+          evaluation: {
+            method: 'ai_semantic',
+            ai_evaluated: true,
+            criteria: ['comprehension', 'accuracy', 'key_details'],
+            maxScore: points
+          }
+        });
+        return;
       } else if (qType === 'fill_blank') {
         optionsList = [];
       } else if (qType === 'matching') {

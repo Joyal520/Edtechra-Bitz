@@ -186,6 +186,39 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    const html = e.clipboardData.getData('text/html');
+
+    if (html) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        // Clean out hardcoded inline styles that cause contrast failures
+        const elements = doc.body.querySelectorAll('*');
+        elements.forEach(el => {
+          if (el instanceof HTMLElement) {
+            el.style.removeProperty('color');
+            el.style.removeProperty('background-color');
+            el.style.removeProperty('background');
+            el.style.removeProperty('font-family');
+          }
+        });
+        const cleanHtml = doc.body.innerHTML;
+        document.execCommand('insertHTML', false, cleanHtml);
+      } catch {
+        document.execCommand('insertText', false, text);
+      }
+    } else if (text) {
+      document.execCommand('insertText', false, text);
+    }
+
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
   const defaultTextColor = getSurfaceDefaultTextColor(surfaceBgColor);
 
   return (
@@ -538,11 +571,32 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
       {/* ------------------------------------------------------------------- */}
       {/* IN-PLACE CONTENTEDITABLE SURFACE                                    */}
       {/* ------------------------------------------------------------------- */}
+      <style>{`
+        .canva-editor-surface h1, .canva-editor-surface h2, .canva-editor-surface h3, .canva-editor-surface h4 {
+          font-weight: 800;
+          color: inherit;
+          margin-top: 0.5rem;
+          margin-bottom: 0.35rem;
+          line-height: 1.3;
+        }
+        .canva-editor-surface h1 { font-size: 1.4rem; }
+        .canva-editor-surface h2 { font-size: 1.25rem; }
+        .canva-editor-surface h3 { font-size: 1.1rem; }
+        .canva-editor-surface h4 { font-size: 1.0rem; }
+        .canva-editor-surface p { margin-bottom: 0.5rem; }
+        .canva-editor-surface a { color: #026fc3; text-decoration: underline; font-weight: 600; }
+        .canva-editor-surface ul { list-style-type: disc; margin-left: 1.25rem; margin-bottom: 0.5rem; }
+        .canva-editor-surface ol { list-style-type: decimal; margin-left: 1.25rem; margin-bottom: 0.5rem; }
+        .canva-editor-surface li { margin-bottom: 0.2rem; }
+        .canva-editor-surface blockquote { border-left: 3px solid #026fc3; padding-left: 0.75rem; font-style: italic; margin-bottom: 0.5rem; }
+        .canva-editor-surface b, .canva-editor-surface strong { font-weight: 700; color: inherit; }
+      `}</style>
       <div
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onPaste={handlePaste}
         onMouseUp={handleSelectionChange}
         onKeyUp={handleSelectionChange}
         onBlur={() => {
@@ -554,8 +608,12 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
           }, 200);
         }}
         data-placeholder={placeholder}
-        style={{ color: defaultTextColor }}
-        className="w-full min-h-[90px] p-2 focus:outline-none focus:ring-1 focus:ring-[#026fc3]/30 rounded-xl leading-relaxed transition-colors font-sans empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none text-left selection:bg-sky-200/60 selection:text-slate-900"
+        style={{
+          backgroundColor: surfaceBgColor || 'transparent',
+          color: defaultTextColor,
+          caretColor: '#026fc3'
+        }}
+        className="canva-editor-surface w-full min-h-[90px] p-3 focus:outline-none rounded-xl leading-relaxed transition-all font-sans border border-stone-200/50 dark:border-slate-700/50 focus:border-[#026fc3] focus:ring-2 focus:ring-[#026fc3]/20 empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 empty:before:pointer-events-none text-left selection:bg-sky-500/25 selection:text-current"
       />
     </div>
   );

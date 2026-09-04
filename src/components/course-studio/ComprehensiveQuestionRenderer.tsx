@@ -23,6 +23,12 @@ import {
 import { courseAudio } from '@/utils/courseAudio';
 import { triggerConfettiBurst } from '@/utils/courseConfetti';
 import { courseStudioService } from '@/services/courseStudioService';
+import {
+  normalizeQuestionOptions,
+  resolveCorrectOption,
+  isOptionMatchingStudentAnswer,
+  evaluateQuestionAnswer
+} from '@/utils/questionGrading';
 
 interface ComprehensiveQuestionRendererProps {
   question: CourseQuestion;
@@ -43,11 +49,10 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const qId = question.id || `q_fallback_${index}`;
   const qType = question.question_type || 'multiple_choice';
 
-  // Normalize options array
-  const rawOptions = Array.isArray(question.options) ? question.options : [];
-  const optionsList: string[] = rawOptions.map(opt =>
-    typeof opt === 'string' ? opt : (opt as any)?.text || String(opt)
-  );
+  // Normalize options array with stable identifiers
+  const normalizedOptions = normalizeQuestionOptions(question.options);
+  const resolvedCorrect = resolveCorrectOption(question);
+  const optionsList: string[] = normalizedOptions.map(opt => opt.text);
 
   // Local interaction states strictly keyed to this instance
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
@@ -80,7 +85,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     studentAnswer: any,
     correctCheck: boolean,
     feedbackText: string,
-    pointsMultiplier = 1
+    pointsMultiplier = 1,
+    languageFeedback: string | null = null
   ) => {
     if (isAnswered) return;
 
@@ -100,6 +106,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       score: pointsAwarded,
       maxScore: question.points || 10,
       feedback: feedbackText,
+      languageFeedback,
       evaluatedAt: new Date().toISOString()
     };
 
@@ -167,6 +174,62 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     }
   };
 
+  // --------------------------------------------------------------------------
+  // 3. WH QUESTION / COMPREHENSION AI EVALUATOR SUBMISSION
+  // --------------------------------------------------------------------------
+  const handleEvaluateWhQuestion = async () => {
+    if (!fillInput.trim() || isAnswered || isEvaluatingAi) return;
+
+    setIsEvaluatingAi(true);
+    setAiError(null);
+
+    try {
+      const evaluation = await courseStudioService.evaluateQuestionAnswer({
+        question_text: question.question_text,
+        student_answer: fillInput.trim(),
+        expected_answer: question.expected_answer || question.correct_answer,
+        acceptable_answers: question.acceptable_answers || [],
+        evaluation_criteria: question.evaluation_criteria || question.evaluation?.criteria || [],
+        passage: question.passage || question.content_ref || '',
+        max_score: question.points || 10,
+        wh_type: question.wh_type,
+        cefr_level: 'A1'
+      });
+
+      if (evaluation.correct) {
+        courseAudio.playCorrectSound();
+        triggerConfettiBurst(null);
+      } else {
+        courseAudio.playIncorrectSound();
+      }
+
+      const res: StudentQuestionResponse = {
+        questionId: qId,
+        answer: fillInput.trim(),
+        status: evaluation.correct ? 'correct' : 'incorrect',
+        score: evaluation.score,
+        maxScore: evaluation.maxScore || question.points || 10,
+        feedback: evaluation.feedback,
+        languageFeedback: evaluation.languageFeedback || null,
+        evaluatedAt: new Date().toISOString()
+      };
+
+      onAnswerSubmit(res);
+    } catch (err: any) {
+      console.warn('AI evaluation service failed, falling back to local evaluation:', err);
+      const fallbackResult = evaluateQuestionAnswer(question, fillInput.trim());
+      commitAnswer(
+        fillInput.trim(),
+        fallbackResult.isCorrect,
+        fallbackResult.feedback,
+        fallbackResult.isCorrect ? 1 : 0,
+        fallbackResult.languageFeedback
+      );
+    } finally {
+      setIsEvaluatingAi(false);
+    }
+  };
+
   return (
     <div
       id={`question-${qId}`}
@@ -220,21 +283,21 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       </h4>
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 1: MULTIPLE CHOICE                                             */}
+      {/* TYPE 1: MULTIPLE CHOICE (ROBUST SINGLE-SOURCE-OF-TRUTH GRADING)     */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'multiple_choice' && (
         <div className="space-y-2 pt-1">
-          {optionsList.map((opt, oIdx) => {
-            const letter = String.fromCharCode(65 + oIdx);
-            const isSelected = response?.answer === opt;
-            const isCorrectAnswer =
-              opt.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
+          {normalizedOptions.map((opt, oIdx) => {
+            const isSelected = isOptionMatchingStudentAnswer(opt, response?.answer);
+            const isThisTheCorrectAnswer = resolvedCorrect ? resolvedCorrect.id === opt.id : false;
 
             let btnStyle = 'surface-answer-option text-theme-primary hover:border-[var(--theme-accent)]';
             if (isAnswered) {
               if (isSelected) {
-                btnStyle = isCorrect ? 'bg-emerald-600 text-white font-bold' : 'bg-rose-600 text-white font-bold';
-              } else if (!isCorrect && isCorrectAnswer) {
+                btnStyle = isCorrect
+                  ? 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-400'
+                  : 'bg-rose-600 text-white font-bold ring-2 ring-rose-400';
+              } else if (!isCorrect && isThisTheCorrectAnswer) {
                 btnStyle = 'border-2 border-emerald-500 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 font-bold';
               } else {
                 btnStyle = 'opacity-40 bg-[var(--theme-surface-subtle)] text-theme-muted';
@@ -243,24 +306,25 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
             return (
               <button
-                key={oIdx}
+                key={opt.id || oIdx}
                 type="button"
                 disabled={isAnswered}
-                onClick={() =>
+                onClick={() => {
+                  const evalResult = evaluateQuestionAnswer(question, opt.id);
                   commitAnswer(
-                    opt,
-                    isCorrectAnswer,
-                    isCorrectAnswer
-                      ? question.explanation || 'Correct answer!'
-                      : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
-                  )
-                }
+                    opt.id,
+                    evalResult.isCorrect,
+                    evalResult.feedback,
+                    evalResult.isCorrect ? 1 : 0,
+                    evalResult.languageFeedback
+                  );
+                }}
                 className={`w-full p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all box-border cursor-pointer disabled:cursor-not-allowed ${btnStyle}`}
               >
                 <span className="w-7 h-7 rounded-lg bg-black/10 dark:bg-white/10 flex items-center justify-center text-xs font-black shrink-0">
-                  {isSelected ? (isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />) : letter}
+                  {isSelected ? (isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />) : opt.id}
                 </span>
-                <span className="flex-1 font-medium">{opt}</span>
+                <span className="flex-1 font-medium">{opt.text}</span>
               </button>
             );
           })}
@@ -544,7 +608,57 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 8: OPEN-ENDED WITH AI EVALUATION (ESSAY / SHORT ANSWER)        */}
+      {/* TYPE 8: WH QUESTION & READING COMPREHENSION                         */}
+      {/* ------------------------------------------------------------------- */}
+      {(qType === 'wh_question' || (qType === 'comprehension' && normalizedOptions.length === 0)) && (
+        <div className="space-y-3 pt-1">
+          {question.wh_type && (
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+                WH Question: {question.wh_type.toUpperCase()}
+              </span>
+              <span className="text-xs text-theme-secondary">
+                Answer in your own words based on the passage.
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <textarea
+              rows={2}
+              disabled={isAnswered || isEvaluatingAi}
+              value={fillInput}
+              onChange={e => setFillInput(e.target.value)}
+              placeholder="Type your complete answer here..."
+              className="w-full p-3 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-theme-primary text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#026fc3] leading-relaxed"
+            />
+
+            {aiError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{aiError}</span>
+              </div>
+            )}
+
+            {!isAnswered && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!fillInput.trim() || isEvaluatingAi}
+                  onClick={handleEvaluateWhQuestion}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-40 transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>{isEvaluatingAi ? 'Evaluating Answer...' : 'Submit Answer'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TYPE 9: OPEN-ENDED WITH AI EVALUATION (ESSAY / SHORT ANSWER)        */}
       {/* ------------------------------------------------------------------- */}
       {(qType === 'short_answer' || qType === 'essay') && (
         <div className="space-y-3 pt-1">
@@ -592,7 +706,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           <div className="flex items-center justify-between font-black">
             <span className="flex items-center gap-1.5">
               {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
-              <span>{isCorrect ? 'Correct!' : 'Needs Review'}</span>
+              <span>{isCorrect ? 'Correct!' : (qType === 'essay' || qType === 'short_answer' ? 'Needs Review' : 'Incorrect')}</span>
             </span>
             <span className="font-mono">
               Score: {response?.score} / {response?.maxScore} pts
@@ -600,6 +714,17 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           </div>
 
           <p className="font-medium">{response?.feedback}</p>
+
+          {/* Language Feedback Coaching for WH / ESL questions */}
+          {response?.languageFeedback && (
+            <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200 text-xs flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Language Coaching: </span>
+                <span>{response.languageFeedback}</span>
+              </div>
+            </div>
+          )}
 
           {/* AI Strengths & Improvements */}
           {response?.strengths && response.strengths.length > 0 && (

@@ -122,6 +122,7 @@ import {
   retryQueueItem
 } from './server/postQueueService.mjs';
 import { evaluateStudentEssay } from './server/courseEssayEvaluationService.mjs';
+import { evaluateStudentAnswer } from './server/courseAnswerEvaluationService.mjs';
 import { knowledgeBitzService } from './server/knowledgeBitzService.mjs';
 import { searchPixabay } from './server/pixabayService.mjs';
 
@@ -3270,6 +3271,50 @@ app.post('/api/course-studio/essay-evaluate', async (req, res) => {
   } catch (err) {
     console.error('Error in POST /api/course-studio/essay-evaluate:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to evaluate essay.' });
+  }
+});
+
+// 14c. POST /api/course-studio/ai/evaluate-answer - Evaluate student short answer & WH question
+app.post('/api/course-studio/ai/evaluate-answer', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      question_text,
+      student_answer,
+      expected_answer,
+      acceptable_answers = [],
+      evaluation_criteria = [],
+      passage = '',
+      max_score = 10,
+      wh_type = '',
+      cefr_level = 'A1'
+    } = req.body;
+
+    if (!question_text || student_answer === undefined) {
+      return res.status(400).json({ success: false, error: 'question_text and student_answer are required.' });
+    }
+
+    const evaluation = await evaluateStudentAnswer({
+      question_text,
+      student_answer,
+      expected_answer,
+      acceptable_answers,
+      evaluation_criteria,
+      passage,
+      max_score,
+      wh_type,
+      cefr_level,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      openaiApiKey: process.env.OPENAI_API_KEY,
+      serverOpenAI
+    });
+
+    res.json({ success: true, evaluation });
+  } catch (err) {
+    console.error('Error in POST /api/course-studio/ai/evaluate-answer:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to evaluate answer.' });
   }
 });
 

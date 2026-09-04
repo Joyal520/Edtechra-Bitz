@@ -2363,13 +2363,15 @@ export const CourseEditorPage: React.FC = () => {
           const mcqCount = normalized.filter(q => q.question_type === 'multiple_choice').length;
           const tfCount = normalized.filter(q => q.question_type === 'true_false').length;
           const ordCount = normalized.filter(q => q.question_type === 'ordering').length;
+          const whCount = normalized.filter(q => q.question_type === 'wh_question').length;
           
           const parts: string[] = [];
           if (mcqCount > 0) parts.push(`${mcqCount} Multiple Choice`);
           if (tfCount > 0) parts.push(`${tfCount} True / False`);
           if (ordCount > 0) parts.push(`${ordCount} Ordering Activity`);
+          if (whCount > 0) parts.push(`${whCount} WH Comprehension`);
 
-          setSuccessBanner(`✓ Lesson Imported: ${parts.join(', ')} (${normalized.length} Activities / Questions Imported)`);
+          setSuccessBanner(`✓ Lesson Imported: ${parts.join(', ') || `${normalized.length} Questions`} (${normalized.length} Activities / Questions Imported)`);
           setTimeout(() => setSuccessBanner(null), 4500);
         }}
       />

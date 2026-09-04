@@ -28,6 +28,7 @@ import {
   QuestionPlan,
   QuestionPlanItem,
   QUESTION_TYPE_LABELS,
+  QUESTION_CATEGORIES,
   buildAiQuestionPrompt,
   validateAiQuestionJson,
   convertValidatedJsonToCourseQuestions,
@@ -79,6 +80,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
   const [videoTranscript, setVideoTranscript] = useState('');
   const [imageDescription, setImageDescription] = useState('');
   const [teacherInstructions, setTeacherInstructions] = useState('');
+  const [cefrLevel, setCefrLevel] = useState<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'>('A1');
 
   // Prompt state
   const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -129,6 +131,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
   const handleGeneratePrompt = () => {
     const plan: QuestionPlan = {
       items: planItems,
+      cefr_level: cefrLevel,
       video_transcript: videoTranscript,
       image_description: imageDescription,
       teacher_instructions: teacherInstructions
@@ -141,7 +144,8 @@ export const QuestionPlanModal: React.FC<Props> = ({
       lessonText,
       videoTranscript,
       imageDescription,
-      plan
+      plan,
+      cefrLevel
     });
 
     setGeneratedPrompt(promptText);
@@ -161,6 +165,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
   const handleValidateJson = () => {
     const plan: QuestionPlan = {
       items: planItems,
+      cefr_level: cefrLevel,
       video_transcript: videoTranscript,
       image_description: imageDescription,
       teacher_instructions: teacherInstructions
@@ -277,12 +282,32 @@ export const QuestionPlanModal: React.FC<Props> = ({
           {tab === 'plan' && (
             <div className="space-y-6">
               
-              {/* Question Sources Summary Box */}
-              <div className="p-4 rounded-2xl bg-sky-50/60 border border-sky-200/80 space-y-2">
-                <p className="text-[11px] font-black text-[#026fc3] uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Question Generation Sources</span>
-                </p>
+              {/* Question Sources Summary Box & CEFR Level */}
+              <div className="p-4 rounded-2xl bg-sky-50/60 border border-sky-200/80 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-sky-200/50">
+                  <p className="text-[11px] font-black text-[#026fc3] uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Question Generation Settings</span>
+                  </p>
+                  
+                  {/* CEFR Level Selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">Target CEFR:</span>
+                    <select
+                      value={cefrLevel}
+                      onChange={e => setCefrLevel(e.target.value as any)}
+                      className="px-2.5 py-1 rounded-lg border border-sky-300 bg-white text-xs font-black text-[#026fc3] shadow-2xs focus:ring-2 focus:ring-[#026fc3]"
+                    >
+                      <option value="A1">A1 — Beginner</option>
+                      <option value="A2">A2 — Elementary</option>
+                      <option value="B1">B1 — Intermediate</option>
+                      <option value="B2">B2 — Upper Intermediate</option>
+                      <option value="C1">C1 — Advanced</option>
+                      <option value="C2">C2 — Proficiency</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-700">
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -413,6 +438,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
                                 handleUpdatePlanItem(item.id, {
                                   type: newType,
                                   points: newType === 'essay' || newType === 'cloze_passage' ? 20 : 10,
+                                  wh_type: newType === 'wh_question' ? 'mixed_wh' : undefined,
                                   blankCount: newType === 'cloze_passage' ? 10 : undefined,
                                   activityCount: newType === 'ordering' ? 1 : undefined,
                                   itemsPerActivity: newType === 'ordering' ? 5 : undefined,
@@ -423,14 +449,15 @@ export const QuestionPlanModal: React.FC<Props> = ({
                               }}
                               className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#026fc3] bg-white"
                             >
-                              <option value="multiple_choice">Multiple Choice (A,B,C,D)</option>
-                              <option value="true_false">True / False</option>
-                              <option value="fill_blank">Fill in the Blank</option>
-                              <option value="cloze_passage">Cloze Passage</option>
-                              <option value="matching">Matching Pairs</option>
-                              <option value="ordering">Ordering Sequence</option>
-                              <option value="short_answer">Short Answer</option>
-                              <option value="essay">Essay / Descriptive Response</option>
+                              {QUESTION_CATEGORIES.map(cat => (
+                                <optgroup key={cat.id} label={`Category ${cat.code}: ${cat.name}`}>
+                                  {cat.types.map(t => (
+                                    <option key={t} value={t}>
+                                      {QUESTION_TYPE_LABELS[t] || t}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))}
                             </select>
                           </div>
 
@@ -613,6 +640,48 @@ export const QuestionPlanModal: React.FC<Props> = ({
                                     </button>
                                   );
                                 })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Extended Controls for WH Questions */}
+                        {item.type === 'wh_question' && (
+                          <div className="p-3.5 rounded-xl bg-sky-50/60 border border-sky-200/80 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-black text-[#026fc3] uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                                <span>WH Comprehension Configuration</span>
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                                AI Evaluation + Semantic Grading
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-600 uppercase">WH Question Focus</label>
+                                <select
+                                  value={item.wh_type || 'mixed_wh'}
+                                  onChange={e => handleUpdatePlanItem(item.id, { wh_type: e.target.value as any })}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs font-medium bg-white"
+                                >
+                                  <option value="mixed_wh">Mixed WH Questions (Who, What, Where, When, Why, How)</option>
+                                  <option value="who">Who (People, subjects)</option>
+                                  <option value="what">What (Actions, definitions, objects)</option>
+                                  <option value="where">Where (Locations, origin)</option>
+                                  <option value="when">When (Time, sequence)</option>
+                                  <option value="why">Why (Reasons, motives)</option>
+                                  <option value="how">How (Manner, process)</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-600 uppercase">Evaluation & Coaching</label>
+                                <div className="px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-xs text-slate-700 flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>CEFR-aware semantic scoring + language advice</span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -810,6 +879,52 @@ export const QuestionPlanModal: React.FC<Props> = ({
                           </span>
                         </div>
                       </div>
+
+                      {/* Interactive Question Preview List */}
+                      {validationResult.parsedData?.question_sets && (
+                        <div className="space-y-2 pt-2">
+                          <div className="flex items-center justify-between text-xs font-black text-slate-800">
+                            <span>Questions Preview ({validationResult.summary.totalQuestions} Questions)</span>
+                            <span className="text-emerald-700 font-bold">Ready to Import</span>
+                          </div>
+
+                          <div className="max-h-60 overflow-y-auto space-y-2 p-2 bg-slate-50/80 rounded-xl border border-stone-200">
+                            {validationResult.parsedData.question_sets.flatMap((qSet: any) =>
+                              (qSet.questions || []).map((q: any, qIdx: number) => {
+                                const qLabel = QUESTION_TYPE_LABELS[qSet.type as QuestionType] || qSet.type;
+                                const prompt = q.question || q.statement || q.sentence || 'Question';
+                                const ans = q.correct_answer !== undefined ? String(q.correct_answer) : (q.expected_answer || '');
+                                return (
+                                  <div
+                                    key={`${qSet.type}-${qIdx}`}
+                                    className="p-3 rounded-lg bg-white border border-stone-200/80 text-xs space-y-1"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="px-1.5 py-0.5 rounded bg-sky-100 text-[#026fc3] font-black text-[10px] uppercase">
+                                        {qLabel}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-slate-400">
+                                        {q.points || 10} pts
+                                      </span>
+                                    </div>
+                                    <p className="font-bold text-slate-900">{prompt}</p>
+                                    {ans && (
+                                      <p className="text-emerald-700 font-medium text-[11px]">
+                                        <span className="font-bold">Correct Answer:</span> {ans}
+                                      </p>
+                                    )}
+                                    {q.explanation && (
+                                      <p className="text-slate-500 italic text-[11px]">
+                                        {q.explanation}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {validationResult.warnings.length > 0 && (
                         <div className="text-xs text-amber-800 space-y-0.5 pt-1">

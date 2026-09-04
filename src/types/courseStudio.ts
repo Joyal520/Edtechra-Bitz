@@ -49,7 +49,13 @@ export type QuestionType =
   | 'short_answer'
   | 'cloze_passage'
   | 'essay'
-  | 'comprehension';
+  | 'comprehension'
+  | 'wh_question'
+  | 'speaking'
+  | 'word_choice'
+  | 'grammar_correction';
+
+export type WhType = 'who' | 'what' | 'where' | 'when' | 'why' | 'how' | 'mixed' | 'mixed_wh';
 
 export type ComprehensionType =
   | 'literal'
@@ -94,6 +100,7 @@ export interface StudentQuestionResponse {
   strengths?: string[];
   improvements?: string[];
   criteria?: OpenEndedRubricCriterion[];
+  languageFeedback?: string | null;
   evaluatedAt?: string;
 }
 
@@ -248,6 +255,16 @@ export interface CourseQuestion {
   content_ref?: string;
   rubric?: OpenEndedRubricCriterion[];
   keywords?: string[];
+  wh_type?: WhType;
+  category?: string;
+  expected_answer?: string;
+  acceptable_answers?: string[];
+  evaluation?: {
+    method?: string;
+    criteria?: string[];
+    maxScore?: number;
+    ai_evaluated?: boolean;
+  };
   created_at?: string;
   updated_at?: string;
 }

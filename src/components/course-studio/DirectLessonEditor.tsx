@@ -36,6 +36,14 @@ import { courseStudioService } from '@/services/courseStudioService';
 import { MarkdownGuideModal } from '@/components/course-studio/MarkdownGuideModal';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
 import { getThemePreset } from '@/utils/courseThemes';
+import {
+  normalizeQuestionOptions,
+  isOptionMatchingStudentAnswer
+} from '@/utils/questionGrading';
+import {
+  QUESTION_CATEGORIES,
+  QUESTION_TYPE_LABELS
+} from '@/utils/questionSchemaValidator';
 
 interface DirectLessonEditorProps {
   blocks: CourseBlock[];
@@ -182,16 +190,56 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
   // 3. QUESTION ACTIONS: ADD, EDIT, DELETE
   // --------------------------------------------------------------------------
   const handleAddQuestion = (type: QuestionType) => {
+    let initialOptions: any = ['Option A', 'Option B', 'Option C', 'Option D'];
+    let initialCorrect = 'A';
+    let whType: any = undefined;
+    let expectedAnswer: string | undefined = undefined;
+    let acceptableAnswers: string[] | undefined = undefined;
+    let evaluation: any = undefined;
+
+    if (type === 'multiple_choice') {
+      initialOptions = [
+        { id: 'A', text: 'Option A' },
+        { id: 'B', text: 'Option B' },
+        { id: 'C', text: 'Option C' },
+        { id: 'D', text: 'Option D' }
+      ];
+      initialCorrect = 'A';
+    } else if (type === 'true_false') {
+      initialOptions = ['True', 'False'];
+      initialCorrect = 'True';
+    } else if (type === 'yes_no') {
+      initialOptions = ['Yes', 'No'];
+      initialCorrect = 'Yes';
+    } else if (type === 'wh_question') {
+      initialOptions = ['London', 'She is from London'];
+      initialCorrect = 'Emily is from London.';
+      expectedAnswer = 'Emily is from London.';
+      acceptableAnswers = ['London', 'She is from London', 'She lives in London'];
+      whType = 'where';
+      evaluation = {
+        ai_evaluated: true,
+        criteria: ['comprehension', 'accuracy', 'key_details']
+      };
+    } else if (type === 'fill_blank') {
+      initialOptions = [];
+      initialCorrect = 'sky';
+    }
+
     const newQ: CourseQuestion = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `q_${Date.now()}`,
       course_id: '',
       episode_id: '',
-      question_text: 'New practice question based on this lesson',
+      question_text: type === 'wh_question' ? 'Where is Emily from?' : 'New practice question based on this lesson',
       question_type: type,
-      options: type === 'true_false' ? ['True', 'False'] : ['Option A', 'Option B', 'Option C', 'Option D'],
-      correct_answer: type === 'true_false' ? 'True' : 'Option A',
+      options: initialOptions,
+      correct_answer: initialCorrect,
+      expected_answer: expectedAnswer,
+      acceptable_answers: acceptableAnswers,
+      wh_type: whType,
+      evaluation,
       explanation: 'Explanation of why this answer is correct.',
-      skill: 'Comprehension',
+      skill: type === 'wh_question' ? 'Reading Comprehension' : 'Comprehension',
       concept: 'Core Lesson Takeaway',
       difficulty: 'medium',
       points: 10,
@@ -889,6 +937,68 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                 {/* Question Editor Fields */}
                 {isEditingQ && (
                   <div className="mt-3 space-y-3 pt-2 border-t border-[var(--theme-border-subtle)]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-bold text-theme-muted uppercase">Question Type</span>
+                        <select
+                          value={q.question_type}
+                          onChange={e => {
+                            const newType = e.target.value as QuestionType;
+                            let newOpts = q.options;
+                            let newCorrect = q.correct_answer;
+                            let whType = q.wh_type;
+                            let expected = q.expected_answer;
+
+                            if (newType === 'multiple_choice') {
+                              newOpts = normalizeQuestionOptions(q.options || ['Option A', 'Option B', 'Option C', 'Option D']);
+                              newCorrect = 'A';
+                            } else if (newType === 'true_false') {
+                              newOpts = ['True', 'False'];
+                              newCorrect = 'True';
+                            } else if (newType === 'yes_no') {
+                              newOpts = ['Yes', 'No'];
+                              newCorrect = 'Yes';
+                            } else if (newType === 'wh_question') {
+                              whType = 'what';
+                              expected = q.correct_answer || 'Expected answer based on lesson';
+                              newCorrect = expected;
+                            }
+
+                            updateQuestion(qIdx, {
+                              question_type: newType,
+                              options: newOpts,
+                              correct_answer: newCorrect,
+                              wh_type: whType,
+                              expected_answer: expected
+                            });
+                          }}
+                          className="w-full p-2 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-xs font-bold text-theme-primary"
+                        >
+                          {QUESTION_CATEGORIES.map(cat => (
+                            <optgroup key={cat.id} label={`Category ${cat.code}: ${cat.name}`}>
+                              {cat.types.map(t => (
+                                <option key={t} value={t}>
+                                  {QUESTION_TYPE_LABELS[t] || t}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-bold text-theme-muted uppercase">Points</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={q.points || 10}
+                          onChange={e => updateQuestion(qIdx, { points: Math.max(1, parseInt(e.target.value) || 1) })}
+                          className="w-full p-2 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-xs font-bold text-theme-primary"
+                        />
+                      </div>
+                    </div>
+
                     <div className="space-y-1">
                       <span className="text-[11px] font-bold text-theme-muted">Question Prompt</span>
                       <input
@@ -912,10 +1022,97 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
                       />
                     </div>
 
-                    {/* Options Editor */}
-                    {Array.isArray(q.options) && q.options.length > 0 && (
+                    {/* Options Editor for Multiple Choice */}
+                    {q.question_type === 'multiple_choice' && Array.isArray(q.options) && q.options.length > 0 && (
                       <div className="space-y-1.5 pl-2 border-l-2 border-[#026fc3]/40">
-                        <span className="text-[11px] font-bold text-theme-muted">Answer Options & Correct Key</span>
+                        <span className="text-[11px] font-bold text-theme-muted">Answer Options & Correct Answer</span>
+                        {normalizeQuestionOptions(q.options).map((normOpt, oIdx) => {
+                          const isOptionCorrect = isOptionMatchingStudentAnswer(normOpt, q.correct_answer);
+                          return (
+                            <div key={normOpt.id || oIdx} className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/10 text-[10px] font-black flex items-center justify-center shrink-0">
+                                {normOpt.id}
+                              </span>
+                              <input
+                                type="radio"
+                                name={`correct_${qIdx}`}
+                                checked={isOptionCorrect}
+                                onChange={() => updateQuestion(qIdx, { correct_answer: normOpt.id })}
+                                className="accent-[#10b981] cursor-pointer"
+                                title={`Mark option ${normOpt.id} as correct`}
+                              />
+                              <input
+                                type="text"
+                                value={normOpt.text}
+                                onChange={e => {
+                                  const nextOpts = [...(q.options as any[])];
+                                  if (typeof nextOpts[oIdx] === 'object' && nextOpts[oIdx] !== null) {
+                                    nextOpts[oIdx] = { ...nextOpts[oIdx], text: e.target.value };
+                                  } else {
+                                    nextOpts[oIdx] = e.target.value;
+                                  }
+                                  updateQuestion(qIdx, { options: nextOpts });
+                                }}
+                                className="flex-1 p-2 rounded-lg border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-xs text-theme-primary"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* WH Question Specific Fields */}
+                    {q.question_type === 'wh_question' && (
+                      <div className="space-y-3 p-3 rounded-xl bg-sky-50/50 border border-sky-200/60">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-bold text-slate-700">WH Question Focus</span>
+                            <select
+                              value={q.wh_type || 'what'}
+                              onChange={e => updateQuestion(qIdx, { wh_type: e.target.value as any })}
+                              className="w-full p-2 rounded-lg border border-stone-200 text-xs font-bold text-slate-800 bg-white"
+                            >
+                              <option value="who">Who (Person / Character)</option>
+                              <option value="what">What (Fact / Object / Action)</option>
+                              <option value="where">Where (Place / Origin)</option>
+                              <option value="when">When (Time / Sequence)</option>
+                              <option value="why">Why (Reason / Motive)</option>
+                              <option value="how">How (Process / Manner)</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-bold text-slate-700">Expected Model Answer</span>
+                            <input
+                              type="text"
+                              value={q.expected_answer || q.correct_answer || ''}
+                              onChange={e => updateQuestion(qIdx, { expected_answer: e.target.value, correct_answer: e.target.value })}
+                              placeholder="e.g. Emily is from London."
+                              className="w-full p-2 rounded-lg border border-stone-200 text-xs font-medium text-slate-800 bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-slate-700">Acceptable Variations (comma separated)</span>
+                          <input
+                            type="text"
+                            value={Array.isArray(q.acceptable_answers) ? q.acceptable_answers.join(', ') : ''}
+                            onChange={e => {
+                              const list = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                              updateQuestion(qIdx, { acceptable_answers: list });
+                            }}
+                            placeholder="e.g. London, She is from London, She lives in London"
+                            className="w-full p-2 rounded-lg border border-stone-200 text-xs font-medium text-slate-800 bg-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generic Options for other types */}
+                    {q.question_type !== 'multiple_choice' && q.question_type !== 'wh_question' && Array.isArray(q.options) && q.options.length > 0 && (
+                      <div className="space-y-1.5 pl-2 border-l-2 border-[#026fc3]/40">
+                        <span className="text-[11px] font-bold text-theme-muted">Options & Correct Answer</span>
                         {(q.options as any[]).map((rawOpt, oIdx) => {
                           const opt = typeof rawOpt === 'string' ? rawOpt : (rawOpt?.text || String(rawOpt));
                           return (
@@ -975,56 +1172,29 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
             </button>
 
             {showAddQuestionMenu && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 bg-[var(--theme-surface-card)] text-theme-primary rounded-xl shadow-xl border border-[var(--theme-border-primary)] p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100">
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('multiple_choice')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Multiple Choice
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('multiple_select')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Multiple Select
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('true_false')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  True / False
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('fill_blank')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Fill in the Blank
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('sentence_reordering')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Sentence Reordering
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('odd_one_out')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Odd One Out
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddQuestion('short_answer')}
-                  className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold"
-                >
-                  Short Answer (AI Evaluated)
-                </button>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 max-h-80 overflow-y-auto bg-[var(--theme-surface-card)] text-theme-primary rounded-xl shadow-xl border border-[var(--theme-border-primary)] p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100">
+                {QUESTION_CATEGORIES.map(cat => (
+                  <div key={cat.id} className="mb-2">
+                    <span className="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-theme-muted block border-b border-stone-100 dark:border-slate-800">
+                      Cat {cat.code}: {cat.name}
+                    </span>
+                    <div className="space-y-0.5 pt-1">
+                      {cat.types.map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => handleAddQuestion(t)}
+                          className="w-full px-2.5 py-1.5 rounded-lg hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-medium flex items-center justify-between"
+                        >
+                          <span>{QUESTION_TYPE_LABELS[t] || t}</span>
+                          {t === 'wh_question' && (
+                            <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-sky-100 text-sky-700">AI</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
