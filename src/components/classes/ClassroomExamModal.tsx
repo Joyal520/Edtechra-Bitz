@@ -32,6 +32,7 @@ interface ClassroomExamModalProps {
   classroomId: string;
   isTeacher: boolean;
   activeExam?: ClassroomExam | any | null;
+  initialTab?: 'my-exams' | 'creator' | 'results';
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -198,11 +199,12 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   classroomId,
   isTeacher,
   activeExam,
+  initialTab,
   onClose,
   onSuccess
 }) => {
   // Navigation tabs for Teacher
-  const [activeTab, setActiveTab] = useState<'my-exams' | 'creator' | 'results'>('my-exams');
+  const [activeTab, setActiveTab] = useState<'my-exams' | 'creator' | 'results'>(initialTab || (activeExam ? 'results' : 'creator'));
   const [creatorStage, setCreatorStage] = useState<'setup' | 'structure' | 'review' | 'publish'>('setup');
 
   // Teacher Previous Exams state
@@ -330,8 +332,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
           setSelectedExamForResults(activeExam);
           loadExamAnalytics(activeExam);
           setActiveTab('results');
+        } else if (initialTab) {
+          setActiveTab(initialTab);
+          if (initialTab === 'creator') {
+            setCreatorStage('setup');
+          }
         } else {
-          setActiveTab('my-exams');
+          setActiveTab('creator');
+          setCreatorStage('setup');
         }
       } else {
         if (activeExam) {
@@ -339,7 +347,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         }
       }
     }
-  }, [isOpen, isTeacher, activeExam]);
+  }, [isOpen, isTeacher, activeExam, initialTab]);
 
   // Student Timer
   useEffect(() => {
@@ -738,121 +746,122 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-5xl w-full h-[92vh] max-h-[850px] shadow-2xl border border-slate-100 relative overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-        
-        {/* ================================================================= */}
-        {/* TOP BAR                                                           */}
-        {/* ================================================================= */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Award className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-slate-900">
-                  {isTeacher ? 'EdTechra AI Exam Engine 2.0' : studentTakingExam?.title || 'Classroom Examination'}
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                  Authoritative Marks Engine
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium">
-                {isTeacher
-                  ? 'Create reusable exam templates, republish across classes, and view isolated performance analytics.'
-                  : 'Complete your assigned assessment within the allotted time.'}
-              </p>
-            </div>
+    <div className="fixed inset-0 z-50 w-screen h-screen flex flex-col bg-[#0b132b] text-white overflow-hidden animate-in fade-in duration-200">
+      
+      {/* ================================================================= */}
+      {/* TOP BAR                                                           */}
+      {/* ================================================================= */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-blue-900/60 bg-[#0b132b] shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <Award className="w-5 h-5" />
           </div>
-
-          <div className="flex items-center gap-3">
-            {!isTeacher && !studentResult && studentTakingExam && (
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black border ${
-                studentTimeRemaining <= 60
-                  ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse'
-                  : studentTimeRemaining <= 300
-                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-              }`}>
-                <Clock className="w-4 h-4" />
-                <span>{formatTimer(studentTimeRemaining)}</span>
-              </div>
-            )}
-
-            <button
-              onClick={onClose}
-              className="w-9 h-9 rounded-2xl bg-slate-200/80 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black text-white">
+                {isTeacher ? 'EdTechra AI Exam Engine 2.0' : studentTakingExam?.title || 'Classroom Examination'}
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-700/60">
+                Authoritative Marks Engine
+              </span>
+            </div>
+            <p className="text-xs text-[#D7E3F4] font-medium">
+              {isTeacher
+                ? 'Create reusable exam templates, republish across classes, and view isolated performance analytics.'
+                : 'Complete your assigned assessment within the allotted time.'}
+            </p>
           </div>
         </div>
 
-        {/* ================================================================= */}
-        {/* TEACHER DASHBOARD HEADER TABS                                     */}
-        {/* ================================================================= */}
-        {isTeacher && (
-          <div className="flex items-center justify-between px-6 py-2.5 border-b border-slate-100 bg-white shrink-0">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('my-exams')}
-                className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-                  activeTab === 'my-exams'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>My Exams ({previousExams.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('creator');
-                  setCreatorStage('setup');
-                }}
-                className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-                  activeTab === 'creator'
-                    ? 'bg-[#6366f1] text-white shadow-md shadow-indigo-500/20'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>+ Create New Exam</span>
-              </button>
-
-              {selectedExamForResults && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('results')}
-                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-                    activeTab === 'results'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  <span>Results & Analytics</span>
-                </button>
-              )}
+        <div className="flex items-center gap-3">
+          {!isTeacher && !studentResult && studentTakingExam && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black border ${
+              studentTimeRemaining <= 60
+                ? 'bg-rose-950/80 text-rose-300 border-rose-500/60 animate-pulse'
+                : studentTimeRemaining <= 300
+                ? 'bg-amber-950/80 text-amber-300 border-amber-500/60'
+                : 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60'
+            }`}>
+              <Clock className="w-4 h-4" />
+              <span>{formatTimer(studentTimeRemaining)}</span>
             </div>
+          )}
 
-            {saveSuccessMsg && (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold animate-in fade-in">
-                <Check className="w-3.5 h-3.5" />
-                <span>{saveSuccessMsg}</span>
-              </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 hover:text-white transition-all cursor-pointer border border-white/10"
+            title="Close Exam Engine"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* ================================================================= */}
+      {/* TEACHER DASHBOARD HEADER TABS                                     */}
+      {/* ================================================================= */}
+      {isTeacher && (
+        <div className="flex items-center justify-between px-6 py-2.5 border-b border-blue-900/40 bg-[#0e1738] shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('creator');
+                setCreatorStage('setup');
+              }}
+              className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'creator'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                  : 'text-[#D7E3F4] hover:text-white hover:bg-[#162044]'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Create Exam</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('my-exams')}
+              className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'my-exams'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                  : 'text-[#D7E3F4] hover:text-white hover:bg-[#162044]'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>My Exams ({previousExams.length})</span>
+            </button>
+
+            {selectedExamForResults && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('results')}
+                className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'results'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30'
+                    : 'text-[#D7E3F4] hover:text-white hover:bg-[#162044]'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Results & Analytics</span>
+              </button>
             )}
           </div>
-        )}
 
-        {/* ================================================================= */}
-        {/* MAIN BODY SCROLLABLE AREA                                         */}
-        {/* ================================================================= */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {saveSuccessMsg && (
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-500/60 rounded-xl text-xs font-bold animate-in fade-in">
+              <Check className="w-3.5 h-3.5" />
+              <span>{saveSuccessMsg}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* MAIN BODY SCROLLABLE AREA                                         */}
+      {/* ================================================================= */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#0b132b] text-white">
           
           {/* --------------------------------------------------------------- */}
           {/* TEACHER VIEW: 1. MY PREVIOUS EXAMS (TEMPLATES & PUBLICATIONS)   */}
@@ -863,18 +872,18 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* Controls bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-md">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-blue-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Search by exam title or topic..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-hidden focus:border-indigo-500"
+                    className="w-full pl-10 pr-4 py-2 bg-[#0d1733] border border-blue-700/60 rounded-2xl text-xs font-semibold text-white placeholder:text-blue-200/50 focus:outline-hidden focus:border-indigo-400"
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Filter className="w-3.5 h-3.5 text-slate-400" />
+                  <Filter className="w-3.5 h-3.5 text-blue-300" />
                   {(['all', 'published', 'draft', 'closed'] as const).map((st) => (
                     <button
                       key={st}
@@ -883,7 +892,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       className={`px-3 py-1.5 rounded-xl text-xs font-extrabold capitalize cursor-pointer transition-all ${
                         statusFilter === st
                           ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          : 'bg-[#131f42] text-[#D7E3F4] border border-blue-800/60 hover:bg-[#1a2754] hover:text-white'
                       }`}
                     >
                       {st}
@@ -891,7 +900,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   ))}
                   <button
                     onClick={loadTeacherExams}
-                    className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl cursor-pointer"
+                    className="p-2 bg-[#131f42] hover:bg-[#1a2754] text-[#D7E3F4] hover:text-white border border-blue-800/60 rounded-xl cursor-pointer transition-colors"
                     title="Refresh list"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -902,17 +911,17 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* Exams Cards Grid */}
               {isLoadingExams ? (
                 <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
-                  <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
-                  <p className="text-xs font-bold">Loading your previous examinations...</p>
+                  <RefreshCw className="w-8 h-8 animate-spin text-indigo-400" />
+                  <p className="text-xs font-bold text-[#D7E3F4]">Loading your previous examinations...</p>
                 </div>
               ) : previousExams.length === 0 ? (
-                <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-3xl p-8 space-y-4">
-                  <div className="w-14 h-14 rounded-3xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <div className="py-16 text-center border-2 border-dashed border-blue-800/60 bg-[#131f42]/50 rounded-3xl p-8 space-y-4">
+                  <div className="w-14 h-14 rounded-3xl bg-indigo-950/80 border border-indigo-500/50 text-indigo-400 flex items-center justify-center mx-auto">
                     <FileText className="w-7 h-7" />
                   </div>
                   <div className="space-y-1">
-                    <h3 className="text-base font-black text-slate-900">No Previous Exams Found</h3>
-                    <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
+                    <h3 className="text-base font-black text-white">No Previous Exams Found</h3>
+                    <p className="text-xs text-[#D7E3F4] font-medium max-w-sm mx-auto">
                       You haven't created any exams yet. Use our AI-powered generator to draft a complete test in seconds.
                     </p>
                   </div>
@@ -922,7 +931,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       setActiveTab('creator');
                       setCreatorStage('setup');
                     }}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black shadow-md shadow-indigo-500/20 cursor-pointer"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-indigo-500/25 cursor-pointer transition-all"
                   >
                     + Create Your First Exam
                   </button>
@@ -944,32 +953,32 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       return (
                         <div
                           key={exam.id}
-                          className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+                          className="bg-[#131f42] rounded-3xl p-5 border border-blue-800/60 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group text-white"
                         >
                           <div className="space-y-3">
                             <div className="flex items-center justify-between">
                               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                 isDraft
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  ? 'bg-amber-950/80 text-amber-300 border border-amber-500/60'
+                                  : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/60'
                               }`}>
                                 {exam.status || 'Draft'}
                               </span>
 
-                              <span className="text-[11px] text-slate-400 font-semibold">
+                              <span className="text-[11px] text-[#D7E3F4]/70 font-semibold">
                                 {new Date(exam.created_at).toLocaleDateString()}
                               </span>
                             </div>
 
                             <div>
-                              <h4 className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                              <h4 className="text-sm font-black text-white group-hover:text-indigo-300 transition-colors line-clamp-1">
                                 {exam.title || 'Untitled Exam'}
                               </h4>
                               
                               {/* Assigned Classes Badge */}
                               <div className="flex items-center gap-1.5 mt-1">
-                                <Users className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span className="text-xs text-slate-500 font-medium line-clamp-1">
+                                <Users className="w-3 h-3 text-blue-300 shrink-0" />
+                                <span className="text-xs text-[#D7E3F4] font-medium line-clamp-1">
                                   {classesList.length > 0
                                     ? `Classes: ${classesList.map((c: any) => c.title).join(', ')}`
                                     : 'Reusable Template (Not yet published)'}
@@ -977,18 +986,18 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-100 text-center">
+                            <div className="grid grid-cols-3 gap-2 py-2 border-y border-blue-900/50 text-center">
                               <div>
-                                <span className="text-[10px] text-slate-400 font-bold block">Duration</span>
-                                <span className="text-xs font-black text-slate-800">{exam.duration_minutes || 60}m</span>
+                                <span className="text-[10px] text-[#D7E3F4]/70 font-bold block">Duration</span>
+                                <span className="text-xs font-black text-white">{exam.duration_minutes || 60}m</span>
                               </div>
                               <div>
-                                <span className="text-[10px] text-slate-400 font-bold block">Marks</span>
-                                <span className="text-xs font-black text-slate-800">{exam.total_marks || 100}</span>
+                                <span className="text-[10px] text-[#D7E3F4]/70 font-bold block">Marks</span>
+                                <span className="text-xs font-black text-white">{exam.total_marks || 100}</span>
                               </div>
                               <div>
-                                <span className="text-[10px] text-slate-400 font-bold block">Submissions</span>
-                                <span className="text-xs font-black text-indigo-600">{totalSubs}</span>
+                                <span className="text-[10px] text-[#D7E3F4]/70 font-bold block">Submissions</span>
+                                <span className="text-xs font-black text-indigo-300">{totalSubs}</span>
                               </div>
                             </div>
                           </div>
@@ -1000,7 +1009,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRepublish(exam)}
-                                  className="flex-1 py-2 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                  className="flex-1 py-2 px-2.5 bg-[#1a2754] hover:bg-[#22336e] text-indigo-200 border border-blue-700/50 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
                                   title="Republish to other classes"
                                 >
                                   <Share2 className="w-3.5 h-3.5" />
@@ -1013,9 +1022,9 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                     loadExamAnalytics(exam);
                                     setActiveTab('results');
                                   }}
-                                  className="flex-1 py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                  className="flex-1 py-2 px-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
                                 >
-                                  <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                                  <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
                                   <span>Results</span>
                                 </button>
                               </>
@@ -1038,7 +1047,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   setCreatorStage('review');
                                   setActiveTab('creator');
                                 }}
-                                className="flex-1 py-2 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                className="flex-1 py-2 px-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer shadow-md shadow-indigo-500/25"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                                 <span>Continue Editing</span>
@@ -1049,10 +1058,10 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleDownloadR2Report(exam.id, exam.r2_file_key)}
-                                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl cursor-pointer"
+                                className="p-2 bg-[#1a2754] hover:bg-[#22336e] text-indigo-300 border border-blue-700/50 rounded-xl cursor-pointer transition-colors"
                                 title="Download Cloudflare R2 PDF Report"
                               >
-                                <Download className="w-3.5 h-3.5 text-indigo-600" />
+                                <Download className="w-3.5 h-3.5 text-indigo-400" />
                               </button>
                             )}
 
@@ -1064,7 +1073,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   loadTeacherExams();
                                 }
                               }}
-                              className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-colors cursor-pointer"
+                              className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
                               title="Delete Exam"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1086,7 +1095,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
             <div className="space-y-6">
               
               {/* Creator Stepper */}
-              <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl">
+              <div className="flex items-center justify-between px-5 py-3 bg-[#131f42] border border-blue-800/60 rounded-2xl shadow-sm">
                 {[
                   { id: 'setup', num: '1', title: 'Exam Setup' },
                   { id: 'structure', num: '2', title: 'Question Structure' },
@@ -1099,14 +1108,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     onClick={() => setCreatorStage(s.id as any)}
                     className={`flex items-center gap-2 text-xs font-black transition-all cursor-pointer ${
                       creatorStage === s.id
-                        ? 'text-indigo-600'
-                        : 'text-slate-400 hover:text-slate-600'
+                        ? 'text-white'
+                        : 'text-[#D7E3F4]/70 hover:text-white'
                     }`}
                   >
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black ${
                       creatorStage === s.id
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-200 text-slate-600'
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/40'
+                        : 'bg-[#0d1733] text-blue-200 border border-blue-800/60'
                     }`}>
                       {s.num}
                     </span>
@@ -1118,8 +1127,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* STAGE 1: SETUP */}
               {creatorStage === 'setup' && (
                 <div className="space-y-5">
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/80 space-y-4">
-                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                  <div className="bg-[#131f42] p-5 rounded-3xl border border-blue-800/60 space-y-4 shadow-sm">
+                    <label className="block text-xs font-black text-white uppercase tracking-wider">
                       Paste Topic, Notes, or Lesson Context
                     </label>
                     <textarea
@@ -1127,16 +1136,16 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
                       placeholder="Paste lesson context, reading comprehension passage, or topic notes for AI exam grounding..."
-                      className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-hidden focus:border-indigo-500 leading-relaxed"
+                      className="w-full p-4 bg-[#0d1733] border border-blue-700/60 rounded-2xl text-xs font-medium text-white placeholder:text-blue-200/50 focus:outline-hidden focus:border-indigo-400 leading-relaxed"
                     />
 
                     {/* Source File Upload with Cloudflare R2 */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white rounded-2xl border border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#0d1733] rounded-2xl border border-blue-700/60">
                       <div className="flex items-center gap-3">
-                        <Upload className="w-5 h-5 text-indigo-600 shrink-0" />
+                        <Upload className="w-5 h-5 text-indigo-400 shrink-0" />
                         <div>
-                          <p className="text-xs font-black text-slate-800">Upload Source Notes Document</p>
-                          <p className="text-[11px] text-slate-400">PDF, DOCX, or TXT (Large files stored in Cloudflare R2)</p>
+                          <p className="text-xs font-black text-white">Upload Source Notes Document</p>
+                          <p className="text-[11px] text-[#D7E3F4]">PDF, DOCX, or TXT (Large files stored in Cloudflare R2)</p>
                         </div>
                       </div>
                       <input
@@ -1149,7 +1158,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold cursor-pointer transition-all"
+                        className="px-4 py-2 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-600/50 rounded-xl text-xs font-extrabold cursor-pointer transition-all shadow-xs"
                       >
                         {uploadedFileName ? uploadedFileName : 'Browse File'}
                       </button>
@@ -1157,57 +1166,57 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Exam Type</label>
+                    <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60">
+                      <label className="block text-xs font-extrabold text-white mb-1.5">Exam Type</label>
                       <select
                         value={examType}
                         onChange={(e) => setExamType(e.target.value)}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
+                        className="w-full p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                       >
-                        {EXAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        {EXAM_TYPES.map((t) => <option key={t} value={t} className="bg-[#0d1733] text-white">{t}</option>)}
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Difficulty</label>
+                    <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60">
+                      <label className="block text-xs font-extrabold text-white mb-1.5">Difficulty</label>
                       <select
                         value={difficulty}
                         onChange={(e) => setDifficulty(e.target.value)}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
+                        className="w-full p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                       >
-                        {DIFFICULTIES.map((d) => <option key={d} value={d}>{d}</option>)}
+                        {DIFFICULTIES.map((d) => <option key={d} value={d} className="bg-[#0d1733] text-white">{d}</option>)}
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Duration</label>
+                    <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60">
+                      <label className="block text-xs font-extrabold text-white mb-1.5">Duration</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
                           min={5}
                           value={durationValue}
                           onChange={(e) => setDurationValue(sanitizeNumericInput(e.target.value, 60, 5))}
-                          className="w-20 p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
+                          className="w-20 p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                         />
                         <select
                           value={durationUnit}
                           onChange={(e) => setDurationUnit(e.target.value)}
-                          className="flex-1 p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
+                          className="flex-1 p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                         >
-                          <option value="Minutes">Minutes</option>
-                          <option value="Hours">Hours</option>
+                          <option value="Minutes" className="bg-[#0d1733] text-white">Minutes</option>
+                          <option value="Hours" className="bg-[#0d1733] text-white">Hours</option>
                         </select>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Total Marks Target</label>
+                    <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60">
+                      <label className="block text-xs font-extrabold text-white mb-1.5">Total Marks Target</label>
                       <input
                         type="number"
                         min={10}
                         value={requiredTotal}
                         onChange={(e) => setRequiredTotal(sanitizeNumericInput(e.target.value, 100, 10))}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold"
+                        className="w-full p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                       />
                     </div>
                   </div>
@@ -1216,7 +1225,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setCreatorStage('structure')}
-                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-md shadow-indigo-500/20 cursor-pointer"
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-500/25 cursor-pointer transition-all"
                     >
                       <span>Proceed to Question Structure</span>
                       <ArrowRight className="w-4 h-4" />
@@ -1232,8 +1241,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   {/* Mark Calculation Banner */}
                   <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border ${
                     currentTotalMarks === requiredTotal
-                      ? 'bg-emerald-50/90 border-emerald-200'
-                      : 'bg-indigo-50/90 border-indigo-200'
+                      ? 'bg-emerald-950/60 border-emerald-500/60 text-white'
+                      : 'bg-[#162044] border-blue-700/60 text-white'
                   }`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
@@ -1245,16 +1254,16 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-900">
+                          <span className="text-xs font-black text-white">
                             Current Marks: {currentTotalMarks} / {requiredTotal}
                           </span>
                           {currentTotalMarks === requiredTotal && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                               Balanced
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] font-medium text-slate-600 mt-0.5">
+                        <p className="text-[11px] font-medium text-[#D7E3F4] mt-0.5">
                           {currentTotalMarks === requiredTotal
                             ? '✓ Perfect mark balance achieved.'
                             : marksDifference > 0
@@ -1268,15 +1277,15 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <button
                         type="button"
                         onClick={handleTriggerAutoBalance}
-                        className="px-3.5 py-2 bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                        className="px-3.5 py-2 bg-[#1a2754] hover:bg-[#22336e] text-indigo-200 border border-indigo-500/40 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                         <span>Auto Balance Marks</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleAddSection}
-                        className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition-all cursor-pointer flex items-center gap-1"
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1 shadow-md shadow-indigo-500/20"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Section</span>
@@ -1285,8 +1294,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   </div>
 
                   {autoBalanceError && (
-                    <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div className="p-3.5 bg-amber-950/70 border border-amber-500/60 text-amber-200 rounded-2xl text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>{autoBalanceError}</span>
                     </div>
                   )}
@@ -1301,12 +1310,12 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       return (
                         <div
                           key={section.id || idx}
-                          className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-xs"
+                          className="p-4 bg-[#131f42] border border-blue-800/60 rounded-2xl space-y-3 shadow-sm"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-black text-slate-900">Section {idx + 1}</span>
-                              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700">
+                              <span className="text-xs font-black text-white">Section {idx + 1}</span>
+                              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#0d1733] text-[#D7E3F4] border border-blue-800/50">
                                 {countVal} Qs × {marksVal} Marks = {sectionSubtotal} Marks
                               </span>
                             </div>
@@ -1314,30 +1323,31 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleRemoveSection(idx)}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                                className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-colors"
+                                title="Delete Section"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             )}
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             <div className="sm:col-span-2">
-                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Type</label>
+                              <label className="block text-[11px] font-bold text-white mb-1">Question Type</label>
                               <select
                                 value={section.type}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setSections(prev => prev.map((s, i) => i === idx ? { ...s, type: val } : s));
                                 }}
-                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                                className="w-full p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                               >
-                                {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                {QUESTION_TYPES.map(t => <option key={t} value={t} className="bg-[#0d1733] text-white">{t}</option>)}
                               </select>
                             </div>
 
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Question Count</label>
+                              <label className="block text-[11px] font-bold text-white mb-1">Question Count</label>
                               <input
                                 type="number"
                                 min={1}
@@ -1346,12 +1356,12 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   const val = sanitizeNumericInput(e.target.value, 1, 1);
                                   setSections(prev => prev.map((s, i) => i === idx ? { ...s, count: val } : s));
                                 }}
-                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                                className="w-full p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                               />
                             </div>
 
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-500 mb-1">Marks per Question</label>
+                              <label className="block text-[11px] font-bold text-white mb-1">Marks per Question</label>
                               <input
                                 type="number"
                                 min={1}
@@ -1360,7 +1370,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   const val = sanitizeNumericInput(e.target.value, 10, 1);
                                   setSections(prev => prev.map((s, i) => i === idx ? { ...s, marks: val } : s));
                                 }}
-                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                                className="w-full p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white focus:border-indigo-400"
                               />
                             </div>
                           </div>
@@ -1369,18 +1379,18 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     })}
                   </div>
 
-                  <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <div className="flex justify-between pt-4 border-t border-blue-900/50">
                     <button
                       type="button"
                       onClick={() => setCreatorStage('setup')}
-                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold cursor-pointer"
+                      className="px-5 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-bold cursor-pointer transition-all"
                     >
                       Back to Setup
                     </button>
                     <button
                       type="button"
                       onClick={handleGenerateExam}
-                      className="px-6 py-3 bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-500/20 cursor-pointer"
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-500/25 cursor-pointer transition-all"
                     >
                       <Sparkles className="w-4 h-4" />
                       <span>Generate AI Exam Draft</span>
@@ -1394,12 +1404,12 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <div className="space-y-5">
                   {isGenerating ? (
                     <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 animate-spin">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 flex items-center justify-center text-indigo-400 animate-spin">
                         <RefreshCw className="w-6 h-6" />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-base font-black text-slate-900">AI Exam Generator Active</h3>
-                        <p className="text-xs text-slate-500 font-medium max-w-sm">
+                        <h3 className="text-base font-black text-white">AI Exam Generator Active</h3>
+                        <p className="text-xs text-[#D7E3F4] font-medium max-w-sm">
                           Structuring questions, balancing options, and preparing deterministic answer keys...
                         </p>
                       </div>
@@ -1408,15 +1418,15 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <div className="space-y-5">
                       
                       {/* Review Bar */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#162044] border border-blue-800/60 rounded-2xl">
                         <div>
-                          <h4 className="text-sm font-black text-slate-900">{generatedExam.metadata?.title}</h4>
-                          <p className="text-xs text-slate-500 font-bold">
+                          <h4 className="text-sm font-black text-white">{generatedExam.metadata?.title}</h4>
+                          <p className="text-xs text-[#D7E3F4] font-bold">
                             {generatedExam.metadata?.totalMarks} Total Marks • {generatedExam.metadata?.duration} • {generatedExam.metadata?.gradingMode}
                           </p>
                         </div>
 
-                        <label className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-indigo-200 text-xs font-black text-indigo-800 cursor-pointer">
+                        <label className="flex items-center gap-2 px-3.5 py-2 bg-[#0d1733] rounded-xl border border-indigo-500/50 text-xs font-black text-indigo-200 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={isApproved}
@@ -1430,30 +1440,30 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       {/* Sections and Questions */}
                       <div className="space-y-4">
                         {(generatedExam.sections || []).map((sec: any, sIdx: number) => (
-                          <div key={sec.sectionId || sIdx} className="bg-white border border-slate-200 rounded-3xl p-5 space-y-4">
-                            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                          <div key={sec.sectionId || sIdx} className="bg-[#131f42] border border-blue-800/60 rounded-3xl p-5 space-y-4 shadow-sm">
+                            <div className="border-b border-blue-900/50 pb-3 flex items-center justify-between">
                               <div>
-                                <h5 className="text-sm font-black text-slate-900">{sec.title || sec.questionType}</h5>
-                                <span className="text-[11px] text-slate-500 font-bold">
+                                <h5 className="text-sm font-black text-white">{sec.title || sec.questionType}</h5>
+                                <span className="text-[11px] text-[#D7E3F4] font-bold">
                                   {sec.questions?.length || 0} Questions • {sec.marksPerQuestion || sec.questions?.[0]?.marks || 10} Marks/Q • Subtotal: {sec.totalMarks || (sec.questions?.length * 10)} Marks
                                 </span>
                               </div>
                             </div>
 
                             {sec.passage && (
-                              <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-sm sm:text-base text-slate-800 leading-relaxed font-medium">
-                                <strong>Reading Passage:</strong> {sec.passage}
+                              <div className="p-4 bg-[#1c2a58] border border-amber-500/40 rounded-2xl text-sm sm:text-base text-blue-100 leading-relaxed font-medium">
+                                <strong className="text-amber-300">Reading Passage:</strong> {sec.passage}
                               </div>
                             )}
 
                             <div className="space-y-4">
                               {(sec.questions || []).map((q: any, qIdx: number) => (
-                                <div key={q.questionId || qIdx} className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                                <div key={q.questionId || qIdx} className="p-4 sm:p-5 bg-[#0f1b3d] rounded-2xl border border-blue-800/60 space-y-3">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-sm font-black text-indigo-700">Question {qIdx + 1} ({q.marks} Marks)</span>
-                                    <span className="text-xs text-slate-500 font-bold bg-white px-2.5 py-0.5 rounded-md border border-slate-200">{q.difficulty || 'Mixed'}</span>
+                                    <span className="text-sm font-black text-indigo-300">Question {qIdx + 1} ({q.marks} Marks)</span>
+                                    <span className="text-xs text-[#D7E3F4] font-bold bg-[#0d1733] px-2.5 py-0.5 rounded-md border border-blue-700/50">{q.difficulty || 'Mixed'}</span>
                                   </div>
-                                  <p className="text-base font-black text-slate-900 leading-relaxed">{q.questionText}</p>
+                                  <p className="text-base font-black text-white leading-relaxed">{q.questionText}</p>
                                   
                                   {/* Options for MCQs */}
                                   {q.options && q.options.length > 0 && (
@@ -1463,8 +1473,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                           key={optIdx}
                                           className={`p-3 rounded-xl text-sm font-semibold border ${
                                             opt === q.correctAnswer
-                                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-bold'
-                                              : 'bg-white text-slate-700 border-slate-200'
+                                              ? 'bg-emerald-950/70 text-emerald-200 border-emerald-500/70 font-bold'
+                                              : 'bg-[#0d1733] text-white border-blue-800/50'
                                           }`}
                                         >
                                           {opt} {opt === q.correctAnswer && '✓'}
@@ -1475,7 +1485,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
                                   {/* Correct answer tag */}
                                   {(!q.options || q.options.length === 0) && (
-                                    <div className="text-xs sm:text-sm text-emerald-800 bg-emerald-50 p-2.5 rounded-xl font-bold border border-emerald-200">
+                                    <div className="text-xs sm:text-sm text-emerald-200 bg-emerald-950/70 p-2.5 rounded-xl font-bold border border-emerald-500/70">
                                       Answer: {q.correctAnswer}
                                     </div>
                                   )}
@@ -1486,11 +1496,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         ))}
                       </div>
 
-                      <div className="flex justify-between pt-4 border-t border-slate-100">
+                      <div className="flex justify-between pt-4 border-t border-blue-900/50">
                         <button
                           type="button"
                           onClick={() => setCreatorStage('structure')}
-                          className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold cursor-pointer"
+                          className="px-5 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-bold cursor-pointer transition-all"
                         >
                           Back to Structure
                         </button>
@@ -1499,14 +1509,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                             type="button"
                             onClick={handleSaveDraft}
                             disabled={isSaving}
-                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-black cursor-pointer"
+                            className="px-5 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-black cursor-pointer transition-all"
                           >
                             Save Draft
                           </button>
                           <button
                             type="button"
                             onClick={() => setCreatorStage('publish')}
-                            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-md shadow-indigo-500/20 cursor-pointer"
+                            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-500/25 cursor-pointer transition-all"
                           >
                             <span>Proceed to Publishing</span>
                             <ArrowRight className="w-4 h-4" />
@@ -1522,49 +1532,49 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* STAGE 4: PUBLISHING */}
               {creatorStage === 'publish' && (
                 <div className="space-y-5">
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200/80 space-y-4">
-                    <h4 className="text-sm font-black text-slate-900">Publishing Configuration</h4>
+                  <div className="bg-[#131f42] p-5 rounded-3xl border border-blue-800/60 space-y-4 shadow-sm">
+                    <h4 className="text-sm font-black text-white">Publishing Configuration</h4>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Start Date & Time (Optional)</label>
+                        <label className="block text-xs font-extrabold text-white mb-1.5">Start Date & Time (Optional)</label>
                         <div className="flex gap-2">
                           <input
                             type="date"
                             value={publishSettings.startDate}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, startDate: e.target.value }))}
-                            className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                            className="flex-1 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"
                           />
                           <input
                             type="time"
                             value={publishSettings.startTime}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, startTime: e.target.value }))}
-                            className="w-28 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                            className="w-28 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-extrabold text-slate-700 mb-1.5">End Date & Time (Optional)</label>
+                        <label className="block text-xs font-extrabold text-white mb-1.5">End Date & Time (Optional)</label>
                         <div className="flex gap-2">
                           <input
                             type="date"
                             value={publishSettings.endDate}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, endDate: e.target.value }))}
-                            className="flex-1 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                            className="flex-1 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"
                           />
                           <input
                             type="time"
                             value={publishSettings.endTime}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, endTime: e.target.value }))}
-                            className="w-28 p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                            className="w-28 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"
                           />
                         </div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                      <label className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer">
+                      <label className="flex items-center gap-2 p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white cursor-pointer hover:border-indigo-500/60 transition-colors">
                         <input
                           type="checkbox"
                           checked={publishSettings.randomizeQuestions}
@@ -1574,7 +1584,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         <span>Randomize Questions</span>
                       </label>
 
-                      <label className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer">
+                      <label className="flex items-center gap-2 p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white cursor-pointer hover:border-indigo-500/60 transition-colors">
                         <input
                           type="checkbox"
                           checked={publishSettings.randomizeOptions}
@@ -1584,7 +1594,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         <span>Randomize Options</span>
                       </label>
 
-                      <label className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer">
+                      <label className="flex items-center gap-2 p-3 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-bold text-white cursor-pointer hover:border-indigo-500/60 transition-colors">
                         <input
                           type="checkbox"
                           checked={publishSettings.showMarksImmediately}
@@ -1596,11 +1606,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <div className="flex justify-between pt-4 border-t border-blue-900/50">
                     <button
                       type="button"
                       onClick={() => setCreatorStage('review')}
-                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold cursor-pointer"
+                      className="px-5 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-bold cursor-pointer transition-all"
                     >
                       Back to AI Review
                     </button>
@@ -1609,7 +1619,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         type="button"
                         onClick={handleSaveDraft}
                         disabled={isSaving}
-                        className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-black cursor-pointer"
+                        className="px-5 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-black cursor-pointer transition-all"
                       >
                         Save Draft
                       </button>
@@ -1617,7 +1627,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                         type="button"
                         onClick={handlePublishExam}
                         disabled={isSaving}
-                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-md shadow-emerald-500/20 cursor-pointer"
+                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/25 cursor-pointer transition-all"
                       >
                         <Check className="w-4 h-4" />
                         <span>{isSaving ? 'Publishing...' : 'Publish Exam to Classroom'}</span>
@@ -1637,32 +1647,32 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
             <div className="space-y-6">
               
               {/* Header card with Classroom Filter */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-indigo-900 text-white rounded-3xl shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[#162044] text-white rounded-3xl shadow-lg border border-blue-800/60">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/20">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-950/80 text-indigo-300 border border-indigo-700/60">
                       Score Analysis Dashboard
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-800 text-indigo-200">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0d1733] text-indigo-200 border border-blue-700/50">
                       {selectedExamForResults.total_marks || 100} Total Marks
                     </span>
                   </div>
-                  <h3 className="text-lg font-black">{selectedExamForResults.title}</h3>
+                  <h3 className="text-lg font-black text-white">{selectedExamForResults.title}</h3>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Classroom Selector Dropdown for Republished Multi-Class Exams */}
                   {selectedExamForResults.classes && selectedExamForResults.classes.length > 1 && (
-                    <div className="flex items-center gap-1.5 bg-white/10 p-1.5 rounded-2xl">
-                      <span className="text-[11px] font-bold text-indigo-200 pl-2">Filter Class:</span>
+                    <div className="flex items-center gap-1.5 bg-[#0d1733] p-1.5 rounded-2xl border border-blue-700/60">
+                      <span className="text-[11px] font-bold text-[#D7E3F4] pl-2">Filter Class:</span>
                       <select
                         value={resultsClassroomFilter}
                         onChange={(e) => loadExamAnalytics(selectedExamForResults, e.target.value)}
-                        className="p-2 bg-white text-indigo-900 rounded-xl text-xs font-black cursor-pointer border-0 outline-hidden"
+                        className="p-2 bg-[#131f42] text-white rounded-xl text-xs font-black cursor-pointer border border-blue-700/60 outline-hidden"
                       >
-                        <option value="all">All Assigned Classes ({selectedExamForResults.classes.length})</option>
+                        <option value="all" className="bg-[#131f42] text-white">All Assigned Classes ({selectedExamForResults.classes.length})</option>
                         {selectedExamForResults.classes.map((c: any) => (
-                          <option key={c.id} value={c.id}>{c.title}</option>
+                          <option key={c.id} value={c.id} className="bg-[#131f42] text-white">{c.title}</option>
                         ))}
                       </select>
                     </div>
@@ -1672,9 +1682,9 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <button
                       type="button"
                       onClick={() => window.open(reportDownloadUrl, '_blank')}
-                      className="px-4 py-2.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-2xl text-xs font-black flex items-center gap-2 shadow-sm cursor-pointer"
+                      className="px-4 py-2.5 bg-[#1a2754] text-white hover:bg-[#22336e] border border-blue-700/50 rounded-2xl text-xs font-black flex items-center gap-2 shadow-sm cursor-pointer transition-all"
                     >
-                      <Download className="w-4 h-4 text-indigo-600" />
+                      <Download className="w-4 h-4 text-indigo-400" />
                       <span>Download Official PDF Report</span>
                     </button>
                   )}
@@ -1684,42 +1694,42 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {/* Metrics row */}
               {analyticsData && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center shadow-xs">
-                    <span className="text-2xl font-black text-indigo-600">{analyticsData.average_score || 0}</span>
-                    <span className="block text-[11px] font-bold text-slate-500 mt-1">Class Average</span>
+                  <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60 text-center shadow-xs">
+                    <span className="text-2xl font-black text-indigo-400">{analyticsData.average_score || 0}</span>
+                    <span className="block text-[11px] font-bold text-[#D7E3F4] mt-1">Class Average</span>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center shadow-xs">
-                    <span className="text-2xl font-black text-emerald-600">{analyticsData.pass_rate || 0}%</span>
-                    <span className="block text-[11px] font-bold text-slate-500 mt-1">Passing Rate</span>
+                  <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60 text-center shadow-xs">
+                    <span className="text-2xl font-black text-emerald-400">{analyticsData.pass_rate || 0}%</span>
+                    <span className="block text-[11px] font-bold text-[#D7E3F4] mt-1">Passing Rate</span>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center shadow-xs">
-                    <span className="text-2xl font-black text-cyan-600">{analyticsData.highest_score || 0}</span>
-                    <span className="block text-[11px] font-bold text-slate-500 mt-1">Highest Score</span>
+                  <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60 text-center shadow-xs">
+                    <span className="text-2xl font-black text-cyan-400">{analyticsData.highest_score || 0}</span>
+                    <span className="block text-[11px] font-bold text-[#D7E3F4] mt-1">Highest Score</span>
                   </div>
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 text-center shadow-xs">
-                    <span className="text-2xl font-black text-purple-600">{analyticsData.total_students || (analyticsData.students?.length || 0)}</span>
-                    <span className="block text-[11px] font-bold text-slate-500 mt-1">Submissions</span>
+                  <div className="bg-[#131f42] p-4 rounded-2xl border border-blue-800/60 text-center shadow-xs">
+                    <span className="text-2xl font-black text-purple-400">{analyticsData.total_students || (analyticsData.students?.length || 0)}</span>
+                    <span className="block text-[11px] font-bold text-[#D7E3F4] mt-1">Submissions</span>
                   </div>
                 </div>
               )}
 
               {/* Student leaderboard / results table */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200 space-y-4">
+              <div className="bg-[#131f42] rounded-3xl p-5 border border-blue-800/60 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-black text-slate-900">Student Performance Breakdown</h4>
-                  <span className="text-xs font-bold text-slate-400">
+                  <h4 className="text-sm font-black text-white">Student Performance Breakdown</h4>
+                  <span className="text-xs font-bold text-[#D7E3F4]">
                     {analyticsData?.students?.length || 0} Attempts Recorded
                   </span>
                 </div>
                 
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-blue-900/40">
                   {isLoadingResults ? (
                     <div className="py-12 text-center text-slate-400">
-                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-600 mb-2" />
-                      <p className="text-xs font-bold">Loading submissions for class...</p>
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-400 mb-2" />
+                      <p className="text-xs font-bold text-[#D7E3F4]">Loading submissions for class...</p>
                     </div>
                   ) : (analyticsData?.students || []).length === 0 ? (
-                    <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                    <div className="py-10 text-center text-[#D7E3F4] text-xs font-medium">
                       No student submissions found for this class yet.
                     </div>
                   ) : (
@@ -1732,17 +1742,17 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       return (
                         <div key={idx} className="py-3.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-[#0d1733] border border-blue-700/50 text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0">
                               {idx + 1}
                             </div>
                             <div>
-                              <p className="text-xs font-black text-slate-800">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
-                                <span className="text-indigo-600 font-semibold">{s.classroom_title}</span>
+                              <p className="text-xs font-black text-white">{s.name || s.student?.full_name || `Student ${idx + 1}`}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#D7E3F4] font-medium mt-0.5">
+                                <span className="text-indigo-300 font-semibold">{s.classroom_title}</span>
                                 <span>• {s.time_taken_minutes ? `${s.time_taken_minutes} mins` : 'Completed'}</span>
-                                <span className="font-bold text-slate-700">• {pct}%</span>
+                                <span className="font-bold text-white">• {pct}%</span>
                                 <span className={`px-2 py-0.5 rounded-full font-black text-[10px] ${
-                                  isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                                  isPassing ? 'bg-emerald-950/80 border border-emerald-500/60 text-emerald-300' : 'bg-rose-950/80 border border-rose-500/60 text-rose-300'
                                 }`}>
                                   {isPassing ? 'Completed' : 'Needs Support'}
                                 </span>
@@ -1752,7 +1762,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
                           <div className="flex items-center gap-3 shrink-0">
                             <span className={`px-3 py-1 rounded-full text-xs font-black ${
-                              isPassing ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                              isPassing ? 'bg-emerald-950/80 border border-emerald-500/60 text-emerald-300' : 'bg-rose-950/80 border border-rose-500/60 text-rose-300'
                             }`}>
                               {studentScore} / {totalMarks}
                             </span>
@@ -1776,54 +1786,54 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               {studentResult ? (
                 /* Student Result Card */
                 <div className="max-w-xl mx-auto py-6 text-center space-y-5">
-                  <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                  <div className="w-16 h-16 rounded-3xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-400 flex items-center justify-center mx-auto shadow-sm">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 bg-emerald-950/80 border border-emerald-500/60 px-3 py-1 rounded-full">
                       Exam Completed & Certified
                     </span>
-                    <h3 className="text-xl font-black text-slate-900 pt-1">{studentTakingExam?.title || 'Classroom Assessment'}</h3>
-                    <p className="text-xs text-slate-500 font-medium">
+                    <h3 className="text-xl font-black text-white pt-1">{studentTakingExam?.title || 'Classroom Assessment'}</h3>
+                    <p className="text-xs text-[#D7E3F4] font-medium">
                       Your answers are evaluated and safely archived.
                     </p>
                   </div>
 
-                  <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200/80 space-y-4">
-                    <div className="text-4xl font-black text-indigo-600">
+                  <div className="p-6 bg-[#131f42] rounded-3xl border border-blue-800/60 space-y-4">
+                    <div className="text-4xl font-black text-white">
                       {studentResult.totalScore ?? studentResult.score ?? 0}{' '}
-                      <span className="text-lg text-slate-400">
+                      <span className="text-lg text-[#D7E3F4]">
                         / {studentResult.maxScore ?? studentResult.total_marks ?? 100}
                       </span>
                     </div>
 
                     <div className="flex flex-wrap justify-center gap-2">
-                      <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-black">
+                      <span className="px-3 py-1 bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 rounded-full text-xs font-black">
                         {studentResult.percentage}% Score
                       </span>
-                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-black">
+                      <span className="px-3 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-500/60 rounded-full text-xs font-black">
                         Grade {studentResult.grade || 'Pass'}
                       </span>
-                      <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-black flex items-center gap-1">
-                        <Award className="w-3.5 h-3.5 text-amber-600" />
+                      <span className="px-3 py-1 bg-amber-950/80 text-amber-300 border border-amber-500/60 rounded-full text-xs font-black flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
                         +{studentResult.totalScore ?? studentResult.score ?? 0} XP Earned
                       </span>
                     </div>
 
-                    <div className="pt-2 flex flex-col items-center gap-1 text-xs font-bold text-slate-600">
-                      <div className="flex items-center gap-1.5 text-emerald-600">
+                    <div className="pt-2 flex flex-col items-center gap-1 text-xs font-bold text-[#D7E3F4]">
+                      <div className="flex items-center gap-1.5 text-emerald-400">
                         <Check className="w-3.5 h-3.5" />
                         <span>Result certified and saved to database</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-indigo-600">
+                      <div className="flex items-center gap-1.5 text-indigo-300">
                         <Check className="w-3.5 h-3.5" />
                         <span>Classroom leaderboard updated</span>
                       </div>
                     </div>
 
                     {studentResult.feedback && (
-                      <p className="text-xs text-slate-600 font-medium italic pt-2 border-t border-slate-200/60">
+                      <p className="text-xs text-[#D7E3F4] font-medium italic pt-2 border-t border-blue-900/50">
                         "{studentResult.feedback}"
                       </p>
                     )}
@@ -1835,10 +1845,10 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowStudentBreakdown((prev) => !prev)}
-                        className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-black flex items-center justify-between transition-all cursor-pointer"
+                        className="w-full px-4 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-2xl text-xs font-black flex items-center justify-between transition-all cursor-pointer"
                       >
                         <span>{showStudentBreakdown ? 'Hide Question Breakdown' : 'View Question Breakdown & Answers'}</span>
-                        <span className="text-[11px] text-slate-500 font-medium">
+                        <span className="text-[11px] text-[#D7E3F4] font-medium">
                           {studentResult.breakdown.filter((b: any) => b.isCorrect).length} / {studentResult.breakdown.length} Correct
                         </span>
                       </button>
@@ -1850,24 +1860,24 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               key={bIdx}
                               className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
                                 item.isCorrect
-                                  ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
-                                  : 'bg-rose-50/50 border-rose-200 text-rose-950'
+                                  ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200'
+                                  : 'bg-rose-950/60 border-rose-500/60 text-rose-200'
                               }`}
                             >
                               <div className="flex items-center justify-between font-black">
-                                <span>Question {bIdx + 1} ({item.questionType || 'Question'})</span>
+                                <span className="text-white">Question {bIdx + 1} ({item.questionType || 'Question'})</span>
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                                  item.isCorrect ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                                  item.isCorrect ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                                 }`}>
                                   {item.score} / {item.maxScore} Marks
                                 </span>
                               </div>
-                              <p className="text-[11px] text-slate-700 font-medium">
-                                <span className="font-bold">Your answer:</span> {String(item.submittedAnswer || '(No Answer)')}
+                              <p className="text-[11px] text-[#D7E3F4] font-medium">
+                                <span className="font-bold text-white">Your answer:</span> {String(item.submittedAnswer || '(No Answer)')}
                               </p>
                               {!item.isCorrect && item.correctAnswer && (
-                                <p className="text-[11px] text-slate-500 font-medium">
-                                  <span className="font-bold text-emerald-700">Correct answer:</span> {String(item.correctAnswer)}
+                                <p className="text-[11px] text-emerald-300 font-medium">
+                                  <span className="font-bold text-white">Correct answer:</span> {String(item.correctAnswer)}
                                 </p>
                               )}
                             </div>
@@ -1880,7 +1890,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black cursor-pointer shadow-md transition-all active:scale-95"
+                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black cursor-pointer shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
                   >
                     Back to Classroom
                   </button>
@@ -1890,11 +1900,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <div className="space-y-6">
                   
                   {((studentTakingExam.questions_json || [])).map((sec: any, secIdx: number) => (
-                    <div key={secIdx} className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 space-y-5 shadow-xs">
-                      <div className="border-b border-slate-100 pb-3.5">
-                        <h4 className="text-base sm:text-lg font-black text-slate-900">{sec.title || sec.questionType}</h4>
+                    <div key={secIdx} className="bg-[#131f42] rounded-3xl p-6 sm:p-7 border border-blue-800/60 space-y-5 shadow-sm text-white">
+                      <div className="border-b border-blue-900/50 pb-3.5">
+                        <h4 className="text-base sm:text-lg font-black text-white">{sec.title || sec.questionType}</h4>
                         {sec.passage && (
-                          <div className="mt-3 p-4 sm:p-5 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-base sm:text-lg text-slate-900 leading-relaxed font-medium">
+                          <div className="mt-3 p-4 sm:p-5 bg-[#1c2a58] border border-amber-500/40 rounded-2xl text-base sm:text-lg text-blue-100 leading-relaxed font-medium">
                             {sec.passage}
                           </div>
                         )}
@@ -1907,15 +1917,15 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                           const isTF = q.questionType?.includes('True');
 
                           return (
-                            <div key={qId} className="p-5 sm:p-6 bg-slate-50/80 rounded-2xl border border-slate-200/90 space-y-4">
+                            <div key={qId} className="p-5 sm:p-6 bg-[#0f1b3d] rounded-2xl border border-blue-800/60 space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-sm sm:text-base font-black text-indigo-700">
+                                <span className="text-sm sm:text-base font-black text-indigo-300">
                                   Question {qIdx + 1}
                                 </span>
-                                <span className="text-xs sm:text-sm text-slate-500 font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200">{q.marks} Marks</span>
+                                <span className="text-xs sm:text-sm text-[#D7E3F4] font-bold bg-[#0d1733] px-2.5 py-1 rounded-lg border border-blue-700/50">{q.marks} Marks</span>
                               </div>
 
-                              <p className="text-base sm:text-lg font-black text-slate-950 leading-relaxed">{q.questionText}</p>
+                              <p className="text-base sm:text-lg font-black text-white leading-relaxed">{q.questionText}</p>
 
                               {/* MCQ Options */}
                               {isMCQ && (
@@ -1925,8 +1935,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                       key={optIdx}
                                       className={`p-4 rounded-xl border text-sm sm:text-base font-bold flex items-center gap-3 cursor-pointer transition-all shadow-2xs ${
                                         studentAnswers[qId] === opt
-                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300/50'
-                                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                                          ? 'bg-indigo-600 text-white border-indigo-400 ring-2 ring-indigo-400/50 shadow-md'
+                                          : 'bg-[#0d1733] text-white border-blue-800/60 hover:bg-[#162044]'
                                       }`}
                                     >
                                       <input
@@ -1952,8 +1962,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                       onClick={() => handleStudentAnswerChange(qId, tf)}
                                       className={`flex-1 py-3.5 sm:py-4 rounded-xl border text-sm sm:text-base font-black cursor-pointer transition-all ${
                                         studentAnswers[qId] === tf
-                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300/50'
-                                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                                          ? 'bg-indigo-600 text-white border-indigo-400 ring-2 ring-indigo-400/50 shadow-md'
+                                          : 'bg-[#0d1733] text-white border-blue-800/60 hover:bg-[#162044]'
                                       }`}
                                     >
                                       {tf}
@@ -1969,7 +1979,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   placeholder="Type your answer here..."
                                   value={studentAnswers[qId] || ''}
                                   onChange={(e) => handleStudentAnswerChange(qId, e.target.value)}
-                                  className="w-full p-4 bg-white border border-slate-200 rounded-xl text-base font-medium focus:outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 leading-relaxed text-slate-900"
+                                  className="w-full p-4 bg-[#0d1733] border border-blue-700/60 rounded-xl text-base font-medium focus:outline-hidden focus:border-indigo-400 text-white placeholder:text-blue-200/50 leading-relaxed"
                                 />
                               )}
                             </div>
@@ -1985,7 +1995,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       type="button"
                       onClick={() => setShowSubmitConfirm(true)}
                       disabled={isSubmittingStudent}
-                      className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-500/20 cursor-pointer"
+                      className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/25 cursor-pointer transition-all"
                     >
                       <Check className="w-4 h-4" />
                       <span>{isSubmittingStudent ? 'Submitting Answers...' : 'Submit Completed Exam'}</span>
@@ -2004,23 +2014,23 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         {/* AUTO BALANCE REVIEW & CONFIRMATION MODAL                          */}
         {/* ================================================================= */}
         {autoBalanceProposal && (
-          <div className="absolute inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl border border-slate-100 animate-in zoom-in-95">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#0f1b3d] rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl border border-blue-800 animate-in zoom-in-95 text-white">
+              <div className="flex items-center gap-3 border-b border-blue-900/60 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 text-indigo-400 flex items-center justify-center">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-base font-black text-slate-900">Review Balanced Marks Distribution</h4>
-                  <p className="text-xs text-slate-500 font-medium">
+                  <h4 className="text-base font-black text-white">Review Balanced Marks Distribution</h4>
+                  <p className="text-xs text-[#D7E3F4] font-medium">
                     Question counts are preserved. The marks per question have been balanced to equal {autoBalanceProposal.target} marks.
                   </p>
                 </div>
               </div>
 
               {/* Comparison Table */}
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden text-xs">
-                <div className="bg-slate-50 p-2.5 font-black text-slate-700 grid grid-cols-12 gap-2">
+              <div className="divide-y divide-blue-900/60 border border-blue-800/80 rounded-2xl overflow-hidden text-xs">
+                <div className="bg-[#162044] p-2.5 font-black text-white grid grid-cols-12 gap-2">
                   <div className="col-span-5">Section & Type</div>
                   <div className="col-span-3 text-center">Questions</div>
                   <div className="col-span-4 text-right">Proposed Marks</div>
@@ -2035,25 +2045,25 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   const origTotal = count * origMarks;
 
                   return (
-                    <div key={sIdx} className="p-3 grid grid-cols-12 gap-2 items-center bg-white">
+                    <div key={sIdx} className="p-3 grid grid-cols-12 gap-2 items-center bg-[#131f42]">
                       <div className="col-span-5">
-                        <span className="font-black text-slate-800 block">Section {sIdx + 1}</span>
-                        <span className="text-[11px] text-slate-500 font-medium line-clamp-1">{sec.type}</span>
+                        <span className="font-black text-white block">Section {sIdx + 1}</span>
+                        <span className="text-[11px] text-[#D7E3F4] font-medium line-clamp-1">{sec.type}</span>
                       </div>
-                      <div className="col-span-3 text-center font-bold text-slate-700">
+                      <div className="col-span-3 text-center font-bold text-white">
                         {count} Qs (Unchanged)
                       </div>
                       <div className="col-span-4 text-right">
-                        <span className="font-black text-indigo-600 block">{newMarks} Marks/Q (= {newTotal})</span>
-                        <span className="text-[10px] text-slate-400">was {origMarks} M/Q (= {origTotal})</span>
+                        <span className="font-black text-indigo-300 block">{newMarks} Marks/Q (= {newTotal})</span>
+                        <span className="text-[10px] text-blue-300/70">was {origMarks} M/Q (= {origTotal})</span>
                       </div>
                     </div>
                   );
                 })}
 
-                <div className="bg-indigo-50/70 p-3 flex items-center justify-between font-black text-slate-900">
+                <div className="bg-[#162044] p-3 flex items-center justify-between font-black text-white">
                   <span>Balanced Total:</span>
-                  <span className="text-sm text-indigo-700">{autoBalanceProposal.target} Marks (Target Achieved)</span>
+                  <span className="text-sm text-emerald-300 font-black">{autoBalanceProposal.target} Marks (Target Achieved)</span>
                 </div>
               </div>
 
@@ -2061,14 +2071,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setAutoBalanceProposal(null)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-all"
+                  className="flex-1 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-xl text-xs font-black cursor-pointer transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleApplyAutoBalance}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/25 cursor-pointer transition-all flex items-center justify-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>Apply Proposed Marks</span>
@@ -2082,48 +2092,48 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         {/* REPUBLISH EXAM MODAL DIALOG                                       */}
         {/* ================================================================= */}
         {republishModalOpen && examToRepublish && (
-          <div className="absolute inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 max-w-xl w-full space-y-5 shadow-2xl border border-slate-100 max-h-[85vh] overflow-y-auto animate-in zoom-in-95">
+          <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#0f1b3d] rounded-3xl p-6 max-w-xl w-full space-y-5 shadow-2xl border border-blue-800 max-h-[85vh] overflow-y-auto animate-in zoom-in-95 text-white">
               
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center justify-between border-b border-blue-900/60 pb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/25">
                     <Share2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-base font-black text-slate-900">Republish Exam to Classes</h4>
-                    <p className="text-xs text-slate-500 font-medium">
+                    <h4 className="text-base font-black text-white">Republish Exam to Classes</h4>
+                    <p className="text-xs text-[#D7E3F4] font-medium">
                       Assign "{examToRepublish.title}" to additional classrooms as a fresh assessment.
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setRepublishModalOpen(false)}
-                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="p-1.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-white cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Exam Info Summary */}
-              <div className="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex items-center justify-between text-xs font-bold text-slate-800">
+              <div className="p-3.5 bg-[#162044] border border-blue-800/60 rounded-2xl flex items-center justify-between text-xs font-bold text-white">
                 <div>
-                  <span className="font-black text-indigo-900">{examToRepublish.title}</span>
-                  <span className="block text-[11px] text-indigo-600 font-semibold">{examToRepublish.exam_type || 'Unit Test'} • {examToRepublish.total_marks} Marks</span>
+                  <span className="font-black text-white">{examToRepublish.title}</span>
+                  <span className="block text-[11px] text-indigo-300 font-semibold">{examToRepublish.exam_type || 'Unit Test'} • {examToRepublish.total_marks} Marks</span>
                 </div>
-                <span className="px-2.5 py-1 bg-white rounded-xl text-indigo-700 shadow-2xs font-black">
+                <span className="px-2.5 py-1 bg-[#0d1733] border border-blue-700/50 rounded-xl text-indigo-300 shadow-xs font-black">
                   Version {examToRepublish.version || 1}
                 </span>
               </div>
 
               {/* Classroom Checkbox Selection */}
               <div className="space-y-2">
-                <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                <label className="block text-xs font-black text-white uppercase tracking-wider">
                   Select Target Classroom(s)
                 </label>
 
                 {teacherClassrooms.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Loading your classrooms...</p>
+                  <p className="text-xs text-[#D7E3F4]/70 italic">Loading your classrooms...</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
                     {teacherClassrooms.map((cls: any) => {
@@ -2135,8 +2145,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                           key={cls.id}
                           className={`p-3 rounded-2xl border text-xs flex items-center justify-between cursor-pointer transition-all ${
                             isChecked
-                              ? 'bg-indigo-50 border-indigo-300 font-black text-indigo-900'
-                              : 'bg-white border-slate-200 font-medium text-slate-700 hover:bg-slate-50'
+                              ? 'bg-[#1a2754] border-indigo-400 font-black text-white'
+                              : 'bg-[#131f42] border-blue-800 font-medium text-[#D7E3F4] hover:bg-[#162044]'
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
@@ -2153,13 +2163,13 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                               className="rounded text-indigo-600 focus:ring-indigo-500"
                             />
                             <div>
-                              <span className="block font-bold text-slate-900">{cls.title}</span>
-                              <span className="text-[10px] text-slate-400">{cls.subject || 'All Subjects'} • {cls.grade || 'Standard'}</span>
+                              <span className="block font-bold text-white">{cls.title}</span>
+                              <span className="text-[10px] text-[#D7E3F4]">{cls.subject || 'All Subjects'} • {cls.grade || 'Standard'}</span>
                             </div>
                           </div>
 
                           {isAlreadyPublished && (
-                            <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md shrink-0">
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 rounded-md shrink-0">
                               Active
                             </span>
                           )}
@@ -2171,49 +2181,49 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               </div>
 
               {/* Assignment Custom Settings */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
-                <h5 className="text-xs font-black text-slate-800 uppercase tracking-wider">Schedule & Policies for this Publication</h5>
+              <div className="p-4 bg-[#131f42] rounded-2xl border border-blue-800/60 space-y-3">
+                <h5 className="text-xs font-black text-white uppercase tracking-wider">Schedule & Policies for this Publication</h5>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Start Date & Time (Optional)</label>
+                    <label className="block text-[11px] font-bold text-white mb-1">Start Date & Time (Optional)</label>
                     <div className="flex gap-1.5">
                       <input
                         type="date"
                         value={republishSettings.startDate}
                         onChange={(e) => setRepublishSettings(prev => ({ ...prev, startDate: e.target.value }))}
-                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                        className="flex-1 p-2 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-medium text-white focus:border-indigo-400"
                       />
                       <input
                         type="time"
                         value={republishSettings.startTime}
                         onChange={(e) => setRepublishSettings(prev => ({ ...prev, startTime: e.target.value }))}
-                        className="w-24 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                        className="w-24 p-2 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-medium text-white focus:border-indigo-400"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">End Date & Time (Optional)</label>
+                    <label className="block text-[11px] font-bold text-white mb-1">End Date & Time (Optional)</label>
                     <div className="flex gap-1.5">
                       <input
                         type="date"
                         value={republishSettings.endDate}
                         onChange={(e) => setRepublishSettings(prev => ({ ...prev, endDate: e.target.value }))}
-                        className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                        className="flex-1 p-2 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-medium text-white focus:border-indigo-400"
                       />
                       <input
                         type="time"
                         value={republishSettings.endTime}
                         onChange={(e) => setRepublishSettings(prev => ({ ...prev, endTime: e.target.value }))}
-                        className="w-24 p-2 bg-white border border-slate-200 rounded-xl text-xs font-medium"
+                        className="w-24 p-2 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-medium text-white focus:border-indigo-400"
                       />
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  <label className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 bg-[#0d1733] rounded-xl border border-blue-700/60 text-xs font-bold text-white cursor-pointer hover:border-indigo-500/60">
                     <input
                       type="checkbox"
                       checked={republishSettings.showMarksImmediately}
@@ -2223,7 +2233,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                     <span>Show Score Immediately</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 bg-[#0d1733] rounded-xl border border-blue-700/60 text-xs font-bold text-white cursor-pointer hover:border-indigo-500/60">
                     <input
                       type="checkbox"
                       checked={republishSettings.randomizeQuestions}
@@ -2236,11 +2246,11 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 pt-2 border-t border-slate-100">
+              <div className="flex gap-2 pt-2 border-t border-blue-900/60">
                 <button
                   type="button"
                   onClick={() => setRepublishModalOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-all"
+                  className="flex-1 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-xl text-xs font-black cursor-pointer transition-all"
                 >
                   Cancel
                 </button>
@@ -2248,7 +2258,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                   type="button"
                   onClick={handleExecuteRepublish}
                   disabled={isRepublishing || selectedClassroomIds.length === 0}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/25 cursor-pointer transition-all flex items-center justify-center gap-1.5"
                 >
                   <Share2 className="w-4 h-4" />
                   <span>{isRepublishing ? 'Republishing...' : `Publish to ${selectedClassroomIds.length} Selected Class(es)`}</span>
@@ -2261,14 +2271,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
 
         {/* Confirmation Modal for Student Submission */}
         {showSubmitConfirm && (
-          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 text-center animate-in zoom-in-95">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+          <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-[#0f1b3d] rounded-3xl p-6 max-w-sm w-full space-y-4 text-center border border-blue-800 animate-in zoom-in-95 text-white">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 text-indigo-400 flex items-center justify-center mx-auto">
                 <HelpCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h4 className="text-base font-black text-slate-900">Ready to Submit?</h4>
-                <p className="text-xs text-slate-500 font-medium">
+                <h4 className="text-base font-black text-white">Ready to Submit?</h4>
+                <p className="text-xs text-[#D7E3F4] font-medium">
                   Once submitted, your answers will be finalized and evaluated by the AI grading engine.
                 </p>
               </div>
@@ -2276,14 +2286,14 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowSubmitConfirm(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                  className="flex-1 py-2.5 bg-[#1a2754] hover:bg-[#22336e] text-white border border-blue-700/50 rounded-xl text-xs font-bold cursor-pointer transition-all"
                 >
                   Keep Reviewing
                 </button>
                 <button
                   type="button"
                   onClick={handleStudentSubmitAuto}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black cursor-pointer shadow-sm"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black cursor-pointer shadow-md shadow-indigo-500/25 transition-all"
                 >
                   Yes, Submit
                 </button>
@@ -2293,6 +2303,5 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
         )}
 
       </div>
-    </div>
   );
 };

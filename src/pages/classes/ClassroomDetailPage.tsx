@@ -1345,6 +1345,7 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         activeExam={selectedExam}
+        initialTab={selectedExam ? 'results' : 'creator'}
         onClose={() => {
           setExamModalOpen(false);
           setSelectedExam(null);
