@@ -349,6 +349,17 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     }
   }, [isOpen, isTeacher, activeExam, initialTab]);
 
+  // Prevent background body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = origOverflow;
+      };
+    }
+  }, [isOpen]);
+
   // Student Timer
   useEffect(() => {
     if (!isOpen || isTeacher || !studentTakingExam || studentResult || studentTimeRemaining <= 0) return;
@@ -746,7 +757,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 w-screen h-screen flex flex-col bg-[#0b132b] text-white overflow-hidden animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 w-full h-full flex flex-col bg-[#0b132b] text-white overflow-hidden animate-in fade-in duration-200">
       
       {/* ================================================================= */}
       {/* TOP BAR                                                           */}
@@ -861,7 +872,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
       {/* ================================================================= */}
       {/* MAIN BODY SCROLLABLE AREA                                         */}
       {/* ================================================================= */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#0b132b] text-white">
+      <div className="flex-1 min-h-0 overflow-y-auto p-6 pb-24 space-y-6 bg-[#0b132b] text-white exam-engine-scrollbar">
           
           {/* --------------------------------------------------------------- */}
           {/* TEACHER VIEW: 1. MY PREVIOUS EXAMS (TEMPLATES & PUBLICATIONS)   */}

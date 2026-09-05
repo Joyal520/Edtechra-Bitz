@@ -670,6 +670,34 @@
   background: #94a3b8;
 }
 
+/* EdTechra Exam Engine High-Contrast Custom Scrollbar */
+.exam-engine-scrollbar {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: #4f46e5 #0d1733;
+}
+
+.exam-engine-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.exam-engine-scrollbar::-webkit-scrollbar-track {
+  background: #0d1733;
+  border-left: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.exam-engine-scrollbar::-webkit-scrollbar-thumb {
+  background: #4f46e5;
+  border-radius: 9999px;
+  border: 2px solid #0d1733;
+}
+
+.exam-engine-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6366f1;
+}
+
+
 /* Paper Craft Soft Shadows & Lift Effects */
 .paper-shadow-sm {
   box-shadow: 0 2px 8px -1px rgba(15, 23, 42, 0.06), 0 1px 4px -1px rgba(15, 23, 42, 0.04);
