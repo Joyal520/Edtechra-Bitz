@@ -1329,6 +1329,38 @@ STRICT RESTRICTIONS:
 
     if (input.bitz_code) {
       newBitz.bitz_code = input.bitz_code;
+    } else if (supabaseClient) {
+      try {
+        const { data: codeRows } = await supabaseClient
+          .from('knowledge_bitz')
+          .select('bitz_code')
+          .not('bitz_code', 'is', null);
+
+        let highestSeq = 0;
+        const takenCodes = new Set();
+        if (Array.isArray(codeRows)) {
+          for (const r of codeRows) {
+            if (r.bitz_code) {
+              const upper = r.bitz_code.toUpperCase();
+              takenCodes.add(upper);
+              const m = upper.match(/B(\d+)/i);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > highestSeq) highestSeq = n;
+              }
+            }
+          }
+        }
+        highestSeq += 1;
+        let candidate = `B${String(highestSeq).padStart(6, '0')}`;
+        while (takenCodes.has(candidate)) {
+          highestSeq += 1;
+          candidate = `B${String(highestSeq).padStart(6, '0')}`;
+        }
+        newBitz.bitz_code = candidate;
+      } catch (err) {
+        console.warn('[KnowledgeBitzService] Error pre-assigning bitz_code in createBitz:', err.message);
+      }
     }
 
     // AUTOMATIC PIXABAY PIPELINE (Priority 4): If no image supplied, auto-assign from Pixabay -> R2
@@ -1640,6 +1672,7 @@ STRICT RESTRICTIONS:
 
       const newBitz = {
         id: crypto.randomUUID(),
+        bitz_code: row.bitz_code ? String(row.bitz_code).trim() : null,
         title,
         subtitle: row.subtitle ? String(row.subtitle).trim() : null,
         short_fact: shortFact,
@@ -1689,6 +1722,47 @@ STRICT RESTRICTIONS:
     }
 
     if (supabaseClient && imported.length > 0) {
+      // Pre-assign guaranteed unique, non-colliding bitz_code for EVERY record in the batch
+      try {
+        const { data: codeRows } = await supabaseClient
+          .from('knowledge_bitz')
+          .select('bitz_code')
+          .not('bitz_code', 'is', null);
+
+        let highestSeq = 0;
+        const takenCodes = new Set();
+        if (Array.isArray(codeRows)) {
+          for (const r of codeRows) {
+            if (r.bitz_code) {
+              const upper = r.bitz_code.toUpperCase();
+              takenCodes.add(upper);
+              const m = upper.match(/B(\d+)/);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > highestSeq) highestSeq = n;
+              }
+            }
+          }
+        }
+
+        for (const b of imported) {
+          if (b.bitz_code && !takenCodes.has(b.bitz_code.toUpperCase())) {
+            takenCodes.add(b.bitz_code.toUpperCase());
+          } else {
+            highestSeq += 1;
+            let candidate = `B${String(highestSeq).padStart(6, '0')}`;
+            while (takenCodes.has(candidate)) {
+              highestSeq += 1;
+              candidate = `B${String(highestSeq).padStart(6, '0')}`;
+            }
+            b.bitz_code = candidate;
+            takenCodes.add(candidate);
+          }
+        }
+      } catch (err) {
+        console.warn('[KnowledgeBitzService] Error pre-assigning bitz_codes in bulkImportBitz:', err.message);
+      }
+
       let { data: insertedData, error: insertError } = await supabaseClient
         .from('knowledge_bitz')
         .insert(imported)
