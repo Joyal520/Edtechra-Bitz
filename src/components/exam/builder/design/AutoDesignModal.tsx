@@ -81,33 +81,33 @@ export const AutoDesignModal: React.FC<AutoDesignModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="bg-[#0b142c] border border-blue-800/90 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-xs animate-fadeIn overflow-y-auto select-none">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-purple-950 via-[#0f1b3d] to-pink-950 border-b border-blue-800/80 flex items-center justify-between">
+        <div className="p-5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-600 flex items-center justify-center text-white shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">Design With AI</h3>
-              <p className="text-xs text-slate-400">Describe the mood, topic, or grade to generate styling.</p>
+              <h3 className="text-base font-black text-slate-900">Design With AI</h3>
+              <p className="text-xs text-slate-600 font-medium">Describe the mood, topic, or grade to generate styling.</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-blue-900/40 cursor-pointer"
+            className="p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 bg-white">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300">
+            <label className="text-xs font-black uppercase tracking-wider text-slate-800">
               How should your assessment look and feel?
             </label>
             <div className="relative">
@@ -117,13 +117,13 @@ export const AutoDesignModal: React.FC<AutoDesignModalProps> = ({
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
                 placeholder="e.g. Make it modern and scientific for high school students..."
-                className="w-full pl-4 pr-12 py-3 bg-[#070e1f] border border-blue-800/80 rounded-2xl text-xs font-semibold text-white focus:outline-hidden focus:border-pink-500"
+                className="w-full pl-4 pr-12 py-3 bg-white border border-slate-300 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
               <button
                 type="button"
                 onClick={() => handleGenerate()}
                 disabled={isProcessing || !prompt.trim()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl cursor-pointer disabled:opacity-30 transition-all"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl cursor-pointer disabled:opacity-30 transition-all shadow-xs"
               >
                 <Wand2 className="w-4 h-4" />
               </button>
@@ -131,8 +131,8 @@ export const AutoDesignModal: React.FC<AutoDesignModalProps> = ({
           </div>
 
           {/* Quick Preset Buttons */}
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-bold text-slate-400">Or pick an inspiration:</span>
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Or pick an inspiration:</span>
             <div className="flex flex-wrap gap-1.5">
               {quickPrompts.map((qp, idx) => (
                 <button
@@ -142,7 +142,7 @@ export const AutoDesignModal: React.FC<AutoDesignModalProps> = ({
                     setPrompt(qp);
                     handleGenerate(qp);
                   }}
-                  className="px-2.5 py-1 rounded-xl bg-blue-950/60 hover:bg-blue-900 border border-blue-800/60 text-[10px] font-semibold text-slate-300 hover:text-white cursor-pointer transition-all text-left"
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-all text-left"
                 >
                   {qp}
                 </button>
@@ -152,29 +152,29 @@ export const AutoDesignModal: React.FC<AutoDesignModalProps> = ({
 
           {/* Suggested Theme Preview Card */}
           {suggestedTheme && (
-            <div className="p-4 rounded-2xl border border-pink-500/50 bg-[#070e1f] space-y-3 animate-fadeIn">
+            <div className="p-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 space-y-3 animate-fadeIn">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-white">{suggestedTheme.name}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold">
+                  <span className="text-xs font-black text-slate-900">{suggestedTheme.name}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold">
                     Suggested Theme
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: suggestedTheme.primaryColor }} />
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: suggestedTheme.secondaryColor }} />
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: suggestedTheme.accentColor }} />
+                  <span className="w-3 h-3 rounded-full border border-slate-300 shadow-2xs" style={{ backgroundColor: suggestedTheme.primaryColor }} />
+                  <span className="w-3 h-3 rounded-full border border-slate-300 shadow-2xs" style={{ backgroundColor: suggestedTheme.secondaryColor }} />
+                  <span className="w-3 h-3 rounded-full border border-slate-300 shadow-2xs" style={{ backgroundColor: suggestedTheme.accentColor }} />
                 </div>
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed italic">
+              <p className="text-xs text-slate-700 leading-relaxed font-medium italic">
                 "{explanation}"
               </p>
 
               <button
                 type="button"
                 onClick={handleApply}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-95"
               >
                 <Check className="w-4 h-4" />
                 <span>Apply This Theme to Assessment</span>

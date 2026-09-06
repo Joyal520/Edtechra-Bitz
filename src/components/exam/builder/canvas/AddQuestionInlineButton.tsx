@@ -54,11 +54,11 @@ export const AddQuestionInlineButton: React.FC<AddQuestionInlineButtonProps> = (
   return (
     <div className="relative py-2 group flex items-center justify-center my-1 select-none">
       {/* Visual divider line that highlights on hover */}
-      <div className="absolute inset-x-0 h-px bg-slate-200 group-hover:bg-indigo-300 transition-colors" />
+      <div className="absolute inset-x-0 h-px bg-slate-300 group-hover:bg-indigo-500 transition-colors" />
 
       {/* Button & Popover Container */}
       <div className="relative z-10" ref={popoverRef}>
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-full px-3 py-1 shadow-xs hover:border-indigo-400 group-hover:border-indigo-300 transition-all">
+        <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-full px-3.5 py-1.5 shadow-xs hover:border-indigo-600 group-hover:border-indigo-500 transition-all">
           <button
             type="button"
             onClick={() => {
@@ -68,7 +68,7 @@ export const AddQuestionInlineButton: React.FC<AddQuestionInlineButtonProps> = (
                 onAddQuestion('multiple_choice');
               }
             }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
+            className="flex items-center gap-2 text-xs font-bold text-slate-900 hover:text-indigo-900 transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition-transform" />
             <span>{label}</span>
@@ -80,19 +80,19 @@ export const AddQuestionInlineButton: React.FC<AddQuestionInlineButtonProps> = (
               e.stopPropagation();
               setShowPopover(!showPopover);
             }}
-            className="p-1 rounded-full text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-colors"
+            className="p-1 rounded-full text-slate-600 hover:text-indigo-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title="Quick question type picker"
           >
             <ChevronDown
-              className={`w-3 h-3 transition-transform ${showPopover ? 'rotate-180 text-indigo-600' : ''}`}
+              className={`w-3.5 h-3.5 transition-transform ${showPopover ? 'rotate-180 text-indigo-600' : ''}`}
             />
           </button>
         </div>
 
         {/* Quick Question Type Picker Popover */}
         {showPopover && (
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 rounded-2xl p-2 shadow-xl border border-slate-200 bg-white z-50 animate-fadeIn">
-            <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 px-2.5 py-1 mb-1">
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 rounded-2xl p-2 shadow-xl border border-slate-300 bg-white z-50 animate-fadeIn">
+            <div className="text-[10px] uppercase tracking-wider font-black text-slate-700 px-2.5 py-1 mb-1">
               Quick Question Picker
             </div>
             <div className="grid grid-cols-1 gap-0.5">

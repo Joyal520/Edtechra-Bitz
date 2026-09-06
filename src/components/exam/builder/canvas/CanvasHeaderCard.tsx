@@ -77,7 +77,7 @@ export const CanvasHeaderCard: React.FC<CanvasHeaderCardProps> = ({
               value={metadata.subject || ''}
               onChange={(e) => onChangeMetadata({ subject: e.target.value })}
               placeholder="Subject (e.g. English)"
-              className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 w-32"
+              className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 w-36 shadow-2xs"
             />
 
             <input
@@ -85,7 +85,7 @@ export const CanvasHeaderCard: React.FC<CanvasHeaderCardProps> = ({
               value={metadata.grade || ''}
               onChange={(e) => onChangeMetadata({ grade: e.target.value })}
               placeholder="Grade (e.g. Grade 10)"
-              className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 w-28"
+              className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 w-32 shadow-2xs"
             />
           </div>
 
@@ -93,9 +93,9 @@ export const CanvasHeaderCard: React.FC<CanvasHeaderCardProps> = ({
             <button
               type="button"
               onClick={() => setShowCoverInput((prev) => !prev)}
-              className="text-xs font-semibold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="text-xs font-bold text-slate-700 hover:text-indigo-600 flex items-center gap-1.5 cursor-pointer transition-colors"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+              <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
               <span>Add Cover Image</span>
             </button>
           )}
@@ -109,19 +109,19 @@ export const CanvasHeaderCard: React.FC<CanvasHeaderCardProps> = ({
               value={coverUrlInput}
               onChange={(e) => setCoverUrlInput(e.target.value)}
               placeholder="Paste cover image URL..."
-              className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600"
             />
             <button
               type="button"
               onClick={handleSaveCover}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
             >
               Set Cover
             </button>
             <button
               type="button"
               onClick={() => setShowCoverInput(false)}
-              className="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+              className="p-2 text-slate-500 hover:text-slate-800 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -130,52 +130,58 @@ export const CanvasHeaderCard: React.FC<CanvasHeaderCardProps> = ({
 
         {/* Editable Title */}
         <div>
+          <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider mb-1.5">
+            Assessment Title
+          </label>
           <input
             type="text"
             value={metadata.title}
             onChange={(e) => onChangeMetadata({ title: e.target.value })}
             placeholder="Untitled Assessment"
-            className="w-full text-2xl sm:text-3xl font-black text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-hidden py-1 transition-all"
+            className="w-full text-xl sm:text-2xl font-black text-slate-900 bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 focus:outline-hidden transition-all placeholder:text-slate-500 shadow-2xs"
           />
         </div>
 
         {/* Editable Description */}
         <div>
+          <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider mb-1.5">
+            Assessment Description & Instructions
+          </label>
           <textarea
             rows={2}
             value={metadata.description || ''}
             onChange={(e) => onChangeMetadata({ description: e.target.value })}
-            placeholder="Add general description or instructions for students..."
-            className="w-full text-xs sm:text-sm text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-hidden py-1 leading-relaxed resize-none transition-all placeholder:text-slate-400"
+            placeholder="Add general description, instructions, or candidate guidelines for students..."
+            className="w-full text-xs sm:text-sm font-medium text-slate-900 bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 focus:outline-hidden leading-relaxed resize-y transition-all placeholder:text-slate-500 shadow-2xs"
           />
         </div>
 
         {/* Quick Meta Footer Strip (Duration & Pass %) */}
-        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-600">Duration:</span>
+        <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center gap-6 text-xs text-slate-700">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-900">Duration:</span>
             <input
               type="number"
               min={5}
               max={240}
               value={metadata.durationMinutes || 60}
               onChange={(e) => onChangeMetadata({ durationMinutes: parseInt(e.target.value) || 60 })}
-              className="w-14 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 text-xs focus:bg-white focus:outline-hidden"
+              className="w-16 px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-center font-bold text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
             />
-            <span>mins</span>
+            <span className="font-semibold text-slate-600">minutes</span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-600">Pass:</span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-900">Passing Grade:</span>
             <input
               type="number"
               min={10}
               max={100}
               value={metadata.passPercentage || 50}
               onChange={(e) => onChangeMetadata({ passPercentage: parseInt(e.target.value) || 50 })}
-              className="w-14 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 text-xs focus:bg-white focus:outline-hidden"
+              className="w-16 px-2.5 py-1 bg-white border border-slate-300 rounded-xl text-center font-bold text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
             />
-            <span>%</span>
+            <span className="font-semibold text-slate-600">%</span>
           </div>
         </div>
       </div>

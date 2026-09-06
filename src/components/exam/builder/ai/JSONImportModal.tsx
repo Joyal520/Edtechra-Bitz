@@ -50,37 +50,37 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="bg-[#0b142c] border border-blue-800/90 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-xs animate-fadeIn overflow-y-auto select-none">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Modal Header */}
-        <div className="p-5 bg-gradient-to-r from-indigo-950 via-[#0f1b3d] to-purple-950 border-b border-blue-800/80 flex items-center justify-between">
+        <div className="p-5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-400/50 flex items-center justify-center text-indigo-300">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
               <FileCode className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">Import AI-Generated JSON</h3>
-              <p className="text-xs text-slate-400">Paste structured JSON from ChatGPT, Gemini, or Claude.</p>
+              <h3 className="text-base font-black text-slate-900">Import AI-Generated JSON</h3>
+              <p className="text-xs text-slate-600 font-medium">Paste structured JSON from ChatGPT, Gemini, or Claude.</p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-blue-900/40 cursor-pointer"
+            className="p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 bg-white">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-300">Raw JSON Text:</label>
+            <label className="text-xs font-black uppercase tracking-wider text-slate-800">Raw JSON Text:</label>
             <button
               type="button"
               onClick={handlePasteFromClipboard}
-              className="text-xs font-bold text-indigo-400 hover:text-white flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 cursor-pointer"
             >
               <ClipboardPaste className="w-3.5 h-3.5" />
               <span>Paste from Clipboard</span>
@@ -95,7 +95,7 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
               setValidation(null);
             }}
             placeholder="Paste raw JSON or ```json ... ``` code fence here..."
-            className="w-full p-3.5 bg-[#070e1f] border border-blue-800/80 rounded-2xl text-xs font-mono text-indigo-200 placeholder:text-slate-600 focus:outline-hidden focus:border-indigo-400 leading-relaxed resize-y"
+            className="w-full p-3.5 bg-white border border-slate-300 rounded-2xl text-xs font-mono text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed resize-y"
           />
 
           {/* Validation Feedback Panel */}
@@ -103,16 +103,16 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
             <div
               className={`p-4 rounded-2xl border text-xs space-y-2 animate-fadeIn ${
                 validation.isValid
-                  ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
-                  : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
               }`}
             >
               <div className="flex items-center justify-between font-black">
                 <div className="flex items-center gap-2">
                   {validation.isValid ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   ) : (
-                    <XCircle className="w-4 h-4 text-rose-400" />
+                    <XCircle className="w-4 h-4 text-rose-600" />
                   )}
                   <span>
                     {validation.isValid
@@ -121,14 +121,14 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
                   </span>
                 </div>
                 {validation.stats && (
-                  <span className="text-[11px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-slate-600 font-bold">
                     {validation.stats.questionCount} Questions • {validation.stats.sectionCount} Sections
                   </span>
                 )}
               </div>
 
               {validation.errors.length > 0 && (
-                <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-300">
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-700 font-medium">
                   {validation.errors.map((err, idx) => (
                     <li key={idx}>{err.message}</li>
                   ))}
@@ -143,7 +143,7 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
               type="button"
               disabled={!jsonText.trim()}
               onClick={handleValidate}
-              className="px-5 py-2.5 rounded-xl border border-blue-800 hover:bg-blue-900/40 text-slate-300 hover:text-white text-xs font-black cursor-pointer transition-all disabled:opacity-30"
+              className="px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-bold shadow-2xs cursor-pointer transition-all disabled:opacity-40"
             >
               Validate Syntax
             </button>
@@ -152,7 +152,7 @@ export const JSONImportModal: React.FC<JSONImportModalProps> = ({
               type="button"
               disabled={!validation?.isValid}
               onClick={handleImport}
-              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-black flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-xs active:scale-95 transition-all"
             >
               <Sparkles className="w-4 h-4" />
               <span>Convert to Editable Cards</span>

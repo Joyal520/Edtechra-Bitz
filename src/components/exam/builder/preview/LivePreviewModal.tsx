@@ -212,9 +212,9 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
             </div>
 
             {/* Candidate Badge */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
-              <span className="text-slate-400 font-medium">Candidate:</span>
-              <span className="font-bold text-slate-800">Student View (Preview)</span>
+            <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-300 text-xs shadow-2xs">
+              <span className="text-slate-600 font-bold">Candidate:</span>
+              <span className="font-black text-slate-900">Student View (Preview)</span>
             </div>
           </div>
 
@@ -234,8 +234,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   }}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
                     isSecCurrent
-                      ? `${color.bg} text-white shadow-xs`
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      ? `${color.bg} text-white shadow-xs font-black`
+                      : 'bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-950 border border-slate-300 shadow-2xs'
                   }`}
                 >
                   <span>{sec.title || `Section ${sIdx + 1}`}</span>
@@ -249,7 +249,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
             {/* Left Question Area (Col span 3) */}
             <div className="lg:col-span-3 p-6 sm:p-8 flex flex-col justify-between space-y-6 bg-white min-h-[480px]">
               {totalQuestions === 0 ? (
-                <div className="text-center py-20 text-slate-400 text-sm">
+                <div className="text-center py-20 text-slate-500 font-medium text-sm">
                   No questions currently added to this assessment.
                 </div>
               ) : (
@@ -257,11 +257,11 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   {/* Question Header: Number & Marks */}
                   <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                      <span className="text-xs font-black uppercase tracking-wider text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">
                         Question {currentIndex + 1} of {totalQuestions}
                       </span>
                       <span className="text-xs font-bold text-slate-400">•</span>
-                      <span className="text-xs font-semibold text-slate-600">
+                      <span className="text-xs font-bold text-slate-800">
                         {currentQItem.question.marks || 1} {Number(currentQItem.question.marks) === 1 ? 'Mark' : 'Marks'}
                       </span>
                     </div>
@@ -270,10 +270,10 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleToggleFlag(currentQItem.question.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
                         flaggedIds.has(currentQItem.question.id)
                           ? 'bg-amber-500 text-white shadow-xs'
-                          : 'bg-slate-50 text-slate-600 hover:bg-amber-50 hover:text-amber-700 border border-slate-200'
+                          : 'bg-white text-slate-800 hover:bg-amber-50 hover:text-amber-800 border border-slate-300'
                       }`}
                     >
                       <Bookmark className={`w-3.5 h-3.5 ${flaggedIds.has(currentQItem.question.id) ? 'fill-current' : ''}`} />
@@ -283,8 +283,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
                   {/* Context Stimulus (Reading Passage, Audio Track, Video Player, Picture) */}
                   {currentQItem.parentPassage && (
-                    <div className="p-5 rounded-2xl bg-teal-50/40 border border-teal-200 text-xs sm:text-sm text-slate-800 leading-relaxed font-serif">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 block mb-1 font-sans">
+                    <div className="p-5 rounded-2xl bg-teal-50/40 border border-teal-200 text-xs sm:text-sm text-slate-900 leading-relaxed font-serif">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-teal-900 block mb-1 font-sans">
                         Reading Passage: {currentQItem.parentPassageTitle || ''}
                       </span>
                       <p>{currentQItem.parentPassage}</p>
@@ -294,8 +294,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   {currentQItem.parentAudioUrl && (
                     <div className="p-4 rounded-2xl bg-violet-50/40 border border-violet-200 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-violet-900 flex items-center gap-1.5">
-                          <Headphones className="w-4 h-4 text-violet-600" />
+                        <span className="text-xs font-black text-violet-950 flex items-center gap-1.5">
+                          <Headphones className="w-4 h-4 text-violet-700" />
                           <span>Listening Activity: {currentQItem.parentActivityTitle || 'Audio Track'}</span>
                         </span>
 
@@ -303,7 +303,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowStudentTranscript(!showStudentTranscript)}
-                            className="text-xs font-semibold text-violet-700 hover:text-violet-900"
+                            className="text-xs font-bold text-violet-800 hover:text-violet-950"
                           >
                             {showStudentTranscript ? 'Hide Transcript' : 'Show Transcript'}
                           </button>
@@ -316,7 +316,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       </audio>
 
                       {showStudentTranscript && currentQItem.parentTranscript && (
-                        <div className="p-3 bg-white rounded-xl border border-violet-200 text-xs text-slate-700 leading-relaxed animate-fadeIn">
+                        <div className="p-3 bg-white rounded-xl border border-violet-200 text-xs text-slate-800 font-medium leading-relaxed animate-fadeIn">
                           {currentQItem.parentTranscript}
                         </div>
                       )}
@@ -325,8 +325,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
                   {currentQItem.parentImageUrl && (
                     <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-200 space-y-3">
-                      <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-amber-700" />
                         <span>Picture Stimulus: {currentQItem.parentActivityTitle || 'Visual Task'}</span>
                       </span>
                       <div className="w-full max-h-64 rounded-xl overflow-hidden border border-amber-200 bg-white flex items-center justify-center">
@@ -341,7 +341,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
                   {/* Question Prompt */}
                   <div className="space-y-3">
-                    <h3 className={`font-bold text-slate-900 ${fontClass}`}>
+                    <h3 className={`font-black text-slate-900 ${fontClass}`}>
                       {currentQItem.question.question}
                     </h3>
 
@@ -361,25 +361,25 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                               className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                                 isSelected
                                   ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs'
-                                  : 'bg-white border-slate-200 hover:border-slate-300 text-slate-800'
+                                  : 'bg-white border-slate-300 hover:border-indigo-400 text-slate-900 shadow-2xs'
                               } ${showAnswerKeys && isCorrectAnswer ? 'bg-emerald-50 border-emerald-500' : ''}`}
                             >
                               <div
-                                className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs font-bold ${
+                                className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-black ${
                                   isSelected
                                     ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'border-slate-300 bg-white text-slate-500'
+                                    : 'border-slate-400 bg-slate-50 text-slate-700'
                                 }`}
                               >
                                 {opt.id.toUpperCase()}
                               </div>
 
-                              <span className="flex-1 text-xs sm:text-sm font-medium">
+                              <span className="flex-1 text-xs sm:text-sm font-bold text-slate-900">
                                 {opt.text}
                               </span>
 
                               {showAnswerKeys && isCorrectAnswer && (
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
                                   Correct Key
                                 </span>
                               )}
@@ -399,10 +399,10 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                               key={String(tfVal)}
                               type="button"
                               onClick={() => handleSelectAnswer(currentQItem.question.id, tfVal)}
-                              className={`p-4 rounded-2xl border text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                              className={`p-4 rounded-2xl border text-sm font-black flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs ${
                                 isSelected
                                   ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20'
-                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                  : 'bg-white border-slate-300 text-slate-900 hover:bg-slate-50'
                               }`}
                             >
                               <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
@@ -420,7 +420,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                           value={mockAnswers[currentQItem.question.id] || ''}
                           onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
                           placeholder="Type your answer here..."
-                          className="w-full p-4 rounded-2xl border border-slate-200 bg-slate-50 text-xs sm:text-sm text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                          className="w-full p-4 rounded-2xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs"
                         />
                       </div>
                     )}
@@ -434,7 +434,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   type="button"
                   disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-slate-700 flex items-center gap-1.5 transition-colors"
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-slate-800 flex items-center gap-1.5 transition-colors shadow-2xs"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Previous</span>
@@ -456,25 +456,25 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
             <div className="lg:col-span-1 p-6 space-y-5 bg-slate-50/50 flex flex-col justify-between">
               <div className="space-y-5">
                 {/* Countdown Timer Box */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                <div className="p-4 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
                     Time Remaining
                   </span>
-                  <div className="flex items-center gap-2 text-indigo-900 font-black text-xl">
+                  <div className="flex items-center gap-2 text-indigo-950 font-black text-xl">
                     <Clock className="w-5 h-5 text-indigo-600" />
                     <span>{assessment.exam.durationMinutes || 60}:00</span>
                   </div>
                 </div>
 
                 {/* Progress Bar Box */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                <div className="p-4 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-700">Progress</span>
-                    <span className="font-black text-indigo-600">
+                    <span className="font-bold text-slate-900">Progress</span>
+                    <span className="font-black text-indigo-900">
                       {answeredCount} / {totalQuestions}
                     </span>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-indigo-600 rounded-full transition-all"
                       style={{
@@ -485,7 +485,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 </div>
 
                 {/* Question Status Legend */}
-                <div className="space-y-1.5 text-[11px] text-slate-500 font-medium">
+                <div className="space-y-1.5 text-[11px] text-slate-700 font-bold">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
                     <span>Answered ({answeredCount})</span>
@@ -495,14 +495,14 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                     <span>Marked for Review ({flaggedIds.size})</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-slate-200 shrink-0" />
+                    <span className="w-3 h-3 rounded-full bg-slate-300 shrink-0" />
                     <span>Not Answered ({totalQuestions - answeredCount})</span>
                   </div>
                 </div>
 
                 {/* Question Palette Grid (1..N clickable) */}
                 <div className="space-y-2">
-                  <span className="text-xs font-bold text-slate-700 block">
+                  <span className="text-xs font-black text-slate-900 block">
                     Question Navigator
                   </span>
                   <div className="grid grid-cols-5 gap-1.5">
@@ -511,11 +511,11 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       const isAnswered = mockAnswers[q.question.id] !== undefined && mockAnswers[q.question.id] !== '';
                       const isFlagged = flaggedIds.has(q.question.id);
 
-                      let bgClass = 'bg-white text-slate-700 border-slate-200 hover:border-slate-300';
+                      let bgClass = 'bg-white text-slate-900 font-bold border-slate-300 hover:border-indigo-400 shadow-2xs';
                       if (isFlagged) {
-                        bgClass = 'bg-amber-500 text-white border-amber-500 shadow-xs';
+                        bgClass = 'bg-amber-500 text-white font-black border-amber-500 shadow-xs';
                       } else if (isAnswered) {
-                        bgClass = 'bg-emerald-500 text-white border-emerald-500 shadow-xs';
+                        bgClass = 'bg-emerald-500 text-white font-black border-emerald-500 shadow-xs';
                       }
 
                       return (
@@ -537,8 +537,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 {/* Student Tools: Font size & Notepad */}
                 <div className="pt-3 border-t border-slate-200 space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-600 flex items-center gap-1.5">
-                      <Type className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Type className="w-3.5 h-3.5 text-slate-500" />
                       <span>Text Size:</span>
                     </span>
                     <div className="flex items-center gap-1">
@@ -546,7 +546,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                         type="button"
                         onClick={() => setFontSize('normal')}
                         className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          fontSize === 'normal' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                          fontSize === 'normal' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
                         }`}
                       >
                         A
@@ -555,7 +555,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                         type="button"
                         onClick={() => setFontSize('large')}
                         className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          fontSize === 'large' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                          fontSize === 'large' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
                         }`}
                       >
                         A+
@@ -566,9 +566,9 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowNotepad(!showNotepad)}
-                    className="w-full py-1.5 px-3 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors"
+                    className="w-full py-1.5 px-3 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
                   >
-                    <FileEdit className="w-3.5 h-3.5 text-slate-500" />
+                    <FileEdit className="w-3.5 h-3.5 text-slate-600" />
                     <span>{showNotepad ? 'Hide Scratchpad' : 'Open Scratchpad'}</span>
                   </button>
 
@@ -578,7 +578,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       value={notepadText}
                       onChange={(e) => setNotepadText(e.target.value)}
                       placeholder="Rough scratch notes for this exam..."
-                      className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 resize-none leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-indigo-500 animate-fadeIn"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium text-slate-900 placeholder:text-slate-500 resize-none leading-relaxed shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 animate-fadeIn"
                     />
                   )}
                 </div>

@@ -123,7 +123,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
           <div className="space-y-4">
             {/* Question Type Selector */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-900">
                 Question Type
               </label>
               <select
@@ -137,7 +137,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                     marks: isSurvey ? 0 : selectedQuestion.marks || def.defaultMarks
                   } as CanonicalQuestion);
                 }}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               >
                 <optgroup label="Core Types">
                   {ALL_ASSESSMENT_QUESTION_TYPES.filter((t) => t.group === 'google_forms').map((t) => (
@@ -160,7 +160,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
             {!isSurvey && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 block">Marks</label>
+                  <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block">Marks</label>
                   <input
                     type="number"
                     min="0"
@@ -172,12 +172,12 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                         marks: Math.max(0, parseInt(e.target.value, 10) || 0)
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-600 block">Difficulty</label>
+                  <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block">Difficulty</label>
                   <select
                     value={selectedQuestion.difficulty || 'medium'}
                     onChange={(e) =>
@@ -186,7 +186,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                         difficulty: e.target.value as QuestionDifficulty
                       })
                     }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 capitalize focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 shadow-2xs capitalize focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="easy">Easy</option>
                     <option value="medium">Medium</option>
@@ -197,11 +197,11 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
             )}
 
             {/* Required & Shuffle Options Toggles */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-slate-800">Required</span>
-                  <p className="text-[10px] text-slate-500">Student must answer</p>
+                  <span className="text-xs font-bold text-slate-900">Required</span>
+                  <p className="text-[11px] text-slate-600 font-medium">Student must answer</p>
                 </div>
                 <input
                   type="checkbox"
@@ -217,10 +217,10 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
               </div>
 
               {['multiple_choice', 'checkboxes', 'dropdown'].includes(selectedQuestion.type) && (
-                <div className="flex items-center justify-between pt-2.5 border-t border-slate-200/80">
+                <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
                   <div>
-                    <span className="text-xs font-bold text-slate-800">Shuffle Options</span>
-                    <p className="text-[10px] text-slate-500">Randomize choice order</p>
+                    <span className="text-xs font-bold text-slate-900">Shuffle Options</span>
+                    <p className="text-[11px] text-slate-600 font-medium">Randomize choice order</p>
                   </div>
                   <input
                     type="checkbox"
@@ -239,8 +239,8 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
 
             {/* Explanation / Learning Hint */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                <HelpCircle className="w-3.5 h-3.5 text-indigo-500" />
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
+                <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Explanation / Student Feedback</span>
               </label>
               <textarea
@@ -253,15 +253,15 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                   })
                 }
                 placeholder="Explain the correct answer or provide guidance for review..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+                className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
               />
             </div>
 
             {/* Conditional Branching Jump */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <GitFork className="w-3.5 h-3.5 text-indigo-500" />
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1">
+                  <GitFork className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Conditional Branching</span>
                 </label>
               </div>
@@ -273,7 +273,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                     skipToSectionId: e.target.value || undefined
                   })
                 }
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Continue to next item</option>
                 {allSections.map((sec, idx) => (
@@ -286,11 +286,11 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
             </div>
 
             {/* Actions: Duplicate, Save to Bank, Delete */}
-            <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+            <div className="pt-3 border-t border-slate-200 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => onDuplicateQuestion(selectedQuestion.id)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-900 shadow-2xs transition-colors"
                 title="Duplicate Question"
               >
                 <Copy className="w-3.5 h-3.5 text-indigo-600" />
@@ -301,7 +301,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => onSaveToQuestionBank(selectedQuestion)}
-                  className="p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-amber-600 hover:text-amber-700 transition-colors"
+                  className="p-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-amber-700 hover:text-amber-800 shadow-2xs transition-colors"
                   title="Save to Question Bank"
                 >
                   <BookMarked className="w-4 h-4" />
@@ -311,7 +311,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onDeleteQuestion(selectedQuestion.id)}
-                className="p-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors"
+                className="p-2 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 shadow-2xs transition-colors"
                 title="Delete Question"
               >
                 <Trash2 className="w-4 h-4" />
@@ -323,8 +323,8 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
           /* CONTEXT 2: ACTIVITY SELECTED (Listening, Reading, Video, Picture)   */
           /* =================================================================== */
           <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-white border border-indigo-200 flex items-center justify-center text-indigo-600">
+            <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-white border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
                 {selectedActivity.activityType === 'listening_activity' && <Headphones className="w-4 h-4" />}
                 {selectedActivity.activityType === 'video_activity' && <Video className="w-4 h-4" />}
                 {selectedActivity.activityType === 'reading_activity' && <BookOpen className="w-4 h-4" />}
@@ -334,7 +334,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                 <span className="text-xs font-bold text-indigo-950 block capitalize">
                   {selectedActivity.activityType.replace(/_/g, ' ')}
                 </span>
-                <span className="text-[10px] text-indigo-700">
+                <span className="text-[11px] font-semibold text-indigo-900">
                   {selectedActivity.questions?.length || 0} child questions attached
                 </span>
               </div>
@@ -342,7 +342,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
 
             {/* Activity Title */}
             <div className="space-y-1">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-900 block">
                 Activity Title
               </label>
               <input
@@ -355,16 +355,16 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                     title: e.target.value
                   })
                 }
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
             {/* Transcript Visibility Toggle */}
             {(selectedActivity.activityType === 'listening_activity' ||
               selectedActivity.activityType === 'video_activity') && (
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="p-3 rounded-xl bg-white border border-slate-300 shadow-2xs space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800">Transcript for Students</span>
+                  <span className="text-xs font-bold text-slate-900">Transcript for Students</span>
                   <button
                     type="button"
                     onClick={() =>
@@ -374,7 +374,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                         showTranscriptToStudents: !selectedActivity.showTranscriptToStudents
                       })
                     }
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1"
                   >
                     {selectedActivity.showTranscriptToStudents ? (
                       <>
@@ -383,13 +383,13 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                       </>
                     ) : (
                       <>
-                        <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-slate-500">Hidden</span>
+                        <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-slate-600">Hidden</span>
                       </>
                     )}
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[11px] text-slate-600 font-medium">
                   By default, listening transcripts are hidden so students must listen to the audio track.
                 </p>
               </div>
@@ -398,7 +398,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
             {/* Picture Description Task Type */}
             {selectedActivity.activityType === 'picture_description_activity' && (
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-900 block">
                   Picture Task Format
                 </label>
                 <select
@@ -410,7 +410,7 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                       pictureTaskType: e.target.value as PictureTaskType
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="describe">Describe the picture</option>
                   <option value="answer_questions">Answer questions about the picture</option>
@@ -422,11 +422,11 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
             )}
 
             {/* Delete Activity */}
-            <div className="pt-3 border-t border-slate-100">
+            <div className="pt-3 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => onDeleteActivity && onDeleteActivity(selectedActivity.id)}
-                className="w-full py-2 px-3 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2 px-3 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Activity</span>
@@ -438,27 +438,27 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
           /* CONTEXT 3: SECTION SELECTED                                         */
           /* =================================================================== */
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-indigo-600">
+            <div className="flex items-center gap-2 text-indigo-700">
               <Layers className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-900">
                 Section Properties
               </span>
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block">
                 Section Title
               </label>
               <input
                 type="text"
                 value={selectedSection.title}
                 onChange={(e) => onUpdateSection(selectedSection.id, { title: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block">
                 Description / Instructions
               </label>
               <textarea
@@ -466,18 +466,18 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
                 value={selectedSection.description || ''}
                 onChange={(e) => onUpdateSection(selectedSection.id, { description: e.target.value })}
                 placeholder="Instructions for students taking this section..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+                className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
               />
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs text-slate-600">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-2 text-xs text-slate-700 font-medium">
               <div className="flex items-center justify-between">
                 <span>Standalone Questions:</span>
-                <span className="font-bold text-slate-800">{selectedSection.questions?.length || 0}</span>
+                <span className="font-bold text-slate-950">{selectedSection.questions?.length || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Activities:</span>
-                <span className="font-bold text-slate-800">{selectedSection.activities?.length || 0}</span>
+                <span className="font-bold text-slate-950">{selectedSection.activities?.length || 0}</span>
               </div>
             </div>
           </div>
@@ -485,8 +485,8 @@ export const RightPropertyPanel: React.FC<RightPropertyPanelProps> = ({
           /* =================================================================== */
           /* CONTEXT 4: GENERAL CANVAS / NO SELECTION                            */
           /* =================================================================== */
-          <div className="p-6 text-center text-slate-400 space-y-2">
-            <Sliders className="w-8 h-8 mx-auto text-slate-300" />
+          <div className="p-6 text-center text-slate-500 space-y-2">
+            <Sliders className="w-8 h-8 mx-auto text-slate-400" />
             <p className="text-xs font-medium">
               Click any Question, Activity, or Section on the canvas to inspect its settings here.
             </p>

@@ -74,28 +74,28 @@ export const CreationModeModal: React.FC<CreationModeModalProps> = ({
               </div>
 
               <div>
-                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 mb-1.5">
+                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-slate-800 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-300 mb-1.5">
                   Full Authoring Control
                 </span>
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
                   1. Build Manually
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
                   Start with a clean canvas. Author and customize every section, activity, question, and answer key yourself.
                 </p>
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-600">
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-800 font-semibold">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Custom question authoring</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Flexible sections & activities</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Interactive question bank</span>
                 </div>
               </div>
@@ -103,7 +103,7 @@ export const CreationModeModal: React.FC<CreationModeModalProps> = ({
 
             <button
               type="button"
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 group-hover:bg-indigo-600 group-hover:text-white text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white border border-slate-300 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all"
             >
               <span>Build Manually</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
@@ -125,28 +125,28 @@ export const CreationModeModal: React.FC<CreationModeModalProps> = ({
               </div>
 
               <div>
-                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 mb-1.5">
+                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-indigo-900 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200 mb-1.5">
                   Blueprint Specification
                 </span>
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
                   2. Build with AI
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
                   Define your exact blueprint: topic, total marks, question distribution, Bloom's skills, and let AI generate the complete exam.
                 </p>
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-600">
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-800 font-semibold">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Exact question distribution matrix</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Bloom's skill weighting</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Fully editable generated result</span>
                 </div>
               </div>
@@ -172,28 +172,28 @@ export const CreationModeModal: React.FC<CreationModeModalProps> = ({
               </div>
 
               <div>
-                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 mb-1.5">
+                <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mb-1.5">
                   Curriculum Practice
                 </span>
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                <h3 className="text-base font-black text-slate-900 group-hover:text-emerald-600 transition-colors">
                   3. O/L Style Examination
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                <p className="text-xs text-slate-600 font-medium leading-relaxed mt-1">
                   Pre-configured O/L English Practice template: Grammar, Vocabulary, Reading Comprehension, Picture Description, Guided Writing & Listening.
                 </p>
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-600">
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs text-slate-800 font-semibold">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Grammar & Vocabulary tasks</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Picture Description with Rubric</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Reading Comprehension passage</span>
                 </div>
               </div>
@@ -201,7 +201,7 @@ export const CreationModeModal: React.FC<CreationModeModalProps> = ({
 
             <button
               type="button"
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 group-hover:bg-emerald-600 group-hover:text-white text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-white border border-slate-300 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all"
             >
               <span>Load O/L Practice Template</span>
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />

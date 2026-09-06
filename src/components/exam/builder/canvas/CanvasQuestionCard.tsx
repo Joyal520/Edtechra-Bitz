@@ -275,7 +275,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
       <div className="p-5 space-y-4">
         {/* Question Prompt (Large Readable Typography) */}
         <div>
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+          <label className="text-xs font-bold text-slate-900 uppercase tracking-wider block mb-1.5">
             Question Prompt
           </label>
           <textarea
@@ -283,7 +283,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
             value={question.question}
             onChange={(e) => handleFieldChange('question', e.target.value)}
             placeholder="Type your question or prompt here..."
-            className="w-full text-sm font-semibold text-slate-900 bg-transparent border border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-3 leading-relaxed resize-none transition-all placeholder:text-slate-400 focus:outline-hidden"
+            className="w-full text-sm font-bold text-slate-900 bg-white border border-slate-300 hover:border-slate-400 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 rounded-xl p-3 leading-relaxed resize-y transition-all placeholder:text-slate-500 focus:outline-hidden shadow-2xs"
           />
         </div>
 
@@ -291,10 +291,10 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
         {isChoiceType && (
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <label className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 Answer Options (Select the correct answer)
               </label>
-              <span className="text-[10px] text-slate-400 font-medium">
+              <span className="text-xs text-slate-600 font-bold">
                 Click circle to set correct answer
               </span>
             </div>
@@ -308,8 +308,8 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                   key={opt.id}
                   className={`p-2.5 rounded-xl border flex items-center gap-3 transition-all ${
                     isCorrect
-                      ? 'bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-400/30'
-                      : 'bg-slate-50/60 border-slate-200 hover:border-slate-300'
+                      ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-400/40 shadow-xs'
+                      : 'bg-white border-slate-300 hover:border-slate-400 shadow-2xs'
                   }`}
                 >
                   {/* Correct Toggle Radio/Checkbox */}
@@ -319,17 +319,17 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                       e.stopPropagation();
                       handleToggleCorrectOption(opt.id);
                     }}
-                    className={`w-6 h-6 rounded-${question.type === 'checkboxes' ? 'md' : 'full'} border flex items-center justify-center text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    className={`w-6 h-6 rounded-${question.type === 'checkboxes' ? 'md' : 'full'} border flex items-center justify-center text-xs font-black transition-all cursor-pointer shrink-0 ${
                       isCorrect
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                        : 'border-slate-300 bg-white text-slate-400 hover:border-emerald-500'
+                        : 'border-slate-400 bg-white text-slate-700 hover:border-emerald-600'
                     }`}
                     title="Click to set as correct answer"
                   >
                     {isCorrect ? <CheckCircle2 className="w-4 h-4" /> : letter}
                   </button>
 
-                  <span className="text-xs font-bold text-slate-600 min-w-[16px]">
+                  <span className="text-xs font-black text-slate-900 min-w-[16px]">
                     {letter}.
                   </span>
 
@@ -338,7 +338,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                     value={opt.text}
                     onChange={(e) => handleUpdateOptionText(opt.id, e.target.value)}
                     placeholder={`Option ${letter} text...`}
-                    className="flex-1 bg-transparent text-xs font-medium text-slate-800 border-0 focus:outline-hidden"
+                    className="flex-1 bg-transparent text-xs font-bold text-slate-900 placeholder:text-slate-500 border-0 focus:outline-hidden"
                   />
 
                   {options.length > 2 && (
@@ -348,7 +348,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                         e.stopPropagation();
                         handleRemoveOption(opt.id);
                       }}
-                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                      className="p-1 text-slate-500 hover:text-rose-600 cursor-pointer"
                       title="Remove option"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -365,9 +365,9 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                 e.stopPropagation();
                 handleAddOption();
               }}
-              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 py-1.5 px-3 rounded-xl hover:bg-indigo-50 cursor-pointer transition-all border border-dashed border-indigo-200 hover:border-indigo-400"
+              className="text-xs font-bold text-indigo-900 hover:text-indigo-950 flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-indigo-50/80 hover:bg-indigo-100 cursor-pointer transition-all border border-indigo-200 shadow-2xs"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-indigo-700" />
               <span>Add Option</span>
             </button>
           </div>
@@ -376,7 +376,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
         {/* True / False Binary Choice Preview */}
         {question.type === 'true_false' && (
           <div className="space-y-2 pt-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+            <label className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
               Correct Answer Key
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -392,13 +392,13 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                     }}
                     className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
                       isCorrect
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-2 ring-emerald-500/20 font-black'
+                        : 'bg-white border-slate-300 text-slate-900 hover:bg-slate-50'
                     }`}
                   >
                     {isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
                     <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
-                    {isCorrect && <span className="text-[10px] text-emerald-600">(Correct)</span>}
+                    {isCorrect && <span className="text-[10px] text-emerald-700 font-bold">(Correct)</span>}
                   </button>
                 );
               })}
@@ -409,7 +409,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
         {/* Fill in the Blank Input Area */}
         {question.type === 'fill_in_blank' && (
           <div className="space-y-2 pt-1">
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+            <label className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
               Accepted Correct Answers (comma separated)
             </label>
             <input
@@ -422,42 +422,42 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                 )
               }
               placeholder="e.g. oxygen, O2"
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
             />
           </div>
         )}
 
         {/* Short Answer / Paragraph Preview */}
         {['short_answer', 'paragraph', 'essay'].includes(question.type) && (
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 italic">
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 font-medium italic">
             Student will provide a written answer here ({question.type === 'paragraph' ? 'essay response with word count' : 'concise answer'}).
           </div>
         )}
 
         {/* Bottom Property Pills Bar (Marks, Difficulty, Required, AI Actions) */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Left: Marks, Difficulty, Required */}
           <div className="flex items-center gap-4 flex-wrap">
             {assessmentType === 'exam' && (
               <div className="flex items-center gap-1.5">
-                <label className="text-[11px] font-bold text-slate-500">Marks:</label>
+                <label className="text-xs font-bold text-slate-900">Marks:</label>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={question.marks}
                   onChange={(e) => handleFieldChange('marks', Math.max(0, parseInt(e.target.value) || 1))}
-                  className="w-12 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 text-xs focus:bg-white focus:outline-hidden"
+                  className="w-14 px-2 py-0.5 bg-white border border-slate-300 rounded-lg text-center font-bold text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
                 />
               </div>
             )}
 
             <div className="flex items-center gap-1.5">
-              <label className="text-[11px] font-bold text-slate-500">Difficulty:</label>
+              <label className="text-xs font-bold text-slate-900">Difficulty:</label>
               <select
                 value={question.difficulty || 'medium'}
                 onChange={(e) => handleFieldChange('difficulty', e.target.value as QuestionDifficulty)}
-                className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 capitalize focus:bg-white focus:outline-hidden"
+                className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 capitalize focus:outline-hidden focus:border-indigo-600 shadow-2xs"
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>

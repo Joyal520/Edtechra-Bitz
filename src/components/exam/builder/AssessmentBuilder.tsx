@@ -233,8 +233,26 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo, handleRedo, onSaveAssessment, assessment]);
 
-  // Active theme and brand kit
-  const activeTheme = assessment.theme || THEME_PRESETS.edtechra_light;
+  // Ensure document uses clean light theme without dark class leakage while in Exam Builder
+  useEffect(() => {
+    const root = document.documentElement;
+    const hadDark = root.classList.contains('dark');
+    const prevThemeMode = root.getAttribute('data-theme-mode');
+
+    root.classList.remove('dark');
+    root.setAttribute('data-theme-mode', 'light');
+
+    return () => {
+      if (hadDark) root.classList.add('dark');
+      if (prevThemeMode) root.setAttribute('data-theme-mode', prevThemeMode);
+    };
+  }, []);
+
+  // Active theme and brand kit - guarantee high-contrast light theme
+  const activeTheme =
+    !assessment.theme || assessment.theme.category === 'dark' || assessment.theme.textColor === '#f8fafc'
+      ? THEME_PRESETS.edtechra_light
+      : assessment.theme;
   const activeBrandKit: BrandKitConfig = assessment.brandKit || { enabled: false, watermark: false };
 
   // Currently selected entities
@@ -1074,7 +1092,12 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-50 text-slate-800 overflow-hidden font-sans">
+    <div
+      data-exam-builder="true"
+      data-theme-mode="light"
+      className="edtechra-exam-builder h-screen w-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden font-sans [color-scheme:light]"
+      style={{ colorScheme: 'light' }}
+    >
       {/* 1. TopBar Control Center (Light Theme) */}
       <TopBar
         title={assessment.exam.title}

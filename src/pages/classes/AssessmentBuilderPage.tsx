@@ -116,7 +116,7 @@ export const AssessmentBuilderPage: React.FC = () => {
       showMarksImmediately: true,
       showCorrectAnswers: true
     },
-    theme: initialType === 'survey' ? THEME_PRESETS.nature_classroom : THEME_PRESETS.modern_academy,
+    theme: THEME_PRESETS.edtechra_light,
     brandKit: {
       enabled: false,
       watermark: false

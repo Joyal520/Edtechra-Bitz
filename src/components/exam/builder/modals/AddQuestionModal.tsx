@@ -297,15 +297,15 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
                 Exam Builder
               </span>
               <span className="text-xs text-slate-400">•</span>
-              <span className="text-xs font-semibold text-slate-500">
-                Adding to <strong className="text-slate-700">{targetSectionTitle}</strong>
+              <span className="text-xs font-semibold text-slate-700">
+                Adding to <strong className="text-slate-950 font-bold">{targetSectionTitle}</strong>
               </span>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 mt-1">
+            <h2 className="text-lg font-black text-slate-900 mt-1">
               Add Question or Learning Activity
             </h2>
           </div>
@@ -313,7 +313,7 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors"
+            className="p-2 text-slate-500 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -323,18 +323,18 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
         <div className="px-6 py-3.5 border-b border-slate-100 flex flex-col sm:flex-row items-center gap-3 bg-white">
           {/* Search input */}
           <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search question types..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+              className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
           {/* Category tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto w-full pb-1 sm:pb-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full pb-1 sm:pb-0">
             {[
               { id: 'all', label: 'All Types' },
               { id: 'core', label: 'Core' },
@@ -346,10 +346,10 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                   activeCategory === cat.id
                     ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
                 }`}
               >
                 {cat.label}
@@ -376,13 +376,13 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
                   }}
                   className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md cursor-pointer transition-all flex items-start gap-3.5 group hover:scale-[1.01]"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors shrink-0">
                     <Icon className="w-5 h-5" />
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">
+                      <h4 className="text-sm font-bold text-slate-950 group-hover:text-indigo-600 transition-colors truncate">
                         {item.title}
                       </h4>
                       <span
@@ -392,7 +392,7 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
                       {item.description}
                     </p>
                   </div>
@@ -402,7 +402,7 @@ export const AddQuestionModal: React.FC<AddQuestionModalProps> = ({
           </div>
 
           {filteredItems.length === 0 && (
-            <div className="text-center py-12 text-slate-400 text-sm">
+            <div className="text-center py-12 text-slate-500 font-medium text-sm">
               No matching question or activity types found.
             </div>
           )}

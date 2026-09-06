@@ -268,7 +268,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
       <div className="p-6 space-y-5">
         {/* Title Input */}
         <div>
-          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
+          <label className="text-xs font-bold text-slate-900 uppercase tracking-wider block mb-1.5">
             Activity Title
           </label>
           <input
@@ -276,15 +276,15 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
             value={activity.title}
             onChange={(e) => handleUpdateField('title', e.target.value)}
             placeholder="e.g. Airport Announcement / The Great Barrier Reef"
-            className="w-full px-3.5 py-2 text-sm font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            className="w-full px-3.5 py-2 text-sm font-bold text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-500 shadow-2xs"
           />
         </div>
 
         {/* 1. LISTENING ACTIVITY MATERIAL */}
         {activity.activityType === 'listening_activity' && (
-          <div className="p-4 rounded-2xl bg-violet-50/30 border border-violet-100 space-y-4">
+          <div className="p-4 rounded-2xl bg-violet-50/50 border border-violet-200 space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-violet-800 uppercase tracking-wider block">
+              <label className="text-xs font-bold text-violet-950 uppercase tracking-wider block">
                 Audio Track (URL or Audio File)
               </label>
               <div className="flex items-center gap-2">
@@ -293,7 +293,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                   value={activity.audioUrl || ''}
                   onChange={(e) => handleUpdateField('audioUrl', e.target.value)}
                   placeholder="https://edtechra.blob.core.windows.net/.../listening.mp3"
-                  className="flex-1 px-3 py-2 bg-white border border-violet-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-violet-500"
+                  className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                 />
                 <button
                   type="button"
@@ -301,7 +301,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                     const demoAudio = 'https://actions.google.com/sounds/v1/ambiences/outdoor_market.ogg';
                     handleUpdateField('audioUrl', demoAudio);
                   }}
-                  className="px-3 py-2 bg-violet-100 hover:bg-violet-200 text-violet-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
+                  className="px-3 py-2 bg-violet-100 hover:bg-violet-200 text-violet-900 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>Sample</span>
@@ -312,14 +312,14 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
             {/* Transcript Box */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-violet-800 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-xs font-bold text-violet-950 uppercase tracking-wider flex items-center gap-1.5">
                   <span>Audio Transcript</span>
-                  <span className="text-[10px] text-rose-500 font-bold">*Required for AI Generation</span>
+                  <span className="text-xs text-rose-600 font-bold">*Required for AI Generation</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => handleUpdateField('showTranscriptToStudents', !activity.showTranscriptToStudents)}
-                  className="text-xs font-semibold text-violet-700 hover:text-violet-900 flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-bold text-violet-800 hover:text-violet-950 flex items-center gap-1 cursor-pointer"
                 >
                   {activity.showTranscriptToStudents ? (
                     <>
@@ -328,8 +328,8 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                     </>
                   ) : (
                     <>
-                      <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-slate-500">Hidden by default</span>
+                      <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-slate-600">Hidden by default</span>
                     </>
                   )}
                 </button>
@@ -339,7 +339,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                 value={activity.transcript || ''}
                 onChange={(e) => handleUpdateField('transcript', e.target.value)}
                 placeholder="Paste the audio transcript here. AI will use this transcript to create comprehension questions..."
-                className="w-full p-3 bg-white border border-violet-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-violet-500 leading-relaxed resize-none"
+                className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 leading-relaxed resize-y shadow-2xs"
               />
             </div>
           </div>
@@ -347,9 +347,9 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
 
         {/* 2. VIDEO ACTIVITY MATERIAL */}
         {activity.activityType === 'video_activity' && (
-          <div className="p-4 rounded-2xl bg-rose-50/30 border border-rose-100 space-y-4">
+          <div className="p-4 rounded-2xl bg-rose-50/50 border border-rose-200 space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-rose-800 uppercase tracking-wider block">
+              <label className="text-xs font-bold text-rose-950 uppercase tracking-wider block">
                 Video URL (MP4 or Embedded Stream)
               </label>
               <input
@@ -357,27 +357,27 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                 value={activity.videoUrl || ''}
                 onChange={(e) => handleUpdateField('videoUrl', e.target.value)}
                 placeholder="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
               />
             </div>
 
             {/* Video Transcript */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">
+                <label className="text-xs font-bold text-rose-950 uppercase tracking-wider">
                   Video Transcript (For Question Generation)
                 </label>
                 <button
                   type="button"
                   onClick={() => handleUpdateField('showTranscriptToStudents', !activity.showTranscriptToStudents)}
-                  className="text-xs font-semibold text-rose-700 flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-bold text-rose-800 flex items-center gap-1 cursor-pointer"
                 >
                   {activity.showTranscriptToStudents ? (
                     <span className="text-emerald-700 flex items-center gap-1">
                       <Eye className="w-3.5 h-3.5" /> Visible
                     </span>
                   ) : (
-                    <span className="text-slate-500 flex items-center gap-1">
+                    <span className="text-slate-600 flex items-center gap-1">
                       <EyeOff className="w-3.5 h-3.5" /> Hidden by default
                     </span>
                   )}
@@ -388,7 +388,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                 value={activity.transcript || ''}
                 onChange={(e) => handleUpdateField('transcript', e.target.value)}
                 placeholder="Paste the dialogue or transcript from the video..."
-                className="w-full p-3 bg-white border border-rose-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-rose-500 leading-relaxed resize-none"
+                className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 leading-relaxed resize-y shadow-2xs"
               />
             </div>
           </div>
@@ -396,8 +396,8 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
 
         {/* 3. READING ACTIVITY MATERIAL */}
         {activity.activityType === 'reading_activity' && (
-          <div className="p-4 rounded-2xl bg-teal-50/30 border border-teal-100 space-y-3">
-            <label className="text-[11px] font-bold text-teal-800 uppercase tracking-wider block">
+          <div className="p-4 rounded-2xl bg-teal-50/50 border border-teal-200 space-y-3">
+            <label className="text-xs font-bold text-teal-950 uppercase tracking-wider block">
               Reading Passage
             </label>
             <textarea
@@ -405,17 +405,17 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
               value={activity.passage || ''}
               onChange={(e) => handleUpdateField('passage', e.target.value)}
               placeholder="Paste or write the reading comprehension passage here..."
-              className="w-full p-3.5 bg-white border border-teal-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 leading-relaxed resize-none"
+              className="w-full p-3.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 leading-relaxed resize-y shadow-2xs"
             />
           </div>
         )}
 
         {/* 4. PICTURE DESCRIPTION ACTIVITY MATERIAL */}
         {activity.activityType === 'picture_description_activity' && (
-          <div className="p-4 rounded-2xl bg-amber-50/30 border border-amber-100 space-y-4">
+          <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+                <label className="text-xs font-bold text-amber-950 uppercase tracking-wider block mb-1">
                   Image URL / Upload
                 </label>
                 <div className="flex items-center gap-2">
@@ -424,7 +424,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                     value={activity.imageUrl || ''}
                     onChange={(e) => handleUpdateField('imageUrl', e.target.value)}
                     placeholder="https://images.unsplash.com/photo-1577563908411-5077b6dc7624"
-                    className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                   />
                   <button
                     type="button"
@@ -432,7 +432,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                       const sampleImg = 'https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=800&q=80';
                       handleUpdateField('imageUrl', sampleImg);
                     }}
-                    className="px-2.5 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold rounded-xl transition-colors shrink-0"
+                    className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-950 text-xs font-bold rounded-xl transition-colors shrink-0 cursor-pointer"
                   >
                     Sample
                   </button>
@@ -440,13 +440,13 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
 
                 {/* Task Type */}
                 <div className="pt-2">
-                  <label className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                  <label className="text-xs font-bold text-amber-950 uppercase tracking-wider block mb-1.5">
                     Activity Task Type
                   </label>
                   <select
                     value={activity.pictureTaskType || 'describe'}
                     onChange={(e) => handleUpdateField('pictureTaskType', e.target.value as PictureTaskType)}
-                    className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
                   >
                     <option value="describe">Describe the picture</option>
                     <option value="answer_questions">Answer questions about the picture</option>
@@ -458,7 +458,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
               </div>
 
               {/* Image Preview Box */}
-              <div className="w-full h-36 rounded-xl border border-amber-200 bg-white overflow-hidden flex items-center justify-center">
+              <div className="w-full h-36 rounded-xl border border-slate-300 bg-white overflow-hidden flex items-center justify-center shadow-2xs">
                 {activity.imageUrl ? (
                   <img
                     src={activity.imageUrl}
@@ -466,8 +466,8 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="text-center text-slate-400 text-xs">
-                    <ImageIcon className="w-8 h-8 mx-auto mb-1 text-slate-300" />
+                  <div className="text-center text-slate-500 text-xs font-semibold">
+                    <ImageIcon className="w-8 h-8 mx-auto mb-1 text-slate-400" />
                     <span>No image selected</span>
                   </div>
                 )}
@@ -475,8 +475,8 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
             </div>
 
             {/* Prompt / Instructions */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-amber-950 uppercase tracking-wider block">
                 Student Instructions / Task Prompt
               </label>
               <textarea
@@ -484,7 +484,7 @@ export const CanvasActivityCard: React.FC<CanvasActivityCardProps> = ({
                 value={activity.instructions || ''}
                 onChange={(e) => handleUpdateField('instructions', e.target.value)}
                 placeholder="e.g. Look at the picture carefully. Write 5 complete sentences describing what the people are doing..."
-                className="w-full p-2.5 bg-white border border-amber-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 resize-none"
+                className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 resize-y shadow-2xs"
               />
             </div>
 

@@ -174,15 +174,15 @@ export const AssessmentCanvas: React.FC<AssessmentCanvasProps> = ({
 
               {/* Standalone Questions within this Section */}
               {sectionQuestions.length === 0 && sectionActivities.length === 0 ? (
-                <div className="rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center bg-white">
-                  <p className="text-xs text-slate-500 mb-3">
+                <div className="rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center bg-white shadow-2xs">
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 mb-3">
                     Section {secIdx + 1} has no questions or activities yet.
                   </p>
                   <div className="flex items-center justify-center gap-2">
                     <button
                       type="button"
                       onClick={() => onOpenAddModal(sec.id)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-all"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Question or Activity</span>
@@ -233,9 +233,9 @@ export const AssessmentCanvas: React.FC<AssessmentCanvasProps> = ({
           <button
             type="button"
             onClick={onAddSection}
-            className="flex items-center gap-2 px-6 py-3 rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 text-xs font-bold text-slate-600 hover:text-indigo-600 transition-all shadow-xs"
+            className="flex items-center gap-2 px-8 py-3.5 rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-600 bg-white hover:bg-indigo-50/50 text-xs font-bold text-slate-900 hover:text-indigo-900 transition-all shadow-xs cursor-pointer"
           >
-            <Layers className="w-4 h-4 text-indigo-500" />
+            <Layers className="w-4 h-4 text-indigo-600" />
             <span>Add New Section</span>
           </button>
         </div>

@@ -116,7 +116,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               onBlur={handleTitleBlur}
               onKeyDown={handleTitleKeyDown}
               autoFocus
-              className="px-2.5 py-1 text-sm font-bold bg-slate-50 border border-indigo-500 rounded-lg text-slate-900 focus:outline-hidden max-w-[200px] sm:max-w-xs md:max-w-sm"
+              className="px-2.5 py-1 text-sm font-black bg-white border-2 border-indigo-600 rounded-lg text-slate-900 shadow-xs focus:outline-hidden max-w-[200px] sm:max-w-xs md:max-w-sm"
             />
           ) : (
             <button
@@ -125,20 +125,20 @@ export const TopBar: React.FC<TopBarProps> = ({
                 setTempTitle(title);
                 setIsEditingTitle(true);
               }}
-              className="text-sm font-bold text-slate-900 hover:text-indigo-600 truncate max-w-[160px] sm:max-w-xs text-left transition-colors flex items-center gap-1.5 group"
+              className="text-sm font-black text-slate-900 hover:text-indigo-600 truncate max-w-[160px] sm:max-w-xs text-left transition-colors flex items-center gap-1.5 group"
               title="Click to rename"
             >
               <span className="truncate">{title || 'Untitled Assessment'}</span>
-              <Pencil className="w-3 h-3 text-slate-400 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+              <Pencil className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
             </button>
           )}
 
           {/* Subject & Grade Badges */}
-          <div className="hidden lg:flex items-center gap-1.5 text-slate-500 text-xs">
+          <div className="hidden lg:flex items-center gap-1.5 text-slate-600 text-xs">
             <span className="text-slate-300">•</span>
-            <span className="font-semibold text-slate-700">{subject}</span>
+            <span className="font-bold text-slate-800">{subject}</span>
             <span className="text-slate-300">•</span>
-            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold">
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-300 text-[11px] font-black">
               {grade}
             </span>
           </div>
@@ -150,7 +150,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={onUndo}
             disabled={!canUndo}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
             title="Undo (Ctrl+Z)"
           >
             <Undo2 className="w-4 h-4" />
@@ -159,7 +159,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={onRedo}
             disabled={!canRedo}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
             title="Redo (Ctrl+Y)"
           >
             <Redo2 className="w-4 h-4" />
@@ -167,17 +167,17 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Autosave Status Indicator */}
-        <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-slate-500 pl-2">
+        <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-slate-600 pl-2">
           {saveStatus === 'saving' && (
             <>
               <Clock className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-              <span className="text-amber-600 font-medium">Saving draft...</span>
+              <span className="text-amber-700 font-bold">Saving draft...</span>
             </>
           )}
           {saveStatus === 'saved' && (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-slate-500">
+              <span className="text-slate-600 font-medium">
                 {lastSavedAt
                   ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                   : 'All changes saved'}
@@ -187,7 +187,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {saveStatus === 'error' && (
             <>
               <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
-              <span className="text-rose-600 font-medium">Unsaved</span>
+              <span className="text-rose-700 font-bold">Unsaved</span>
             </>
           )}
         </div>
@@ -206,16 +206,16 @@ export const TopBar: React.FC<TopBarProps> = ({
                 key={sec.id}
                 type="button"
                 onClick={() => onSelectSection(sec.id)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                   isSecActive
-                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs font-bold'
-                    : 'text-slate-600 hover:bg-slate-100 border border-transparent'
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-300 shadow-2xs font-black'
+                    : 'bg-white text-slate-800 hover:bg-slate-100 hover:text-slate-950 border border-slate-200'
                 }`}
                 title={`Jump to Section ${secLetter}`}
               >
                 <span className="text-[10px] font-black">{secLetter}</span>
                 <span className="truncate max-w-[100px]">{sec.title || `Section ${secLetter}`}</span>
-                <span className="text-[10px] text-slate-400">({qCount})</span>
+                <span className="text-[10px] text-slate-500 font-semibold">({qCount})</span>
               </button>
             );
           })}
@@ -228,7 +228,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           type="button"
           onClick={onOpenBlueprint}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center gap-1.5"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50 shadow-2xs transition-all flex items-center gap-1.5"
           title="Configure Exam Blueprint Matrix"
         >
           <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
@@ -239,7 +239,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           type="button"
           onClick={onOpenAISuite}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all flex items-center gap-1.5"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-900 hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-2xs"
           title="AI Assessment Suite"
         >
           <Bot className="w-4 h-4 text-indigo-600" />
@@ -250,10 +250,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center gap-1.5 shadow-2xs"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 transition-all flex items-center gap-1.5 shadow-2xs"
           title="Assessment Settings"
         >
-          <Settings className="w-4 h-4 text-slate-500" />
+          <Settings className="w-4 h-4 text-slate-600" />
           <span className="hidden sm:inline">Settings</span>
         </button>
 
@@ -261,10 +261,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           type="button"
           onClick={onOpenPreview}
-          className="p-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center gap-1.5 shadow-2xs"
+          className="p-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 transition-all flex items-center gap-1.5 shadow-2xs"
           title="Preview Student Experience"
         >
-          <Eye className="w-4 h-4 text-indigo-500" />
+          <Eye className="w-4 h-4 text-indigo-600" />
           <span className="hidden sm:inline">Preview</span>
         </button>
 

@@ -159,7 +159,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   // 3. TEACHER: Visual Assessment Builder 2.0 (Canva + Google Forms)
   if (isTeacher) {
     return (
-      <div className="fixed inset-0 z-50 overflow-hidden bg-[#070e1f]">
+      <div className="fixed inset-0 z-50 overflow-hidden bg-slate-50">
         <AssessmentBuilder
           classroomId={classroomId}
           initialAssessment={canonicalActiveExam || undefined}

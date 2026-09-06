@@ -1031,4 +1031,52 @@
   }
 }
 
+/* ========================================================================== */
+/* EDTECHRA EXAM BUILDER: HIGH-CONTRAST LIGHT THEME ENFORCEMENT               */
+/* Guarantees 100% dark navy text on white backgrounds regardless of root dark */
+/* ========================================================================== */
+
+.edtechra-exam-builder,
+[data-exam-builder="true"] {
+  color-scheme: light !important;
+  --theme-text-primary: #0f172a !important;
+  --theme-text-secondary: #334155 !important;
+  --theme-text-muted: #475569 !important;
+  --theme-surface-page: #f8fafc !important;
+  --theme-surface-card: #ffffff !important;
+  --theme-input-bg: #ffffff !important;
+  --theme-input-text: #0f172a !important;
+  --theme-input-placeholder: #64748b !important;
+  --theme-input-border: #cbd5e1 !important;
+  color: #0f172a !important;
+  background-color: #f8fafc !important;
+}
+
+.edtechra-exam-builder input,
+.edtechra-exam-builder textarea,
+.edtechra-exam-builder select,
+[data-exam-builder="true"] input,
+[data-exam-builder="true"] textarea,
+[data-exam-builder="true"] select {
+  color-scheme: light !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #4f46e5 !important;
+}
+
+.edtechra-exam-builder input::placeholder,
+.edtechra-exam-builder textarea::placeholder,
+[data-exam-builder="true"] input::placeholder,
+[data-exam-builder="true"] textarea::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+.edtechra-exam-builder label,
+[data-exam-builder="true"] label {
+  color: #0f172a;
+}
+
+
 

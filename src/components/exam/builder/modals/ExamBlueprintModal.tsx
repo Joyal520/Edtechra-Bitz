@@ -155,29 +155,29 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6 bg-slate-50/30">
           {/* 1. General Exam Specifications */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-indigo-600" />
               <span>1. General Assessment Specification</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Subject</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Subject</label>
                 <input
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. English Language"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Grade Level</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Grade Level</label>
                 <select
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   {['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11 (O/L)', 'A/L', 'General'].map((g) => (
                     <option key={g} value={g}>{g}</option>
@@ -186,11 +186,11 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Exam Type</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Exam Type</label>
                 <select
                   value={examType}
                   onChange={(e) => setExamType(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   {['Unit Test', 'Mid Term', 'Final Exam', 'Term Test', 'Practice Test', 'O/L Practice', 'Diagnostic'].map((t) => (
                     <option key={t} value={t}>{t}</option>
@@ -199,11 +199,11 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Target Difficulty</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Target Difficulty</label>
                 <select
                   value={difficulty}
                   onChange={(e) => setDifficulty(e.target.value as ExamDifficulty)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="Easy">Easy (Foundation)</option>
                   <option value="Medium">Medium (Standard)</option>
@@ -215,43 +215,43 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Topic / Syllabus Focus</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Topic / Syllabus Focus</label>
                 <input
                   type="text"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder="e.g. Grammar, Tenses & Reading Comprehension"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Total Marks</label>
+                  <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Total Marks</label>
                   <input
                     type="number"
                     min={10}
                     max={200}
                     value={totalMarks}
                     onChange={(e) => setTotalMarks(Math.max(1, parseInt(e.target.value) || 50))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Duration (Min)</label>
+                  <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Duration (Min)</label>
                   <input
                     type="number"
                     min={10}
                     max={240}
                     value={durationMinutes}
                     onChange={(e) => setDurationMinutes(Math.max(5, parseInt(e.target.value) || 60))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Pass Mark Threshold</label>
+                <label className="text-[11px] font-bold text-slate-900 uppercase tracking-wider block mb-1">Pass Mark Threshold</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="range"
@@ -262,7 +262,7 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
                     onChange={(e) => setPassPercentage(parseInt(e.target.value))}
                     className="flex-1 accent-indigo-600"
                   />
-                  <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 min-w-[50px] text-center">
+                  <span className="text-xs font-bold text-indigo-900 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 min-w-[50px] text-center font-black">
                     {passPercentage}%
                   </span>
                 </div>
@@ -273,117 +273,117 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
           {/* 2. Question & Activity Distribution Matrix */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-indigo-600" />
                 <span>2. Question & Activity Distribution Matrix</span>
               </h3>
-              <span className="text-xs font-semibold text-slate-500">
-                Total Planned Items: <strong className="text-indigo-600">{totalCalculatedItems}</strong>
+              <span className="text-xs font-bold text-slate-700">
+                Total Planned Items: <strong className="text-indigo-900 font-black">{totalCalculatedItems}</strong>
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                <label className="text-[11px] font-bold text-slate-700 block">Multiple Choice</label>
-                <span className="text-[10px] text-slate-400 block mb-1.5">Objective 4-options</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-2xs">
+                <label className="text-[11px] font-bold text-slate-900 block">Multiple Choice</label>
+                <span className="text-[10px] text-slate-600 font-medium block mb-1.5">Objective 4-options</span>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={distribution.multipleChoice}
                   onChange={(e) => handleUpdateDist('multipleChoice', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 text-center"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                <label className="text-[11px] font-bold text-slate-700 block">True / False</label>
-                <span className="text-[10px] text-slate-400 block mb-1.5">Binary verification</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-2xs">
+                <label className="text-[11px] font-bold text-slate-900 block">True / False</label>
+                <span className="text-[10px] text-slate-600 font-medium block mb-1.5">Binary verification</span>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={distribution.trueFalse}
                   onChange={(e) => handleUpdateDist('trueFalse', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 text-center"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                <label className="text-[11px] font-bold text-slate-700 block">Fill in the Blank</label>
-                <span className="text-[10px] text-slate-400 block mb-1.5">Vocabulary gaps</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-2xs">
+                <label className="text-[11px] font-bold text-slate-900 block">Fill in the Blank</label>
+                <span className="text-[10px] text-slate-600 font-medium block mb-1.5">Vocabulary gaps</span>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={distribution.fillInBlank}
                   onChange={(e) => handleUpdateDist('fillInBlank', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 text-center"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                <label className="text-[11px] font-bold text-slate-700 block">Short Answer</label>
-                <span className="text-[10px] text-slate-400 block mb-1.5">Sentences / definitions</span>
+              <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-2xs">
+                <label className="text-[11px] font-bold text-slate-900 block">Short Answer</label>
+                <span className="text-[10px] text-slate-600 font-medium block mb-1.5">Sentences / definitions</span>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={distribution.shortAnswer}
                   onChange={(e) => handleUpdateDist('shortAnswer', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 text-center"
+                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-teal-50/50 rounded-xl border border-teal-100">
-                <label className="text-[11px] font-bold text-teal-800 block">Reading Activities</label>
-                <span className="text-[10px] text-teal-600 block mb-1.5">Passage + 4-5 Qs each</span>
+              <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200 shadow-2xs">
+                <label className="text-[11px] font-black text-teal-950 block">Reading Activities</label>
+                <span className="text-[10px] text-teal-800 font-semibold block mb-1.5">Passage + 4-5 Qs each</span>
                 <input
                   type="number"
                   min={0}
                   max={5}
                   value={distribution.reading}
                   onChange={(e) => handleUpdateDist('reading', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-teal-200 rounded-lg text-xs font-bold text-teal-900 text-center"
+                  className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-black text-teal-950 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-violet-50/50 rounded-xl border border-violet-100">
-                <label className="text-[11px] font-bold text-violet-800 block">Listening Activities</label>
-                <span className="text-[10px] text-violet-600 block mb-1.5">Audio + transcript + Qs</span>
+              <div className="p-3 bg-violet-50/60 rounded-xl border border-violet-200 shadow-2xs">
+                <label className="text-[11px] font-black text-violet-950 block">Listening Activities</label>
+                <span className="text-[10px] text-violet-800 font-semibold block mb-1.5">Audio + transcript + Qs</span>
                 <input
                   type="number"
                   min={0}
                   max={5}
                   value={distribution.listening}
                   onChange={(e) => handleUpdateDist('listening', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-violet-200 rounded-lg text-xs font-bold text-violet-900 text-center"
+                  className="w-full px-2.5 py-1.5 bg-white border border-violet-300 rounded-lg text-xs font-black text-violet-950 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                <label className="text-[11px] font-bold text-rose-800 block">Writing Tasks</label>
-                <span className="text-[10px] text-rose-600 block mb-1.5">Letter / Essay / Notice</span>
+              <div className="p-3 bg-rose-50/60 rounded-xl border border-rose-200 shadow-2xs">
+                <label className="text-[11px] font-black text-rose-950 block">Writing Tasks</label>
+                <span className="text-[10px] text-rose-800 font-semibold block mb-1.5">Letter / Essay / Notice</span>
                 <input
                   type="number"
                   min={0}
                   max={5}
                   value={distribution.writing}
                   onChange={(e) => handleUpdateDist('writing', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-900 text-center"
+                  className="w-full px-2.5 py-1.5 bg-white border border-rose-300 rounded-lg text-xs font-black text-rose-950 text-center"
                 />
               </div>
 
-              <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-100">
-                <label className="text-[11px] font-bold text-amber-800 block">Picture Description</label>
-                <span className="text-[10px] text-amber-600 block mb-1.5">Visual stimulus + Rubric</span>
+              <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 shadow-2xs">
+                <label className="text-[11px] font-black text-amber-950 block">Picture Description</label>
+                <span className="text-[10px] text-amber-800 font-semibold block mb-1.5">Visual stimulus + Rubric</span>
                 <input
                   type="number"
                   min={0}
                   max={5}
                   value={distribution.pictureDescription || 0}
                   onChange={(e) => handleUpdateDist('pictureDescription', parseInt(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg text-xs font-bold text-amber-900 text-center"
+                  className="w-full px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-black text-amber-950 text-center"
                 />
               </div>
             </div>
@@ -392,15 +392,15 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
           {/* 3. Skill & Cognitive Weighting (Bloom's Taxonomy) */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
                 <PieChart className="w-4 h-4 text-indigo-600" />
                 <span>3. Bloom's Taxonomy & Skill Weighting</span>
               </h3>
               <span
                 className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
                   totalSkillPercent === 100
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
                 }`}
               >
                 Total: {totalSkillPercent}% {totalSkillPercent === 100 ? '✓' : '(Should equal 100%)'}
@@ -409,9 +409,9 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-900 mb-1">
                   <span>Recall / Facts</span>
-                  <span className="text-indigo-600">{skills.recall}%</span>
+                  <span className="text-indigo-900 font-black">{skills.recall}%</span>
                 </div>
                 <input
                   type="range"
@@ -422,13 +422,13 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
                   onChange={(e) => handleUpdateSkill('recall', parseInt(e.target.value))}
                   className="w-full accent-indigo-600"
                 />
-                <span className="text-[10px] text-slate-400 block mt-1">Definitions, terms, direct facts</span>
+                <span className="text-[10px] text-slate-600 font-medium block mt-1">Definitions, terms, direct facts</span>
               </div>
 
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-900 mb-1">
                   <span>Comprehension</span>
-                  <span className="text-indigo-600">{skills.comprehension}%</span>
+                  <span className="text-indigo-900 font-black">{skills.comprehension}%</span>
                 </div>
                 <input
                   type="range"
@@ -439,13 +439,13 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
                   onChange={(e) => handleUpdateSkill('comprehension', parseInt(e.target.value))}
                   className="w-full accent-indigo-600"
                 />
-                <span className="text-[10px] text-slate-400 block mt-1">Understanding passages & context</span>
+                <span className="text-[10px] text-slate-600 font-medium block mt-1">Understanding passages & context</span>
               </div>
 
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-900 mb-1">
                   <span>Application</span>
-                  <span className="text-indigo-600">{skills.application}%</span>
+                  <span className="text-indigo-900 font-black">{skills.application}%</span>
                 </div>
                 <input
                   type="range"
@@ -456,13 +456,13 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
                   onChange={(e) => handleUpdateSkill('application', parseInt(e.target.value))}
                   className="w-full accent-indigo-600"
                 />
-                <span className="text-[10px] text-slate-400 block mt-1">Sentence building & rules</span>
+                <span className="text-[10px] text-slate-600 font-medium block mt-1">Sentence building & rules</span>
               </div>
 
               <div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 mb-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-900 mb-1">
                   <span>Analysis / Synthesis</span>
-                  <span className="text-indigo-600">{skills.analysis}%</span>
+                  <span className="text-indigo-900 font-black">{skills.analysis}%</span>
                 </div>
                 <input
                   type="range"
@@ -473,14 +473,14 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
                   onChange={(e) => handleUpdateSkill('analysis', parseInt(e.target.value))}
                   className="w-full accent-indigo-600"
                 />
-                <span className="text-[10px] text-slate-400 block mt-1">Inference & original writing</span>
+                <span className="text-[10px] text-slate-600 font-medium block mt-1">Inference & original writing</span>
               </div>
             </div>
           </div>
 
           {/* 4. Optional Teacher Context / Source Material */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
               4. Source Material / Teacher Context Notes (Optional)
             </h3>
             <textarea
@@ -488,7 +488,7 @@ export const ExamBlueprintModal: React.FC<ExamBlueprintModalProps> = ({
               value={sourceContent}
               onChange={(e) => setSourceContent(e.target.value)}
               placeholder="Paste lesson notes, textbook chapter excerpts, vocabulary lists, or curriculum standards to ground the questions in your exact course material..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
             />
           </div>
         </div>
