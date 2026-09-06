@@ -517,6 +517,7 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
 
     parsedExam = {
       schemaVersion: '1.0',
+      assessmentType: 'exam',
       exam: {
         title: String(exam.title || 'Classroom Assessment').trim(),
         subject: String(exam.subject || 'General').trim(),

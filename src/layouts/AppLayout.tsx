@@ -35,7 +35,8 @@ export const AppLayout: React.FC = () => {
   const isClassesPage = location.pathname.startsWith('/classes');
   const isReaderPage =
     location.pathname.includes('/courses/') ||
-    location.pathname.includes('/preview');
+    location.pathname.includes('/preview') ||
+    location.pathname.includes('/assessments/builder');
 
   const { user, profile, isAdmin, isLoading, signOut, requireAuth } = useAuth();
 

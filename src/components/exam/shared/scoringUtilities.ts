@@ -64,7 +64,13 @@ export function calculatePassMarks(totalMarks: number, passPercentage: number = 
  * Determines whether a question type requires human teacher evaluation.
  */
 export function isSubjectiveQuestion(type: SupportedQuestionType): boolean {
-  return type === 'essay' || type === 'short_answer';
+  return (
+    type === 'essay' ||
+    type === 'paragraph' ||
+    type === 'short_answer' ||
+    type === 'coding_question' ||
+    type === 'file_upload'
+  );
 }
 
 /**

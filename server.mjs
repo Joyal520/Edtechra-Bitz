@@ -14573,10 +14573,167 @@ app.all('/api/exam-engine', async (req, res) => {
       return res.json({ success: true, message: 'Exam deleted successfully.' });
     }
 
+    // Action 13: Submit Survey Response
+    if (action === 'submit-survey-response') {
+      const { examId, classroomId, answers, feedback } = req.body || {};
+      if (!examId || !classroomId) {
+        return res.status(400).json({ success: false, error: 'examId and classroomId are required.' });
+      }
+
+      if (!serverSupabase) {
+        return res.status(500).json({ success: false, error: 'Database unavailable.' });
+      }
+
+      const { data: examData } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      const surveySettings = examData?.survey_settings || {};
+      const isAnonymous = Boolean(surveySettings.isAnonymous);
+
+      const record = {
+        exam_id: examId,
+        classroom_id: classroomId,
+        student_id: isAnonymous ? null : (user?.id || null),
+        score: 0,
+        total_marks: 0,
+        percentage: 100,
+        passed: true,
+        is_survey_response: true,
+        survey_response: {
+          answers: answers || {},
+          feedback: feedback || '',
+          submittedAt: new Date().toISOString()
+        },
+        answers: answers || {},
+        submitted_at: new Date().toISOString()
+      };
+
+      const { data: inserted, error: insertErr } = await serverSupabase
+        .from('classroom_exam_results')
+        .insert(record)
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+
+      return res.json({
+        success: true,
+        message: 'Survey response submitted successfully.',
+        responseId: inserted?.id
+      });
+    }
+
+    // Action 14: Get Survey Results Analytics
+    if (action === 'get-survey-results') {
+      const examId = req.query.examId || req.body?.examId;
+      if (!examId) return res.status(400).json({ success: false, error: 'examId is required.' });
+
+      if (!serverSupabase) {
+        return res.status(500).json({ success: false, error: 'Database unavailable.' });
+      }
+
+      const { data: exam } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      const { data: responses, error: respErr } = await serverSupabase
+        .from('classroom_exam_results')
+        .select('*')
+        .eq('exam_id', examId)
+        .eq('is_survey_response', true);
+
+      if (respErr) throw respErr;
+
+      return res.json({
+        success: true,
+        examTitle: exam?.title || 'Survey',
+        totalResponses: (responses || []).length,
+        responses: responses || []
+      });
+    }
+
     return res.status(400).json({ success: false, error: `Unknown action: ${action}` });
   } catch (err) {
     console.error('[ExamEngine API Error]:', err);
     return res.status(500).json({ success: false, error: err.message || 'Internal exam server error.' });
+  }
+});
+
+// Standalone Survey Submission & Analytics Routes
+app.post('/api/assessments/surveys/submit', async (req, res) => {
+  const authContext = await verifyAuthUser(req);
+  const user = authContext?.user;
+  const { examId, classroomId, answers, feedback } = req.body || {};
+
+  if (!examId || !classroomId) {
+    return res.status(400).json({ success: false, error: 'examId and classroomId are required.' });
+  }
+
+  try {
+    const record = {
+      exam_id: examId,
+      classroom_id: classroomId,
+      student_id: user?.id || null,
+      score: 0,
+      total_marks: 0,
+      percentage: 100,
+      passed: true,
+      is_survey_response: true,
+      survey_response: {
+        answers: answers || {},
+        feedback: feedback || '',
+        submittedAt: new Date().toISOString()
+      },
+      answers: answers || {},
+      submitted_at: new Date().toISOString()
+    };
+
+    if (serverSupabase) {
+      const { data, error } = await serverSupabase
+        .from('classroom_exam_results')
+        .insert(record)
+        .select()
+        .single();
+      if (error) throw error;
+      return res.json({ success: true, responseId: data?.id });
+    }
+    return res.json({ success: true, responseId: 'mock-survey-resp-1' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/assessments/surveys/:id/results', async (req, res) => {
+  const examId = req.params.id;
+  try {
+    if (serverSupabase) {
+      const { data: exam } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      const { data: responses } = await serverSupabase
+        .from('classroom_exam_results')
+        .select('*')
+        .eq('exam_id', examId)
+        .eq('is_survey_response', true);
+
+      return res.json({
+        success: true,
+        examTitle: exam?.title || 'Survey',
+        totalResponses: (responses || []).length,
+        responses: responses || []
+      });
+    }
+    return res.json({ success: true, examTitle: 'Survey', totalResponses: 0, responses: [] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -22,6 +22,7 @@ import { CourseEditorPage } from '@/pages/course-studio/CourseEditorPage';
 import { CoursePreviewPage } from '@/pages/course-studio/CoursePreviewPage';
 import { CourseAnalyticsPage } from '@/pages/course-studio/CourseAnalyticsPage';
 import { StudentCoursePlayerPage } from '@/pages/classes/courses/StudentCoursePlayerPage';
+import { AssessmentBuilderPage } from '@/pages/classes/AssessmentBuilderPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -36,6 +37,10 @@ export const AppRoutes: React.FC = () => {
         <Route path="classes/join/:code" element={<JoinClassroomPage />} />
         <Route path="classes/:id" element={<ClassroomDetailPage />} />
         <Route path="classes/:id/resources" element={<TeacherResourcesPage />} />
+        
+        {/* Assessment & Survey Studio Routes */}
+        <Route path="classes/:classroomId/assessments/builder" element={<AssessmentBuilderPage />} />
+        <Route path="classes/:classroomId/assessments/builder/:assessmentId" element={<AssessmentBuilderPage />} />
         
         {/* Live Quiz Routes */}
         <Route path="classes/live-quiz/join" element={<LiveQuizJoinPage />} />

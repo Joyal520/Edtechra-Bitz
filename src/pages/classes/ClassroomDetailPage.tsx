@@ -60,6 +60,7 @@ import { SubmissionListModal } from '@/components/classes/SubmissionListModal';
 import { ActivityHubModal } from '@/components/classes/ActivityHubModal';
 import { OCRGradingModal } from '@/components/classes/OCRGradingModal';
 import { ExamPlatformModal } from '@/components/exam/ExamPlatformModal';
+import { AssessmentTypeSelectionModal } from '@/components/exam/entry/AssessmentTypeSelectionModal';
 import { AITeachingIntelligenceModal } from '@/components/classes/AITeachingIntelligenceModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
@@ -108,6 +109,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClassroomExam | null>(null);
+  const [assessmentTypeModalOpen, setAssessmentTypeModalOpen] = useState(false);
   const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
   const [studentAssessmentHistoryOpen, setStudentAssessmentHistoryOpen] = useState(false);
 
@@ -1073,20 +1075,17 @@ export const ClassroomDetailPage: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
                   <div>
-                    <h2 className="text-base font-black text-slate-900">Classroom Timed Assessments</h2>
-                    <p className="text-xs text-slate-500 font-semibold">{exams.length} active exams</p>
+                    <h2 className="text-base font-black text-slate-900">Assessments & Surveys Studio</h2>
+                    <p className="text-xs text-slate-500 font-semibold">{exams.length} active assessments & surveys</p>
                   </div>
                   {isTeacher && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedExam(null);
-                        setExamModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                      onClick={() => setAssessmentTypeModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Create Exam</span>
+                      <span>Create Assessment</span>
                     </button>
                   )}
                 </div>
@@ -1094,61 +1093,82 @@ export const ClassroomDetailPage: React.FC = () => {
                 {exams.length === 0 ? (
                   <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-2">
                     <Award className="w-10 h-10 text-slate-300 mx-auto" />
-                    <p className="text-xs font-bold text-slate-500">No exams scheduled for this classroom.</p>
+                    <p className="text-xs font-bold text-slate-500">No assessments or surveys created for this classroom.</p>
                     <p className="text-[11px] text-slate-400">
                       {isTeacher
-                        ? 'Click "+ Create Exam" to build an interactive timed assessment.'
+                        ? 'Click "+ Create Assessment" to launch the Canva-style visual builder.'
                         : 'Check back when your teacher announces an assessment.'}
                     </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {exams.map((exam) => (
-                      <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
-                              {exam.duration_minutes} Minutes
-                            </span>
-                            <span className="text-xs font-extrabold text-slate-600">
-                              {exam.total_marks} Marks Total
-                            </span>
+                    {exams.map((exam) => {
+                      const isSurveyItem = (exam as any).assessment_type === 'survey';
+
+                      return (
+                        <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                isSurveyItem ? 'text-amber-700 bg-amber-50' : 'text-indigo-700 bg-indigo-50'
+                              }`}>
+                                {isSurveyItem ? 'Survey' : `${exam.duration_minutes} Mins`}
+                              </span>
+                              <span className="text-xs font-extrabold text-slate-600">
+                                {isSurveyItem ? 'Feedback / Poll' : `${exam.total_marks} Marks Total`}
+                              </span>
+                            </div>
+
+                            <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
+                            {exam.description && (
+                              <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
+                            )}
                           </div>
 
-                          <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
-                          {exam.description && (
-                            <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
-                          )}
-                        </div>
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            {exam.latest_result ? (
+                              <span className="text-xs font-black text-emerald-600 truncate">
+                                {isSurveyItem
+                                  ? 'Submitted'
+                                  : `Score: ${exam.latest_result.score} / ${exam.total_marks} (${exam.latest_result.percentage}%)`}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold text-slate-400">
+                                {(Array.isArray(exam.questions_json) && exam.questions_json.length > 0
+                                  ? exam.questions_json.flatMap((s: any) => s.questions || []).length
+                                  : Array.isArray(exam.questions)
+                                  ? exam.questions.length
+                                  : 0)} questions
+                              </span>
+                            )}
 
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                          {exam.latest_result ? (
-                            <span className="text-xs font-black text-emerald-600">
-                              Score: {exam.latest_result.score} / {exam.total_marks} ({exam.latest_result.percentage}%)
-                            </span>
-                          ) : (
-                            <span className="text-xs font-semibold text-slate-400">
-                              {(Array.isArray(exam.questions_json) && exam.questions_json.length > 0
-                                ? exam.questions_json.flatMap((s: any) => s.questions || []).length
-                                : Array.isArray(exam.questions)
-                                ? exam.questions.length
-                                : 0)} questions
-                            </span>
-                          )}
+                            <div className="flex items-center gap-1.5">
+                              {isTeacher && (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/classes/${classroom.id}/assessments/builder/${exam.id}`)}
+                                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                  title="Edit in Assessment Studio"
+                                >
+                                  Edit Studio
+                                </button>
+                              )}
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedExam(exam);
-                              setExamModalOpen(true);
-                            }}
-                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
-                          >
-                            {exam.latest_result ? 'View Result' : 'Take Exam'}
-                          </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedExam(exam);
+                                  setExamModalOpen(true);
+                                }}
+                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                              >
+                                {exam.latest_result ? 'View Result' : isSurveyItem ? 'Take Survey' : 'Take Exam'}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1351,6 +1371,15 @@ export const ClassroomDetailPage: React.FC = () => {
           setSelectedExam(null);
         }}
         onSuccess={loadAllClassroomData}
+      />
+
+      <AssessmentTypeSelectionModal
+        isOpen={assessmentTypeModalOpen}
+        onClose={() => setAssessmentTypeModalOpen(false)}
+        onSelectType={(type) => {
+          setAssessmentTypeModalOpen(false);
+          navigate(`/classes/${classroom.id}/assessments/builder?type=${type}`);
+        }}
       />
 
       <AITeachingIntelligenceModal

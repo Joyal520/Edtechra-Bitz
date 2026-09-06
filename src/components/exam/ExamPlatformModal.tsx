@@ -50,6 +50,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
 
     return {
       schemaVersion: '1.0',
+      assessmentType: activeExam.assessment_type || 'exam',
       exam: {
         title: activeExam.title || 'Exam',
         subject: activeExam.subject || 'General',

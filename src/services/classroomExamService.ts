@@ -8,6 +8,7 @@ import {
   ClassroomExamResult,
   ClassroomExamQuestion
 } from '@/types/classroom';
+import { CanonicalAssessmentV2 } from '@/components/exam/shared/ExamSchema';
 import { classroomPointsService } from './classroomPointsService';
 
 class ClassroomExamService {
@@ -578,6 +579,126 @@ class ClassroomExamService {
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Failed to delete exam.');
+    }
+  }
+
+  /**
+   * Saves or updates a v2.0 CanonicalAssessment in classroom_exams
+   */
+  async saveAssessmentV2(params: {
+    examId?: string;
+    classroomId: string;
+    assessment: CanonicalAssessmentV2;
+    status: 'draft' | 'published';
+  }): Promise<{ data?: any; error?: string }> {
+    if (!supabase) return { error: 'Supabase is not configured' };
+    const userId = await this.getUserId();
+    if (!userId) return { error: 'Authentication required' };
+
+    try {
+      const { assessment, classroomId, examId, status } = params;
+      const totalMarks = assessment.assessmentType === 'survey' ? 0 : assessment.sections.reduce(
+        (acc, s) => acc + (s.questions?.reduce((qAcc, q) => qAcc + (q.marks || 1), 0) || 0),
+        0
+      );
+
+      const flatQuestions = assessment.sections.flatMap((s) => s.questions || []);
+
+      const rowData: Record<string, any> = {
+        classroom_id: classroomId,
+        title: assessment.exam.title.trim() || 'Untitled Assessment',
+        description: (assessment.exam.description || '').trim(),
+        instructions: (assessment.exam.instructions || '').trim(),
+        assessment_type: assessment.assessmentType,
+        duration_minutes: assessment.exam.durationMinutes || 60,
+        total_marks: totalMarks,
+        pass_marks: Math.round(totalMarks * ((assessment.exam.passPercentage || 60) / 100)),
+        starts_at: assessment.exam.startsAt || null,
+        ends_at: assessment.exam.endsAt || null,
+        theme_config: assessment.theme || null,
+        brand_kit: assessment.brandKit || null,
+        survey_settings: assessment.surveySettings || null,
+        questions: flatQuestions,
+        status: status || 'published'
+      };
+
+      if (examId) {
+        const { data, error } = await supabase
+          .from('classroom_exams')
+          .update(rowData)
+          .eq('id', examId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return { data };
+      } else {
+        rowData.created_by = userId;
+        const { data, error } = await supabase
+          .from('classroom_exams')
+          .insert(rowData)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return { data };
+      }
+    } catch (err: any) {
+      console.error('[ClassroomExamService] saveAssessmentV2 error:', err);
+      return { error: err.message || 'Failed to save assessment.' };
+    }
+  }
+
+  /**
+   * Retrieves an assessment formatted as CanonicalAssessmentV2
+   */
+  async getAssessmentV2(examId: string): Promise<CanonicalAssessmentV2 | null> {
+    if (!supabase || !examId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      const assessmentType = data.assessment_type || 'exam';
+      const sections = data.sections || [
+        {
+          id: 'sec_1',
+          title: 'Section 1',
+          questions: data.questions || []
+        }
+      ];
+
+      const assessment: CanonicalAssessmentV2 = {
+        schemaVersion: '2.0',
+        assessmentType,
+        exam: {
+          title: data.title || 'Untitled Assessment',
+          subject: data.subject || 'General',
+          grade: data.grade || 'Grade 10',
+          examType: data.exam_type || 'quiz',
+          difficulty: data.difficulty || 'medium',
+          description: data.description || '',
+          instructions: data.instructions || '',
+          durationMinutes: data.duration_minutes || 60,
+          passPercentage: data.pass_marks && data.total_marks ? Math.round((data.pass_marks / data.total_marks) * 100) : 60,
+          startsAt: data.starts_at || null,
+          endsAt: data.ends_at || null
+        },
+        theme: data.theme_config || undefined,
+        brandKit: data.brand_kit || undefined,
+        surveySettings: data.survey_settings || undefined,
+        sections
+      };
+
+      return assessment;
+    } catch (err) {
+      console.error('[ClassroomExamService] getAssessmentV2 error:', err);
+      return null;
     }
   }
 
