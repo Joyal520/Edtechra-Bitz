@@ -436,49 +436,141 @@ export function normalizeExam(exam, payload) {
 // 2. DETERMINISTIC & HYBRID AUTO-GRADING ENGINE
 // ----------------------------------------------------------------------------
 
-export function gradeExamAttempt(examPayload, answers = {}) {
-  const sections = examPayload?.sections || examPayload?.questions_json || [];
+export function gradeExamAttempt(examPayload, answers = {}, subjectiveScores = {}, subjectiveFeedbacks = {}) {
+  const sections = examPayload?.sections || examPayload?.questions_json || (Array.isArray(examPayload?.questions) ? [{ id: 'sec_default', questions: examPayload.questions }] : []);
   const questions = sections.flatMap((section) => {
     const sType = section.questionType || section.title || section.type || '';
-    return (section.questions || []).map(q => ({
-      ...q,
-      questionType: q.questionType || q.type || sType
-    }));
+    const sPassage = section.passage || '';
+    const sPassageTitle = section.passageTitle || '';
+
+    return (section.questions || []).flatMap(q => {
+      // If reading comprehension with subQuestions, flatten them for grading
+      if ((q.type === 'reading_comprehension' || q.questionType === 'reading_comprehension') && Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
+        return q.subQuestions.map(subQ => ({
+          ...subQ,
+          questionType: subQ.type || subQ.questionType || 'multiple_choice',
+          parentPassage: q.passage || sPassage,
+          parentPassageTitle: q.passageTitle || sPassageTitle
+        }));
+      }
+      return [{
+        ...q,
+        questionType: q.questionType || q.type || sType,
+        parentPassage: sPassage,
+        parentPassageTitle: sPassageTitle
+      }];
+    });
   });
 
+  let hasSubjective = false;
+  let allSubjectiveGraded = true;
+
   const breakdown = questions.map((question) => {
-    const submitted = answers[question.questionId] !== undefined ? answers[question.questionId] : answers[question.id];
-    const cleanSubmitted = String(submitted || '').trim().toLowerCase();
-    const cleanCorrect = String(question.correctAnswer || question.correct_answer || '').trim().toLowerCase();
+    const qId = question.id || question.questionId;
+    const submitted = answers[qId] !== undefined ? answers[qId] : (question.questionId ? answers[question.questionId] : undefined);
+    const qType = String(question.questionType || question.type || '').toLowerCase();
 
-    const hybrid = [
-      "Essay Type Questions",
-      "Essay Questions",
-      "Reading Comprehension Questions",
-      "Reading Comprehension",
-      "Short Answer Questions"
-    ].includes(question.questionType || question.type);
+    const isSubjective =
+      qType.includes('essay') ||
+      qType.includes('short_answer') ||
+      qType.includes('short answer');
 
-    let isExact = false;
-    if (question.questionType?.includes("Reorder")) {
-      isExact = cleanSubmitted.replace(/[^a-z0-9]/g, '') === cleanCorrect.replace(/[^a-z0-9]/g, '');
-    } else {
-      isExact = cleanSubmitted === cleanCorrect && cleanSubmitted.length > 0;
+    const marks = Number(question.marks || 1);
+
+    if (isSubjective) {
+      hasSubjective = true;
+      const teacherAssignedScore = subjectiveScores[qId];
+      const teacherFeedback = subjectiveFeedbacks[qId];
+
+      if (teacherAssignedScore !== undefined && teacherAssignedScore !== null) {
+        const score = Math.max(0, Math.min(marks, Number(teacherAssignedScore)));
+        return {
+          questionId: qId,
+          questionType: question.questionType || question.type,
+          questionText: question.question || question.questionText || '',
+          submittedAnswer: submitted || '',
+          score,
+          maxScore: marks,
+          isCorrect: score === marks,
+          requiresTeacherReview: false,
+          teacherFeedback: teacherFeedback || '',
+          feedback: teacherFeedback || `Evaluated by teacher (${score}/${marks} marks).`
+        };
+      }
+
+      allSubjectiveGraded = false;
+      return {
+        questionId: qId,
+        questionType: question.questionType || question.type,
+        questionText: question.question || question.questionText || '',
+        submittedAnswer: submitted || '',
+        score: 0,
+        maxScore: marks,
+        isCorrect: false,
+        requiresTeacherReview: true,
+        feedback: submitted ? 'Answer recorded. Pending teacher evaluation.' : 'Unattempted. Pending teacher evaluation.'
+      };
     }
 
-    const marks = Number(question.marks || 10);
-    const score = isExact ? marks : (hybrid && cleanSubmitted.length > 0) ? Math.round(marks * 0.7) : 0;
+    // Objective Grading
+    let isExact = false;
+    const rawCorrect = question.correctAnswer || question.correct_answer || question.acceptedAnswers;
+
+    if (qType.includes('reorder')) {
+      const targetOrder = Array.isArray(question.correctOrder) ? question.correctOrder : [];
+      if (Array.isArray(submitted) && targetOrder.length > 0) {
+        isExact = submitted.join(',') === targetOrder.join(',');
+      } else {
+        const cleanSub = String(submitted || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const cleanCor = String(targetOrder.join('') || rawCorrect || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+        isExact = cleanSub.length > 0 && cleanSub === cleanCor;
+      }
+    } else if (qType.includes('fill') || qType.includes('blank')) {
+      const cleanSub = String(submitted || '').trim().toLowerCase();
+      const acceptedList = Array.isArray(question.acceptedAnswers)
+        ? question.acceptedAnswers.map(a => String(a).trim().toLowerCase())
+        : [String(rawCorrect || '').trim().toLowerCase()];
+      isExact = cleanSub.length > 0 && acceptedList.includes(cleanSub);
+    } else if (qType.includes('select') && Array.isArray(rawCorrect)) {
+      const subArr = Array.isArray(submitted) ? submitted.map(String).sort() : [String(submitted)];
+      const corArr = rawCorrect.map(String).sort();
+      isExact = subArr.join(',') === corArr.join(',');
+    } else if (qType.includes('matching') && Array.isArray(question.pairs)) {
+      const subMap = (typeof submitted === 'object' && submitted !== null) ? submitted : {};
+      const allMatched = question.pairs.every(p => {
+        const studentMatch = subMap[p.left];
+        return studentMatch && String(studentMatch).trim().toLowerCase() === String(p.right).trim().toLowerCase();
+      });
+      isExact = allMatched && question.pairs.length > 0;
+    } else if (qType.includes('true') || qType.includes('false')) {
+      const cleanSub = String(submitted).trim().toLowerCase();
+      const cleanCor = String(rawCorrect).trim().toLowerCase();
+      isExact = (cleanSub === 'true' && cleanCor === 'true') || (cleanSub === 'false' && cleanCor === 'false');
+    } else {
+      // MCQ / Single Choice
+      const cleanSub = String(submitted || '').trim().toLowerCase();
+      if (Array.isArray(rawCorrect)) {
+        isExact = rawCorrect.some(c => String(c).trim().toLowerCase() === cleanSub) && cleanSub.length > 0;
+      } else {
+        const cleanCor = String(rawCorrect || '').trim().toLowerCase();
+        isExact = cleanSub === cleanCor && cleanSub.length > 0;
+      }
+    }
+
+    const score = isExact ? marks : 0;
 
     return {
-      questionId: question.questionId || question.id,
+      questionId: qId,
       questionType: question.questionType || question.type,
-      submittedAnswer: submitted || "",
-      correctAnswer: question.correctAnswer || question.correct_answer || "",
+      questionText: question.question || question.questionText || '',
+      submittedAnswer: submitted || '',
+      correctAnswer: rawCorrect || '',
+      explanation: question.explanation || '',
       score,
       maxScore: marks,
       isCorrect: isExact,
-      isHybrid: hybrid,
-      feedback: isExact ? "Correct answer." : (hybrid && cleanSubmitted.length > 0) ? "Provisional rubric score assigned." : "Incorrect or unattempted. Review topic."
+      requiresTeacherReview: false,
+      feedback: isExact ? 'Correct answer.' : (question.explanation || 'Incorrect answer.')
     };
   });
 
@@ -486,22 +578,38 @@ export function gradeExamAttempt(examPayload, answers = {}) {
   const maxScore = breakdown.reduce((sum, item) => sum + item.maxScore, 0) || Number(examPayload?.metadata?.totalMarks || 100);
   const percentage = maxScore > 0 ? Number(((totalScore / maxScore) * 100).toFixed(2)) : 0;
 
-  let grade = "Needs Support";
-  if (percentage >= 90) grade = "A+";
-  else if (percentage >= 80) grade = "A";
-  else if (percentage >= 70) grade = "B";
-  else if (percentage >= 60) grade = "C";
-  else if (percentage >= 50) grade = "D";
+  const gradingStatus = !hasSubjective
+    ? 'auto_graded'
+    : allSubjectiveGraded
+    ? 'reviewed'
+    : 'pending_review';
+
+  let grade = 'Needs Support';
+  if (percentage >= 90) grade = 'A+';
+  else if (percentage >= 80) grade = 'A';
+  else if (percentage >= 70) grade = 'B';
+  else if (percentage >= 60) grade = 'C';
+  else if (percentage >= 50) grade = 'D';
+
+  const passThreshold = Number(examPayload?.pass_marks || examPayload?.metadata?.passPercentage || 40);
+  const passed = totalScore >= passThreshold || percentage >= passThreshold;
 
   return {
     totalScore,
+    score: totalScore,
     maxScore,
+    total_marks: maxScore,
     percentage,
     grade,
-    passed: percentage >= 40,
-    strengths: percentage >= 70 ? ["Strong concept mastery", "High accuracy in objective sections"] : ["Attempt completed", "Objective questions reviewed"],
-    weaknesses: percentage < 70 ? ["Review topics with lower accuracy", "Practice timed responses"] : ["Continue practice to maintain top tier score"],
-    feedback: percentage >= 50 ? "Great effort! Your score and performance breakdown are recorded." : "Keep practicing! Review incorrect answers and retake practice sets.",
+    passed,
+    gradingStatus,
+    strengths: percentage >= 70 ? ['Strong concept mastery', 'High accuracy in objective sections'] : ['Attempt completed', 'Objective questions reviewed'],
+    weaknesses: percentage < 70 ? ['Review topics with lower accuracy', 'Practice timed responses'] : ['Continue practice to maintain top tier score'],
+    feedback: gradingStatus === 'pending_review'
+      ? 'Exam submitted successfully. Subjective responses are pending teacher review.'
+      : percentage >= 50
+      ? 'Great effort! Your score and performance breakdown are recorded.'
+      : 'Keep practicing! Review incorrect answers and retake practice sets.',
     breakdown
   };
 }

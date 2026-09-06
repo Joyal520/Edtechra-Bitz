@@ -14644,6 +14644,397 @@ app.post('/api/score-analysis', async (req, res) => {
 });
 
 // ============================================================================
+// EDTECHRA DIGITAL EXAMINATION PLATFORM API ENDPOINTS
+// ============================================================================
+
+// 1. Publish Exam
+app.post('/api/exams/publish', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const teacherId = authContext?.user?.id || '00000000-0000-0000-0000-000000000001';
+    const payload = req.body || {};
+    const classroomId = payload.classroomId;
+    const canonicalExam = payload.canonicalExam;
+    const schedule = payload.schedule || {};
+
+    if (!canonicalExam) {
+      return res.status(400).json({ error: 'canonicalExam payload is required.' });
+    }
+
+    const examData = canonicalExam.exam || {};
+    const totalMarks = (canonicalExam.sections || []).reduce((secAcc, sec) => {
+      return secAcc + (sec.questions || []).reduce((qAcc, q) => qAcc + (Number(q.marks) || 1), 0);
+    }, 0) || 100;
+
+    const passMarks = Math.ceil((totalMarks * (examData.passPercentage || 40)) / 100);
+
+    const record = {
+      classroom_id: classroomId,
+      teacher_id: teacherId,
+      created_by: teacherId,
+      title: examData.title || 'Classroom Assessment',
+      description: examData.description || '',
+      instructions: examData.instructions || '',
+      exam_type: examData.examType || 'Unit Test',
+      difficulty: examData.difficulty || 'Mixed',
+      duration_minutes: examData.durationMinutes || 45,
+      total_marks: totalMarks,
+      pass_marks: passMarks,
+      pass_percentage: examData.passPercentage || 40,
+      max_attempts: examData.maxAttempts || 1,
+      score_policy: examData.scorePolicy || 'highest',
+      randomize_questions: Boolean(examData.randomizeQuestions),
+      randomize_options: Boolean(examData.randomizeOptions),
+      show_marks_immediately: examData.showMarksImmediately !== false,
+      show_correct_answers: examData.showCorrectAnswers !== false,
+      password: examData.password || null,
+      starts_at: schedule.startsAt || examData.startsAt || null,
+      ends_at: schedule.endsAt || examData.endsAt || null,
+      questions_json: canonicalExam.sections || [],
+      questions: canonicalExam.sections || [],
+      pedagogical_config: canonicalExam.requirements || {},
+      status: 'published',
+      published_at: new Date().toISOString()
+    };
+
+    if (serverSupabase) {
+      const { data, error } = await serverSupabase
+        .from('classroom_exams')
+        .insert(record)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json({ success: true, id: data.id, status: 'published' });
+    }
+
+    return res.json({ success: true, id: `exam_${Date.now()}`, status: 'published' });
+  } catch (err) {
+    console.error('[API /api/exams/publish Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to publish exam.' });
+  }
+});
+
+// 2. Start Exam Attempt & Retrieve Authoritative Timer Expiry
+app.post('/api/exams/start-attempt', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const user = authContext?.user;
+    const { examId, classroomId, password } = req.body || {};
+
+    if (!examId) return res.status(400).json({ error: 'examId is required.' });
+
+    let exam = null;
+    if (serverSupabase) {
+      const { data, error } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      if (error || !data) return res.status(404).json({ error: 'Exam not found.' });
+      exam = data;
+    }
+
+    // Verify Password if exam is protected
+    if (exam?.password && exam.password.trim().length > 0) {
+      if (!password || password.trim() !== exam.password.trim()) {
+        return res.status(403).json({ error: 'Incorrect examination password.' });
+      }
+    }
+
+    const durationMinutes = exam?.duration_minutes || 45;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
+
+    if (serverSupabase && user) {
+      // 1. Check for existing in-progress attempt to restore
+      const { data: existingInProgress } = await serverSupabase
+        .from('classroom_exam_results')
+        .select('*')
+        .eq('exam_id', examId)
+        .eq('student_id', user.id)
+        .eq('status', 'in_progress')
+        .maybeSingle();
+
+      if (existingInProgress) {
+        return res.json({
+          attemptId: existingInProgress.id,
+          attemptNumber: existingInProgress.attempt_number || 1,
+          startedAt: existingInProgress.started_at || now.toISOString(),
+          expiresAt: existingInProgress.expires_at || expiresAt.toISOString(),
+          durationMinutes,
+          savedAnswers: existingInProgress.session_answers || existingInProgress.answers || {},
+          bookmarkedIds: existingInProgress.bookmarked_question_ids || []
+        });
+      }
+
+      // 2. Check completed attempts against max_attempts
+      const { data: priorAttempts } = await serverSupabase
+        .from('classroom_exam_results')
+        .select('id, attempt_number')
+        .eq('exam_id', examId)
+        .eq('student_id', user.id);
+
+      const maxAttempts = exam?.max_attempts || 1;
+      const count = priorAttempts?.length || 0;
+
+      if (count >= maxAttempts) {
+        return res.status(403).json({
+          error: `Maximum attempts limit reached (${maxAttempts} attempt${maxAttempts > 1 ? 's' : ''} allowed).`
+        });
+      }
+
+      const nextAttemptNumber = count + 1;
+
+      // 3. Create fresh attempt session
+      const { data: newAttempt, error: insErr } = await serverSupabase
+        .from('classroom_exam_results')
+        .insert({
+          exam_id: examId,
+          classroom_id: classroomId || exam.classroom_id,
+          student_id: user.id,
+          attempt_number: nextAttemptNumber,
+          status: 'in_progress',
+          started_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          session_answers: {},
+          bookmarked_question_ids: [],
+          score: 0,
+          total_marks: exam.total_marks || 100
+        })
+        .select()
+        .single();
+
+      if (!insErr && newAttempt) {
+        return res.json({
+          attemptId: newAttempt.id,
+          attemptNumber: nextAttemptNumber,
+          startedAt: newAttempt.started_at,
+          expiresAt: newAttempt.expires_at,
+          durationMinutes,
+          savedAnswers: {},
+          bookmarkedIds: []
+        });
+      }
+    }
+
+    return res.json({
+      attemptId: `temp_att_${Date.now()}`,
+      attemptNumber: 1,
+      startedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      durationMinutes,
+      savedAnswers: {},
+      bookmarkedIds: []
+    });
+  } catch (err) {
+    console.error('[API /api/exams/start-attempt Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to start exam session.' });
+  }
+});
+
+// 3. Sync & Autosave Answers
+app.patch('/api/exams/attempts/sync', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const user = authContext?.user;
+    const { attemptId, examId, answers, bookmarkedIds } = req.body || {};
+
+    if (!attemptId && !examId) return res.status(400).json({ error: 'attemptId or examId required.' });
+
+    if (serverSupabase && user) {
+      const updates = {
+        session_answers: answers || {},
+        bookmarked_question_ids: bookmarkedIds || [],
+        last_synced_at: new Date().toISOString()
+      };
+
+      let query = serverSupabase
+        .from('classroom_exam_results')
+        .update(updates)
+        .eq('student_id', user.id)
+        .eq('status', 'in_progress');
+
+      if (attemptId && attemptId.length === 36) {
+        query = query.eq('id', attemptId);
+      } else if (examId) {
+        query = query.eq('exam_id', examId);
+      }
+
+      await query.catch((err) => console.warn('[Exam Autosave sync warning]:', err.message));
+    }
+
+    return res.json({ success: true, syncedAt: new Date().toISOString() });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Final Exam Attempt Submission & Deterministic Grading
+app.post('/api/exams/attempts/submit', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const user = authContext?.user;
+    const { examId, classroomId, exam, answers } = req.body || {};
+
+    if (!examId) return res.status(400).json({ error: 'examId is required.' });
+
+    // Fetch full exam from DB to ensure answers aren't tampered with
+    let authoritativeExam = exam;
+    if (serverSupabase && examId) {
+      const { data: dbExam } = await serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('id', examId)
+        .maybeSingle();
+
+      if (dbExam) authoritativeExam = dbExam;
+    }
+
+    // Run deterministic grading
+    const grading = gradeExamAttempt(authoritativeExam, answers);
+
+    // Save submission to database
+    if (serverSupabase && user) {
+      const record = {
+        exam_id: examId,
+        classroom_id: classroomId || authoritativeExam?.classroom_id,
+        student_id: user.id,
+        score: grading.totalScore,
+        total_marks: grading.maxScore,
+        percentage: grading.percentage,
+        grade: grading.grade,
+        passed: grading.passed,
+        grading_status: grading.gradingStatus,
+        status: 'submitted',
+        answers: answers,
+        breakdown_json: grading.breakdown,
+        feedback: grading.feedback,
+        submitted_at: new Date().toISOString()
+      };
+
+      await serverSupabase
+        .from('classroom_exam_results')
+        .upsert(record, { onConflict: 'exam_id,student_id,attempt_number' })
+        .catch(async () => {
+          // Fallback on primary key or exam_id,student_id if migration not yet applied in prod
+          await serverSupabase
+            .from('classroom_exam_results')
+            .upsert(record, { onConflict: 'exam_id,student_id' })
+            .catch((err) => console.warn('[Submit Save Fallback Notice]:', err.message));
+        });
+
+      // Authoritative Single Server-Side Classroom Point Award
+      if (grading.totalScore > 0 && classroomId) {
+        try {
+          const { data: existingPoint } = await serverSupabase
+            .from('classroom_points')
+            .select('id')
+            .eq('classroom_id', classroomId)
+            .eq('student_id', user.id)
+            .eq('source_type', 'exam')
+            .eq('source_id', examId)
+            .maybeSingle();
+
+          if (!existingPoint) {
+            await serverSupabase
+              .from('classroom_points')
+              .insert({
+                classroom_id: classroomId,
+                student_id: user.id,
+                points: grading.totalScore,
+                reason: `Exam: ${authoritativeExam?.title || 'Classroom Exam'}`,
+                source_type: 'exam',
+                source_id: examId,
+                awarded_by: user.id
+              });
+          }
+        } catch (pErr) {
+          console.warn('[Exam Server Point Award Notice]:', pErr.message);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      examId,
+      score: grading.totalScore,
+      maxScore: grading.maxScore,
+      percentage: grading.percentage,
+      grade: grading.grade,
+      passed: grading.passed,
+      gradingStatus: grading.gradingStatus,
+      feedback: grading.feedback,
+      breakdown: grading.breakdown,
+      answers,
+      submittedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[API /api/exams/attempts/submit Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to submit exam attempt.' });
+  }
+});
+
+// 5. Teacher Manual Evaluation for Subjective Questions
+app.post('/api/exams/results/grade-manual', async (req, res) => {
+  try {
+    const authContext = await verifyAuthUser(req);
+    const user = authContext?.user;
+    if (!user) return res.status(401).json({ error: 'Teacher authentication required.' });
+
+    const { resultId, subjectiveScores, subjectiveFeedbacks, generalFeedback } = req.body || {};
+    if (!resultId) return res.status(400).json({ error: 'resultId is required.' });
+
+    if (serverSupabase) {
+      const { data: resultRecord, error: resErr } = await serverSupabase
+        .from('classroom_exam_results')
+        .select('*, exam:classroom_exams(*)')
+        .eq('id', resultId)
+        .maybeSingle();
+
+      if (resErr || !resultRecord) return res.status(404).json({ error: 'Result record not found.' });
+
+      const examPayload = resultRecord.exam;
+      const studentAnswers = resultRecord.answers || {};
+
+      // Re-grade incorporating teacher manual subjective scores
+      const updatedGrading = gradeExamAttempt(examPayload, studentAnswers, subjectiveScores, subjectiveFeedbacks);
+
+      const updatePayload = {
+        score: updatedGrading.totalScore,
+        percentage: updatedGrading.percentage,
+        grade: updatedGrading.grade,
+        passed: updatedGrading.passed,
+        grading_status: 'reviewed',
+        subjective_scores: subjectiveScores || {},
+        subjective_feedbacks: subjectiveFeedbacks || {},
+        teacher_feedback: generalFeedback || null,
+        breakdown_json: updatedGrading.breakdown,
+        reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: updated, error: updErr } = await serverSupabase
+        .from('classroom_exam_results')
+        .update(updatePayload)
+        .eq('id', resultId)
+        .select()
+        .single();
+
+      if (updErr) throw updErr;
+
+      return res.json({ success: true, updatedResult: updated });
+    }
+
+    return res.json({ success: true, message: 'Grade updated.' });
+  } catch (err) {
+    console.error('[API /api/exams/results/grade-manual Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to save manual grade.' });
+  }
+});
+
+// ============================================================================
 // EDTECHRA-BITZ: Knowledge Bitz Discovery, Learning & Admin Endpoints
 // ============================================================================
 

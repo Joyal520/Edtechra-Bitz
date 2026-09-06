@@ -59,7 +59,7 @@ import { StudentSubmitModal } from '@/components/classes/StudentSubmitModal';
 import { SubmissionListModal } from '@/components/classes/SubmissionListModal';
 import { ActivityHubModal } from '@/components/classes/ActivityHubModal';
 import { OCRGradingModal } from '@/components/classes/OCRGradingModal';
-import { ClassroomExamModal } from '@/components/classes/ClassroomExamModal';
+import { ExamPlatformModal } from '@/components/exam/ExamPlatformModal';
 import { AITeachingIntelligenceModal } from '@/components/classes/AITeachingIntelligenceModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
@@ -1340,7 +1340,7 @@ export const ClassroomDetailPage: React.FC = () => {
         onSuccess={loadAllClassroomData}
       />
 
-      <ClassroomExamModal
+      <ExamPlatformModal
         isOpen={examModalOpen}
         classroomId={classroom.id}
         isTeacher={isTeacher}
