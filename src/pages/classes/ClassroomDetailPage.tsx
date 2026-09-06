@@ -700,11 +700,11 @@ export const ClassroomDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1 text-center">
                   <h3 className="text-sm font-black text-slate-900">
-                    {isTeacher ? 'Exam' : 'Exams'}
+                    {isTeacher ? 'Assessment & Survey' : 'Exams'}
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                     {isTeacher
-                      ? 'Create exams, set time limits & evaluate performance.'
+                      ? 'Visual Canva-style builder, question bank & AI generator.'
                       : 'Take scheduled timed assessments and review results.'}
                   </p>
                 </div>
@@ -713,15 +713,14 @@ export const ClassroomDetailPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (isTeacher) {
-                    setSelectedExam(null);
-                    setExamModalOpen(true);
+                    setAssessmentTypeModalOpen(true);
                   } else {
                     handleSelectTab('exams');
                   }
                 }}
                 className="w-full py-2.5 px-4 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
               >
-                {isTeacher ? 'Create Exam' : 'View Exams'}
+                {isTeacher ? 'Create Assessment' : 'View Exams'}
               </button>
             </div>
 
@@ -1348,7 +1347,7 @@ export const ClassroomDetailPage: React.FC = () => {
         onOpenOCR={() => setOcrModalOpen(true)}
         onOpenExam={() => {
           setSelectedExam(null);
-          setExamModalOpen(true);
+          setAssessmentTypeModalOpen(true);
         }}
       />
 

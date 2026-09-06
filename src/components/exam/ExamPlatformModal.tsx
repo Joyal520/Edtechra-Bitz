@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClassroomExam } from '@/types/classroom';
 import { CanonicalExamV1 } from './shared/ExamSchema';
-import { ExamStudio } from './teacher/ExamStudio';
+import { AssessmentBuilder } from './builder/AssessmentBuilder';
 import { ExamResultsDashboard } from './teacher/ExamResultsDashboard';
 import { ExamSession, ExamSessionAttemptData } from './student/ExamSession';
 import { ExamResultView } from './student/ExamResultView';
@@ -32,12 +32,11 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const [teacherMode, setTeacherMode] = useState<'studio' | 'results' | 'preview'>(
+  const [teacherMode, setTeacherMode] = useState<'studio' | 'results'>(
     initialTab === 'results' && activeExam ? 'results' : 'studio'
   );
   const [resultsList, setResultsList] = useState<any[]>([]);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
-  const [previewExam, setPreviewExam] = useState<CanonicalExamV1 | null>(null);
 
   // Student Session State
   const [studentAttemptData, setStudentAttemptData] = useState<ExamSessionAttemptData | null>(null);
@@ -107,17 +106,6 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 1. TEACHER: Student Preview Mode
-  if (isTeacher && teacherMode === 'preview' && previewExam) {
-    return (
-      <ExamSession
-        exam={previewExam}
-        classroomId={classroomId}
-        isPreview={true}
-        onClose={() => setTeacherMode('studio')}
-      />
-    );
-  }
 
   // 2. TEACHER: Results Analytics & Grading Mode
   if (isTeacher && teacherMode === 'results' && activeExam) {
@@ -130,7 +118,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
               onClick={() => setTeacherMode('studio')}
               className="text-xs font-black text-indigo-300 hover:text-white px-3 py-1.5 rounded-xl bg-blue-950 border border-blue-800"
             >
-              &larr; Switch to Exam Creator Studio
+              &larr; Edit in Assessment Studio
             </button>
             <button
               type="button"
@@ -168,27 +156,32 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
     );
   }
 
-  // 3. TEACHER: Exam Creation Studio
+  // 3. TEACHER: Visual Assessment Builder 2.0 (Canva + Google Forms)
   if (isTeacher) {
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-[#070e1f]">
-        <ExamStudio
+      <div className="fixed inset-0 z-50 overflow-hidden bg-[#070e1f]">
+        <AssessmentBuilder
           classroomId={classroomId}
-          initialExam={canonicalActiveExam}
-          onClose={onClose}
-          onPublishExam={async (examData, schedule) => {
-            await examPlatformService.publishExam({
+          initialAssessment={canonicalActiveExam || undefined}
+          onBack={onClose}
+          onSaveAssessment={async (assessmentData, isPublished) => {
+            const res = await classroomExamService.saveAssessmentV2({
+              examId: activeExam?.id,
               classroomId,
-              canonicalExam: examData,
-              schedule
+              assessment: assessmentData,
+              status: isPublished ? 'published' : 'draft'
             });
-            alert('Exam published successfully to classroom students!');
+            if (res.error) {
+              alert(`Error saving assessment: ${res.error}`);
+              return;
+            }
+            if (isPublished) {
+              alert('Assessment published successfully to classroom students!');
+            } else {
+              alert('Draft saved successfully!');
+            }
             onSuccess();
             onClose();
-          }}
-          onPreviewAsStudent={(examToPreview) => {
-            setPreviewExam(examToPreview);
-            setTeacherMode('preview');
           }}
         />
       </div>
