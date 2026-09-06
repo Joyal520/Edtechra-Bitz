@@ -1,6 +1,6 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER 2.0: TOP BAR
-// Header control center with title edit, mode badge, undo/redo, autosave, & actions
+// EDTECHRA ASSESSMENT BUILDER: TOP BAR (PREMIUM LIGHT)
+// Header control center with title, section navigation strip, AI tools, Preview & Publish
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -8,24 +8,26 @@ import {
   ArrowLeft,
   Undo2,
   Redo2,
-  Sparkles,
-  Palette,
+  FileSpreadsheet,
   Bot,
-  FileCode2,
-  BookMarked,
-  Settings,
   Eye,
   Send,
   CheckCircle2,
   Clock,
   AlertCircle,
-  FileQuestion
+  Pencil,
+  Settings
 } from 'lucide-react';
-import { AssessmentType } from '../shared/ExamSchema';
+import { AssessmentType, ExamSection } from '../shared/ExamSchema';
 
 interface TopBarProps {
   title: string;
+  subject?: string;
+  grade?: string;
   assessmentType: AssessmentType;
+  sections?: ExamSection[];
+  activeSectionId?: string;
+  onSelectSection?: (sectionId: string) => void;
   canUndo: boolean;
   canRedo: boolean;
   saveStatus: 'saved' | 'saving' | 'error' | 'idle';
@@ -34,11 +36,8 @@ interface TopBarProps {
   onRedo: () => void;
   onChangeTitle: (title: string) => void;
   onBack: () => void;
-  onOpenAutoDesign: () => void;
-  onOpenThemeEditor: () => void;
-  onOpenAIAssistant: () => void;
-  onOpenPromptBridge: () => void;
-  onOpenQuestionBank: () => void;
+  onOpenBlueprint: () => void;
+  onOpenAISuite: () => void;
   onOpenSettings: () => void;
   onOpenPreview: () => void;
   onPublish: () => void;
@@ -46,7 +45,12 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   title,
-  assessmentType,
+  subject = 'English Language',
+  grade = 'Grade 10',
+  assessmentType: _assessmentType,
+  sections = [],
+  activeSectionId,
+  onSelectSection,
   canUndo,
   canRedo,
   saveStatus,
@@ -55,11 +59,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRedo,
   onChangeTitle,
   onBack,
-  onOpenAutoDesign,
-  onOpenThemeEditor,
-  onOpenAIAssistant,
-  onOpenPromptBridge,
-  onOpenQuestionBank,
+  onOpenBlueprint,
+  onOpenAISuite,
   onOpenSettings,
   onOpenPreview,
   onPublish
@@ -86,21 +87,27 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   return (
-    <header className="h-16 border-b border-blue-900/60 bg-[#070e1e]/95 backdrop-blur-md px-4 flex items-center justify-between z-30 sticky top-0">
-      {/* Left Section: Back, Title, Mode Badge, Undo/Redo */}
+    <header className="h-16 border-b border-slate-200 bg-white px-4 sm:px-6 flex items-center justify-between z-30 sticky top-0 shadow-2xs select-none">
+      {/* Left Section: Back, Brand, Title, Subject/Grade */}
       <div className="flex items-center gap-3 min-w-0">
-        {/* Back Button */}
         <button
           type="button"
           onClick={onBack}
-          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+          className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors shrink-0"
           title="Back to Classroom"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        {/* Title and Badge */}
+        {/* Title & Metadata Editor */}
         <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-black text-sm text-indigo-600 tracking-tight">
+              EdTechra
+            </span>
+            <span className="text-slate-300">|</span>
+          </div>
+
           {isEditingTitle ? (
             <input
               type="text"
@@ -109,7 +116,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               onBlur={handleTitleBlur}
               onKeyDown={handleTitleKeyDown}
               autoFocus
-              className="px-2 py-1 text-sm font-bold bg-[#0a152e] border border-indigo-500 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[200px] sm:max-w-xs md:max-w-md"
+              className="px-2.5 py-1 text-sm font-bold bg-slate-50 border border-indigo-500 rounded-lg text-slate-900 focus:outline-hidden max-w-[200px] sm:max-w-xs md:max-w-sm"
             />
           ) : (
             <button
@@ -118,42 +125,32 @@ export const TopBar: React.FC<TopBarProps> = ({
                 setTempTitle(title);
                 setIsEditingTitle(true);
               }}
-              className="text-sm font-bold text-white hover:text-indigo-300 truncate max-w-[160px] sm:max-w-xs md:max-w-sm text-left transition-colors px-1 py-0.5 rounded hover:bg-white/5"
+              className="text-sm font-bold text-slate-900 hover:text-indigo-600 truncate max-w-[160px] sm:max-w-xs text-left transition-colors flex items-center gap-1.5 group"
               title="Click to rename"
             >
-              {title || 'Untitled Assessment'}
+              <span className="truncate">{title || 'Untitled Assessment'}</span>
+              <Pencil className="w-3 h-3 text-slate-400 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
             </button>
           )}
 
-          {/* Assessment Mode Badge */}
-          <span
-            className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-              assessmentType === 'survey'
-                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
-            }`}
-          >
-            {assessmentType === 'survey' ? (
-              <>
-                <FileQuestion className="w-3 h-3" />
-                <span>Survey</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Exam</span>
-              </>
-            )}
-          </span>
+          {/* Subject & Grade Badges */}
+          <div className="hidden lg:flex items-center gap-1.5 text-slate-500 text-xs">
+            <span className="text-slate-300">•</span>
+            <span className="font-semibold text-slate-700">{subject}</span>
+            <span className="text-slate-300">•</span>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold">
+              {grade}
+            </span>
+          </div>
         </div>
 
         {/* Undo / Redo */}
-        <div className="hidden md:flex items-center gap-1 border-l border-blue-900/60 pl-3 ml-1">
+        <div className="hidden xl:flex items-center gap-1 border-l border-slate-200 pl-3 ml-1">
           <button
             type="button"
             onClick={onUndo}
             disabled={!canUndo}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
             title="Undo (Ctrl+Z)"
           >
             <Undo2 className="w-4 h-4" />
@@ -162,7 +159,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={onRedo}
             disabled={!canRedo}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
             title="Redo (Ctrl+Y)"
           >
             <Redo2 className="w-4 h-4" />
@@ -170,113 +167,112 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Autosave Status Indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-400 pl-2">
+        <div className="hidden 2xl:flex items-center gap-1.5 text-xs text-slate-500 pl-2">
           {saveStatus === 'saving' && (
             <>
-              <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-              <span className="text-amber-300">Saving...</span>
+              <Clock className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+              <span className="text-amber-600 font-medium">Saving draft...</span>
             </>
           )}
           {saveStatus === 'saved' && (
             <>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-slate-400">
-                {lastSavedAt ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-slate-500">
+                {lastSavedAt
+                  ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : 'All changes saved'}
               </span>
             </>
           )}
           {saveStatus === 'error' && (
             <>
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-              <span className="text-rose-400">Unsaved changes</span>
+              <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+              <span className="text-rose-600 font-medium">Unsaved</span>
             </>
           )}
         </div>
       </div>
 
-      {/* Right Section: Tools & Action Buttons */}
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* ✨ Design with AI */}
+      {/* Middle: Clean Section Navigation Pills (Desktop) */}
+      {sections.length > 0 && onSelectSection && (
+        <div className="hidden md:flex items-center gap-1.5 max-w-md overflow-x-auto py-1 px-2">
+          {sections.map((sec, sIdx) => {
+            const isSecActive = activeSectionId === sec.id;
+            const secLetter = String.fromCharCode(65 + sIdx);
+            const qCount = (sec.questions?.length || 0) + (sec.activities?.reduce((acc, a) => acc + (a.questions?.length || 0), 0) || 0);
+
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                onClick={() => onSelectSection(sec.id)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  isSecActive
+                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:bg-slate-100 border border-transparent'
+                }`}
+                title={`Jump to Section ${secLetter}`}
+              >
+                <span className="text-[10px] font-black">{secLetter}</span>
+                <span className="truncate max-w-[100px]">{sec.title || `Section ${secLetter}`}</span>
+                <span className="text-[10px] text-slate-400">({qCount})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Right Section: Action Controls */}
+      <div className="flex items-center gap-2">
+        {/* 📋 Exam Blueprint */}
         <button
           type="button"
-          onClick={onOpenAutoDesign}
-          className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/40 text-purple-200 hover:text-white hover:border-purple-400 transition-all shadow-sm"
-          title="Auto-style with AI"
+          onClick={onOpenBlueprint}
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-50 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center gap-1.5"
+          title="Configure Exam Blueprint Matrix"
         >
-          <Sparkles className="w-3.5 h-3.5 text-pink-400" />
-          <span>Design with AI</span>
+          <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+          <span className="hidden sm:inline">Blueprint</span>
         </button>
 
-        {/* 🎨 Theme Editor */}
+        {/* 🤖 AI Assessment Tools */}
         <button
           type="button"
-          onClick={onOpenThemeEditor}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-blue-950/60 border border-blue-800/80 text-slate-200 hover:text-white hover:border-blue-600 transition-all flex items-center gap-1.5"
-          title="Themes & Styling"
+          onClick={onOpenAISuite}
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all flex items-center gap-1.5"
+          title="AI Assessment Suite"
         >
-          <Palette className="w-4 h-4 text-indigo-400" />
-          <span className="hidden sm:inline">Theme</span>
+          <Bot className="w-4 h-4 text-indigo-600" />
+          <span className="hidden sm:inline">AI Tools</span>
         </button>
 
-        {/* In-Canvas AI Assistant */}
-        <button
-          type="button"
-          onClick={onOpenAIAssistant}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-blue-950/60 border border-blue-800/80 text-slate-200 hover:text-white hover:border-blue-600 transition-all flex items-center gap-1.5"
-          title="In-Canvas AI Question Generator"
-        >
-          <Bot className="w-4 h-4 text-cyan-400" />
-          <span className="hidden lg:inline">AI Assist</span>
-        </button>
-
-        {/* External AI Bridge / JSON Import */}
-        <button
-          type="button"
-          onClick={onOpenPromptBridge}
-          className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-950/60 border border-blue-800/80 text-slate-200 hover:text-white hover:border-blue-600 transition-all"
-          title="External AI Prompt & JSON Import"
-        >
-          <FileCode2 className="w-4 h-4 text-emerald-400" />
-          <span>AI Bridge</span>
-        </button>
-
-        {/* Question Bank */}
-        <button
-          type="button"
-          onClick={onOpenQuestionBank}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-blue-950/60 border border-blue-800/80 text-slate-200 hover:text-white hover:border-blue-600 transition-all flex items-center gap-1.5"
-          title="Question Bank"
-        >
-          <BookMarked className="w-4 h-4 text-amber-400" />
-          <span className="hidden xl:inline">Bank</span>
-        </button>
-
-        {/* Settings Drawer */}
+        {/* ⚙️ Assessment Settings */}
         <button
           type="button"
           onClick={onOpenSettings}
-          className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-blue-800/60 transition-colors"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center gap-1.5 shadow-2xs"
           title="Assessment Settings"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-4 h-4 text-slate-500" />
+          <span className="hidden sm:inline">Settings</span>
         </button>
 
-        {/* Live Preview Modal */}
+        {/* 👁️ Student Preview */}
         <button
           type="button"
           onClick={onOpenPreview}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold bg-slate-800/80 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1.5"
-          title="Live Student Preview"
+          className="p-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 transition-all flex items-center gap-1.5 shadow-2xs"
+          title="Preview Student Experience"
         >
-          <Eye className="w-4 h-4 text-blue-400" />
+          <Eye className="w-4 h-4 text-indigo-500" />
           <span className="hidden sm:inline">Preview</span>
         </button>
 
-        {/* Publish / Action Button */}
+        {/* 🚀 Publish */}
         <button
           type="button"
           onClick={onPublish}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md hover:shadow-indigo-500/25 transition-all"
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs hover:shadow-sm transition-all cursor-pointer active:scale-95"
         >
           <Send className="w-3.5 h-3.5" />
           <span>Publish</span>

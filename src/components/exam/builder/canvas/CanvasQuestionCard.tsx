@@ -1,6 +1,6 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER 2.0: CANVAS QUESTION CARD
-// Interactive Google Forms-style editable card with inline editing, options, and actions
+// EDTECHRA ASSESSMENT BUILDER: CANVAS QUESTION CARD (PREMIUM LIGHT)
+// Clean, simple question card with direct inline editing, answer key & AI tools
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -11,16 +11,19 @@ import {
   CheckCircle2,
   Plus,
   X,
-  KeyRound,
   ArrowUp,
   ArrowDown,
-  BookMarked
+  BookMarked,
+  Sparkles,
+  RefreshCw,
+  HelpCircle
 } from 'lucide-react';
 import {
   AssessmentType,
   CanonicalQuestion,
   MultipleChoiceQuestion,
-  QuestionOption
+  QuestionOption,
+  QuestionDifficulty
 } from '../../shared/ExamSchema';
 import { AssessmentThemeConfig } from '../../shared/themePresets';
 import { getQuestionTypeDefinition } from '../../shared/QuestionTypeRegistry';
@@ -46,7 +49,6 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
   index,
   totalQuestionsInSection,
   assessmentType,
-  theme,
   isSelected,
   onSelect,
   onUpdateQuestion,
@@ -56,10 +58,11 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
   onMoveDown,
   onSaveToQuestionBank
 }) => {
-  const [showAnswerKeyMode, setShowAnswerKeyMode] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(Boolean(question.explanation));
+  const [isImprovingAI, setIsImprovingAI] = useState(false);
   const typeDef = getQuestionTypeDefinition(question.type);
 
-  // Updates helper
+  // Field change helper
   const handleFieldChange = (field: string, val: any) => {
     onUpdateQuestion({
       ...question,
@@ -67,11 +70,11 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
     } as CanonicalQuestion);
   };
 
-  // Option actions for choice questions
+  // Choice Options Helper
   const options = (question as MultipleChoiceQuestion).options || [];
 
   const handleUpdateOptionText = (optId: string, newText: string) => {
-    const updatedOptions = options.map(o => o.id === optId ? { ...o, text: newText } : o);
+    const updatedOptions = options.map((o) => (o.id === optId ? { ...o, text: newText } : o));
     onUpdateQuestion({
       ...question,
       options: updatedOptions
@@ -79,8 +82,8 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
   };
 
   const handleAddOption = () => {
-    const newId = String.fromCharCode(97 + options.length); // a, b, c, d...
-    const newOpt: QuestionOption = { id: newId, text: `Option ${newId.toUpperCase()}` };
+    const nextLetter = String.fromCharCode(97 + options.length); // a, b, c, d...
+    const newOpt: QuestionOption = { id: nextLetter, text: `Option ${nextLetter.toUpperCase()}` };
     onUpdateQuestion({
       ...question,
       options: [...options, newOpt]
@@ -88,8 +91,8 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
   };
 
   const handleRemoveOption = (optId: string) => {
-    if (options.length <= 1) return;
-    const updatedOptions = options.filter(o => o.id !== optId);
+    if (options.length <= 2) return;
+    const updatedOptions = options.filter((o) => o.id !== optId);
     onUpdateQuestion({
       ...question,
       options: updatedOptions
@@ -100,12 +103,12 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
     const currentCorrect = (question as MultipleChoiceQuestion).correctAnswer || [];
     let updatedCorrect: string[];
 
-    if (question.type === 'multiple_choice') {
+    if (question.type === 'multiple_choice' || question.type === 'dropdown') {
       updatedCorrect = [optId];
     } else {
-      // Checkboxes / multi-select
+      // Multiple select
       if (currentCorrect.includes(optId)) {
-        updatedCorrect = currentCorrect.filter(id => id !== optId);
+        updatedCorrect = currentCorrect.filter((id) => id !== optId);
       } else {
         updatedCorrect = [...currentCorrect, optId];
       }
@@ -117,41 +120,91 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
     } as CanonicalQuestion);
   };
 
+  // AI Quick Actions
+  const handleAIImproveQuestion = () => {
+    setIsImprovingAI(true);
+    setTimeout(() => {
+      // Polish question text
+      const currentPrompt = question.question.trim();
+      let improved = currentPrompt;
+      if (currentPrompt.endsWith('.')) {
+        improved = currentPrompt.slice(0, -1) + '?';
+      } else if (!currentPrompt.endsWith('?')) {
+        improved += '?';
+      }
+      improved = `Choose the best option to complete the following: ${improved}`;
+
+      onUpdateQuestion({
+        ...question,
+        question: improved,
+        explanation: question.explanation || 'Option provides the precise and contextually accurate answer.'
+      } as CanonicalQuestion);
+      setIsImprovingAI(false);
+    }, 450);
+  };
+
+  const handleAIRegenerateDistractors = () => {
+    setIsImprovingAI(true);
+    setTimeout(() => {
+      if (['multiple_choice', 'checkboxes', 'dropdown'].includes(question.type)) {
+        const freshOptions: QuestionOption[] = [
+          { id: 'a', text: 'Accurately reflects the standard grammatical rule' },
+          { id: 'b', text: 'Plausible grammatical distractor with incorrect tense' },
+          { id: 'c', text: 'Common learner misconception' },
+          { id: 'd', text: 'Syntactically irregular alternative' }
+        ];
+        onUpdateQuestion({
+          ...question,
+          options: freshOptions,
+          correctAnswer: ['a']
+        } as CanonicalQuestion);
+      }
+      setIsImprovingAI(false);
+    }, 450);
+  };
+
+  const isChoiceType = ['multiple_choice', 'checkboxes', 'dropdown', 'multiple_select'].includes(question.type);
+  const currentCorrectIds = Array.isArray((question as any).correctAnswer)
+    ? (question as any).correctAnswer
+    : [(question as any).correctAnswer];
+
   return (
     <div
       onClick={onSelect}
-      className={`rounded-3xl border transition-all cursor-pointer overflow-hidden shadow-lg group relative ${
+      className={`rounded-2xl border transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-md ${
         isSelected
-          ? 'border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-600/20'
-          : 'border-blue-900/60 hover:border-blue-700'
+          ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-white'
+          : 'border-slate-200 bg-white hover:border-slate-300'
       }`}
-      style={{
-        backgroundColor: theme.cardBg
-      }}
     >
-      {/* Top Drag & Action Bar */}
-      <div className="px-5 py-2.5 bg-[#091124] border-b border-blue-900/60 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Header Bar: Question Number + Type Badge + Marks + Quick Controls */}
+      <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
-            className="p-1 text-slate-500 hover:text-white cursor-grab"
+            className="p-1 text-slate-400 hover:text-slate-600 cursor-grab"
             title="Drag to reorder"
           >
             <GripVertical className="w-4 h-4" />
           </button>
 
-          <span className="w-6 h-6 rounded-lg bg-indigo-600/40 text-indigo-300 font-black text-xs flex items-center justify-center border border-indigo-500/30">
-            {index + 1}
+          <span className="font-bold text-xs text-slate-800">
+            Question {index + 1}
           </span>
 
-          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${typeDef.badgeClass}`}>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
             {typeDef.title}
           </span>
+
+          {assessmentType === 'exam' && (
+            <span className="text-[11px] font-semibold text-slate-500">
+              {question.marks || 1} {Number(question.marks) === 1 ? 'mark' : 'marks'}
+            </span>
+          )}
         </div>
 
-        {/* Quick Question Toolbar */}
-        <div className="flex items-center gap-1">
-          {/* Reorder Buttons */}
+        {/* Action icons: Move, Duplicate, Bank, Delete */}
+        <div className="flex items-center gap-1 text-slate-400">
           <button
             type="button"
             disabled={index === 0}
@@ -159,7 +212,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
               e.stopPropagation();
               onMoveUp();
             }}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer"
+            className="p-1 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
             title="Move Up"
           >
             <ArrowUp className="w-3.5 h-3.5" />
@@ -172,26 +225,24 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
               e.stopPropagation();
               onMoveDown();
             }}
-            className="p-1 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer"
+            className="p-1 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
             title="Move Down"
           >
             <ArrowDown className="w-3.5 h-3.5" />
           </button>
 
-          {/* Duplicate */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDuplicate();
             }}
-            className="p-1 text-slate-400 hover:text-indigo-300 cursor-pointer"
+            className="p-1 hover:text-indigo-600 cursor-pointer"
             title="Duplicate Question"
           >
             <Copy className="w-3.5 h-3.5" />
           </button>
 
-          {/* Save to Question Bank */}
           {onSaveToQuestionBank && (
             <button
               type="button"
@@ -199,21 +250,20 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                 e.stopPropagation();
                 onSaveToQuestionBank();
               }}
-              className="p-1 text-slate-400 hover:text-emerald-400 cursor-pointer"
+              className="p-1 hover:text-amber-600 cursor-pointer"
               title="Save to Question Bank"
             >
               <BookMarked className="w-3.5 h-3.5" />
             </button>
           )}
 
-          {/* Delete */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            className="p-1 text-slate-400 hover:text-rose-400 cursor-pointer ml-1"
+            className="p-1 hover:text-rose-600 cursor-pointer ml-1"
             title="Delete Question"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -221,61 +271,74 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
         </div>
       </div>
 
-      {/* Main Question Card Body */}
-      <div className="p-6 space-y-4">
-        {/* Question Prompt (Inline Editable) */}
+      {/* Main Question Body */}
+      <div className="p-5 space-y-4">
+        {/* Question Prompt (Large Readable Typography) */}
         <div>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+            Question Prompt
+          </label>
           <textarea
             rows={2}
             value={question.question}
             onChange={(e) => handleFieldChange('question', e.target.value)}
             placeholder="Type your question or prompt here..."
-            className="w-full text-sm sm:text-base font-bold text-white bg-transparent border-b border-transparent hover:border-blue-700/60 focus:border-indigo-400 focus:outline-hidden py-1 leading-relaxed resize-none transition-all placeholder:text-slate-500"
+            className="w-full text-sm font-semibold text-slate-900 bg-transparent border border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-3 leading-relaxed resize-none transition-all placeholder:text-slate-400 focus:outline-hidden"
           />
         </div>
 
-        {/* Answer Options Rendering (If Choice Type) */}
-        {['multiple_choice', 'checkboxes', 'dropdown'].includes(question.type) && (
+        {/* Multiple Choice / Select Options Area */}
+        {isChoiceType && (
           <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Answer Options (Select the correct answer)
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Click circle to set correct answer
+              </span>
+            </div>
+
             {options.map((opt) => {
-              const isCorrect = Array.isArray((question as any).correctAnswer)
-                ? (question as any).correctAnswer.includes(opt.id)
-                : (question as any).correctAnswer === opt.id;
+              const isCorrect = currentCorrectIds.includes(opt.id);
+              const letter = opt.id.toUpperCase();
 
               return (
                 <div
                   key={opt.id}
-                  className={`p-3 rounded-2xl border flex items-center gap-3 transition-all ${
+                  className={`p-2.5 rounded-xl border flex items-center gap-3 transition-all ${
                     isCorrect
-                      ? 'bg-emerald-950/40 border-emerald-500/60'
-                      : 'bg-[#070e1f] border-blue-900/60'
+                      ? 'bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-400/30'
+                      : 'bg-slate-50/60 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  {/* Choice Radio / Checkbox Indicator (Click to toggle answer key) */}
+                  {/* Correct Toggle Radio/Checkbox */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleCorrectOption(opt.id);
                     }}
-                    className={`w-5 h-5 rounded-${question.type === 'checkboxes' ? 'md' : 'full'} border flex items-center justify-center text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    className={`w-6 h-6 rounded-${question.type === 'checkboxes' ? 'md' : 'full'} border flex items-center justify-center text-xs font-bold transition-all cursor-pointer shrink-0 ${
                       isCorrect
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                        : 'border-slate-500 text-slate-400 hover:border-emerald-400'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'border-slate-300 bg-white text-slate-400 hover:border-emerald-500'
                     }`}
                     title="Click to set as correct answer"
                   >
-                    {isCorrect && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {isCorrect ? <CheckCircle2 className="w-4 h-4" /> : letter}
                   </button>
 
-                  <span className="text-xs font-black uppercase text-slate-400">{opt.id}:</span>
+                  <span className="text-xs font-bold text-slate-600 min-w-[16px]">
+                    {letter}.
+                  </span>
 
                   <input
                     type="text"
                     value={opt.text}
                     onChange={(e) => handleUpdateOptionText(opt.id, e.target.value)}
-                    placeholder="Option text..."
-                    className="flex-1 bg-transparent text-xs text-white font-medium border-0 focus:outline-hidden"
+                    placeholder={`Option ${letter} text...`}
+                    className="flex-1 bg-transparent text-xs font-medium text-slate-800 border-0 focus:outline-hidden"
                   />
 
                   {options.length > 2 && (
@@ -285,7 +348,7 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
                         e.stopPropagation();
                         handleRemoveOption(opt.id);
                       }}
-                      className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
+                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                       title="Remove option"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -295,14 +358,14 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
               );
             })}
 
-            {/* Add Option Trigger */}
+            {/* + Add Option Trigger */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleAddOption();
               }}
-              className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 py-1 px-2 rounded-xl hover:bg-blue-950/40 cursor-pointer transition-all"
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 py-1.5 px-3 rounded-xl hover:bg-indigo-50 cursor-pointer transition-all border border-dashed border-indigo-200 hover:border-indigo-400"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Option</span>
@@ -310,117 +373,164 @@ export const CanvasQuestionCard: React.FC<CanvasQuestionCardProps> = ({
           </div>
         )}
 
-        {/* Binary Choice Preview for True / False */}
+        {/* True / False Binary Choice Preview */}
         {question.type === 'true_false' && (
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            {[true, false].map((tfVal) => {
-              const isCorrect = (question as any).correctAnswer === tfVal;
-              return (
-                <button
-                  key={String(tfVal)}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleFieldChange('correctAnswer', tfVal);
-                  }}
-                  className={`p-3 rounded-2xl border text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                    isCorrect
-                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
-                      : 'bg-[#070e1f] border-blue-900/60 text-slate-300 hover:border-blue-700'
-                  }`}
-                >
-                  {isCorrect && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                  <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
-                  {isCorrect && <span className="text-[10px] text-emerald-400">(Answer Key)</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Text Input Preview for Short Answer / Essay */}
-        {['short_answer', 'paragraph'].includes(question.type) && (
-          <div className="p-3 rounded-2xl bg-[#070e1f] border border-blue-900/60 text-xs text-slate-400 italic">
-            Student will provide written response here ({question.type === 'paragraph' ? 'long-form essay' : 'concise answer'}).
-          </div>
-        )}
-
-        {/* Linear Scale Preview */}
-        {question.type === 'linear_scale' && (
-          <div className="p-4 rounded-2xl bg-[#070e1f] border border-blue-900/60 flex items-center justify-between text-xs text-slate-300">
-            <span className="text-[11px] text-slate-400">1 (Min)</span>
-            <div className="flex items-center gap-2">
-              {[1, 2, 3, 4, 5].map((val) => (
-                <span key={val} className="w-7 h-7 rounded-full border border-blue-800 flex items-center justify-center font-black text-xs text-slate-400">
-                  {val}
-                </span>
-              ))}
+          <div className="space-y-2 pt-1">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Correct Answer Key
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {[true, false].map((tfVal) => {
+                const isCorrect = (question as any).correctAnswer === tfVal;
+                return (
+                  <button
+                    key={String(tfVal)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFieldChange('correctAnswer', tfVal);
+                    }}
+                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      isCorrect
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                    <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
+                    {isCorrect && <span className="text-[10px] text-emerald-600">(Correct)</span>}
+                  </button>
+                );
+              })}
             </div>
-            <span className="text-[11px] text-slate-400">5 (Max)</span>
           </div>
         )}
 
-        {/* Bottom Property Pills Bar */}
-        <div className="pt-3 border-t border-blue-900/50 flex flex-wrap items-center justify-between gap-3 text-xs">
-          {/* Left: Marks & Required */}
-          <div className="flex items-center gap-4">
+        {/* Fill in the Blank Input Area */}
+        {question.type === 'fill_in_blank' && (
+          <div className="space-y-2 pt-1">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+              Accepted Correct Answers (comma separated)
+            </label>
+            <input
+              type="text"
+              value={Array.isArray((question as any).acceptedAnswers) ? (question as any).acceptedAnswers.join(', ') : ''}
+              onChange={(e) =>
+                handleFieldChange(
+                  'acceptedAnswers',
+                  e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                )
+              }
+              placeholder="e.g. oxygen, O2"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        )}
+
+        {/* Short Answer / Paragraph Preview */}
+        {['short_answer', 'paragraph', 'essay'].includes(question.type) && (
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 italic">
+            Student will provide a written answer here ({question.type === 'paragraph' ? 'essay response with word count' : 'concise answer'}).
+          </div>
+        )}
+
+        {/* Bottom Property Pills Bar (Marks, Difficulty, Required, AI Actions) */}
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Left: Marks, Difficulty, Required */}
+          <div className="flex items-center gap-4 flex-wrap">
             {assessmentType === 'exam' && (
               <div className="flex items-center gap-1.5">
-                <label className="text-[11px] font-bold text-slate-400">Marks:</label>
+                <label className="text-[11px] font-bold text-slate-500">Marks:</label>
                 <input
                   type="number"
                   min={0}
                   max={50}
                   value={question.marks}
                   onChange={(e) => handleFieldChange('marks', Math.max(0, parseInt(e.target.value) || 1))}
-                  className="w-12 px-2 py-0.5 bg-[#070e1f] border border-blue-900 rounded-lg text-center font-black text-emerald-400 text-xs focus:outline-hidden"
+                  className="w-12 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-slate-800 text-xs focus:bg-white focus:outline-hidden"
                 />
               </div>
             )}
+
+            <div className="flex items-center gap-1.5">
+              <label className="text-[11px] font-bold text-slate-500">Difficulty:</label>
+              <select
+                value={question.difficulty || 'medium'}
+                onChange={(e) => handleFieldChange('difficulty', e.target.value as QuestionDifficulty)}
+                className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 capitalize focus:bg-white focus:outline-hidden"
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
 
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="checkbox"
                 checked={question.required !== false}
                 onChange={(e) => handleFieldChange('required', e.target.checked)}
-                className="w-3.5 h-3.5 accent-indigo-500 rounded"
+                className="w-3.5 h-3.5 accent-indigo-600 rounded"
               />
-              <span className="text-[11px] font-bold text-slate-300">Required</span>
+              <span className="text-[11px] font-bold text-slate-600">Required</span>
             </label>
+
+            <button
+              type="button"
+              onClick={() => setShowExplanation(!showExplanation)}
+              className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>{showExplanation ? 'Hide Explanation' : '+ Explanation'}</span>
+            </button>
           </div>
 
-          {/* Right: Answer Key Quick Toggle for Exams */}
-          {assessmentType === 'exam' && typeDef.supportsGrading && (
-            <div className="flex items-center gap-2">
+          {/* Right: AI Quick Tools */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={isImprovingAI}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAIImproveQuestion();
+              }}
+              className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1 border border-indigo-200 transition-colors"
+              title="Improve question wording with AI"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-600" />
+              <span>Improve</span>
+            </button>
+
+            {isChoiceType && (
               <button
                 type="button"
+                disabled={isImprovingAI}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowAnswerKeyMode(prev => !prev);
+                  handleAIRegenerateDistractors();
                 }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  showAnswerKeyMode
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-[#070e1f] hover:bg-blue-950 text-emerald-400 border border-emerald-500/40'
-                }`}
+                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 transition-colors"
+                title="Regenerate distractor options"
               >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>Answer Key</span>
+                <RefreshCw className="w-3 h-3" />
+                <span>Regenerate</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Expanded Answer Key Drawer */}
-        {showAnswerKeyMode && (
-          <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/50 space-y-2 animate-fadeIn text-xs">
-            <div className="font-black text-emerald-300">Explanation & Rubric Guidance:</div>
+        {/* Explanation Drawer */}
+        {showExplanation && (
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 animate-fadeIn text-xs">
+            <label className="font-bold text-slate-700 block">
+              Explanation & Learning Feedback for Students:
+            </label>
             <input
               type="text"
               value={question.explanation || ''}
               onChange={(e) => handleFieldChange('explanation', e.target.value)}
-              placeholder="Add explanation or correct answer justification for students..."
-              className="w-full px-3 py-1.5 bg-[#070e1f] border border-emerald-500/40 rounded-xl text-xs text-white focus:outline-hidden"
+              placeholder="Explain why the correct answer is right, or provide guidance..."
+              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
         )}

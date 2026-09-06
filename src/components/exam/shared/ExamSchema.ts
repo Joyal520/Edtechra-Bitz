@@ -21,7 +21,7 @@ export type SupportedQuestionType =
   | 'date'
   | 'time'
   | 'file_upload'
-  // EdTechra Educational Types
+  // EdTechra Educational & Language Types
   | 'true_false'
   | 'fill_in_blank'
   | 'matching'
@@ -32,9 +32,86 @@ export type SupportedQuestionType =
   | 'video_question'
   | 'coding_question'
   | 'sentence_builder'
+  | 'sentence_completion'
+  | 'sentence_transformation'
+  | 'error_correction'
+  | 'speaking'
+  | 'interactive_activity'
+  // Dedicated Activity Types
+  | 'reading_activity'
+  | 'listening_activity'
+  | 'video_activity'
+  | 'picture_description'
+  | 'picture_description_activity'
   // Backward compatibility aliases
   | 'multiple_select'
   | 'essay';
+
+export type ActivityType =
+  | 'reading_activity'
+  | 'listening_activity'
+  | 'video_activity'
+  | 'picture_description_activity';
+
+export interface ActivityRubric {
+  content?: number | string;
+  vocabulary?: number | string;
+  grammar?: number | string;
+  organization?: number | string;
+}
+
+export type PictureTaskType =
+  | 'describe'
+  | 'answer_questions'
+  | 'identify_objects'
+  | 'write_paragraph'
+  | 'infer_info';
+
+export interface ExamActivity {
+  id: string;
+  activityType: ActivityType;
+  title: string;
+  instructions?: string;
+  passage?: string; // Reading
+  audioUrl?: string; // Listening
+  videoUrl?: string; // Video
+  imageUrl?: string; // Picture description
+  transcript?: string; // Listening / Video
+  showTranscriptToStudents?: boolean;
+  pictureTaskType?: PictureTaskType;
+  rubric?: ActivityRubric;
+  questions: CanonicalQuestion[];
+  marks?: number;
+}
+
+export interface ExamBlueprintConfig {
+  subject: string;
+  grade: string;
+  topic: string;
+  examType: ExamType | string;
+  totalQuestions: number;
+  totalMarks: number;
+  durationMinutes: number;
+  passPercentage: number;
+  difficulty: ExamDifficulty;
+  questionDistribution: {
+    multipleChoice: number;
+    trueFalse: number;
+    fillInBlank: number;
+    shortAnswer: number;
+    reading: number;
+    listening: number;
+    writing: number;
+    pictureDescription?: number;
+  };
+  skillWeighting: {
+    recall: number;
+    comprehension: number;
+    application: number;
+    analysis: number;
+  };
+  sourceContent?: string;
+}
 
 export type QuestionDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -86,7 +163,13 @@ export interface BaseQuestion {
   imageUrl?: string;
   audioUrl?: string;
   videoUrl?: string;
+  transcript?: string;
+  showTranscriptToStudents?: boolean;
+  pictureTaskType?: PictureTaskType;
+  rubric?: ActivityRubric | string;
   shuffleOptions?: boolean;
+  activityId?: string;
+  activityType?: ActivityType;
 }
 
 // 1. Multiple Choice
@@ -286,6 +369,7 @@ export interface ExamSection {
   passage?: string;
   skipToSectionId?: string; // Branching jump target
   questions: CanonicalQuestion[];
+  activities?: ExamActivity[];
 }
 
 export interface BrandKitConfig {
@@ -315,6 +399,7 @@ export interface ExamMetadata {
   examType: ExamType | string;
   difficulty: ExamDifficulty;
   topic?: string;
+  totalMarks?: number;
   description?: string;
   instructions?: string;
   coverImageUrl?: string;

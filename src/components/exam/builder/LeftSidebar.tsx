@@ -1,140 +1,123 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER 2.0: LEFT SIDEBAR
-// Palette of 21 Google Forms & EdTechra Question Types + Document Navigator
+// EDTECHRA ASSESSMENT BUILDER: LEFT SIDEBAR (EXAM OUTLINE)
+// Clean hierarchical document tree: Exam -> Instructions -> Sections -> Activities & Questions
 // ============================================================================
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  PlusCircle,
   ListTree,
-  ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Layers,
-  Sparkles,
-  Award,
-  Clock,
   CheckCircle2,
   ListChecks,
-  ChevronDown,
   PenLine,
   FileText,
-  SlidersHorizontal,
-  Grid,
-  Calendar,
-  Upload,
   ToggleLeft,
-  HelpCircle,
-  SplitSquareVertical,
-  ArrowDownUp,
+  MinusSquare,
+  GitFork,
   BookOpen,
-  Image,
-  Volume2,
+  Headphones,
   Video,
-  Code2,
-  AlignLeft
+  Image as ImageIcon,
+  Plus
 } from 'lucide-react';
 import {
-  CanonicalExamV2,
+  CanonicalAssessmentV2,
   SupportedQuestionType
 } from '../shared/ExamSchema';
-import {
-  ALL_ASSESSMENT_QUESTION_TYPES,
-  getQuestionTypeDefinition,
-  QuestionTypeDefinition
-} from '../shared/QuestionTypeRegistry';
 
 interface LeftSidebarProps {
-  assessment: CanonicalExamV2;
+  assessment: CanonicalAssessmentV2;
   activeSectionId: string;
   selectedQuestionId: string | null;
   selectedSectionId: string | null;
+  selectedActivityId?: string | null;
   onSelectQuestion: (questionId: string) => void;
   onSelectSection: (sectionId: string) => void;
+  onSelectActivity?: (activityId: string) => void;
   onAddQuestion: (sectionId: string, index?: number, type?: SupportedQuestionType) => void;
   onAddSection: () => void;
+  onOpenAddModal: (sectionId: string) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
 
-// Icon mapper for registry icon names
-const renderTypeIcon = (iconName: string, className: string = 'w-4 h-4') => {
-  switch (iconName) {
-    case 'CheckCircle2':
-      return <CheckCircle2 className={className} />;
-    case 'ListChecks':
-      return <ListChecks className={className} />;
-    case 'ChevronDown':
-      return <ChevronDown className={className} />;
-    case 'PenLine':
-      return <PenLine className={className} />;
-    case 'FileText':
-      return <FileText className={className} />;
-    case 'SlidersHorizontal':
-      return <SlidersHorizontal className={className} />;
-    case 'Grid':
-      return <Grid className={className} />;
-    case 'Calendar':
-      return <Calendar className={className} />;
-    case 'Clock':
-      return <Clock className={className} />;
-    case 'Upload':
-      return <Upload className={className} />;
-    case 'ToggleLeft':
-      return <ToggleLeft className={className} />;
-    case 'HelpCircle':
-      return <HelpCircle className={className} />;
-    case 'SplitSquareVertical':
-      return <SplitSquareVertical className={className} />;
-    case 'ArrowDownUp':
-      return <ArrowDownUp className={className} />;
-    case 'BookOpen':
-      return <BookOpen className={className} />;
-    case 'Image':
-      return <Image className={className} />;
-    case 'Volume2':
-      return <Volume2 className={className} />;
-    case 'Video':
-      return <Video className={className} />;
-    case 'Code2':
-      return <Code2 className={className} />;
-    case 'AlignLeft':
-      return <AlignLeft className={className} />;
+const getQuestionIcon = (type: string) => {
+  switch (type) {
+    case 'multiple_choice':
+      return <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />;
+    case 'checkboxes':
+    case 'multiple_select':
+      return <ListChecks className="w-3.5 h-3.5 text-purple-600" />;
+    case 'true_false':
+      return <ToggleLeft className="w-3.5 h-3.5 text-emerald-600" />;
+    case 'fill_in_blank':
+      return <MinusSquare className="w-3.5 h-3.5 text-cyan-600" />;
+    case 'short_answer':
+      return <PenLine className="w-3.5 h-3.5 text-amber-600" />;
+    case 'paragraph':
+    case 'essay':
+      return <FileText className="w-3.5 h-3.5 text-rose-600" />;
+    case 'matching':
+      return <GitFork className="w-3.5 h-3.5 text-pink-600" />;
     default:
-      return <CheckCircle2 className={className} />;
+      return <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />;
+  }
+};
+
+const getActivityIcon = (type: string) => {
+  switch (type) {
+    case 'listening_activity':
+      return <Headphones className="w-3.5 h-3.5 text-violet-600" />;
+    case 'video_activity':
+      return <Video className="w-3.5 h-3.5 text-rose-600" />;
+    case 'reading_activity':
+      return <BookOpen className="w-3.5 h-3.5 text-teal-600" />;
+    case 'picture_description_activity':
+      return <ImageIcon className="w-3.5 h-3.5 text-amber-600" />;
+    default:
+      return <Layers className="w-3.5 h-3.5 text-slate-500" />;
   }
 };
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   assessment,
-  activeSectionId,
+  activeSectionId: _activeSectionId,
   selectedQuestionId,
   selectedSectionId,
+  selectedActivityId,
   onSelectQuestion,
   onSelectSection,
-  onAddQuestion,
+  onSelectActivity,
   onAddSection,
+  onOpenAddModal,
   isOpen,
   onToggle
 }) => {
-  const [activeTab, setActiveTab] = useState<'palette' | 'outline'>('palette');
-
-  const isSurvey = assessment.assessmentType === 'survey';
   const sections = assessment.sections && assessment.sections.length > 0
     ? assessment.sections
-    : [{ id: 'sec-default', title: 'Section 1', questions: [] }];
+    : [{ id: 'sec-1', title: 'Section 1', questions: [] }];
 
-  const totalQuestions = sections.reduce((acc: number, s: any) => acc + (s.questions?.length || 0), 0);
-  const totalMarks = sections.reduce(
-    (acc: number, s: any) => acc + (s.questions?.reduce((qAcc: number, q: any) => qAcc + (q.marks || 1), 0) || 0),
+  const totalQuestions = sections.reduce(
+    (acc, s) =>
+      acc +
+      (s.questions?.length || 0) +
+      (s.activities?.reduce((aAcc, act) => aAcc + (act.questions?.length || 0), 0) || 0),
     0
   );
-  const estimatedMins = Math.max(1, Math.ceil(totalQuestions * 0.75));
 
-  const googleFormsTypes = ALL_ASSESSMENT_QUESTION_TYPES.filter(
-    (t: QuestionTypeDefinition) => t.group === 'google_forms'
-  );
-  const edtechraTypes = ALL_ASSESSMENT_QUESTION_TYPES.filter(
-    (t: QuestionTypeDefinition) => t.group === 'edtechra_interactive'
+  const totalMarks = sections.reduce(
+    (acc, s) =>
+      acc +
+      (s.questions?.reduce((qAcc, q) => qAcc + (Number(q.marks) || 1), 0) || 0) +
+      (s.activities?.reduce(
+        (aAcc, act) =>
+          aAcc +
+          (act.marks || act.questions?.reduce((qAcc, q) => qAcc + (Number(q.marks) || 1), 0) || 0),
+        0
+      ) || 0),
+    0
   );
 
   if (!isOpen) {
@@ -143,8 +126,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         <button
           type="button"
           onClick={onToggle}
-          className="absolute top-4 left-3 p-2 bg-[#091124] border border-blue-900/80 rounded-xl text-slate-300 hover:text-white shadow-xl hover:border-indigo-500 transition-all"
-          title="Expand Palette & Outline"
+          className="absolute top-4 left-3 p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 shadow-md hover:border-indigo-400 transition-all"
+          title="Expand Exam Outline"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -152,247 +135,209 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     );
   }
 
+  // Running global index counter for Q1, Q2...
+  let globalQNum = 1;
+
   return (
-    <aside className="w-80 h-[calc(100vh-4rem)] border-r border-blue-900/60 bg-[#070e1e] flex flex-col flex-shrink-0 z-20 transition-all select-none">
-      {/* Top Header & Tab Switcher */}
-      <div className="p-3 border-b border-blue-900/60 flex items-center justify-between">
-        <div className="flex bg-[#050b18] p-1 rounded-xl border border-blue-900/60 w-full max-w-[220px]">
-          <button
-            type="button"
-            onClick={() => setActiveTab('palette')}
-            className={`flex-1 py-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'palette'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Blocks</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('outline')}
-            className={`flex-1 py-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'outline'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <ListTree className="w-3.5 h-3.5" />
-            <span>Outline</span>
-          </button>
+    <aside className="w-72 h-[calc(100vh-4rem)] border-r border-slate-200 bg-white flex flex-col flex-shrink-0 z-20 transition-all select-none">
+      {/* Top Header: EXAM OUTLINE */}
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+            <ListTree className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-800 block">
+              Exam Outline
+            </span>
+            <span className="text-[10px] text-slate-500 font-medium">
+              {totalQuestions} Qs • {totalMarks} Marks
+            </span>
+          </div>
         </div>
 
         <button
           type="button"
           onClick={onToggle}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors ml-2"
-          title="Collapse sidebar"
+          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          title="Collapse outline"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronDown className="w-4 h-4 rotate-90" />
         </button>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-4">
-        {activeTab === 'palette' ? (
-          <div className="space-y-4">
-            {/* Google Forms Essentials Group */}
-            <div>
-              <div className="flex items-center justify-between px-1 mb-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-indigo-400">
-                  Google Forms Essentials
-                </span>
-                <span className="text-[10px] text-slate-500 font-bold">11 Types</span>
-              </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {googleFormsTypes.map((item: QuestionTypeDefinition) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => onAddQuestion(activeSectionId, undefined, item.type as SupportedQuestionType)}
-                    className="flex items-center gap-3 p-2 rounded-xl border border-blue-900/40 bg-[#091124]/70 hover:bg-[#0c1836] hover:border-indigo-500/60 text-left transition-all group"
-                  >
-                    <div className="p-2 rounded-lg bg-[#050b18] border border-blue-900/60 text-indigo-400 group-hover:text-white group-hover:scale-105 transition-all">
-                      {renderTypeIcon(item.iconName)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate">
-                          {item.title}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500">
-                          {item.shortLabel}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 truncate">
-                        {item.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* EdTechra Interactive Educational Group */}
-            <div>
-              <div className="flex items-center justify-between px-1 mb-2 pt-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  <span>EdTechra Interactive</span>
-                </span>
-                <span className="text-[10px] text-slate-500 font-bold">10 Types</span>
-              </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {edtechraTypes.map((item: QuestionTypeDefinition) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => onAddQuestion(activeSectionId, undefined, item.type as SupportedQuestionType)}
-                    className="flex items-center gap-3 p-2 rounded-xl border border-blue-900/40 bg-[#091124]/70 hover:bg-[#0c1836] hover:border-emerald-500/60 text-left transition-all group"
-                  >
-                    <div className="p-2 rounded-lg bg-[#050b18] border border-blue-900/60 text-emerald-400 group-hover:text-white group-hover:scale-105 transition-all">
-                      {renderTypeIcon(item.iconName)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-200 group-hover:text-white truncate">
-                          {item.title}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500">
-                          {item.shortLabel}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 truncate">
-                        {item.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Outline / Navigator Tab */
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                Assessment Structure
-              </span>
-              <button
-                type="button"
-                onClick={onAddSection}
-                className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-              >
-                <Layers className="w-3 h-3" />
-                <span>+ Section</span>
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {sections.map((sec: any, secIdx: number) => {
-                const sectionQuestions = sec.questions || [];
-                const isSecSelected = selectedSectionId === sec.id;
-
-                return (
-                  <div
-                    key={sec.id}
-                    className={`rounded-2xl border transition-all overflow-hidden ${
-                      isSecSelected
-                        ? 'border-indigo-500/80 bg-indigo-950/20'
-                        : 'border-blue-900/40 bg-[#091124]/60'
-                    }`}
-                  >
-                    {/* Section Header in Navigator */}
-                    <button
-                      type="button"
-                      onClick={() => onSelectSection(sec.id)}
-                      className="w-full text-left p-2.5 flex items-center justify-between border-b border-blue-900/40 hover:bg-white/5 transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Layers className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                        <span className="text-xs font-bold text-slate-200 truncate">
-                          {sec.title || `Section ${secIdx + 1}`}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-400 bg-[#050b18] px-1.5 py-0.5 rounded">
-                        {sectionQuestions.length} Qs
-                      </span>
-                    </button>
-
-                    {/* Question Items */}
-                    <div className="p-1 space-y-1">
-                      {sectionQuestions.length === 0 ? (
-                        <div className="text-[11px] text-slate-500 text-center py-2">
-                          No questions in this section
-                        </div>
-                      ) : (
-                        sectionQuestions.map((q: any, qIdx: number) => {
-                          const isQSelected = selectedQuestionId === q.id;
-                          const typeDef = getQuestionTypeDefinition(q.type);
-
-                          return (
-                            <button
-                              key={q.id}
-                              type="button"
-                              onClick={() => {
-                                onSelectSection(sec.id);
-                                onSelectQuestion(q.id);
-                              }}
-                              className={`w-full flex items-center gap-2 p-2 rounded-xl text-left transition-all ${
-                                isQSelected
-                                  ? 'bg-indigo-600 text-white shadow-md'
-                                  : 'hover:bg-white/5 text-slate-300'
-                              }`}
-                            >
-                              <span className="text-[10px] font-mono opacity-60 w-4 text-center">
-                                {qIdx + 1}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs truncate font-medium">
-                                  {q.question || 'Untitled question'}
-                                </p>
-                                <div className="flex items-center gap-1 text-[10px] opacity-70">
-                                  <span>{typeDef.shortLabel}</span>
-                                  {!isSurvey && q.marks !== undefined && (
-                                    <>
-                                      <span>•</span>
-                                      <span>{q.marks} pts</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Summary Bar */}
-      <div className="p-3 border-t border-blue-900/60 bg-[#050b18] flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2 text-slate-400">
-          <ListTree className="w-3.5 h-3.5 text-indigo-400" />
-          <span>{totalQuestions} {totalQuestions === 1 ? 'Question' : 'Questions'}</span>
+      {/* Main Hierarchical Tree View */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+        {/* Exam Title & Instructions Anchor */}
+        <div
+          onClick={() => {
+            onSelectSection(sections[0]?.id || 'sec_1');
+          }}
+          className="p-2.5 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors space-y-0.5"
+        >
+          <span className="text-xs font-bold text-slate-800 truncate block">
+            {assessment.exam.title || 'Untitled Assessment'}
+          </span>
+          <span className="text-[10px] text-slate-500 block truncate">
+            {assessment.exam.subject} • {assessment.exam.grade}
+          </span>
         </div>
 
-        {isSurvey ? (
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span>~{estimatedMins} min read</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-indigo-300 font-bold">
-            <Award className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{totalMarks} Total Pts</span>
-          </div>
-        )}
+        {/* Section List */}
+        <div className="space-y-2">
+          {sections.map((sec, sIdx) => {
+            const isSecSelected = selectedSectionId === sec.id && !selectedQuestionId && !selectedActivityId;
+            const secQuestions = sec.questions || [];
+            const secActivities = sec.activities || [];
+            const secLetter = String.fromCharCode(65 + sIdx); // A, B, C, D...
+
+            return (
+              <div
+                key={sec.id}
+                className="rounded-2xl border border-slate-200/80 overflow-hidden bg-white shadow-2xs"
+              >
+                {/* Section Header Row */}
+                <div
+                  onClick={() => onSelectSection(sec.id)}
+                  className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
+                    isSecSelected
+                      ? 'bg-indigo-50/80 text-indigo-900 font-bold'
+                      : 'hover:bg-slate-50 text-slate-700 font-semibold'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                      SEC {secLetter}
+                    </span>
+                    <span className="text-xs truncate">
+                      {sec.title || `Section ${sIdx + 1}`}
+                    </span>
+                  </div>
+
+                  <span className="text-[10px] font-medium text-slate-400 shrink-0">
+                    {secQuestions.length + secActivities.length} items
+                  </span>
+                </div>
+
+                {/* Children: Activities & Questions */}
+                <div className="px-2 py-1.5 space-y-1 bg-slate-50/30 border-t border-slate-100 text-xs">
+                  {/* 1. Activities in this section */}
+                  {secActivities.map((act) => {
+                    const isActSelected = selectedActivityId === act.id;
+                    const childQs = act.questions || [];
+
+                    return (
+                      <div key={act.id} className="space-y-0.5">
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectActivity) onSelectActivity(act.id);
+                          }}
+                          className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                            isActSelected
+                              ? 'bg-violet-50 text-violet-900 font-bold border border-violet-200'
+                              : 'hover:bg-white text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {getActivityIcon(act.activityType)}
+                            <span className="truncate text-[11px]">
+                              {act.title || 'Activity'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            {childQs.length} Qs
+                          </span>
+                        </div>
+
+                        {/* Child Questions under this activity */}
+                        {childQs.map((q) => {
+                          const isQSelected = selectedQuestionId === q.id;
+                          const qNum = globalQNum++;
+
+                          return (
+                            <div
+                              key={q.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectQuestion(q.id);
+                              }}
+                              className={`flex items-center gap-2 pl-6 pr-2 py-1 rounded-md cursor-pointer text-[11px] transition-colors ${
+                                isQSelected
+                                  ? 'bg-indigo-600 text-white font-semibold'
+                                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                              }`}
+                            >
+                              <span className="font-bold min-w-[20px]">Q{qNum}</span>
+                              <span className="truncate">{q.question || 'Untitled Question'}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+
+                  {/* 2. Standalone Questions in this section */}
+                  {secQuestions.map((q) => {
+                    const isQSelected = selectedQuestionId === q.id;
+                    const qNum = globalQNum++;
+
+                    return (
+                      <div
+                        key={q.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectQuestion(q.id);
+                        }}
+                        className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
+                          isQSelected
+                            ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+                            : 'text-slate-700 hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {getQuestionIcon(q.type)}
+                          <span className="font-bold text-[11px] min-w-[20px]">
+                            Q{qNum}
+                          </span>
+                          <span className="truncate text-[11px]">
+                            {q.question || 'Untitled'}
+                          </span>
+                        </div>
+
+                        <span className={`text-[10px] ${isQSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                          {q.marks || 1}m
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {/* Add Question / Activity to this section button */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenAddModal(sec.id)}
+                    className="w-full mt-1.5 py-1.5 px-2 rounded-xl text-left text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50/80 flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Question / Activity</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom Actions: + Add Section */}
+      <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+        <button
+          type="button"
+          onClick={onAddSection}
+          className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 text-xs font-bold text-slate-700 hover:text-indigo-600 flex items-center justify-center gap-1.5 transition-all shadow-2xs"
+        >
+          <Plus className="w-4 h-4 text-indigo-500" />
+          <span>Add Section</span>
+        </button>
       </div>
     </aside>
   );

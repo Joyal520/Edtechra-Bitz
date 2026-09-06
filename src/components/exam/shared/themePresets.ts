@@ -29,6 +29,28 @@ export interface AssessmentThemeConfig {
 }
 
 export const THEME_PRESETS: Record<string, AssessmentThemeConfig> = {
+  edtechra_light: {
+    presetId: 'edtechra_light',
+    name: 'EdTechra Light (Default)',
+    category: 'modern',
+    description: 'Clean light background, pure white cards, indigo accents, and dark navy typography.',
+    background: '#f8fafc',
+    canvasBg: '#f8fafc',
+    pageBg: '#f8fafc',
+    primaryColor: '#4f46e5',
+    primaryHover: '#4338ca',
+    secondaryColor: '#0284c7',
+    accentColor: '#10b981',
+    textColor: '#0f172a',
+    subtextColor: '#64748b',
+    cardBg: '#ffffff',
+    cardBorder: '#e2e8f0',
+    cardStyle: 'elevated',
+    borderRadius: 'lg',
+    typography: 'sans',
+    bannerGradient: 'from-indigo-600 via-blue-600 to-indigo-700',
+    badgeStyle: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+  },
   modern_academy: {
     presetId: 'modern_academy',
     name: 'Modern Academy',

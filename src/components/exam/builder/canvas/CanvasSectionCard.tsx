@@ -1,6 +1,6 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER 2.0: CANVAS SECTION CARD
-// Section divider card with inline title, description, passage, and branching
+// EDTECHRA ASSESSMENT BUILDER: CANVAS SECTION CARD (LIGHT)
+// Section divider card with inline title, description, and branching jump
 // ============================================================================
 
 import React from 'react';
@@ -27,7 +27,6 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
   sectionIndex,
   totalSections,
   allSections,
-  theme,
   isSelected,
   onSelectSection,
   onUpdateSection,
@@ -35,23 +34,31 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
   onDeleteSection,
   onAddQuestionToSection
 }) => {
+  const totalQuestions = (section.questions?.length || 0) + (section.activities?.reduce((acc, a) => acc + (a.questions?.length || 0), 0) || 0);
+  const totalMarks =
+    (section.questions?.reduce((acc, q) => acc + (Number(q.marks) || 1), 0) || 0) +
+    (section.activities?.reduce((acc, a) => acc + (a.marks || a.questions?.reduce((qAcc, q) => qAcc + (Number(q.marks) || 1), 0) || 0), 0) || 0);
+
   return (
     <div
       onClick={onSelectSection}
-      className={`rounded-3xl border transition-all cursor-pointer overflow-hidden shadow-md ${
+      className={`rounded-3xl border transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-sm ${
         isSelected
-          ? 'border-indigo-400 ring-2 ring-indigo-500/30 shadow-indigo-600/20'
-          : 'border-blue-900/60 hover:border-blue-700'
+          ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-white'
+          : 'border-slate-200 bg-white hover:border-slate-300'
       }`}
-      style={{
-        backgroundColor: theme.cardBg
-      }}
     >
-      {/* Top Section Tag */}
-      <div className="px-6 py-2.5 bg-[#091124] border-b border-blue-900/60 flex items-center justify-between text-xs font-bold text-slate-300">
+      {/* Top Section Header Strip */}
+      <div className="px-6 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between text-xs font-bold text-slate-700">
         <div className="flex items-center gap-2">
-          <Layers className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Section {sectionIndex + 1} of {totalSections}</span>
+          <Layers className="w-4 h-4 text-indigo-600" />
+          <span className="uppercase tracking-wider text-[11px] text-indigo-700">
+            Section {sectionIndex + 1} of {totalSections}
+          </span>
+          <span className="text-slate-300">•</span>
+          <span className="text-slate-500 font-semibold text-[11px]">
+            {totalQuestions} {totalQuestions === 1 ? 'question' : 'questions'} ({totalMarks} {totalMarks === 1 ? 'mark' : 'marks'})
+          </span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -61,10 +68,10 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
               e.stopPropagation();
               onAddQuestionToSection();
             }}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-blue-900/50 cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 cursor-pointer transition-colors"
             title="Add question to this section"
           >
-            <Plus className="w-3.5 h-3.5 text-indigo-400" />
+            <Plus className="w-4 h-4" />
           </button>
 
           <button
@@ -73,10 +80,10 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
               e.stopPropagation();
               onDuplicateSection();
             }}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-blue-900/50 cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
             title="Duplicate section"
           >
-            <Copy className="w-3.5 h-3.5" />
+            <Copy className="w-4 h-4" />
           </button>
 
           {totalSections > 1 && (
@@ -86,10 +93,10 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
                 e.stopPropagation();
                 onDeleteSection();
               }}
-              className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-950/40 cursor-pointer"
+              className="p-1.5 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer transition-colors"
               title="Delete section"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -103,7 +110,7 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
             value={section.title}
             onChange={(e) => onUpdateSection({ title: e.target.value })}
             placeholder="Section Title (e.g. Grammar & Vocabulary)"
-            className="w-full text-lg sm:text-xl font-black text-white bg-transparent border-b border-transparent hover:border-blue-700/60 focus:border-indigo-400 focus:outline-hidden py-1 transition-all"
+            className="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-hidden py-1 transition-all"
           />
         </div>
 
@@ -113,46 +120,46 @@ export const CanvasSectionCard: React.FC<CanvasSectionCardProps> = ({
             value={section.description || ''}
             onChange={(e) => onUpdateSection({ description: e.target.value })}
             placeholder="Section description or instructions for students..."
-            className="w-full text-xs text-slate-300 bg-transparent border-b border-transparent hover:border-blue-800/60 focus:border-indigo-400 focus:outline-hidden py-0.5 transition-all placeholder:text-slate-500"
+            className="w-full text-xs text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-hidden py-0.5 transition-all placeholder:text-slate-400"
           />
         </div>
 
-        {/* Optional Reading Passage Field */}
+        {/* Optional Shared Reading Passage Field */}
         <div className="pt-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-400 mb-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 mb-1">
             <BookOpen className="w-3.5 h-3.5" />
-            <span>Reading Passage (Optional):</span>
+            <span>Shared Context / Reading Passage (Optional):</span>
           </div>
           <textarea
-            rows={3}
+            rows={2}
             value={section.passage || ''}
             onChange={(e) => onUpdateSection({ passage: e.target.value })}
-            placeholder="Paste shared reading passage, case study, or contextual article for questions in this section..."
-            className="w-full p-3 bg-[#070e1f] border border-blue-900/80 rounded-2xl text-xs font-serif text-amber-100 placeholder:text-slate-600 focus:outline-hidden focus:border-amber-400 leading-relaxed resize-y"
+            placeholder="Paste shared reading passage or contextual article for questions in this section..."
+            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-400 leading-relaxed resize-y"
           />
         </div>
 
         {/* Conditional Branching Jump Selector */}
-        <div className="pt-2 border-t border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <GitFork className="w-3.5 h-3.5 text-indigo-400" />
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <GitFork className="w-3.5 h-3.5 text-indigo-500" />
             <span>After completing this section:</span>
           </div>
 
           <select
-            value={section.skipToSectionId || 'next'}
-            onChange={(e) => onUpdateSection({ skipToSectionId: e.target.value === 'next' ? undefined : e.target.value })}
-            className="px-3 py-1.5 bg-[#070e1f] border border-blue-800/70 rounded-xl text-xs text-white font-semibold focus:outline-hidden"
+            value={section.skipToSectionId || ''}
+            onChange={(e) => onUpdateSection({ skipToSectionId: e.target.value || undefined })}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 focus:bg-white focus:outline-hidden"
           >
-            <option value="next">Continue to next section</option>
+            <option value="">Continue to next section</option>
             {allSections
-              .filter(s => s.id !== section.id)
+              .filter((s) => s.id !== section.id)
               .map((s, idx) => (
                 <option key={s.id} value={s.id}>
-                  Jump to: {s.title || `Section ${idx + 1}`}
+                  Go to Section {idx + 1}: {s.title || 'Untitled'}
                 </option>
               ))}
-            <option value="submit">Submit assessment</option>
+            <option value="SUBMIT_FORM">Submit exam directly</option>
           </select>
         </div>
       </div>
