@@ -26,7 +26,8 @@ export type AssessmentQuestionType =
   | 'audio_question'
   | 'video_question'
   | 'coding_question'
-  | 'sentence_builder';
+  | 'sentence_builder'
+  | 'cloze_passage';
 
 export type QuestionGroup = 'google_forms' | 'edtechra_interactive';
 
@@ -237,6 +238,18 @@ export const QUESTION_TYPE_DEFINITIONS: Record<AssessmentQuestionType, QuestionT
     supportsGrading: true,
     defaultMarks: 5,
     iconName: 'BookOpen',
+    badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+  },
+  cloze_passage: {
+    type: 'cloze_passage',
+    title: 'Cloze Passage',
+    shortLabel: 'Cloze',
+    description: 'Complete missing words in a passage with optional word bank.',
+    group: 'edtechra_interactive',
+    category: 'objective',
+    supportsGrading: true,
+    defaultMarks: 5,
+    iconName: 'FileSpreadsheet',
     badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/40'
   },
   image_question: {

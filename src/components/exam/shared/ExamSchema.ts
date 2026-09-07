@@ -43,6 +43,8 @@ export type SupportedQuestionType =
   | 'video_activity'
   | 'picture_description'
   | 'picture_description_activity'
+  | 'cloze_activity'
+  | 'cloze_passage'
   // Backward compatibility aliases
   | 'multiple_select'
   | 'essay';
@@ -51,7 +53,8 @@ export type ActivityType =
   | 'reading_activity'
   | 'listening_activity'
   | 'video_activity'
-  | 'picture_description_activity';
+  | 'picture_description_activity'
+  | 'cloze_activity';
 
 export interface ActivityRubric {
   content?: number | string;
@@ -81,6 +84,8 @@ export interface ExamActivity {
   pictureTaskType?: PictureTaskType;
   rubric?: ActivityRubric;
   questions: CanonicalQuestion[];
+  blanks?: ClozeBlank[]; // Cloze activity
+  wordBank?: string[]; // Cloze activity
   marks?: number;
 }
 
@@ -337,6 +342,21 @@ export interface SentenceBuilderQuestion extends BaseQuestion {
   targetSentence: string;
 }
 
+// 22. Cloze Passage
+export interface ClozeBlank {
+  id: string; // e.g. "blank_1" or "1"
+  correctAnswer: string;
+  acceptedAnswers?: string[];
+  marks?: number;
+}
+
+export interface ClozePassageQuestion extends BaseQuestion {
+  type: 'cloze_passage';
+  passage: string;
+  blanks: ClozeBlank[];
+  wordBank?: string[];
+}
+
 export type CanonicalQuestion =
   | MultipleChoiceQuestion
   | CheckboxesQuestion
@@ -358,7 +378,8 @@ export type CanonicalQuestion =
   | AudioQuestion
   | VideoQuestion
   | CodingQuestion
-  | SentenceBuilderQuestion;
+  | SentenceBuilderQuestion
+  | ClozePassageQuestion;
 
 export interface ExamSection {
   id: string;

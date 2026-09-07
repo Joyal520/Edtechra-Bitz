@@ -1,48 +1,65 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER: MODERN DIGITAL EXAM STUDENT PREVIEW (LIGHT)
-// Real modern online examination platform: Colorful section tabs, timer,
-// question palette (1..N grid), flag for review, student utilities & audio/video
+// EDTECHRA ASSESSMENT BUILDER: MODERN DIGITAL EXAM PREVIEW & VISUAL STUDIO
+// Dual-Mode Experience:
+// 1. [ Student Preview ]: Colorful, modern, compact 1400px student taking view
+// 2. [ Teacher Edit ]: Visual card editing with [Edit], [Duplicate], [Delete] & [Publish]
+// Features dedicated Cloze Passage, Reading, Audio/Video, and Picture Description UI
 // ============================================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Monitor,
   Tablet,
   Smartphone,
-  Clock,
   CheckCircle2,
   Bookmark,
   ArrowLeft,
   ArrowRight,
   Headphones,
-  Image as ImageIcon,
   KeyRound,
   FileEdit,
-  Type
+  Type,
+  RotateCcw,
+  BookOpen,
+  Pencil,
+  Copy,
+  Trash2,
+  Send,
+  Sparkles,
+  Eye
 } from 'lucide-react';
 import {
   CanonicalAssessmentV2,
+  CanonicalQuestion,
   MultipleChoiceQuestion
 } from '../../shared/ExamSchema';
 import { AssessmentThemeConfig } from '../../shared/themePresets';
 import { flattenExamQuestions, FlattenedExamQuestion } from '../../shared/scoringUtilities';
+import { QuestionVisualEditorModal } from '../modals/QuestionVisualEditorModal';
+import { SimplePublishModal } from '../publishing/SimplePublishModal';
 
 interface LivePreviewModalProps {
   isOpen: boolean;
   assessment: CanonicalAssessmentV2;
   theme: AssessmentThemeConfig;
   onClose: () => void;
+  onUpdateAssessment?: (updated: CanonicalAssessmentV2) => void;
+  onPublishExam?: (settings: any) => void;
 }
 
 type DeviceMode = 'desktop' | 'tablet' | 'mobile';
+type ViewMode = 'student' | 'teacher';
 
 export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
   isOpen,
   assessment,
-  onClose
+  onClose,
+  onUpdateAssessment,
+  onPublishExam
 }) => {
   const [device, setDevice] = useState<DeviceMode>('desktop');
+  const [viewMode, setViewMode] = useState<ViewMode>('student');
   const [showAnswerKeys, setShowAnswerKeys] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mockAnswers, setMockAnswers] = useState<Record<string, any>>({});
@@ -52,10 +69,31 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
   const [notepadText, setNotepadText] = useState('');
   const [showStudentTranscript, setShowStudentTranscript] = useState(false);
 
+  // Local live assessment state to allow immediate teacher editing updates
+  const [liveAssessment, setLiveAssessment] = useState<CanonicalAssessmentV2>(assessment);
+  const [editingQuestion, setEditingQuestion] = useState<CanonicalQuestion | null>(null);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
+  // Synchronize when outer assessment changes
+  useEffect(() => {
+    setLiveAssessment(assessment);
+  }, [assessment]);
+
+  // Helper for live word and character counts
+  const getWordCount = (val: any): number => {
+    if (!val || typeof val !== 'string') return 0;
+    return val.trim().split(/\s+/).filter(Boolean).length;
+  };
+
+  const getCharCount = (val: any): number => {
+    if (!val || typeof val !== 'string') return 0;
+    return val.length;
+  };
+
   // Flatten questions across all sections and activities
   const flattenedQuestions: FlattenedExamQuestion[] = useMemo(() => {
-    return flattenExamQuestions(assessment.sections);
-  }, [assessment.sections]);
+    return flattenExamQuestions(liveAssessment.sections);
+  }, [liveAssessment.sections]);
 
   const currentQItem = flattenedQuestions[currentIndex] || flattenedQuestions[0];
   const totalQuestions = flattenedQuestions.length;
@@ -77,13 +115,74 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
   };
 
   // Sections navigation tabs
-  const sections = assessment.sections && assessment.sections.length > 0
-    ? assessment.sections
+  const sections = liveAssessment.sections && liveAssessment.sections.length > 0
+    ? liveAssessment.sections
     : [{ id: 'sec-1', title: 'Section 1', questions: [] }];
 
   const answeredCount = Object.keys(mockAnswers).filter(
     (k) => mockAnswers[k] !== undefined && mockAnswers[k] !== ''
   ).length;
+
+  // Teacher Edit Handlers
+  const handleSaveQuestionChanges = (updatedQ: CanonicalQuestion) => {
+    const updatedSections = liveAssessment.sections.map((sec) => {
+      const hasQ = (sec.questions || []).some((q) => q.id === updatedQ.id);
+      if (hasQ) {
+        return {
+          ...sec,
+          questions: sec.questions.map((q) => (q.id === updatedQ.id ? updatedQ : q))
+        };
+      }
+      return sec;
+    });
+
+    const updatedAssessment = { ...liveAssessment, sections: updatedSections };
+    setLiveAssessment(updatedAssessment);
+    onUpdateAssessment?.(updatedAssessment);
+  };
+
+  const handleDuplicateQuestion = () => {
+    if (!currentQItem) return;
+    const targetQ = currentQItem.question;
+    const duplicatedQ: CanonicalQuestion = {
+      ...JSON.parse(JSON.stringify(targetQ)),
+      id: `${targetQ.id}_copy_${Date.now().toString(36).slice(-4)}`,
+      question: `${targetQ.question} (Copy)`
+    };
+
+    const updatedSections = liveAssessment.sections.map((sec) => {
+      if (sec.id === currentQItem.sectionId) {
+        return {
+          ...sec,
+          questions: [...sec.questions, duplicatedQ]
+        };
+      }
+      return sec;
+    });
+
+    const updatedAssessment = { ...liveAssessment, sections: updatedSections };
+    setLiveAssessment(updatedAssessment);
+    onUpdateAssessment?.(updatedAssessment);
+  };
+
+  const handleDeleteQuestion = () => {
+    if (!currentQItem || totalQuestions <= 1) {
+      alert('An examination must contain at least one question.');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
+
+    const targetId = currentQItem.question.id;
+    const updatedSections = liveAssessment.sections.map((sec) => ({
+      ...sec,
+      questions: (sec.questions || []).filter((q) => q.id !== targetId)
+    }));
+
+    const updatedAssessment = { ...liveAssessment, sections: updatedSections };
+    setLiveAssessment(updatedAssessment);
+    onUpdateAssessment?.(updatedAssessment);
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+  };
 
   if (!isOpen) return null;
 
@@ -92,7 +191,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
       ? 'max-w-[420px]'
       : device === 'tablet'
       ? 'max-w-3xl'
-      : 'max-w-6xl';
+      : 'max-w-[1400px]';
 
   const fontClass =
     fontSize === 'xlarge'
@@ -101,20 +200,42 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
       ? 'text-base leading-relaxed'
       : 'text-sm leading-relaxed';
 
-  // Section Color Themes for colorful tabs
-  const sectionColors = [
-    { bg: 'bg-blue-600', text: 'text-white', badge: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { bg: 'bg-purple-600', text: 'text-white', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
-    { bg: 'bg-emerald-600', text: 'text-white', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    { bg: 'bg-amber-600', text: 'text-white', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { bg: 'bg-rose-600', text: 'text-white', badge: 'bg-rose-50 text-rose-700 border-rose-200' }
-  ];
+  // Section Color Themes matching educational domains
+  const getSectionColor = (title: string = '') => {
+    const lower = title.toLowerCase();
+    if (lower.includes('grammar') || lower.includes('language')) {
+      return { bg: 'bg-indigo-600', text: 'text-white', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+    }
+    if (lower.includes('reading') || lower.includes('comprehension')) {
+      return { bg: 'bg-emerald-600', text: 'text-white', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+    if (lower.includes('cloze')) {
+      return { bg: 'bg-teal-600', text: 'text-white', badge: 'bg-teal-50 text-teal-700 border-teal-200' };
+    }
+    if (lower.includes('listen') || lower.includes('audio')) {
+      return { bg: 'bg-blue-600', text: 'text-white', badge: 'bg-blue-50 text-blue-700 border-blue-200' };
+    }
+    if (lower.includes('picture') || lower.includes('image') || lower.includes('visual')) {
+      return { bg: 'bg-amber-600', text: 'text-white', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+    }
+    if (lower.includes('writ') || lower.includes('essay')) {
+      return { bg: 'bg-purple-600', text: 'text-white', badge: 'bg-purple-50 text-purple-700 border-purple-200' };
+    }
+    return { bg: 'bg-indigo-600', text: 'text-white', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+  };
+
+  const isPictureTask = Boolean(
+    currentQItem?.parentActivityType === 'picture_description_activity' ||
+    (currentQItem?.parentImageUrl && ['paragraph', 'essay', 'short_answer'].includes(currentQItem?.question.type)) ||
+    (currentQItem?.question.type === 'image_question' && !(currentQItem?.question as any).options?.length)
+  );
+  const stimulusImageUrl = currentQItem?.parentImageUrl || (currentQItem?.question as any)?.imageUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/60 backdrop-blur-md select-none overflow-hidden animate-fadeIn">
       {/* Top Device & Control Bar */}
       <div className="h-14 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between z-20 shadow-2xs">
-        {/* Device Switcher */}
+        {/* Left: Device Switcher */}
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
           <button
             type="button"
@@ -159,35 +280,68 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
           </button>
         </div>
 
-        {/* Center: Indicator & Answer Key Toggle */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-500 hidden md:inline">
-            Interactive Online Examination Experience
-          </span>
+        {/* Center: Mode Toggle [ Student Preview ] vs [ Teacher Edit ] */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setViewMode('student')}
+            className={`px-3.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              viewMode === 'student'
+                ? 'bg-white text-indigo-600 shadow-xs font-black'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Student Preview</span>
+          </button>
 
           <button
             type="button"
+            onClick={() => setViewMode('teacher')}
+            className={`px-3.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              viewMode === 'teacher'
+                ? 'bg-indigo-600 text-white shadow-xs font-black'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            <span>Teacher Edit</span>
+          </button>
+        </div>
+
+        {/* Right: Answer Key, Publish & Close */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
             onClick={() => setShowAnswerKeys(!showAnswerKeys)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
               showAnswerKeys
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                 : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
             }`}
           >
             <KeyRound className="w-3.5 h-3.5" />
-            <span>{showAnswerKeys ? 'Hide Answer Key' : 'Reveal Answer Key'}</span>
+            <span>{showAnswerKeys ? 'Hide Keys' : 'Reveal Keys'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPublishModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all cursor-pointer active:scale-95"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Publish Exam</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Exit Studio"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Exit Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-          title="Exit Student Preview"
-        >
-          <X className="w-5 h-5" />
-        </button>
       </div>
 
       {/* Main Student Examination Viewport */}
@@ -203,25 +357,27 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
               </div>
               <div>
                 <h1 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
-                  {assessment.exam.title || 'Official Digital Examination'}
+                  {liveAssessment.exam.title || 'Official Digital Examination'}
                 </h1>
                 <span className="text-xs font-semibold text-slate-500">
-                  {assessment.exam.subject} • {assessment.exam.grade}
+                  {liveAssessment.exam.subject} • {liveAssessment.exam.grade} • {liveAssessment.exam.durationMinutes || 60} Minutes
                 </span>
               </div>
             </div>
 
-            {/* Candidate Badge */}
+            {/* Candidate / Mode Badge */}
             <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-300 text-xs shadow-2xs">
-              <span className="text-slate-600 font-bold">Candidate:</span>
-              <span className="font-black text-slate-900">Student View (Preview)</span>
+              <span className="text-slate-600 font-bold">Mode:</span>
+              <span className="font-black text-slate-900">
+                {viewMode === 'teacher' ? 'Teacher Edit Studio' : 'Student Examination'}
+              </span>
             </div>
           </div>
 
           {/* 2. Colorful Section Navigation Tabs */}
           <div className="px-6 py-2.5 bg-slate-50/80 border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
             {sections.map((sec, sIdx) => {
-              const color = sectionColors[sIdx % sectionColors.length];
+              const color = getSectionColor(sec.title);
               const isSecCurrent = currentQItem?.sectionId === sec.id;
 
               return (
@@ -245,17 +401,49 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
           </div>
 
           {/* 3. Main Examination Workspace: Left Question Area + Right Dashboard Sidebar */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 flex-1 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-            {/* Left Question Area (Col span 3) */}
-            <div className="lg:col-span-3 p-6 sm:p-8 flex flex-col justify-between space-y-6 bg-white min-h-[480px]">
-              {totalQuestions === 0 ? (
-                <div className="text-center py-20 text-slate-500 font-medium text-sm">
-                  No questions currently added to this assessment.
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Question Header: Number & Marks */}
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 items-start">
+            {/* Left Question Area (70-75% width: 8 to 9 cols) */}
+            <div className="lg:col-span-8 xl:col-span-9 p-5 sm:p-7 md:p-8 flex flex-col justify-start">
+              {currentQItem ? (
+                <div className="space-y-5 question-card question-content [color-scheme:light]">
+                  {/* Teacher Edit Quick Toolbar */}
+                  {viewMode === 'teacher' && (
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex items-center justify-between gap-2 animate-fadeIn">
+                      <div className="flex items-center gap-2 text-xs font-black text-indigo-950">
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                        <span>Teacher Edit Active</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingQuestion(currentQItem.question)}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer shadow-2xs transition-all active:scale-95"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDuplicateQuestion}
+                          className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-2xs transition-all active:scale-95"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Duplicate</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteQuestion}
+                          className="px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-2xs transition-all active:scale-95"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Question Meta Strip: Number, Marks, Flag */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black uppercase tracking-wider text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200">
                         Question {currentIndex + 1} of {totalQuestions}
@@ -264,9 +452,16 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       <span className="text-xs font-bold text-slate-800">
                         {currentQItem.question.marks || 1} {Number(currentQItem.question.marks) === 1 ? 'Mark' : 'Marks'}
                       </span>
+                      {currentQItem.sectionTitle && (
+                        <>
+                          <span className="text-xs font-bold text-slate-400 hidden sm:inline">•</span>
+                          <span className="text-xs font-semibold text-slate-500 hidden sm:inline truncate max-w-[160px]">
+                            {currentQItem.sectionTitle}
+                          </span>
+                        </>
+                      )}
                     </div>
 
-                    {/* Review Flag button */}
                     <button
                       type="button"
                       onClick={() => handleToggleFlag(currentQItem.question.id)}
@@ -277,328 +472,548 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       }`}
                     >
                       <Bookmark className={`w-3.5 h-3.5 ${flaggedIds.has(currentQItem.question.id) ? 'fill-current' : ''}`} />
-                      <span>{flaggedIds.has(currentQItem.question.id) ? 'Marked for Review' : 'Flag for Review'}</span>
+                      <span className="hidden sm:inline">{flaggedIds.has(currentQItem.question.id) ? 'Marked for Review' : 'Flag for Review'}</span>
+                      <span className="sm:hidden">{flaggedIds.has(currentQItem.question.id) ? 'Flagged' : 'Flag'}</span>
                     </button>
                   </div>
 
-                  {/* Context Stimulus (Reading Passage, Audio Track, Video Player, Picture) */}
-                  {currentQItem.parentPassage && (
-                    <div className="p-5 rounded-2xl bg-teal-50/40 border border-teal-200 text-xs sm:text-sm text-slate-900 leading-relaxed font-serif">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-teal-900 block mb-1 font-sans">
-                        Reading Passage: {currentQItem.parentPassageTitle || ''}
-                      </span>
-                      <p>{currentQItem.parentPassage}</p>
-                    </div>
-                  )}
+                  {/* 1. Picture Description Specific Layout */}
+                  {isPictureTask && stimulusImageUrl ? (
+                    <div className="space-y-4">
+                      <div className="max-w-[760px] mx-auto w-full rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden shadow-2xs">
+                        <img
+                          src={stimulusImageUrl}
+                          alt="Picture stimulus"
+                          className="w-full max-h-[360px] object-contain mx-auto"
+                        />
+                      </div>
 
-                  {currentQItem.parentAudioUrl && (
-                    <div className="p-4 rounded-2xl bg-violet-50/40 border border-violet-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-violet-950 flex items-center gap-1.5">
-                          <Headphones className="w-4 h-4 text-violet-700" />
-                          <span>Listening Activity: {currentQItem.parentActivityTitle || 'Audio Track'}</span>
-                        </span>
-
-                        {currentQItem.showTranscriptToStudents && (
-                          <button
-                            type="button"
-                            onClick={() => setShowStudentTranscript(!showStudentTranscript)}
-                            className="text-xs font-bold text-violet-800 hover:text-violet-950"
-                          >
-                            {showStudentTranscript ? 'Hide Transcript' : 'Show Transcript'}
-                          </button>
+                      <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-2">
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                          {currentQItem.question.question}
+                        </p>
+                        {currentQItem.rubric && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-indigo-100/80">
+                            <span className="text-[10px] font-black uppercase text-indigo-800 tracking-wider">
+                              Rubric Criteria:
+                            </span>
+                            {currentQItem.rubric.content !== undefined && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-900 shadow-2xs">
+                                Content ({String(currentQItem.rubric.content)}m)
+                              </span>
+                            )}
+                            {currentQItem.rubric.vocabulary !== undefined && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-900 shadow-2xs">
+                                Vocabulary ({String(currentQItem.rubric.vocabulary)}m)
+                              </span>
+                            )}
+                            {currentQItem.rubric.grammar !== undefined && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-900 shadow-2xs">
+                                Grammar ({String(currentQItem.rubric.grammar)}m)
+                              </span>
+                            )}
+                            {currentQItem.rubric.organization !== undefined && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-900 shadow-2xs">
+                                Organization ({String(currentQItem.rubric.organization)}m)
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      <audio controls className="w-full h-10 rounded-lg">
-                        <source src={currentQItem.parentAudioUrl} />
-                        Your browser does not support the audio element.
-                      </audio>
-
-                      {showStudentTranscript && currentQItem.parentTranscript && (
-                        <div className="p-3 bg-white rounded-xl border border-violet-200 text-xs text-slate-800 font-medium leading-relaxed animate-fadeIn">
-                          {currentQItem.parentTranscript}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {currentQItem.parentImageUrl && (
-                    <div className="p-4 rounded-2xl bg-amber-50/40 border border-amber-200 space-y-3">
-                      <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4 text-amber-700" />
-                        <span>Picture Stimulus: {currentQItem.parentActivityTitle || 'Visual Task'}</span>
-                      </span>
-                      <div className="w-full max-h-64 rounded-xl overflow-hidden border border-amber-200 bg-white flex items-center justify-center">
-                        <img
-                          src={currentQItem.parentImageUrl}
-                          alt="Picture stimulus"
-                          className="max-h-64 w-auto object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Question Prompt */}
-                  <div className="space-y-3">
-                    <h3 className={`font-black text-slate-900 ${fontClass}`}>
-                      {currentQItem.question.question}
-                    </h3>
-
-                    {/* Answer Options Rendering */}
-                    {['multiple_choice', 'checkboxes', 'dropdown'].includes(currentQItem.question.type) && (
-                      <div className="space-y-2.5 pt-2">
-                        {((currentQItem.question as MultipleChoiceQuestion).options || []).map((opt) => {
-                          const isSelected = mockAnswers[currentQItem.question.id] === opt.id;
-                          const isCorrectAnswer = Array.isArray((currentQItem.question as any).correctAnswer)
-                            ? (currentQItem.question as any).correctAnswer.includes(opt.id)
-                            : (currentQItem.question as any).correctAnswer === opt.id;
-
-                          return (
-                            <div
-                              key={opt.id}
-                              onClick={() => handleSelectAnswer(currentQItem.question.id, opt.id)}
-                              className={`p-3.5 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                                isSelected
-                                  ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs'
-                                  : 'bg-white border-slate-300 hover:border-indigo-400 text-slate-900 shadow-2xs'
-                              } ${showAnswerKeys && isCorrectAnswer ? 'bg-emerald-50 border-emerald-500' : ''}`}
-                            >
-                              <div
-                                className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-black ${
-                                  isSelected
-                                    ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'border-slate-400 bg-slate-50 text-slate-700'
-                                }`}
-                              >
-                                {opt.id.toUpperCase()}
-                              </div>
-
-                              <span className="flex-1 text-xs sm:text-sm font-bold text-slate-900">
-                                {opt.text}
-                              </span>
-
-                              {showAnswerKeys && isCorrectAnswer && (
-                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
-                                  Correct Key
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* True / False Binary Selection */}
-                    {currentQItem.question.type === 'true_false' && (
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                        {[true, false].map((tfVal) => {
-                          const isSelected = mockAnswers[currentQItem.question.id] === tfVal;
-                          return (
-                            <button
-                              key={String(tfVal)}
-                              type="button"
-                              onClick={() => handleSelectAnswer(currentQItem.question.id, tfVal)}
-                              className={`p-4 rounded-2xl border text-sm font-black flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs ${
-                                isSelected
-                                  ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20'
-                                  : 'bg-white border-slate-300 text-slate-900 hover:bg-slate-50'
-                              }`}
-                            >
-                              <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Textarea for written responses */}
-                    {['short_answer', 'paragraph', 'essay'].includes(currentQItem.question.type) && (
-                      <div className="space-y-2 pt-2">
+                      <div className="space-y-1.5 answer-area">
                         <textarea
-                          rows={currentQItem.question.type === 'paragraph' ? 6 : 3}
+                          rows={6}
                           value={mockAnswers[currentQItem.question.id] || ''}
                           onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
-                          placeholder="Type your answer here..."
-                          className="w-full p-4 rounded-2xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs"
+                          placeholder="Write your description here..."
+                          className="w-full p-4 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs resize-y min-h-[180px] max-h-[240px]"
                         />
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
+                          <span>Write clearly and describe the key details.</span>
+                          <span className="font-mono text-slate-700 font-bold">
+                            {getWordCount(mockAnswers[currentQItem.question.id])} words • {getCharCount(mockAnswers[currentQItem.question.id])} characters
+                          </span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  ) : (
+                    /* 2. Standard Question Flow (Cloze, Reading, Audio, MCQ, Text) */
+                    <div className="space-y-4">
+                      {/* Reading Passage Context */}
+                      {currentQItem.parentPassage && currentQItem.question.type !== 'cloze_passage' && (
+                        <div className="p-5 sm:p-6 rounded-2xl bg-teal-50/40 border border-teal-200 text-slate-900 space-y-2.5">
+                          <div className="flex items-center gap-2 text-teal-900 text-xs font-black uppercase tracking-wider">
+                            <BookOpen className="w-4 h-4 text-teal-600 shrink-0" />
+                            <span>Reading Passage: {currentQItem.parentPassageTitle || 'Comprehension Text'}</span>
+                          </div>
+                          <div className="max-w-[72ch] text-xs sm:text-sm text-slate-800 leading-[1.6] font-serif whitespace-pre-wrap selection:bg-teal-100">
+                            {currentQItem.parentPassage}
+                          </div>
+                        </div>
+                      )}
 
-              {/* Bottom Navigation Buttons: Previous / Next */}
-              <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  disabled={currentIndex === 0}
-                  onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-                  className="px-5 py-2.5 rounded-xl border border-slate-300 hover:border-slate-400 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-slate-800 flex items-center gap-1.5 transition-colors shadow-2xs"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Previous</span>
-                </button>
+                      {/* Audio Track Context */}
+                      {currentQItem.parentAudioUrl && (
+                        <div className="p-4 rounded-2xl bg-violet-50/40 border border-violet-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-violet-950 flex items-center gap-1.5">
+                              <Headphones className="w-4 h-4 text-violet-700" />
+                              <span>Listening Activity: {currentQItem.parentActivityTitle || 'Audio Track'}</span>
+                            </span>
 
-                <button
-                  type="button"
-                  disabled={currentIndex >= totalQuestions - 1}
-                  onClick={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all"
-                >
-                  <span>Next Question</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                            {(currentQItem.showTranscriptToStudents || showAnswerKeys) && (
+                              <button
+                                type="button"
+                                onClick={() => setShowStudentTranscript(!showStudentTranscript)}
+                                className="text-xs font-bold text-violet-800 hover:text-violet-950 cursor-pointer"
+                              >
+                                {showStudentTranscript ? 'Hide Transcript' : 'Show Transcript'}
+                              </button>
+                            )}
+                          </div>
 
-            {/* Right Sticky Examination Sidebar (Col span 1) */}
-            <div className="lg:col-span-1 p-6 space-y-5 bg-slate-50/50 flex flex-col justify-between">
-              <div className="space-y-5">
-                {/* Countdown Timer Box */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    Time Remaining
-                  </span>
-                  <div className="flex items-center gap-2 text-indigo-950 font-black text-xl">
-                    <Clock className="w-5 h-5 text-indigo-600" />
-                    <span>{assessment.exam.durationMinutes || 60}:00</span>
-                  </div>
-                </div>
+                          <audio controls className="w-full h-10 rounded-lg accent-violet-600">
+                            <source src={currentQItem.parentAudioUrl} />
+                            Your browser does not support audio playback.
+                          </audio>
 
-                {/* Progress Bar Box */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-300 shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-900">Progress</span>
-                    <span className="font-black text-indigo-900">
-                      {answeredCount} / {totalQuestions}
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 rounded-full transition-all"
-                      style={{
-                        width: totalQuestions > 0 ? `${(answeredCount / totalQuestions) * 100}%` : '0%'
-                      }}
-                    />
-                  </div>
-                </div>
+                          {showStudentTranscript && currentQItem.parentTranscript && (
+                            <div className="p-3 bg-white rounded-xl border border-violet-200 text-xs text-slate-800 font-medium leading-relaxed animate-fadeIn">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-violet-700 block mb-1">
+                                Audio Transcript:
+                              </span>
+                              {currentQItem.parentTranscript}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                {/* Question Status Legend */}
-                <div className="space-y-1.5 text-[11px] text-slate-700 font-bold">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
-                    <span>Answered ({answeredCount})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
-                    <span>Marked for Review ({flaggedIds.size})</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-slate-300 shrink-0" />
-                    <span>Not Answered ({totalQuestions - answeredCount})</span>
-                  </div>
-                </div>
+                      {/* Question Prompt */}
+                      <div className="space-y-2">
+                        <h3 className={`font-black text-slate-900 ${fontClass}`}>
+                          {currentQItem.question.question}
+                        </h3>
 
-                {/* Question Palette Grid (1..N clickable) */}
-                <div className="space-y-2">
-                  <span className="text-xs font-black text-slate-900 block">
-                    Question Navigator
-                  </span>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {flattenedQuestions.map((q, idx) => {
-                      const isCurrent = currentIndex === idx;
-                      const isAnswered = mockAnswers[q.question.id] !== undefined && mockAnswers[q.question.id] !== '';
-                      const isFlagged = flaggedIds.has(q.question.id);
+                        {/* Multiple Choice Options */}
+                        {['multiple_choice', 'checkboxes', 'dropdown'].includes(currentQItem.question.type) && (
+                          <div className="space-y-2 pt-1 answer-area">
+                            {((currentQItem.question as MultipleChoiceQuestion).options || []).map((opt) => {
+                              const isSelected = mockAnswers[currentQItem.question.id] === opt.id;
+                              const isCorrectAnswer = Array.isArray((currentQItem.question as any).correctAnswer)
+                                ? (currentQItem.question as any).correctAnswer.includes(opt.id)
+                                : (currentQItem.question as any).correctAnswer === opt.id;
 
-                      let bgClass = 'bg-white text-slate-900 font-bold border-slate-300 hover:border-indigo-400 shadow-2xs';
-                      if (isFlagged) {
-                        bgClass = 'bg-amber-500 text-white font-black border-amber-500 shadow-xs';
-                      } else if (isAnswered) {
-                        bgClass = 'bg-emerald-500 text-white font-black border-emerald-500 shadow-xs';
-                      }
+                              return (
+                                <div
+                                  key={opt.id}
+                                  onClick={() => handleSelectAnswer(currentQItem.question.id, opt.id)}
+                                  className={`p-3 sm:p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                                    isSelected
+                                      ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs font-bold'
+                                      : 'bg-white border-slate-300 hover:border-indigo-400 hover:bg-slate-50 text-slate-900 shadow-2xs'
+                                  } ${showAnswerKeys && isCorrectAnswer ? 'bg-emerald-50 border-emerald-500' : ''}`}
+                                >
+                                  <div
+                                    className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs font-black shrink-0 ${
+                                      isSelected
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                        : 'border-slate-300 bg-slate-50 text-slate-700'
+                                    }`}
+                                  >
+                                    {opt.id.toUpperCase()}
+                                  </div>
 
-                      return (
-                        <button
-                          key={q.question.id}
-                          type="button"
-                          onClick={() => setCurrentIndex(idx)}
-                          className={`w-9 h-9 rounded-xl text-xs font-bold border flex items-center justify-center transition-all ${bgClass} ${
-                            isCurrent ? 'ring-2 ring-indigo-600 ring-offset-2' : ''
-                          }`}
-                        >
-                          {idx + 1}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                                  <span className="flex-1 text-xs sm:text-sm font-semibold text-slate-900 leading-snug">
+                                    {opt.text}
+                                  </span>
 
-                {/* Student Tools: Font size & Notepad */}
-                <div className="pt-3 border-t border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <Type className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Text Size:</span>
-                    </span>
-                    <div className="flex items-center gap-1">
+                                  {showAnswerKeys && isCorrectAnswer && (
+                                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                                      Correct Key
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* True / False Selection */}
+                        {currentQItem.question.type === 'true_false' && (
+                          <div className="grid grid-cols-2 gap-3 pt-1 max-w-md answer-area">
+                            {[true, false].map((tfVal) => {
+                              const isSelected = mockAnswers[currentQItem.question.id] === tfVal;
+                              return (
+                                <button
+                                  key={String(tfVal)}
+                                  type="button"
+                                  onClick={() => handleSelectAnswer(currentQItem.question.id, tfVal)}
+                                  className={`p-3.5 rounded-xl border text-sm font-black flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs ${
+                                    isSelected
+                                      ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-200'
+                                      : 'bg-white border-slate-300 text-slate-900 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Fill in Blank */}
+                        {currentQItem.question.type === 'fill_in_blank' && (
+                          <div className="space-y-1.5 pt-1 answer-area max-w-xl">
+                            <input
+                              type="text"
+                              value={mockAnswers[currentQItem.question.id] || ''}
+                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
+                              placeholder="Type the missing word or phrase..."
+                              className="w-full h-11 sm:h-12 px-4 rounded-xl border border-slate-300 bg-white text-sm sm:text-base font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                            />
+                            <div className="text-[11px] text-slate-500 font-semibold px-1">
+                              Type the answer accurately
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Cloze Passage Component */}
+                        {currentQItem.question.type === 'cloze_passage' && (
+                          <div className="space-y-4 pt-1 answer-area">
+                            {/* Word Bank if available */}
+                            {Array.isArray((currentQItem.question as any).wordBank) && (currentQItem.question as any).wordBank.length > 0 && (
+                              <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-2">
+                                <div className="text-[10px] font-black uppercase tracking-wider text-teal-950">
+                                  WORD BANK
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {(currentQItem.question as any).wordBank.map((term: string, tIdx: number) => (
+                                    <span
+                                      key={tIdx}
+                                      className="px-3 py-1 bg-white border border-teal-300 text-teal-950 rounded-xl text-xs font-bold shadow-2xs"
+                                    >
+                                      {term}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Passage with blanks */}
+                            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                              <div className="flex items-center justify-between text-xs font-black text-slate-800">
+                                <span className="uppercase tracking-wider">CLOZE PASSAGE</span>
+                                <span className="text-teal-700 font-bold">
+                                  {((currentQItem.question as any).blanks || []).length} blanks •{' '}
+                                  {
+                                    ((currentQItem.question as any).blanks || []).filter(
+                                      (b: any) => Boolean(mockAnswers[`${currentQItem.question.id}_${b.id}`])
+                                    ).length
+                                  } / {((currentQItem.question as any).blanks || []).length} completed
+                                </span>
+                              </div>
+
+                              <div className="text-sm font-serif text-slate-800 leading-[1.7] whitespace-pre-wrap max-w-[72ch]">
+                                {(currentQItem.question as any).passage || currentQItem.parentPassage || ''}
+                              </div>
+                            </div>
+
+                            {/* Interactive Blanks Answer Fields */}
+                            <div className="space-y-2.5 pt-1">
+                              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                                Complete Each Blank:
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {((currentQItem.question as any).blanks || []).map((blank: any, bIdx: number) => {
+                                  const blankKey = `${currentQItem.question.id}_${blank.id}`;
+                                  return (
+                                    <div
+                                      key={blank.id || bIdx}
+                                      className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center gap-2 shadow-2xs"
+                                    >
+                                      <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 flex items-center justify-center text-xs font-black shrink-0">
+                                        [{bIdx + 1}]
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={mockAnswers[blankKey] || ''}
+                                        onChange={(e) => handleSelectAnswer(blankKey, e.target.value)}
+                                        placeholder={`Blank [ ${bIdx + 1} ] answer...`}
+                                        className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                                      />
+                                      {showAnswerKeys && blank.correctAnswer && (
+                                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+                                          Key: {blank.correctAnswer}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Short Answer */}
+                        {currentQItem.question.type === 'short_answer' && (
+                          <div className="space-y-1.5 pt-1 answer-area max-w-2xl">
+                            <textarea
+                              rows={3}
+                              value={mockAnswers[currentQItem.question.id] || ''}
+                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
+                              placeholder="Type your concise answer here..."
+                              className="w-full p-3.5 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs resize-y min-h-[80px] max-h-[140px]"
+                            />
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
+                              <span>Be direct and concise</span>
+                              <span className="font-mono text-slate-600">{getCharCount(mockAnswers[currentQItem.question.id])} characters</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Long Writing / Essay */}
+                        {['paragraph', 'essay'].includes(currentQItem.question.type) && (
+                          <div className="space-y-1.5 pt-1 answer-area">
+                            <textarea
+                              rows={8}
+                              value={mockAnswers[currentQItem.question.id] || ''}
+                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
+                              placeholder="Type your written response here..."
+                              className="w-full p-4 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 leading-relaxed shadow-2xs resize-y min-h-[220px] max-h-[280px]"
+                            />
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
+                              <span>Organize your thoughts into coherent sentences and paragraphs.</span>
+                              <span className="font-mono text-slate-700 font-bold">
+                                {getWordCount(mockAnswers[currentQItem.question.id])} words
+                                {(currentQItem.question as any).minWords ? ` / ${(currentQItem.question as any).minWords} min words` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bottom Navigation Controls: Previous / Clear / Flag / Next */}
+                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={currentIndex === 0}
+                      onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                      className="px-4 py-2 rounded-xl border border-slate-300 hover:border-slate-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-slate-800 flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Previous</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setFontSize('normal')}
-                        className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          fontSize === 'normal' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
-                        }`}
+                        disabled={mockAnswers[currentQItem.question.id] === undefined || mockAnswers[currentQItem.question.id] === ''}
+                        onClick={() => handleSelectAnswer(currentQItem.question.id, undefined)}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-600 hover:text-rose-700 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Clear answer for this question"
                       >
-                        A
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Clear</span>
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => setFontSize('large')}
-                        className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          fontSize === 'large' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
-                        }`}
+                        disabled={currentIndex === totalQuestions - 1}
+                        onClick={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
+                        className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-white flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
                       >
-                        A+
+                        <span>Next</span>
+                        <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowNotepad(!showNotepad)}
-                    className="w-full py-1.5 px-3 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
-                  >
-                    <FileEdit className="w-3.5 h-3.5 text-slate-600" />
-                    <span>{showNotepad ? 'Hide Scratchpad' : 'Open Scratchpad'}</span>
-                  </button>
-
-                  {showNotepad && (
-                    <textarea
-                      rows={3}
-                      value={notepadText}
-                      onChange={(e) => setNotepadText(e.target.value)}
-                      placeholder="Rough scratch notes for this exam..."
-                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium text-slate-900 placeholder:text-slate-500 resize-none leading-relaxed shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 animate-fadeIn"
-                    />
-                  )}
                 </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500 font-semibold text-sm">
+                  No questions in this assessment.
+                </div>
+              )}
+            </div>
+
+            {/* Right Dashboard Sidebar (25-30% width: 3 to 4 cols) */}
+            <div className="lg:col-span-4 xl:col-span-3 p-5 sm:p-6 bg-slate-50/70 space-y-5">
+              {/* Time Remaining Card */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+                  Time Remaining
+                </div>
+                <div className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+                  {liveAssessment.exam.durationMinutes || 60}:00
+                </div>
+              </div>
+
+              {/* Progress Summary Chips */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-slate-900">
+                  <span>Exam Progress</span>
+                  <span>{Math.round((answeredCount / (totalQuestions || 1)) * 100)}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                    style={{ width: `${(answeredCount / (totalQuestions || 1)) * 100}%` }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px] text-center font-bold">
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+                    <div className="text-sm font-black">{answeredCount}</div>
+                    <div>Answered</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+                    <div className="text-sm font-black">{flaggedIds.size}</div>
+                    <div>Marked</div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700">
+                    <div className="text-sm font-black">{Math.max(0, totalQuestions - answeredCount)}</div>
+                    <div>Remaining</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Question Palette Grid */}
+              <div className="space-y-2">
+                <span className="text-xs font-black text-slate-900 block">
+                  Question Navigator
+                </span>
+                <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-1.5 max-h-56 overflow-y-auto pr-0.5">
+                  {flattenedQuestions.map((q, idx) => {
+                    const isCurrent = currentIndex === idx;
+                    const isAnswered = mockAnswers[q.question.id] !== undefined && mockAnswers[q.question.id] !== '';
+                    const isFlagged = flaggedIds.has(q.question.id);
+
+                    let bgClass = 'bg-white text-slate-900 font-bold border-slate-300 hover:border-indigo-400 shadow-2xs';
+                    if (isFlagged) {
+                      bgClass = 'bg-amber-500 text-white font-black border-amber-500 shadow-xs';
+                    } else if (isAnswered) {
+                      bgClass = 'bg-emerald-500 text-white font-black border-emerald-500 shadow-xs';
+                    }
+
+                    return (
+                      <button
+                        key={q.question.id}
+                        type="button"
+                        onClick={() => setCurrentIndex(idx)}
+                        className={`h-8 rounded-lg text-xs font-bold border flex items-center justify-center transition-all cursor-pointer ${bgClass} ${
+                          isCurrent ? 'ring-2 ring-indigo-600 ring-offset-1' : ''
+                        }`}
+                        title={`Question ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Student Tools: Font size & Notepad */}
+              <div className="pt-2 border-t border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 flex items-center gap-1">
+                    <Type className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Text Size:</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFontSize('normal')}
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        fontSize === 'normal' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      A
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFontSize('large')}
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        fontSize === 'large' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800 border border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      A+
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowNotepad(!showNotepad)}
+                  className="w-full py-1.5 px-3 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 hover:bg-slate-50 flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <FileEdit className="w-3.5 h-3.5 text-slate-600" />
+                  <span>{showNotepad ? 'Hide Scratchpad' : 'Open Scratchpad'}</span>
+                </button>
+
+                {showNotepad && (
+                  <textarea
+                    rows={3}
+                    value={notepadText}
+                    onChange={(e) => setNotepadText(e.target.value)}
+                    placeholder="Rough scratch notes for this exam..."
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-medium text-slate-900 placeholder:text-slate-500 resize-none leading-relaxed shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 animate-fadeIn"
+                  />
+                )}
               </div>
 
               {/* Submit Exam Button */}
-              <div className="pt-4 border-t border-slate-200">
+              <div className="pt-2 border-t border-slate-200 space-y-2">
                 <button
                   type="button"
                   onClick={() => alert(`Exam Submitted in Preview Mode! ${answeredCount} of ${totalQuestions} questions answered.`)}
-                  className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Submit Exam</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPublishModalOpen(true)}
+                  className="w-full py-2 px-3 rounded-xl bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Publish Exam to Students</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Visual Question Editor Modal */}
+      <QuestionVisualEditorModal
+        isOpen={Boolean(editingQuestion)}
+        question={editingQuestion}
+        onClose={() => setEditingQuestion(null)}
+        onSaveQuestion={handleSaveQuestionChanges}
+      />
+
+      {/* Simplified Publishing Dialog */}
+      <SimplePublishModal
+        isOpen={isPublishModalOpen}
+        examTitle={liveAssessment.exam.title}
+        totalQuestions={totalQuestions}
+        totalMarks={flattenedQuestions.reduce((acc, q) => acc + (Number(q.question.marks) || 1), 0)}
+        durationMinutes={liveAssessment.exam.durationMinutes || 60}
+        onClose={() => setIsPublishModalOpen(false)}
+        onConfirmPublish={(settings) => {
+          setIsPublishModalOpen(false);
+          if (onPublishExam) {
+            onPublishExam(settings);
+          } else {
+            alert('Assessment published successfully to classroom students!');
+            onClose();
+          }
+        }}
+      />
     </div>
   );
 };

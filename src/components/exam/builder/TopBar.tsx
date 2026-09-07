@@ -41,6 +41,7 @@ interface TopBarProps {
   onOpenBlueprint: () => void;
   onOpenAdjustExam?: () => void;
   onOpenCreationMode?: () => void;
+  onOpenAIWizard?: () => void;
   onOpenAISuite: () => void;
   onOpenSettings: () => void;
   onOpenPreview: () => void;
@@ -66,6 +67,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenBlueprint,
   onOpenAdjustExam,
   onOpenCreationMode,
+  onOpenAIWizard,
   onOpenAISuite,
   onOpenSettings,
   onOpenPreview,
@@ -240,6 +242,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Sliders className="w-4 h-4 text-indigo-600" />
             <span className="hidden sm:inline">Adjust Exam</span>
+          </button>
+        )}
+
+        {/* 🪄 AI Exam Generator Wizard */}
+        {onOpenAIWizard && (
+          <button
+            type="button"
+            onClick={onOpenAIWizard}
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Open 5-Step AI Exam Generator Wizard"
+          >
+            <Sparkles className="w-4 h-4 text-white" />
+            <span className="hidden sm:inline">AI Generator</span>
           </button>
         )}
 

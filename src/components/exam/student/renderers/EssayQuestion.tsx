@@ -30,12 +30,12 @@ export const EssayQuestionComponent: React.FC<EssayQuestionProps> = ({
   const isOverMax = maxWords !== undefined && wordCount > maxWords;
 
   return (
-    <div className="space-y-3 pt-2 max-w-3xl mx-auto">
-      <div className="p-5 sm:p-6 bg-slate-50 rounded-3xl border border-slate-200 shadow-xs space-y-3">
+    <div className="space-y-3 pt-1 w-full question-content">
+      <div className="p-4 sm:p-5 bg-slate-50/70 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 answer-area">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
-            <FileText className="w-4 h-4 text-rose-600" />
-            Essay Response
+          <label className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-indigo-600" />
+            Written Composition
           </label>
 
           {/* Word Count Indicator */}
@@ -43,29 +43,28 @@ export const EssayQuestionComponent: React.FC<EssayQuestionProps> = ({
             <span
               className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
                 isUnderMin || isOverMax
-                  ? 'bg-amber-50 border-amber-300 text-amber-800'
-                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-900'
               }`}
             >
-              {wordCount} Words
-              {minWords && ` (Min: ${minWords})`}
+              {wordCount} {minWords ? `/ ${minWords}` : ''} Words
               {maxWords && ` (Max: ${maxWords})`}
             </span>
           </div>
         </div>
 
         <textarea
-          rows={10}
+          rows={8}
           value={currentAnswer}
           onChange={(e) => onAnswerChange(e.target.value)}
-          placeholder="Compose your essay here. Organize your thoughts into clear paragraphs..."
-          className="w-full p-4 bg-white border-2 border-slate-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-100 rounded-2xl text-sm font-medium text-slate-900 placeholder:text-slate-400 leading-relaxed focus:outline-hidden transition-all resize-y"
+          placeholder="Compose your response here. Structure your answer logically with clear paragraphs..."
+          className="w-full p-4 bg-white border border-slate-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 leading-relaxed focus:outline-hidden transition-all resize-y min-h-[220px] max-h-[280px] shadow-2xs"
         />
 
-        <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
-          <span>Structure your answer logically with an introduction, body, and conclusion.</span>
+        <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
+          <span>Structure your answer logically with clear sentences.</span>
           {isUnderMin && (
-            <span className="text-amber-700 font-bold flex items-center gap-1">
+            <span className="text-amber-800 font-bold flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
               {minWords - wordCount} more word{minWords - wordCount > 1 ? 's' : ''} recommended
             </span>

@@ -332,9 +332,9 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       {sectionsList.length > 1 && (
         <nav
           aria-label="Exam Sections Navigation"
-          className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 shadow-2xs"
+          className="sticky top-[57px] z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-2 shadow-2xs"
         >
-          <div className="max-w-6xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="max-w-[1400px] mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
               Sections:
             </span>
@@ -371,9 +371,9 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       )}
 
       {/* Main Examination Workspace */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* Left / Center: Question Renderer Container */}
-        <div className="lg:col-span-3 space-y-6">
+      <main className="flex-1 max-w-[1400px] w-full mx-auto p-3 sm:p-5 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+        {/* Left / Center: Question Renderer Container (approx 70-75% width) */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-4">
           {currentQ ? (
             <QuestionRenderer
               questionItem={currentQ}
@@ -381,18 +381,18 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               onAnswerChange={handleAnswerChange}
             />
           ) : (
-            <div className="p-8 text-center text-slate-500 bg-white rounded-3xl border border-slate-200">
+            <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
               No questions available in this examination.
             </div>
           )}
 
           {/* Question Navigation Controls (Previous / Clear / Bookmark / Next) */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-3">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-between gap-2">
             <button
               type="button"
               disabled={currentIndex === 0}
               onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-2xs"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Previous</span>
@@ -403,7 +403,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
                 type="button"
                 onClick={handleClearCurrentAnswer}
                 disabled={answers[currentQ?.question?.id] === undefined || answers[currentQ?.question?.id] === null || answers[currentQ?.question?.id] === ''}
-                className="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                 title="Clear answer for this question"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -413,14 +413,14 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={handleToggleBookmark}
-                className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
                   isBookmarked
                     ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
                     : 'bg-slate-50 text-slate-700 hover:text-amber-700 hover:bg-amber-50/50 border-slate-200'
                 }`}
                 title={isBookmarked ? 'Remove review flag' : 'Flag to review before submitting'}
               >
-                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
                 <span className="hidden sm:inline">{isBookmarked ? 'Marked' : 'Mark for Review'}</span>
               </button>
             </div>
@@ -429,7 +429,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1))}
-                className="px-5 sm:px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
               >
                 <span>Next</span>
                 <ArrowRight className="w-4 h-4" />
@@ -438,7 +438,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={() => setShowSubmitConfirm(true)}
-                className="px-5 sm:px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Submit Exam</span>
@@ -447,14 +447,16 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           </div>
         </div>
 
-        {/* Right: Question Navigator Panel (Sticky on Desktop) */}
-        <div className="hidden lg:block lg:col-span-1 sticky top-20">
+        {/* Right: Question Navigator Panel (Sticky on Desktop, approx 25-30% width) */}
+        <div className="hidden lg:block lg:col-span-4 xl:col-span-3 sticky top-20">
           <QuestionNavigator
             questions={flattenedQuestions}
             currentIndex={currentIndex}
             answers={answers}
             bookmarkedIds={bookmarkedIds}
             onSelectIndex={setCurrentIndex}
+            timeRemainingSeconds={timeRemainingSeconds}
+            onSubmitExam={() => setShowSubmitConfirm(true)}
           />
         </div>
 
@@ -468,6 +470,8 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
                 answers={answers}
                 bookmarkedIds={bookmarkedIds}
                 onSelectIndex={setCurrentIndex}
+                timeRemainingSeconds={timeRemainingSeconds}
+                onSubmitExam={() => setShowSubmitConfirm(true)}
                 onClose={() => setNavigatorOpen(false)}
               />
             </div>

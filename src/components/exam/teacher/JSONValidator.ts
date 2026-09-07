@@ -62,6 +62,7 @@ export function normalizeQuestionType(typeStr: string): SupportedQuestionType | 
   if (raw === 'image_question' || raw === 'picture_description' || raw === 'picture_description_activity' || raw.includes('image') || raw.includes('picture')) return 'image_question';
   if (raw === 'audio_question' || raw === 'listening_activity' || raw.includes('audio') || raw.includes('listening')) return 'audio_question';
   if (raw === 'video_question' || raw === 'video_activity' || raw.includes('video')) return 'video_question';
+  if (raw === 'cloze_passage' || raw === 'cloze_activity' || raw === 'cloze' || raw.includes('cloze')) return 'cloze_passage';
 
   return null;
 }
@@ -487,6 +488,71 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             marks,
             explanation: q.explanation
           });
+        } else if (normalizedType === 'cloze_passage') {
+          const passage = String(q.passage || sec.passage || '').trim();
+          if (!passage) {
+            errors.push({
+              id: `missing_cloze_passage_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Cloze Passage Question "${questionId}" is missing passage text.`
+            });
+          }
+
+          const rawBlanks = q.blanks || q.blankAnswers || [];
+          if (!Array.isArray(rawBlanks) || rawBlanks.length === 0) {
+            errors.push({
+              id: `missing_cloze_blanks_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Cloze Passage Question "${questionId}" requires at least one blank with a correct answer.`
+            });
+          }
+
+          const blanks = (Array.isArray(rawBlanks) ? rawBlanks : []).map((b: any, bIdx: number) => {
+            const id = String(b.id || `blank_${bIdx + 1}`);
+            const rawAcc = b.acceptedAnswers || b.accepted || [];
+            const acceptedList = Array.isArray(rawAcc)
+              ? rawAcc.map(String)
+              : typeof rawAcc === 'string' && rawAcc.trim() ? [rawAcc.trim()] : [];
+            const correctAnswer = String(b.correctAnswer || b.answer || b.correct || (acceptedList.length > 0 ? acceptedList[0] : '')).trim();
+            const acceptedAnswers = acceptedList.length > 0 ? acceptedList : (correctAnswer ? [correctAnswer] : []);
+            return {
+              id,
+              blankIndex: Number(b.blankIndex) || bIdx + 1,
+              correctAnswer,
+              acceptedAnswers,
+              marks: Number(b.marks) || 1
+            };
+          });
+
+          const missingAns = blanks.filter(b => !b.correctAnswer);
+          if (missingAns.length > 0) {
+            errors.push({
+              id: `missing_cloze_answer_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Cloze Passage Question "${questionId}" has blanks without a correct answer.`
+            });
+          }
+
+          const wordBank = Array.isArray(q.wordBank)
+            ? q.wordBank.map(String)
+            : Array.isArray(q.options)
+            ? q.options.map((opt: any) => typeof opt === 'string' ? opt : opt.text)
+            : undefined;
+
+          validatedQuestions.push({
+            id: questionId,
+            type: 'cloze_passage',
+            question: questionText || 'Complete the missing words in the passage.',
+            passage,
+            blanks,
+            wordBank,
+            difficulty: (q.difficulty || 'medium').toLowerCase(),
+            marks: Number(q.marks) || blanks.reduce((acc, b) => acc + (b.marks || 1), 0),
+            explanation: q.explanation
+          } as any);
         }
 
         // Warnings for missing explanations
@@ -500,6 +566,24 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
         }
       });
 
+      const validatedActivities = (Array.isArray(sec.activities) ? sec.activities : []).map((act: any) => {
+        if (act.activityType === 'cloze_activity') {
+          const rawBlanks = act.blanks || [];
+          const blanks = (Array.isArray(rawBlanks) ? rawBlanks : []).map((b: any, bIdx: number) => ({
+            id: String(b.id || `blank_${bIdx + 1}`),
+            correctAnswer: String(b.correctAnswer || b.answer || '').trim(),
+            acceptedAnswers: Array.isArray(b.acceptedAnswers) ? b.acceptedAnswers.map(String) : [String(b.correctAnswer || '')],
+            marks: Number(b.marks) || 1
+          }));
+          return {
+            ...act,
+            blanks,
+            marks: Number(act.marks) || blanks.reduce((acc, b) => acc + b.marks, 0)
+          };
+        }
+        return act;
+      });
+
       validatedSections.push({
         id: sectionId,
         title: sectionTitle,
@@ -507,7 +591,7 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
         instructions: sec.instructions,
         passage: sec.passage,
         questions: validatedQuestions,
-        activities: Array.isArray(sec.activities) ? sec.activities : []
+        activities: validatedActivities
       });
     });
   }
@@ -563,3 +647,40 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
     stats
   };
 }
+
+/**
+ * Generates an actionable, teacher-friendly correction prompt to send back to AI when JSON validation encounters issues.
+ */
+export function generateCorrectionPrompt(
+  errors: ValidationError[],
+  warnings: ValidationWarning[] = [],
+  originalInput: string = ''
+): string {
+  const errorLines = errors.map((e, idx) => `• Issue ${idx + 1}: ${e.message}`).join('\n');
+  const warningLines = warnings.length > 0
+    ? '\n\nRecommendations to refine:\n' + warnings.map((w, idx) => `• Tip ${idx + 1}: ${w.message}`).join('\n')
+    : '';
+  const inputSnippet = originalInput && originalInput.trim().length > 0
+    ? `\n\nPREVIOUS JSON PROVIDED:\n${originalInput.trim().slice(0, 1000)}\n`
+    : '';
+
+  return `CRITICAL FIX REQUIRED: The examination JSON you provided has ${errors.length} issue${errors.length === 1 ? '' : 's'} that must be corrected:
+
+================================================================================
+ISSUES DETECTED
+================================================================================
+${errorLines}${warningLines}${inputSnippet}
+
+================================================================================
+CORRECTION INSTRUCTIONS
+================================================================================
+1. Fix every specific issue listed above.
+2. Verify all multiple choice questions have at least 2 options and a valid correctAnswer.
+3. Verify all reorder questions have at least 2 sequence items.
+4. Verify all cloze passages include the passage text with numbered blanks and a valid correctAnswer for each blank.
+5. Strictly adhere to the requested question counts, question types, and marks.
+6. Ground all content strictly in the provided teaching material.
+7. Return ONLY valid JSON matching the EdTechra Assessment Schema.
+8. DO NOT include markdown code fences (\`\`\`json), comments, explanations, or conversational text.`;
+}
+

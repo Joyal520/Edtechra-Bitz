@@ -26,6 +26,10 @@ export function calculateQuestionMarks(q: CanonicalQuestion): number {
     }
     return Number(q.marks) || 5;
   }
+  if (q.type === 'cloze_passage') {
+    const clozeQ = q as any;
+    return Number(clozeQ.marks) || (Array.isArray(clozeQ.blanks) && clozeQ.blanks.length > 0 ? clozeQ.blanks.length : 5);
+  }
   return Number(q.marks) || getDefaultMarksForType(q.type);
 }
 
@@ -38,7 +42,8 @@ export function calculateExamTotalMarks(sections: ExamSection[]): number {
     const qMarks = (sec.questions || []).reduce((qAcc, q) => qAcc + calculateQuestionMarks(q), 0);
     const actMarks = (sec.activities || []).reduce((actAcc, act) => {
       const actQMarks = (act.questions || []).reduce((qAcc, q) => qAcc + calculateQuestionMarks(q), 0);
-      return actAcc + (act.marks || actQMarks);
+      const clozeMarks = act.blanks ? act.blanks.reduce((acc, b) => acc + (Number(b.marks) || 1), 0) : 5;
+      return actAcc + (act.marks || (act.activityType === 'cloze_activity' ? clozeMarks : actQMarks));
     }, 0);
     return secAcc + qMarks + actMarks;
   }, 0);
@@ -57,6 +62,7 @@ export function calculateTotalQuestionCount(sections: ExamSection[]): number {
       return qAcc + 1;
     }, 0);
     const actCount = (sec.activities || []).reduce((actAcc, act) => {
+      if (act.activityType === 'cloze_activity') return actAcc + 1;
       return actAcc + (act.questions?.length || (act.pictureTaskType === 'write_paragraph' ? 1 : 0));
     }, 0);
     return secAcc + qCount + actCount;
@@ -187,6 +193,32 @@ export function flattenExamQuestions(sections: ExamSection[]): FlattenedExamQues
           parentActivityType: act.activityType,
           pictureTaskType: act.pictureTaskType,
           rubric: act.rubric
+        });
+        globalIndex++;
+      } else if (act.activityType === 'cloze_activity') {
+        const clozeMarks = act.blanks ? act.blanks.reduce((acc, b) => acc + (Number(b.marks) || 1), 0) : 5;
+        const pseudoQ: CanonicalQuestion = {
+          id: `${act.id}_cloze`,
+          type: 'cloze_passage',
+          question: act.instructions || act.title || 'Complete the missing words in the passage.',
+          passage: act.passage || '',
+          blanks: act.blanks || [],
+          wordBank: act.wordBank || [],
+          difficulty: 'medium',
+          marks: act.marks || clozeMarks,
+          required: true
+        } as any;
+
+        result.push({
+          question: pseudoQ,
+          sectionId: sec.id,
+          sectionTitle: sec.title,
+          globalIndex,
+          displayNumber: globalIndex + 1,
+          parentPassage: act.passage,
+          parentPassageTitle: act.title,
+          parentActivityTitle: act.title,
+          parentActivityType: act.activityType
         });
         globalIndex++;
       }

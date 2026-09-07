@@ -1126,6 +1126,21 @@
   color: #0f172a !important;
 }
 
+/* ========================================================================== */
+/* QUESTION HEIGHT & CONTAINER ERGONOMICS                                     */
+/* Question containers hug content naturally without artificial dead space   */
+/* ========================================================================== */
 
+.question-card {
+  height: auto !important;
+  min-height: 0 !important;
+}
 
+.question-content {
+  height: auto !important;
+  min-height: 0 !important;
+}
 
+.answer-area {
+  height: auto !important;
+}

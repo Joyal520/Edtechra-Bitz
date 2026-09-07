@@ -191,7 +191,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   // 4. STUDENT: Already Submitted View
   if (!isTeacher && studentResult && canonicalActiveExam) {
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-[#070e1f]">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
         <ExamResultView
           result={studentResult}
           examTitle={canonicalActiveExam.exam.title}
@@ -206,7 +206,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   // 5. STUDENT: Exam Taking Session
   if (!isTeacher && canonicalActiveExam && activeExam) {
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-[#070e1f]">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-100">
         <ExamSession
           exam={canonicalActiveExam}
           classroomId={classroomId}

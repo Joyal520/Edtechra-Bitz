@@ -35,6 +35,7 @@ import { OLStyleExamModal } from './modals/OLStyleExamModal';
 import { AdjustExamModal } from './modals/AdjustExamModal';
 import { AIPromptBridgeModal } from './modals/AIPromptBridgeModal';
 import { AIAssessmentSuiteModal } from './ai/AIAssessmentSuiteModal';
+import { AIExamGeneratorWizard } from './ai/AIExamGeneratorWizard';
 import { QuestionBankModal } from './question-bank/QuestionBankModal';
 import { AssessmentSettingsDrawer } from './settings/AssessmentSettingsDrawer';
 import { PublishValidationModal } from './publishing/PublishValidationModal';
@@ -147,8 +148,9 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
     assessment.sections?.[0]?.id || 'sec_1'
   );
   const isCreatingNew = isNewExam !== undefined ? isNewExam : !initialAssessment;
+  const [isAIWizardOpen, setIsAIWizardOpen] = useState(isCreatingNew);
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
-  const [isCreationModeOpen, setIsCreationModeOpen] = useState(isCreatingNew);
+  const [isCreationModeOpen, setIsCreationModeOpen] = useState(false);
   const [isStandardExamModalOpen, setIsStandardExamModalOpen] = useState(false);
   const [isOLStyleModalOpen, setIsOLStyleModalOpen] = useState(false);
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
@@ -1095,7 +1097,7 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   const handleSelectCreationMode = (mode: 'standard' | 'ol_style' | 'custom' | string) => {
     setIsCreationModeOpen(false);
     if (mode === 'standard') {
-      setIsStandardExamModalOpen(true);
+      setIsAIWizardOpen(true);
     } else if (mode === 'ol_style') {
       setIsOLStyleModalOpen(true);
     } else if (mode === 'ol_practice') {
@@ -1197,6 +1199,7 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         onOpenBlueprint={() => setIsBlueprintOpen(true)}
         onOpenAdjustExam={() => setIsAdjustModalOpen(true)}
         onOpenCreationMode={() => setIsCreationModeOpen(true)}
+        onOpenAIWizard={() => setIsAIWizardOpen(true)}
         onOpenAISuite={() => setIsAISuiteOpen(true)}
         onOpenSettings={() => setIsSettingsDrawerOpen(true)}
         onOpenPreview={() => setIsPreviewModalOpen(true)}
@@ -1322,6 +1325,26 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         onSelectMode={handleSelectCreationMode}
       />
 
+      {/* 5a. Teacher-Friendly AI Exam Generator Wizard */}
+      <AIExamGeneratorWizard
+        isOpen={isAIWizardOpen}
+        initialTopic={assessment.exam.title}
+        initialSubject={assessment.exam.subject}
+        initialGrade={assessment.exam.grade}
+        onClose={() => setIsAIWizardOpen(false)}
+        onExamCreated={(newAssessment) => {
+          updateAssessment(() => newAssessment);
+          if (newAssessment.sections?.[0]) {
+            setSelectedSectionId(newAssessment.sections[0].id);
+            if (newAssessment.sections[0].questions?.[0]) {
+              setSelectedQuestionId(newAssessment.sections[0].questions[0].id);
+            }
+          }
+          setIsAIWizardOpen(false);
+          setIsPreviewModalOpen(true);
+        }}
+      />
+
       {/* 5b. Standard Exam Workflow Modal */}
       <StandardExamModal
         isOpen={isStandardExamModalOpen}
@@ -1380,6 +1403,23 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         assessment={assessment}
         theme={activeTheme}
         onClose={() => setIsPreviewModalOpen(false)}
+        onUpdateAssessment={(updated) => updateAssessment(() => updated)}
+        onPublishExam={async (settings) => {
+          const updatedMeta = settings?.mode === 'schedule' && settings.scheduledDate
+            ? {
+                ...assessment.exam,
+                startsAt: `${settings.scheduledDate}T${settings.startTime || '09:00'}:00`,
+                endsAt: `${settings.scheduledDate}T${settings.endTime || '11:00'}:00`
+              }
+            : assessment.exam;
+          const assessmentToSave: CanonicalAssessmentV2 = {
+            ...assessment,
+            exam: updatedMeta
+          };
+          updateAssessment(() => assessmentToSave);
+          await onSaveAssessment(assessmentToSave, true);
+          setIsPreviewModalOpen(false);
+        }}
       />
 
       {/* 8. Question Bank Modal */}

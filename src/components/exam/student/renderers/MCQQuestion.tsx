@@ -21,8 +21,8 @@ export const MCQQuestion: React.FC<MCQQuestionProps> = ({
   const options = question.options || [];
 
   return (
-    <div className="space-y-3 pt-2">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+    <div className="space-y-2 pt-1 answer-area">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {options.map((opt) => {
           const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
 
@@ -31,25 +31,25 @@ export const MCQQuestion: React.FC<MCQQuestionProps> = ({
               key={opt.id}
               type="button"
               onClick={() => onAnswerChange(opt.id)}
-              className={`p-4 sm:p-5 rounded-2xl border text-left flex items-center gap-3.5 cursor-pointer transition-all duration-150 active:scale-[0.98] ${
+              className={`p-3 sm:p-3.5 rounded-xl border text-left flex items-center gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] ${
                 isSelected
-                  ? 'bg-indigo-600 text-white border-indigo-600 ring-4 ring-indigo-200 shadow-md'
-                  : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  ? 'bg-indigo-50 border-indigo-600 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs'
+                  : 'bg-white text-slate-900 border-slate-200 hover:bg-slate-50 hover:border-indigo-300 shadow-2xs'
               }`}
             >
               {/* Option Letter Chip */}
               <div
-                className={`w-9 h-9 rounded-xl border flex items-center justify-center font-black text-sm shrink-0 transition-colors ${
+                className={`w-7 h-7 rounded-lg border flex items-center justify-center font-black text-xs shrink-0 transition-colors ${
                   isSelected
-                    ? 'bg-white text-indigo-700 border-white shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-300'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-300'
                 }`}
               >
-                {isSelected ? <Check className="w-4 h-4 stroke-[3]" /> : opt.id.toUpperCase()}
+                {isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : opt.id.toUpperCase()}
               </div>
 
               {/* Option Text */}
-              <span className={`text-sm sm:text-base font-bold leading-snug flex-1 ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+              <span className={`text-xs sm:text-sm font-semibold leading-snug flex-1 ${isSelected ? 'text-indigo-950 font-bold' : 'text-slate-800'}`}>
                 {opt.text}
               </span>
             </button>

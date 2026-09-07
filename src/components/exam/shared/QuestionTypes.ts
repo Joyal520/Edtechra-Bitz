@@ -82,6 +82,21 @@ export const ALL_QUESTION_TYPES: QuestionTypeMeta[] = [
     }
   },
   {
+    type: 'cloze_passage',
+    title: 'Cloze Passage',
+    shortLabel: 'Cloze',
+    description: 'Complete missing words in a contextual passage',
+    category: 'objective',
+    defaultMarks: 5,
+    icon: 'FileSpreadsheet',
+    color: {
+      bg: 'bg-teal-950/40 hover:bg-teal-900/50',
+      border: 'border-teal-500/30 hover:border-teal-500/60',
+      text: 'text-teal-300',
+      badge: 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+    }
+  },
+  {
     type: 'matching',
     title: 'Matching',
     shortLabel: 'Matching',
