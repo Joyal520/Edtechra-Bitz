@@ -168,19 +168,30 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
       {/* Main Hierarchical Tree View */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
-        {/* Exam Title & Instructions Anchor */}
+        {/* Exam Title & Instructions Anchors */}
         <div
           onClick={() => {
             onSelectSection(sections[0]?.id || 'sec_1');
           }}
           className="p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100/80 cursor-pointer transition-colors space-y-0.5 shadow-2xs"
         >
-          <span className="text-xs font-black text-slate-950 truncate block">
-            {assessment.exam.title || 'Untitled Assessment'}
-          </span>
-          <span className="text-xs text-slate-700 font-semibold block truncate">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span className="text-xs font-black text-slate-950 truncate block">
+              {assessment.exam.title || 'Untitled Assessment'}
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-600 font-semibold block truncate pl-5">
             {assessment.exam.subject} • {assessment.exam.grade}
           </span>
+        </div>
+
+        <div
+          onClick={() => onSelectSection(sections[0]?.id || 'sec_1')}
+          className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-2 text-xs text-slate-800 font-bold shadow-2xs"
+        >
+          <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <span className="truncate">Instructions</span>
         </div>
 
         {/* Section List */}

@@ -16,7 +16,9 @@ import {
   Clock,
   AlertCircle,
   Pencil,
-  Settings
+  Settings,
+  Sliders,
+  Sparkles
 } from 'lucide-react';
 import { AssessmentType, ExamSection } from '../shared/ExamSchema';
 
@@ -37,6 +39,8 @@ interface TopBarProps {
   onChangeTitle: (title: string) => void;
   onBack: () => void;
   onOpenBlueprint: () => void;
+  onOpenAdjustExam?: () => void;
+  onOpenCreationMode?: () => void;
   onOpenAISuite: () => void;
   onOpenSettings: () => void;
   onOpenPreview: () => void;
@@ -60,6 +64,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onChangeTitle,
   onBack,
   onOpenBlueprint,
+  onOpenAdjustExam,
+  onOpenCreationMode,
   onOpenAISuite,
   onOpenSettings,
   onOpenPreview,
@@ -224,11 +230,37 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right Section: Action Controls */}
       <div className="flex items-center gap-2">
+        {/* 🎛️ Adjust Exam */}
+        {onOpenAdjustExam && (
+          <button
+            type="button"
+            onClick={onOpenAdjustExam}
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-900 hover:bg-indigo-100 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            title="Adjust exam difficulty, duration, and question distribution"
+          >
+            <Sliders className="w-4 h-4 text-indigo-600" />
+            <span className="hidden sm:inline">Adjust Exam</span>
+          </button>
+        )}
+
+        {/* ✨ Creation Flow / Mode */}
+        {onOpenCreationMode && (
+          <button
+            type="button"
+            onClick={onOpenCreationMode}
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Switch Creation Workflow (Standard, O/L Style, Custom)"
+          >
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <span className="hidden sm:inline">Modes</span>
+          </button>
+        )}
+
         {/* 📋 Exam Blueprint */}
         <button
           type="button"
           onClick={onOpenBlueprint}
-          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50 shadow-2xs transition-all flex items-center gap-1.5"
+          className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 text-slate-800 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
           title="Configure Exam Blueprint Matrix"
         >
           <FileSpreadsheet className="w-4 h-4 text-indigo-600" />

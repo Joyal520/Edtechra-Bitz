@@ -19,25 +19,25 @@ export const QUESTION_STATUS_CONFIG: Record<QuestionAnswerStatus, QuestionStatus
   current: {
     status: 'current',
     label: 'Current',
-    badgeClass: 'bg-indigo-600 text-white border-indigo-400 ring-2 ring-indigo-400/40 shadow-md',
+    badgeClass: 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-400/50 shadow-xs font-black',
     iconClass: 'text-white'
   },
   answered: {
     status: 'answered',
     label: 'Answered',
-    badgeClass: 'bg-emerald-600/90 text-white border-emerald-400/80 shadow-xs',
-    iconClass: 'text-emerald-200'
+    badgeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-2xs font-bold',
+    iconClass: 'text-white'
   },
   marked_for_review: {
     status: 'marked_for_review',
     label: 'Marked for Review',
-    badgeClass: 'bg-amber-500/90 text-slate-950 font-black border-amber-300 shadow-xs',
-    iconClass: 'text-amber-950'
+    badgeClass: 'bg-amber-500 text-white border-amber-500 shadow-2xs font-black',
+    iconClass: 'text-white'
   },
   unanswered: {
     status: 'unanswered',
     label: 'Unanswered',
-    badgeClass: 'bg-slate-800/80 text-slate-400 border-slate-700/80 hover:bg-slate-700/80 hover:text-white',
-    iconClass: 'text-slate-500'
+    badgeClass: 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900 font-semibold',
+    iconClass: 'text-slate-400'
   }
 };

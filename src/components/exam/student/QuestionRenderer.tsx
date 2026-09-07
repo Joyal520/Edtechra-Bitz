@@ -134,30 +134,30 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
   };
 
   const coreCard = (
-    <div className="bg-[#0f1b3d] rounded-3xl border border-blue-800/80 p-5 sm:p-7 shadow-xl space-y-5">
+    <div className="bg-white rounded-3xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5 text-slate-900 [color-scheme:light]">
       {/* Question Header: Section, Question Number & Marks */}
-      <div className="flex items-center justify-between border-b border-blue-900/60 pb-3.5">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
         <div className="flex items-center gap-2.5">
           <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-xs">
             {displayNumber}
           </span>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400">
+            <div className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
               {sectionTitle}
             </div>
-            <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${meta.color.badge}`}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.color.badge}`}>
               {meta.title}
             </span>
           </div>
         </div>
 
-        <div className="text-xs font-black text-emerald-300 px-3 py-1 rounded-xl bg-emerald-950/50 border border-emerald-500/40">
-          {question.marks || meta.defaultMarks} Mark{question.marks > 1 ? 's' : ''}
+        <div className="text-xs font-black text-emerald-800 px-3 py-1 rounded-xl bg-emerald-50 border border-emerald-200">
+          {question.marks || meta.defaultMarks} Mark{(question.marks || meta.defaultMarks) > 1 ? 's' : ''}
         </div>
       </div>
 
       {/* Question Prompt */}
-      <h2 className="text-base sm:text-lg md:text-xl font-black text-white leading-relaxed tracking-wide">
+      <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900 leading-relaxed tracking-wide">
         {question.question}
       </h2>
 

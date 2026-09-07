@@ -58,9 +58,9 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
 
   return (
     <div className="space-y-4 pt-2">
-      <div className="flex items-center justify-between text-xs text-indigo-200">
+      <div className="flex items-center justify-between text-xs text-indigo-800">
         <span className="font-bold flex items-center gap-1.5">
-          <GitFork className="w-4 h-4 text-violet-400" />
+          <GitFork className="w-4 h-4 text-violet-600" />
           Click an item on the left, then click its matching match on the right:
         </span>
 
@@ -68,7 +68,7 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
           <button
             type="button"
             onClick={handleResetAll}
-            className="text-[11px] text-slate-400 hover:text-rose-400 flex items-center gap-1 cursor-pointer transition-colors"
+            className="text-[11px] text-slate-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
             <span>Reset Pairs</span>
@@ -79,7 +79,7 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Left Column (Items) */}
         <div className="space-y-2.5">
-          <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 px-1">
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-600 px-1">
             Column A (Terms)
           </div>
           {pairs.map((p, idx) => {
@@ -92,21 +92,21 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
                 onClick={() => handleSelectLeft(p.left)}
                 className={`p-4 rounded-2xl border text-left cursor-pointer transition-all duration-150 flex items-center justify-between gap-3 ${
                   isSelected
-                    ? 'bg-violet-600 text-white border-violet-400 ring-4 ring-violet-400/30 shadow-lg'
+                    ? 'bg-violet-600 text-white border-violet-600 ring-4 ring-violet-200 shadow-sm'
                     : currentMatch
-                    ? 'bg-[#121a38] text-white border-violet-500/50 shadow-xs'
-                    : 'bg-[#0b142c] text-slate-200 border-blue-800/60 hover:bg-[#132047] hover:border-violet-500/40'
+                    ? 'bg-violet-50 text-violet-950 border-violet-300 shadow-2xs'
+                    : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100 hover:border-violet-300'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-7 h-7 rounded-xl bg-[#070e1f] text-violet-300 border border-blue-900 flex items-center justify-center font-black text-xs shrink-0">
+                  <span className="w-7 h-7 rounded-xl bg-white text-violet-700 border border-slate-200 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
                     <div className="text-sm font-bold truncate">{p.left}</div>
                     {currentMatch && (
-                      <div className="text-[11px] text-violet-300 font-medium truncate mt-0.5">
-                        Matched with: <strong className="text-white">{currentMatch}</strong>
+                      <div className="text-[11px] text-violet-700 font-medium truncate mt-0.5">
+                        Matched with: <strong className="text-violet-900">{currentMatch}</strong>
                       </div>
                     )}
                   </div>
@@ -119,7 +119,7 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
                       e.stopPropagation();
                       handleClearPair(p.left);
                     }}
-                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all shrink-0"
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-all shrink-0"
                     title="Remove match"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -132,7 +132,7 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
 
         {/* Right Column (Matches) */}
         <div className="space-y-2.5">
-          <div className="text-[11px] font-black uppercase tracking-wider text-slate-400 px-1">
+          <div className="text-[11px] font-black uppercase tracking-wider text-slate-600 px-1">
             Column B (Matches)
           </div>
           {rightOptions.map((rightText, rIdx) => {
@@ -145,23 +145,23 @@ export const MatchingQuestionComponent: React.FC<MatchingQuestionProps> = ({
                 onClick={() => handleSelectRight(rightText)}
                 className={`w-full p-4 rounded-2xl border text-left cursor-pointer transition-all duration-150 flex items-center justify-between gap-3 ${
                   selectedLeft
-                    ? 'hover:border-violet-400 hover:bg-violet-950/40 active:scale-[0.98]'
+                    ? 'hover:border-violet-400 hover:bg-violet-50/60 active:scale-[0.98]'
                     : ''
                 } ${
                   isClaimedBy
-                    ? 'bg-violet-950/50 text-violet-200 border-violet-500/50'
-                    : 'bg-[#0b142c] text-slate-200 border-blue-800/60'
+                    ? 'bg-violet-50 text-violet-950 border-violet-300'
+                    : 'bg-slate-50 text-slate-800 border-slate-200'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-7 h-7 rounded-xl bg-[#070e1f] text-slate-400 border border-blue-900 flex items-center justify-center font-black text-xs shrink-0">
+                  <span className="w-7 h-7 rounded-xl bg-white text-slate-700 border border-slate-200 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
                     {String.fromCharCode(65 + rIdx)}
                   </span>
                   <span className="text-sm font-semibold leading-snug">{rightText}</span>
                 </div>
 
                 {isClaimedBy && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-500/30 text-violet-200 border border-violet-400/40 shrink-0">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-300 shrink-0">
                     Linked
                   </span>
                 )}

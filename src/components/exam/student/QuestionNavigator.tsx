@@ -52,22 +52,22 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
   const unansweredCount = total - answeredCount;
 
   return (
-    <div className="bg-[#0b142c] border border-blue-800/80 rounded-3xl p-5 shadow-xl space-y-5 flex flex-col">
+    <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-5 flex flex-col text-slate-900 [color-scheme:light]">
       {/* Navigator Header */}
-      <div className="flex items-center justify-between border-b border-blue-900/60 pb-3">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
-          <h3 className="text-xs font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+          <h3 className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
             <Bookmark className="w-3.5 h-3.5" />
             Question Navigator
           </h3>
-          <p className="text-[11px] text-slate-400 font-medium">Jump directly to any question</p>
+          <p className="text-[11px] text-slate-500 font-medium">Jump directly to any question</p>
         </div>
 
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-blue-900/40 md:hidden cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 md:hidden cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -76,17 +76,17 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
 
       {/* Summary Stat Chips */}
       <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
-        <div className="p-2 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300">
+        <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
           <div className="text-sm font-black">{answeredCount}</div>
           <div className="text-[10px] uppercase tracking-wider opacity-80">Answered</div>
         </div>
 
-        <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-700/60 text-slate-300">
+        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700">
           <div className="text-sm font-black">{unansweredCount}</div>
           <div className="text-[10px] uppercase tracking-wider opacity-80">Remaining</div>
         </div>
 
-        <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-300">
+        <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
           <div className="text-sm font-black">{reviewCount}</div>
           <div className="text-[10px] uppercase tracking-wider opacity-80">Review</div>
         </div>
@@ -116,7 +116,7 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
 
               {/* Status Icons Overlay */}
               {isAnswered && !isCurrent && (
-                <Check className="w-2.5 h-2.5 absolute top-1 right-1 text-emerald-300" />
+                <Check className="w-2.5 h-2.5 absolute top-1 right-1 text-white" />
               )}
               {isMarked && (
                 <span className="absolute -top-1 -right-1 text-[10px]" title="Marked for review">
@@ -129,21 +129,21 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
       </div>
 
       {/* Status Legend */}
-      <div className="pt-2 border-t border-blue-900/60 space-y-1 text-[11px] text-slate-400 font-medium">
+      <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px] text-slate-500 font-medium">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
           <span>Current question</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
           <span>Answered (saved)</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
           <span>Marked for review (🔖)</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-slate-700" />
+          <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
           <span>Unanswered</span>
         </div>
       </div>

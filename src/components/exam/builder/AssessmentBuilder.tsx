@@ -29,14 +29,26 @@ import { AssessmentCanvas } from './canvas/AssessmentCanvas';
 import { LivePreviewModal } from './preview/LivePreviewModal';
 import { AddQuestionModal, AddItemType } from './modals/AddQuestionModal';
 import { ExamBlueprintModal } from './modals/ExamBlueprintModal';
-import { CreationModeModal, CreationMode } from './modals/CreationModeModal';
+import { CreationModeModal } from './modals/CreationModeModal';
+import { StandardExamModal } from './modals/StandardExamModal';
+import { OLStyleExamModal } from './modals/OLStyleExamModal';
+import { AdjustExamModal } from './modals/AdjustExamModal';
+import { AIPromptBridgeModal } from './modals/AIPromptBridgeModal';
 import { AIAssessmentSuiteModal } from './ai/AIAssessmentSuiteModal';
 import { QuestionBankModal } from './question-bank/QuestionBankModal';
 import { AssessmentSettingsDrawer } from './settings/AssessmentSettingsDrawer';
 import { PublishValidationModal } from './publishing/PublishValidationModal';
+import {
+  generateStandardExamBlueprint,
+  generateOLStyleBlueprint,
+  adjustExamBlueprint,
+  StandardExamInput,
+  AdjustExamOptions
+} from '../shared/assessmentBlueprints';
 
 interface AssessmentBuilderProps {
   initialAssessment?: CanonicalAssessmentV2;
+  isNewExam?: boolean;
   classroomId: string;
   onSaveAssessment: (assessment: CanonicalAssessmentV2, isPublished: boolean) => Promise<void>;
   onBack: () => void;
@@ -44,6 +56,7 @@ interface AssessmentBuilderProps {
 
 export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   initialAssessment,
+  isNewExam,
   classroomId,
   onSaveAssessment,
   onBack
@@ -133,8 +146,21 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   const [addModalTargetSectionId, setAddModalTargetSectionId] = useState<string>(
     assessment.sections?.[0]?.id || 'sec_1'
   );
+  const isCreatingNew = isNewExam !== undefined ? isNewExam : !initialAssessment;
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
-  const [isCreationModeOpen, setIsCreationModeOpen] = useState(false);
+  const [isCreationModeOpen, setIsCreationModeOpen] = useState(isCreatingNew);
+  const [isStandardExamModalOpen, setIsStandardExamModalOpen] = useState(false);
+  const [isOLStyleModalOpen, setIsOLStyleModalOpen] = useState(false);
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [isAIPromptBridgeOpen, setIsAIPromptBridgeOpen] = useState(false);
+  const [aiPromptBridgeInput, setAiPromptBridgeInput] = useState<StandardExamInput>({
+    subject: assessment.exam.subject || 'English Language',
+    grade: assessment.exam.grade || 'Grade 10',
+    topic: assessment.exam.topic || assessment.exam.title || 'Simple Present Tense',
+    lessonNotes: '',
+    difficulty: assessment.exam.difficulty || 'Medium',
+    durationMinutes: assessment.exam.durationMinutes || 45
+  });
   const [isAISuiteOpen, setIsAISuiteOpen] = useState(false);
   const [isQuestionBankOpen, setIsQuestionBankOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
@@ -870,7 +896,7 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   };
 
   // O/L Style Exam Template Loader
-  const handleLoadOLPracticeTemplate = () => {
+  const _handleLoadOLPracticeTemplate = () => {
     const olAssessment: CanonicalAssessmentV2 = {
       schemaVersion: '2.0',
       assessmentType: 'exam',
@@ -1066,15 +1092,64 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   };
 
   // Creation Mode Selector Handler
-  const handleSelectCreationMode = (mode: CreationMode) => {
+  const handleSelectCreationMode = (mode: 'standard' | 'ol_style' | 'custom' | string) => {
     setIsCreationModeOpen(false);
-    if (mode === 'manual') {
-      // Keep blank draft
+    if (mode === 'standard') {
+      setIsStandardExamModalOpen(true);
+    } else if (mode === 'ol_style') {
+      setIsOLStyleModalOpen(true);
+    } else if (mode === 'ol_practice') {
+      _handleLoadOLPracticeTemplate();
+    } else if (mode === 'custom' || mode === 'manual') {
+      // Keep open for direct custom visual editing
     } else if (mode === 'ai_blueprint') {
       setIsBlueprintOpen(true);
-    } else if (mode === 'ol_style') {
-      handleLoadOLPracticeTemplate();
     }
+  };
+
+  const handleGenerateStandardExam = (input: StandardExamInput) => {
+    const generated = generateStandardExamBlueprint(input);
+    updateAssessment(() => generated);
+    if (generated.sections?.[0]) {
+      setSelectedSectionId(generated.sections[0].id);
+      setSelectedQuestionId(generated.sections[0].questions?.[0]?.id || null);
+      setSelectedActivityId(generated.sections[0].activities?.[0]?.id || null);
+    }
+    setIsStandardExamModalOpen(false);
+  };
+
+  const handleGenerateOLStyleExam = (input: StandardExamInput) => {
+    const generated = generateOLStyleBlueprint(input);
+    updateAssessment(() => generated);
+    if (generated.sections?.[0]) {
+      setSelectedSectionId(generated.sections[0].id);
+      setSelectedQuestionId(generated.sections[0].questions?.[0]?.id || null);
+      setSelectedActivityId(generated.sections[0].activities?.[0]?.id || null);
+    }
+    setIsOLStyleModalOpen(false);
+  };
+
+  const handleApplyAdjustments = (options: AdjustExamOptions) => {
+    const updated = adjustExamBlueprint(assessment, options);
+    updateAssessment(() => updated);
+    setIsAdjustModalOpen(false);
+  };
+
+  const handleImportFromAIPromptBridge = (sections: ExamSection[], updatedExamMeta?: any) => {
+    updateAssessment((prev) => ({
+      ...prev,
+      exam: {
+        ...prev.exam,
+        ...(updatedExamMeta || {})
+      },
+      sections
+    }));
+    if (sections?.[0]) {
+      setSelectedSectionId(sections[0].id);
+      setSelectedQuestionId(sections[0].questions?.[0]?.id || null);
+      setSelectedActivityId(sections[0].activities?.[0]?.id || null);
+    }
+    setIsAIPromptBridgeOpen(false);
   };
 
   // Publish flow execution
@@ -1120,6 +1195,8 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         onChangeTitle={(title) => handleChangeMetadata({ title })}
         onBack={onBack}
         onOpenBlueprint={() => setIsBlueprintOpen(true)}
+        onOpenAdjustExam={() => setIsAdjustModalOpen(true)}
+        onOpenCreationMode={() => setIsCreationModeOpen(true)}
         onOpenAISuite={() => setIsAISuiteOpen(true)}
         onOpenSettings={() => setIsSettingsDrawerOpen(true)}
         onOpenPreview={() => setIsPreviewModalOpen(true)}
@@ -1243,6 +1320,47 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         isOpen={isCreationModeOpen}
         onClose={() => setIsCreationModeOpen(false)}
         onSelectMode={handleSelectCreationMode}
+      />
+
+      {/* 5b. Standard Exam Workflow Modal */}
+      <StandardExamModal
+        isOpen={isStandardExamModalOpen}
+        onClose={() => setIsStandardExamModalOpen(false)}
+        onGenerateStandardExam={handleGenerateStandardExam}
+        onOpenAIPromptBridge={(input) => {
+          setIsStandardExamModalOpen(false);
+          setAiPromptBridgeInput(input);
+          setIsAIPromptBridgeOpen(true);
+        }}
+      />
+
+      {/* 5c. O/L Style Exam Workflow Modal */}
+      <OLStyleExamModal
+        isOpen={isOLStyleModalOpen}
+        onClose={() => setIsOLStyleModalOpen(false)}
+        onGenerateOLExam={handleGenerateOLStyleExam}
+        onOpenAIPromptBridge={(input) => {
+          setIsOLStyleModalOpen(false);
+          setAiPromptBridgeInput(input);
+          setIsAIPromptBridgeOpen(true);
+        }}
+      />
+
+      {/* 5d. Adjust Exam Controller Modal */}
+      <AdjustExamModal
+        isOpen={isAdjustModalOpen}
+        currentQuestionCount={assessment.sections.reduce((acc, s) => acc + (s.questions?.length || 0) + (s.activities?.reduce((a, act) => a + (act.questions?.length || 1), 0) || 0), 0)}
+        currentDurationMinutes={assessment.exam.durationMinutes || 45}
+        onClose={() => setIsAdjustModalOpen(false)}
+        onApplyAdjustments={handleApplyAdjustments}
+      />
+
+      {/* 5e. AI Prompt Bridge & JSON Importer Modal */}
+      <AIPromptBridgeModal
+        isOpen={isAIPromptBridgeOpen}
+        input={aiPromptBridgeInput}
+        onClose={() => setIsAIPromptBridgeOpen(false)}
+        onImportExam={handleImportFromAIPromptBridge}
       />
 
       {/* 6. AI Assessment Suite Modal */}

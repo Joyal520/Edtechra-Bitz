@@ -41,35 +41,35 @@ export const ExamHeader: React.FC<ExamHeaderProps> = ({
   const isWarning = !isCritical && timeRemainingSeconds <= 300;
 
   return (
-    <header className="sticky top-0 z-40 bg-[#091124]/95 backdrop-blur-md border-b border-blue-800/80 shadow-lg">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs [color-scheme:light]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         {/* Left: Brand & Question Indicator */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0 shadow-2xs">
             <Sparkles className="w-4 h-4" />
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400">EdTechra</span>
-              <span className="text-slate-500 text-xs">•</span>
-              <span className="text-xs font-black text-white truncate max-w-[120px] sm:max-w-xs">{title}</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">EdTechra</span>
+              <span className="text-slate-300 text-xs">•</span>
+              <span className="text-xs font-black text-slate-900 truncate max-w-[120px] sm:max-w-xs">{title}</span>
             </div>
-            <div className="text-xs font-black text-indigo-300">
-              Question {currentIndex + 1} <span className="text-slate-500 font-medium">/ {totalCount}</span>
+            <div className="text-xs font-black text-indigo-700">
+              Question {currentIndex + 1} <span className="text-slate-400 font-medium">/ {totalCount}</span>
             </div>
           </div>
         </div>
 
         {/* Center: Progress Bar (Desktop) */}
         <div className="hidden md:flex flex-col items-center justify-center flex-1 max-w-xs px-4">
-          <div className="w-full bg-[#040916] rounded-full h-2 border border-blue-900/60 overflow-hidden">
+          <div className="w-full bg-slate-100 rounded-full h-2 border border-slate-200 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+              className="h-full bg-indigo-600 transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-[10px] font-bold text-slate-400 mt-1">
+          <span className="text-[10px] font-bold text-slate-500 mt-1">
             {progressPercent}% Complete
           </span>
         </div>
@@ -77,38 +77,38 @@ export const ExamHeader: React.FC<ExamHeaderProps> = ({
         {/* Right: Autosave Status & Authoritative Timer */}
         <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           {/* Sync Status Badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0b142c] border border-blue-900/70 text-[11px] font-bold">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-700">
             {syncState === 'saving' && (
               <>
-                <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin" />
-                <span className="text-indigo-300">Saving...</span>
+                <RefreshCw className="w-3 h-3 text-indigo-600 animate-spin" />
+                <span className="text-indigo-700">Saving...</span>
               </>
             )}
             {syncState === 'saved' && (
               <>
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-300">Saved</span>
+                <Check className="w-3 h-3 text-emerald-600" />
+                <span className="text-emerald-700">Saved</span>
               </>
             )}
             {syncState === 'offline' && (
               <>
-                <CloudOff className="w-3 h-3 text-amber-400" />
-                <span className="text-amber-300">Offline</span>
+                <CloudOff className="w-3 h-3 text-amber-600" />
+                <span className="text-amber-800">Offline</span>
               </>
             )}
           </div>
 
           {/* Countdown Timer Badge */}
           <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs sm:text-sm font-black border transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border transition-all shadow-2xs ${
               isCritical
-                ? 'bg-rose-950/80 text-rose-300 border-rose-500/80 animate-pulse ring-2 ring-rose-500/40'
+                ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse ring-2 ring-rose-200'
                 : isWarning
-                ? 'bg-amber-950/80 text-amber-300 border-amber-500/70 ring-1 ring-amber-500/30'
-                : 'bg-[#0f1b3d] text-indigo-200 border-blue-700/60'
+                ? 'bg-amber-50 text-amber-800 border-amber-300 ring-1 ring-amber-200'
+                : 'bg-slate-50 text-slate-900 border-slate-200'
             }`}
           >
-            <Clock className={`w-4 h-4 ${isCritical ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-indigo-400'}`} />
+            <Clock className={`w-4 h-4 ${isCritical ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-slate-500'}`} />
             <span className="font-mono tracking-wider">{formatTime(timeRemainingSeconds)}</span>
           </div>
 
@@ -119,8 +119,8 @@ export const ExamHeader: React.FC<ExamHeaderProps> = ({
               onClick={onToggleNavigator}
               className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                 navigatorOpen
-                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-xs'
-                  : 'bg-[#0b142c] text-slate-300 border-blue-800/80 hover:text-white'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
               }`}
               title="Toggle Question Navigator"
             >
@@ -131,9 +131,9 @@ export const ExamHeader: React.FC<ExamHeaderProps> = ({
       </div>
 
       {/* Mobile Progress Bar (Micro bar at bottom edge) */}
-      <div className="md:hidden w-full bg-[#040916] h-1 overflow-hidden">
+      <div className="md:hidden w-full bg-slate-100 h-1 overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+          className="h-full bg-indigo-600 transition-all duration-300"
           style={{ width: `${progressPercent}%` }}
         />
       </div>

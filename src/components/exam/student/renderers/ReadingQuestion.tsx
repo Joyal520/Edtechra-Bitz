@@ -20,15 +20,15 @@ export const ReadingQuestionLayout: React.FC<ReadingQuestionProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2 items-start">
       {/* Passage Card */}
-      <div className="bg-[#0b142c] p-5 sm:p-6 rounded-3xl border border-teal-500/40 shadow-md space-y-3 lg:sticky lg:top-20 max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center gap-2 border-b border-teal-500/30 pb-3">
-          <BookOpen className="w-4 h-4 text-teal-400 shrink-0" />
-          <h4 className="text-sm font-black text-white truncate">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-teal-200 shadow-xs space-y-3 lg:sticky lg:top-20 max-h-[70vh] overflow-y-auto">
+        <div className="flex items-center gap-2 border-b border-teal-100 pb-3">
+          <BookOpen className="w-4 h-4 text-teal-600 shrink-0" />
+          <h4 className="text-sm font-black text-slate-900 truncate">
             {passageTitle || 'Reading Comprehension Passage'}
           </h4>
         </div>
 
-        <div className="text-sm text-blue-100/95 leading-relaxed font-serif whitespace-pre-wrap selection:bg-teal-500/30">
+        <div className="text-sm text-slate-800 leading-relaxed font-serif whitespace-pre-wrap selection:bg-teal-100">
           {passage}
         </div>
       </div>

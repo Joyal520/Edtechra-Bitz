@@ -31,10 +31,10 @@ export const EssayQuestionComponent: React.FC<EssayQuestionProps> = ({
 
   return (
     <div className="space-y-3 pt-2 max-w-3xl mx-auto">
-      <div className="p-5 sm:p-6 bg-[#0b142c] rounded-3xl border border-blue-800/80 shadow-md space-y-3">
+      <div className="p-5 sm:p-6 bg-slate-50 rounded-3xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-black text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
-            <FileText className="w-4 h-4 text-rose-400" />
+          <label className="text-xs font-black text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-rose-600" />
             Essay Response
           </label>
 
@@ -43,8 +43,8 @@ export const EssayQuestionComponent: React.FC<EssayQuestionProps> = ({
             <span
               className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
                 isUnderMin || isOverMax
-                  ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                  : 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                  ? 'bg-amber-50 border-amber-300 text-amber-800'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
               }`}
             >
               {wordCount} Words
@@ -59,13 +59,13 @@ export const EssayQuestionComponent: React.FC<EssayQuestionProps> = ({
           value={currentAnswer}
           onChange={(e) => onAnswerChange(e.target.value)}
           placeholder="Compose your essay here. Organize your thoughts into clear paragraphs..."
-          className="w-full p-4 bg-[#070e1f] border-2 border-blue-800/70 focus:border-rose-400 focus:ring-4 focus:ring-rose-400/20 rounded-2xl text-sm font-medium text-white placeholder:text-slate-500 leading-relaxed focus:outline-hidden transition-all resize-y"
+          className="w-full p-4 bg-white border-2 border-slate-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-100 rounded-2xl text-sm font-medium text-slate-900 placeholder:text-slate-400 leading-relaxed focus:outline-hidden transition-all resize-y"
         />
 
-        <div className="flex items-center justify-between text-[11px] text-slate-400">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
           <span>Structure your answer logically with an introduction, body, and conclusion.</span>
           {isUnderMin && (
-            <span className="text-amber-400 font-bold flex items-center gap-1">
+            <span className="text-amber-700 font-bold flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
               {minWords - wordCount} more word{minWords - wordCount > 1 ? 's' : ''} recommended
             </span>

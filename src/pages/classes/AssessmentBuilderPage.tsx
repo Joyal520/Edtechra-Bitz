@@ -140,6 +140,7 @@ export const AssessmentBuilderPage: React.FC = () => {
   return (
     <AssessmentBuilder
       key={assessmentId || 'new'}
+      isNewExam={!assessmentId}
       initialAssessment={loadedAssessment || fallbackAssessment}
       classroomId={classroomId || ''}
       onSaveAssessment={handleSaveAssessment}

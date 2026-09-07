@@ -47,7 +47,7 @@ export const ReorderQuestionComponent: React.FC<ReorderQuestionProps> = ({
 
   return (
     <div className="space-y-3 pt-2 max-w-2xl mx-auto">
-      <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 pb-1">
+      <div className="text-xs font-bold text-amber-800 flex items-center gap-1.5 pb-1">
         <ArrowUpDown className="w-3.5 h-3.5" />
         <span>Use the arrow buttons to arrange these items in the correct order:</span>
       </div>
@@ -60,13 +60,13 @@ export const ReorderQuestionComponent: React.FC<ReorderQuestionProps> = ({
           return (
             <div
               key={item.id}
-              className="p-4 rounded-2xl bg-[#0b142c] border border-blue-800/80 shadow-xs hover:border-amber-500/50 transition-all flex items-center justify-between gap-3 group"
+              className="p-4 rounded-2xl bg-slate-50 border border-slate-200 shadow-2xs hover:border-amber-400 transition-all flex items-center justify-between gap-3 group"
             >
               <div className="flex items-center gap-3.5 min-w-0">
-                <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black text-xs flex items-center justify-center shrink-0">
+                <span className="w-8 h-8 rounded-xl bg-white text-amber-800 border border-amber-300 font-black text-xs flex items-center justify-center shrink-0 shadow-2xs">
                   {idx + 1}
                 </span>
-                <span className="text-sm font-bold text-white leading-snug">
+                <span className="text-sm font-bold text-slate-900 leading-snug">
                   {item.text}
                 </span>
               </div>
@@ -77,7 +77,7 @@ export const ReorderQuestionComponent: React.FC<ReorderQuestionProps> = ({
                   type="button"
                   disabled={isFirst}
                   onClick={() => handleMove(idx, 'up')}
-                  className="p-2 rounded-xl bg-[#070e1f] text-slate-300 hover:text-white hover:bg-blue-900/60 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                  className="p-2 rounded-xl bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all shadow-2xs"
                   title="Move Up"
                 >
                   <ArrowUp className="w-4 h-4" />
@@ -87,7 +87,7 @@ export const ReorderQuestionComponent: React.FC<ReorderQuestionProps> = ({
                   type="button"
                   disabled={isLast}
                   onClick={() => handleMove(idx, 'down')}
-                  className="p-2 rounded-xl bg-[#070e1f] text-slate-300 hover:text-white hover:bg-blue-900/60 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                  className="p-2 rounded-xl bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all shadow-2xs"
                   title="Move Down"
                 >
                   <ArrowDown className="w-4 h-4" />

@@ -9,7 +9,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Bookmark,
-  CheckCircle2
+  CheckCircle2,
+  RotateCcw
 } from 'lucide-react';
 import { CanonicalExamV1 } from '../shared/ExamSchema';
 import { flattenExamQuestions, FlattenedExamQuestion } from '../shared/scoringUtilities';
@@ -290,8 +291,32 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   const currentQ = flattenedQuestions[currentIndex];
   const isBookmarked = currentQ ? bookmarkedIds.has(currentQ.question.id) : false;
 
+  // Section Navigation List
+  const sectionsList = useMemo(() => {
+    return exam.sections.map((sec, idx) => {
+      const firstQIndex = flattenedQuestions.findIndex(q => q.sectionId === sec.id);
+      const isCurrent = currentQ ? currentQ.sectionId === sec.id : idx === 0;
+      return {
+        id: sec.id,
+        title: sec.title || `Section ${String.fromCharCode(65 + idx)}`,
+        firstQIndex: firstQIndex >= 0 ? firstQIndex : 0,
+        isCurrent
+      };
+    });
+  }, [exam.sections, flattenedQuestions, currentQ]);
+
+  const handleClearCurrentAnswer = () => {
+    if (currentQ) {
+      handleAnswerChange(undefined);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#070e1f] text-slate-100 flex flex-col font-sans select-none animate-fadeIn">
+    <div
+      data-student-exam="true"
+      className="edtechra-student-exam min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none animate-fadeIn [color-scheme:light]"
+      style={{ colorScheme: 'light' }}
+    >
       {/* Top Authoritative Header */}
       <ExamHeader
         title={exam.exam.title}
@@ -303,14 +328,42 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         navigatorOpen={navigatorOpen}
       />
 
+      {/* Section Navigation Strip */}
+      {sectionsList.length > 1 && (
+        <nav
+          aria-label="Exam Sections Navigation"
+          className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 shadow-2xs"
+        >
+          <div className="max-w-6xl mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+              Sections:
+            </span>
+            {sectionsList.map((sec) => (
+              <button
+                key={sec.id}
+                type="button"
+                onClick={() => setCurrentIndex(sec.firstQIndex)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap cursor-pointer transition-all ${
+                  sec.isCurrent
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+                }`}
+              >
+                {sec.title}
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
+
       {/* Preview Watermark Badge if Teacher is Previewing */}
       {isPreview && (
-        <div className="bg-amber-500/20 border-b border-amber-500/40 py-1.5 px-4 text-center text-xs font-black text-amber-300 flex items-center justify-center gap-2">
+        <div className="bg-amber-50 border-b border-amber-200 py-1.5 px-4 text-center text-xs font-bold text-amber-900 flex items-center justify-center gap-2">
           <span>TEACHER PREVIEW MODE — Student scores will not be recorded</span>
           <button
             type="button"
             onClick={onClose}
-            className="underline text-white hover:text-amber-200 cursor-pointer ml-2"
+            className="underline text-amber-950 hover:text-indigo-600 font-semibold cursor-pointer ml-2"
           >
             Exit Preview
           </button>
@@ -328,40 +381,55 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               onAnswerChange={handleAnswerChange}
             />
           ) : (
-            <div className="p-8 text-center text-slate-400">No questions available.</div>
+            <div className="p-8 text-center text-slate-500 bg-white rounded-3xl border border-slate-200">
+              No questions available in this examination.
+            </div>
           )}
 
-          {/* Question Navigation Controls (Previous / Bookmark / Next) */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-[#0b142c] border border-blue-800/80 shadow-md flex items-center justify-between gap-3">
+          {/* Question Navigation Controls (Previous / Clear / Bookmark / Next) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-3">
             <button
               type="button"
               disabled={currentIndex === 0}
               onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
-              className="px-5 py-3 rounded-2xl border border-blue-800/80 text-slate-300 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Previous</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleToggleBookmark}
-              className={`px-4 py-3 rounded-2xl border text-xs font-black flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
-                isBookmarked
-                  ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md shadow-amber-500/20'
-                  : 'bg-[#070e1f] text-slate-400 hover:text-amber-300 border-blue-900/80'
-              }`}
-              title={isBookmarked ? 'Remove review flag' : 'Flag to review before submitting'}
-            >
-              <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-              <span className="hidden sm:inline">{isBookmarked ? 'Marked' : 'Mark for Review'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClearCurrentAnswer}
+                disabled={answers[currentQ?.question?.id] === undefined || answers[currentQ?.question?.id] === null || answers[currentQ?.question?.id] === ''}
+                className="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                title="Clear answer for this question"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Clear Answer</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleBookmark}
+                className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                  isBookmarked
+                    ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                    : 'bg-slate-50 text-slate-700 hover:text-amber-700 hover:bg-amber-50/50 border-slate-200'
+                }`}
+                title={isBookmarked ? 'Remove review flag' : 'Flag to review before submitting'}
+              >
+                <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                <span className="hidden sm:inline">{isBookmarked ? 'Marked' : 'Mark for Review'}</span>
+              </button>
+            </div>
 
             {currentIndex < flattenedQuestions.length - 1 ? (
               <button
                 type="button"
                 onClick={() => setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1))}
-                className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/30 active:scale-95 transition-all"
+                className="px-5 sm:px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
               >
                 <span>Next</span>
                 <ArrowRight className="w-4 h-4" />
@@ -370,7 +438,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={() => setShowSubmitConfirm(true)}
-                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/30 active:scale-95 transition-all"
+                className="px-5 sm:px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Submit Exam</span>

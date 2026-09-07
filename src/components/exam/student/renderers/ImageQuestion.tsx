@@ -22,14 +22,14 @@ export const ImageQuestionComponent: React.FC<ImageQuestionProps> = ({
     <div className="space-y-4 pt-2 max-w-2xl mx-auto">
       {/* Embedded Image Container */}
       {question.imageUrl && (
-        <div className="rounded-3xl border border-purple-500/40 overflow-hidden bg-[#070e1f] shadow-lg max-h-80 flex flex-col items-center justify-center">
+        <div className="rounded-3xl border border-slate-200 overflow-hidden bg-slate-50 shadow-xs max-h-80 flex flex-col items-center justify-center">
           <img
             src={question.imageUrl}
             alt={question.caption || 'Assessment Visual'}
             className="w-full h-auto max-h-72 object-contain"
           />
           {question.caption && (
-            <div className="p-2 text-center text-xs text-slate-400 font-medium w-full bg-[#0b142c]">
+            <div className="p-2 text-center text-xs text-slate-600 font-medium w-full bg-slate-100 border-t border-slate-200">
               {question.caption}
             </div>
           )}

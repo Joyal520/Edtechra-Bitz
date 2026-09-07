@@ -32,17 +32,17 @@ export const TrueFalseQuestionComponent: React.FC<TrueFalseQuestionProps> = ({
         <button
           type="button"
           onClick={() => onAnswerChange(true)}
-          className={`p-6 sm:p-7 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-150 active:scale-95 shadow-md ${
+          className={`p-6 sm:p-7 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-150 active:scale-95 shadow-xs ${
             normalizedAnswer === true
-              ? 'bg-emerald-600 text-white border-emerald-400 ring-4 ring-emerald-400/30 shadow-emerald-600/30'
-              : 'bg-[#0b142c] text-slate-200 border-blue-800/60 hover:bg-[#132047] hover:border-emerald-500/50'
+              ? 'bg-emerald-600 text-white border-emerald-600 ring-4 ring-emerald-200 shadow-emerald-600/30'
+              : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-emerald-50/60 hover:border-emerald-300'
           }`}
         >
           <div
             className={`w-12 h-12 rounded-2xl border flex items-center justify-center font-black text-lg ${
               normalizedAnswer === true
-                ? 'bg-white text-emerald-700 border-white shadow-xs'
-                : 'bg-emerald-950/50 text-emerald-300 border-emerald-500/40'
+                ? 'bg-white text-emerald-700 border-white shadow-2xs'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
             }`}
           >
             <CheckCircle2 className="w-6 h-6" />
@@ -54,17 +54,17 @@ export const TrueFalseQuestionComponent: React.FC<TrueFalseQuestionProps> = ({
         <button
           type="button"
           onClick={() => onAnswerChange(false)}
-          className={`p-6 sm:p-7 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-150 active:scale-95 shadow-md ${
+          className={`p-6 sm:p-7 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-150 active:scale-95 shadow-xs ${
             normalizedAnswer === false
-              ? 'bg-rose-600 text-white border-rose-400 ring-4 ring-rose-400/30 shadow-rose-600/30'
-              : 'bg-[#0b142c] text-slate-200 border-blue-800/60 hover:bg-[#132047] hover:border-rose-500/50'
+              ? 'bg-rose-600 text-white border-rose-600 ring-4 ring-rose-200 shadow-rose-600/30'
+              : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-rose-50/60 hover:border-rose-300'
           }`}
         >
           <div
             className={`w-12 h-12 rounded-2xl border flex items-center justify-center font-black text-lg ${
               normalizedAnswer === false
-                ? 'bg-white text-rose-700 border-white shadow-xs'
-                : 'bg-rose-950/50 text-rose-300 border-rose-500/40'
+                ? 'bg-white text-rose-700 border-white shadow-2xs'
+                : 'bg-rose-50 text-rose-700 border-rose-200'
             }`}
           >
             <XCircle className="w-6 h-6" />

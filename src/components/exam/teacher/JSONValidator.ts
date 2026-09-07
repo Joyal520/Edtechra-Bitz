@@ -50,16 +50,18 @@ export function normalizeQuestionType(typeStr: string): SupportedQuestionType | 
   const raw = String(typeStr).trim().toLowerCase();
 
   if (raw === 'multiple_choice' || raw === 'mcq' || raw.includes('multiple choice')) return 'multiple_choice';
-  if (raw === 'multiple_select' || raw.includes('multiple select') || raw.includes('multi-select')) return 'multiple_select';
+  if (raw === 'multiple_select' || raw === 'checkboxes' || raw.includes('multiple select') || raw.includes('multi-select')) return 'multiple_select';
   if (raw === 'true_false' || raw === 'true/false' || raw.includes('true or false') || raw.includes('true_false')) return 'true_false';
-  if (raw === 'fill_in_blank' || raw === 'fill_in_the_blank' || raw.includes('blanks') || raw.includes('blank')) return 'fill_in_blank';
+  if (raw === 'fill_in_blank' || raw === 'sentence_completion' || raw.includes('fill in') || raw.includes('blank')) return 'fill_in_blank';
   if (raw === 'matching' || raw.includes('matching')) return 'matching';
   if (raw === 'reorder' || raw.includes('reorder') || raw.includes('sequence') || raw.includes('sequencing')) return 'reorder';
-  if (raw === 'short_answer' || raw.includes('short answer')) return 'short_answer';
-  if (raw === 'essay' || raw.includes('essay')) return 'essay';
-  if (raw === 'reading_comprehension' || raw.includes('comprehension') || raw.includes('reading')) return 'reading_comprehension';
-  if (raw === 'image_question' || raw.includes('image')) return 'image_question';
-  if (raw === 'audio_question' || raw.includes('audio') || raw.includes('listening')) return 'audio_question';
+  if (raw === 'sentence_builder' || raw.includes('sentence builder')) return 'sentence_builder';
+  if (raw === 'short_answer' || raw === 'sentence_transformation' || raw === 'error_correction' || raw.includes('short answer')) return 'short_answer';
+  if (raw === 'essay' || raw === 'paragraph' || raw.includes('essay') || raw.includes('paragraph')) return 'essay';
+  if (raw === 'reading_comprehension' || raw === 'reading_activity' || raw.includes('comprehension') || raw.includes('reading')) return 'reading_comprehension';
+  if (raw === 'image_question' || raw === 'picture_description' || raw === 'picture_description_activity' || raw.includes('image') || raw.includes('picture')) return 'image_question';
+  if (raw === 'audio_question' || raw === 'listening_activity' || raw.includes('audio') || raw.includes('listening')) return 'audio_question';
+  if (raw === 'video_question' || raw === 'video_activity' || raw.includes('video')) return 'video_question';
 
   return null;
 }
@@ -135,11 +137,14 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
       const sectionId = sec.id || `section_${secIdx + 1}`;
       const sectionTitle = sec.title || `Section ${secIdx + 1}`;
 
-      if (!sec.questions || !Array.isArray(sec.questions) || sec.questions.length === 0) {
+      const rawSecQuestions = Array.isArray(sec.questions) ? sec.questions : [];
+      const rawSecActivities = Array.isArray(sec.activities) ? sec.activities : [];
+
+      if (rawSecQuestions.length === 0 && rawSecActivities.length === 0) {
         errors.push({
           id: `empty_section_${sectionId}`,
           sectionId,
-          message: `Section "${sectionTitle}" contains no questions.`
+          message: `Section "${sectionTitle}" contains no questions or activities.`
         });
         return;
       }
@@ -501,7 +506,8 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
         description: sec.description,
         instructions: sec.instructions,
         passage: sec.passage,
-        questions: validatedQuestions
+        questions: validatedQuestions,
+        activities: Array.isArray(sec.activities) ? sec.activities : []
       });
     });
   }
