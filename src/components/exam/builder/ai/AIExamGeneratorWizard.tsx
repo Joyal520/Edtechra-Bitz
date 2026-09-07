@@ -413,10 +413,22 @@ EXACT QUESTION BLUEPRINT (DO NOT ALTER COUNTS OR MARKS)
 You MUST construct an examination containing EXACTLY these question types, counts, and marks:
 ${blueprintDescription}
 
-CRITICAL RULES:
+CRITICAL ASSESSMENT & RENDERING RULES:
+- Generate questions that are directly renderable by the EdTechra examination engine.
 - EdTechra defines the assessment structure. You MUST NOT change question counts, marks, or types.
 - DO NOT alter or hallucinate question types not listed in the blueprint.
 - DO NOT alter the JSON schema or create new fields.
+- Distribute correct answers across A, B, C, and D naturally. Do not use a predictable answer pattern. Do not make every correct answer option A. Vary the correct options (e.g. C, A, D, B, C...).
+- Never refer to an underlined, bold, highlighted, italicized, circled, boxed, or marked word unless that formatting actually exists in the JSON using <b>, <strong>, <i>, <em>, or <u> tags.
+- Prefer simpler instructions like: "Replace the noun 'teacher' with a suitable subject pronoun." instead of "Replace the underlined noun..." unless actual underline formatting is present.
+- Do not output literal [blank] text for a question type that does not support blanks.
+- For Fill in the Blank questions, use the exact [blank] placeholder in the question text.
+- For Cloze Passage questions, use [blank_1], [blank_2], [blank_3], etc. in the passage string.
+- For Cloze Passage, every blank ID in the passage MUST have a matching object in the blanks array with 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array containing all correct words plus distractors.
+- Do not include the correct answer in question text or option labels.
+- Do not reveal correct answers through option ordering or hints.
+- Do not add answer-key labels such as 'Correct option: A' in option text.
+- Correct answers are metadata for grading only, stored exclusively in the 'correctAnswer' field.
 ${blueprintItems.some((i) => i.enabled && i.id === 'cloze') ? `- Cloze Passage MUST contain a contextual passage with numbered '[blank_1]', '[blank_2]', etc., accompanied by a 'blanks' array where each blank has an 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array.\n` : ''}${requiresVideo && videoTranscript ? `- Video Questions MUST be strictly derived from this Video Transcript:\n"""\n${videoTranscript}\n"""\n` : ''}${requiresAudio && audioTranscript ? `- Audio Questions MUST be strictly derived from this Audio Transcript:\n"""\n${audioTranscript}\n"""\n` : ''}
 ================================================================================
 OUTPUT FORMAT REQUIREMENTS (CRITICAL)
@@ -554,44 +566,44 @@ Generate the complete examination JSON now:`;
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/50 backdrop-blur-xs animate-fadeIn overflow-y-auto select-none">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-auto max-h-[94vh]">
-        {/* Top Header */}
-        <div className="p-5 sm:p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                  AI Exam Generator
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="text-xs font-semibold text-slate-500">Step {currentStep} of 5</span>
-              </div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-0.5">
-                {currentStep === 1 && '1. What should this exam test?'}
-                {currentStep === 2 && '2. Choose your question types'}
-                {currentStep === 3 && '3. Add Media'}
-                {currentStep === 4 && '4. Exam Settings'}
-                {currentStep === 5 && '5. Generate Your AI Exam'}
-              </h2>
-            </div>
+    <div className="fixed inset-0 z-50 w-screen h-screen flex flex-col bg-white overflow-hidden select-none animate-fadeIn [color-scheme:light]">
+      {/* Top Header */}
+      <div className="px-6 py-4 sm:px-10 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0 z-20">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs">
+            <Sparkles className="w-5 h-5" />
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-            title="Close Wizard"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                AI Exam Generator
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="text-xs font-semibold text-slate-500">Step {currentStep} of 5</span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-0.5">
+              {currentStep === 1 && '1. What should this exam test?'}
+              {currentStep === 2 && '2. Choose your question types'}
+              {currentStep === 3 && '3. Add Media'}
+              {currentStep === 4 && '4. Exam Settings'}
+              {currentStep === 5 && '5. Generate Your AI Exam'}
+            </h2>
+          </div>
         </div>
 
-        {/* Visual Step Progress Indicator */}
-        <div className="px-6 py-3 bg-white border-b border-slate-100 flex items-center justify-between overflow-x-auto gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+          title="Close Wizard"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Visual Step Progress Indicator */}
+      <div className="px-6 py-3.5 sm:px-10 bg-white border-b border-slate-200 flex items-center justify-center shrink-0 z-10 shadow-2xs">
+        <div className="flex items-center justify-between w-full max-w-4xl overflow-x-auto gap-2">
           {[
             { step: 1, label: 'Content' },
             { step: 2, label: 'Blueprint' },
@@ -607,7 +619,7 @@ Generate the complete examination JSON now:`;
                 type="button"
                 disabled={s.step > currentStep}
                 onClick={() => setCurrentStep(s.step as any)}
-                className={`flex items-center gap-2 text-xs font-bold transition-all px-3 py-1.5 rounded-xl cursor-pointer disabled:cursor-not-allowed ${
+                className={`flex items-center gap-2 text-xs font-bold transition-all px-3.5 py-1.5 rounded-xl cursor-pointer disabled:cursor-not-allowed ${
                   isCurrent
                     ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs'
                     : isDone
@@ -631,9 +643,11 @@ Generate the complete examination JSON now:`;
             );
           })}
         </div>
+      </div>
 
-        {/* Main Wizard Content Panels */}
-        <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+      {/* Main Wizard Content Panels */}
+      <div className="p-6 sm:px-10 sm:py-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+        <div className="max-w-4xl mx-auto space-y-6">
           {/* ============================================================
               PANEL 1 — CONTENT
           ============================================================ */}
@@ -1339,9 +1353,11 @@ Generate the complete examination JSON now:`;
             </div>
           )}
         </div>
+      </div>
 
-        {/* Wizard Footer Controls */}
-        <div className="p-5 sm:p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+      {/* Wizard Footer Controls */}
+      <div className="px-6 py-4 sm:px-10 bg-slate-50 border-t border-slate-200 shrink-0 z-20">
+        <div className="w-full max-w-4xl mx-auto flex items-center justify-between">
           <div>
             {currentStep > 1 && (
               <button

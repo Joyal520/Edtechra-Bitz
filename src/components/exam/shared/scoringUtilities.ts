@@ -38,15 +38,8 @@ export function calculateQuestionMarks(q: CanonicalQuestion): number {
  */
 export function calculateExamTotalMarks(sections: ExamSection[]): number {
   if (!Array.isArray(sections)) return 0;
-  return sections.reduce((secAcc, sec) => {
-    const qMarks = (sec.questions || []).reduce((qAcc, q) => qAcc + calculateQuestionMarks(q), 0);
-    const actMarks = (sec.activities || []).reduce((actAcc, act) => {
-      const actQMarks = (act.questions || []).reduce((qAcc, q) => qAcc + calculateQuestionMarks(q), 0);
-      const clozeMarks = act.blanks ? act.blanks.reduce((acc, b) => acc + (Number(b.marks) || 1), 0) : 5;
-      return actAcc + (act.marks || (act.activityType === 'cloze_activity' ? clozeMarks : actQMarks));
-    }, 0);
-    return secAcc + qMarks + actMarks;
-  }, 0);
+  const flat = flattenExamQuestions(sections);
+  return flat.reduce((sum, item) => sum + calculateQuestionMarks(item.question), 0);
 }
 
 /**
@@ -54,19 +47,7 @@ export function calculateExamTotalMarks(sections: ExamSection[]): number {
  */
 export function calculateTotalQuestionCount(sections: ExamSection[]): number {
   if (!Array.isArray(sections)) return 0;
-  return sections.reduce((secAcc, sec) => {
-    const qCount = (sec.questions || []).reduce((qAcc, q) => {
-      if (q.type === 'reading_comprehension' && Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
-        return qAcc + q.subQuestions.length;
-      }
-      return qAcc + 1;
-    }, 0);
-    const actCount = (sec.activities || []).reduce((actAcc, act) => {
-      if (act.activityType === 'cloze_activity') return actAcc + 1;
-      return actAcc + (act.questions?.length || (act.pictureTaskType === 'write_paragraph' ? 1 : 0));
-    }, 0);
-    return secAcc + qCount + actCount;
-  }, 0);
+  return flattenExamQuestions(sections).length;
 }
 
 /**

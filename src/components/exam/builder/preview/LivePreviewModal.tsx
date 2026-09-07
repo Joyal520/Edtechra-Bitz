@@ -35,7 +35,18 @@ import {
   MultipleChoiceQuestion
 } from '../../shared/ExamSchema';
 import { AssessmentThemeConfig } from '../../shared/themePresets';
-import { flattenExamQuestions, FlattenedExamQuestion } from '../../shared/scoringUtilities';
+import {
+  flattenExamQuestions,
+  calculateExamTotalMarks,
+  FlattenedExamQuestion
+} from '../../shared/scoringUtilities';
+import { renderFormattedPrompt } from '../../shared/formattedText';
+import { MCQQuestion } from '../../student/renderers/MCQQuestion';
+import { TrueFalseQuestionComponent } from '../../student/renderers/TrueFalseQuestion';
+import { FillBlankQuestionComponent } from '../../student/renderers/FillBlankQuestion';
+import { ShortAnswerQuestionComponent } from '../../student/renderers/ShortAnswerQuestion';
+import { ClozeQuestionComponent } from '../../student/renderers/ClozeQuestion';
+import { EssayQuestionComponent } from '../../student/renderers/EssayQuestion';
 import { QuestionVisualEditorModal } from '../modals/QuestionVisualEditorModal';
 import { SimplePublishModal } from '../publishing/SimplePublishModal';
 
@@ -79,6 +90,16 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
     setLiveAssessment(assessment);
   }, [assessment]);
 
+  // When switching to student view, ensure answer keys are closed
+  useEffect(() => {
+    if (viewMode === 'student') {
+      setShowAnswerKeys(false);
+    }
+  }, [viewMode]);
+
+  // Effective answer key visibility: strictly prohibited in student preview
+  const effectiveShowKeys = viewMode === 'teacher' && showAnswerKeys;
+
   // Helper for live word and character counts
   const getWordCount = (val: any): number => {
     if (!val || typeof val !== 'string') return 0;
@@ -97,6 +118,11 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
   const currentQItem = flattenedQuestions[currentIndex] || flattenedQuestions[0];
   const totalQuestions = flattenedQuestions.length;
+
+  // Dynamically calculate total marks from sections
+  const totalMarks = useMemo(() => {
+    return calculateExamTotalMarks(liveAssessment.sections);
+  }, [liveAssessment.sections]);
 
   const handleSelectAnswer = (qId: string, value: any) => {
     setMockAnswers((prev) => ({
@@ -119,9 +145,24 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
     ? liveAssessment.sections
     : [{ id: 'sec-1', title: 'Section 1', questions: [] }];
 
-  const answeredCount = Object.keys(mockAnswers).filter(
-    (k) => mockAnswers[k] !== undefined && mockAnswers[k] !== ''
-  ).length;
+  const isQuestionAnswered = (qId: string): boolean => {
+    const ans = mockAnswers[qId];
+    if (ans !== undefined && ans !== null) {
+      if (typeof ans === 'string') return ans.trim().length > 0;
+      if (Array.isArray(ans)) return ans.length > 0;
+      if (typeof ans === 'object') {
+        return Object.values(ans).some((v) => Boolean(v && String(v).trim().length > 0));
+      }
+      return true;
+    }
+    const subKeys = Object.keys(mockAnswers).filter((k) => k.startsWith(`${qId}_`));
+    if (subKeys.length > 0) {
+      return subKeys.some((k) => Boolean(mockAnswers[k] && String(mockAnswers[k]).trim().length > 0));
+    }
+    return false;
+  };
+
+  const answeredCount = flattenedQuestions.filter((q) => isQuestionAnswered(q.question.id)).length;
 
   // Teacher Edit Handlers
   const handleSaveQuestionChanges = (updatedQ: CanonicalQuestion) => {
@@ -311,18 +352,20 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
         {/* Right: Answer Key, Publish & Close */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAnswerKeys(!showAnswerKeys)}
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
-              showAnswerKeys
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-            }`}
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>{showAnswerKeys ? 'Hide Keys' : 'Reveal Keys'}</span>
-          </button>
+          {viewMode === 'teacher' && (
+            <button
+              type="button"
+              onClick={() => setShowAnswerKeys(!showAnswerKeys)}
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
+                showAnswerKeys
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>{showAnswerKeys ? 'Hide Keys' : 'Reveal Keys'}</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -360,7 +403,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                   {liveAssessment.exam.title || 'Official Digital Examination'}
                 </h1>
                 <span className="text-xs font-semibold text-slate-500">
-                  {liveAssessment.exam.subject} • {liveAssessment.exam.grade} • {liveAssessment.exam.durationMinutes || 60} Minutes
+                  {liveAssessment.exam.subject} • {liveAssessment.exam.grade} • {liveAssessment.exam.durationMinutes || 60} Minutes • {totalQuestions} Questions • {totalMarks} Total Marks
                 </span>
               </div>
             </div>
@@ -592,204 +635,71 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       {/* Question Prompt */}
                       <div className="space-y-2">
                         <h3 className={`font-black text-slate-900 ${fontClass}`}>
-                          {currentQItem.question.question}
+                          {renderFormattedPrompt(currentQItem.question.question, {
+                            isMCQ: currentQItem.question.type === 'multiple_choice',
+                            isFillBlank: currentQItem.question.type === 'fill_in_blank',
+                            inlineInputValue: currentQItem.question.type === 'fill_in_blank' ? mockAnswers[currentQItem.question.id] : undefined,
+                            onInlineInputChange: currentQItem.question.type === 'fill_in_blank' ? (val) => handleSelectAnswer(currentQItem.question.id, val) : undefined
+                          })}
                         </h3>
 
                         {/* Multiple Choice Options */}
                         {['multiple_choice', 'checkboxes', 'dropdown'].includes(currentQItem.question.type) && (
-                          <div className="space-y-2 pt-1 answer-area">
-                            {((currentQItem.question as MultipleChoiceQuestion).options || []).map((opt) => {
-                              const isSelected = mockAnswers[currentQItem.question.id] === opt.id;
-                              const isCorrectAnswer = Array.isArray((currentQItem.question as any).correctAnswer)
-                                ? (currentQItem.question as any).correctAnswer.includes(opt.id)
-                                : (currentQItem.question as any).correctAnswer === opt.id;
-
-                              return (
-                                <div
-                                  key={opt.id}
-                                  onClick={() => handleSelectAnswer(currentQItem.question.id, opt.id)}
-                                  className={`p-3 sm:p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
-                                    isSelected
-                                      ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs font-bold'
-                                      : 'bg-white border-slate-300 hover:border-indigo-400 hover:bg-slate-50 text-slate-900 shadow-2xs'
-                                  } ${showAnswerKeys && isCorrectAnswer ? 'bg-emerald-50 border-emerald-500' : ''}`}
-                                >
-                                  <div
-                                    className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs font-black shrink-0 ${
-                                      isSelected
-                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                                        : 'border-slate-300 bg-slate-50 text-slate-700'
-                                    }`}
-                                  >
-                                    {opt.id.toUpperCase()}
-                                  </div>
-
-                                  <span className="flex-1 text-xs sm:text-sm font-semibold text-slate-900 leading-snug">
-                                    {opt.text}
-                                  </span>
-
-                                  {showAnswerKeys && isCorrectAnswer && (
-                                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-                                      Correct Key
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <MCQQuestion
+                            question={currentQItem.question as MultipleChoiceQuestion}
+                            currentAnswer={mockAnswers[currentQItem.question.id]}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                            showAnswerKey={effectiveShowKeys}
+                          />
                         )}
 
                         {/* True / False Selection */}
                         {currentQItem.question.type === 'true_false' && (
-                          <div className="grid grid-cols-2 gap-3 pt-1 max-w-md answer-area">
-                            {[true, false].map((tfVal) => {
-                              const isSelected = mockAnswers[currentQItem.question.id] === tfVal;
-                              return (
-                                <button
-                                  key={String(tfVal)}
-                                  type="button"
-                                  onClick={() => handleSelectAnswer(currentQItem.question.id, tfVal)}
-                                  className={`p-3.5 rounded-xl border text-sm font-black flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs ${
-                                    isSelected
-                                      ? 'bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-200'
-                                      : 'bg-white border-slate-300 text-slate-900 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  <span>{tfVal ? 'TRUE' : 'FALSE'}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <TrueFalseQuestionComponent
+                            question={currentQItem.question as any}
+                            currentAnswer={mockAnswers[currentQItem.question.id]}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                            showAnswerKey={effectiveShowKeys}
+                          />
                         )}
 
                         {/* Fill in Blank */}
                         {currentQItem.question.type === 'fill_in_blank' && (
-                          <div className="space-y-1.5 pt-1 answer-area max-w-xl">
-                            <input
-                              type="text"
-                              value={mockAnswers[currentQItem.question.id] || ''}
-                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
-                              placeholder="Type the missing word or phrase..."
-                              className="w-full h-11 sm:h-12 px-4 rounded-xl border border-slate-300 bg-white text-sm sm:text-base font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                            />
-                            <div className="text-[11px] text-slate-500 font-semibold px-1">
-                              Type the answer accurately
-                            </div>
-                          </div>
+                          <FillBlankQuestionComponent
+                            question={currentQItem.question as any}
+                            currentAnswer={mockAnswers[currentQItem.question.id]}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                            showAnswerKey={effectiveShowKeys}
+                          />
                         )}
 
                         {/* Cloze Passage Component */}
                         {currentQItem.question.type === 'cloze_passage' && (
-                          <div className="space-y-4 pt-1 answer-area">
-                            {/* Word Bank if available */}
-                            {Array.isArray((currentQItem.question as any).wordBank) && (currentQItem.question as any).wordBank.length > 0 && (
-                              <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-2">
-                                <div className="text-[10px] font-black uppercase tracking-wider text-teal-950">
-                                  WORD BANK
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  {(currentQItem.question as any).wordBank.map((term: string, tIdx: number) => (
-                                    <span
-                                      key={tIdx}
-                                      className="px-3 py-1 bg-white border border-teal-300 text-teal-950 rounded-xl text-xs font-bold shadow-2xs"
-                                    >
-                                      {term}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Passage with blanks */}
-                            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                              <div className="flex items-center justify-between text-xs font-black text-slate-800">
-                                <span className="uppercase tracking-wider">CLOZE PASSAGE</span>
-                                <span className="text-teal-700 font-bold">
-                                  {((currentQItem.question as any).blanks || []).length} blanks •{' '}
-                                  {
-                                    ((currentQItem.question as any).blanks || []).filter(
-                                      (b: any) => Boolean(mockAnswers[`${currentQItem.question.id}_${b.id}`])
-                                    ).length
-                                  } / {((currentQItem.question as any).blanks || []).length} completed
-                                </span>
-                              </div>
-
-                              <div className="text-sm font-serif text-slate-800 leading-[1.7] whitespace-pre-wrap max-w-[72ch]">
-                                {(currentQItem.question as any).passage || currentQItem.parentPassage || ''}
-                              </div>
-                            </div>
-
-                            {/* Interactive Blanks Answer Fields */}
-                            <div className="space-y-2.5 pt-1">
-                              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                                Complete Each Blank:
-                              </span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                {((currentQItem.question as any).blanks || []).map((blank: any, bIdx: number) => {
-                                  const blankKey = `${currentQItem.question.id}_${blank.id}`;
-                                  return (
-                                    <div
-                                      key={blank.id || bIdx}
-                                      className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center gap-2 shadow-2xs"
-                                    >
-                                      <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 flex items-center justify-center text-xs font-black shrink-0">
-                                        [{bIdx + 1}]
-                                      </span>
-                                      <input
-                                        type="text"
-                                        value={mockAnswers[blankKey] || ''}
-                                        onChange={(e) => handleSelectAnswer(blankKey, e.target.value)}
-                                        placeholder={`Blank [ ${bIdx + 1} ] answer...`}
-                                        className="flex-1 px-3 py-1.5 text-xs font-bold text-slate-900 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                                      />
-                                      {showAnswerKeys && blank.correctAnswer && (
-                                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
-                                          Key: {blank.correctAnswer}
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
+                          <ClozeQuestionComponent
+                            question={currentQItem.question as any}
+                            currentAnswer={mockAnswers[currentQItem.question.id] || {}}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                            showAnswerKey={effectiveShowKeys}
+                          />
                         )}
 
                         {/* Short Answer */}
                         {currentQItem.question.type === 'short_answer' && (
-                          <div className="space-y-1.5 pt-1 answer-area max-w-2xl">
-                            <textarea
-                              rows={3}
-                              value={mockAnswers[currentQItem.question.id] || ''}
-                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
-                              placeholder="Type your concise answer here..."
-                              className="w-full p-3.5 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed shadow-2xs resize-y min-h-[80px] max-h-[140px]"
-                            />
-                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
-                              <span>Be direct and concise</span>
-                              <span className="font-mono text-slate-600">{getCharCount(mockAnswers[currentQItem.question.id])} characters</span>
-                            </div>
-                          </div>
+                          <ShortAnswerQuestionComponent
+                            question={currentQItem.question as any}
+                            currentAnswer={mockAnswers[currentQItem.question.id]}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                            showAnswerKey={effectiveShowKeys}
+                          />
                         )}
 
                         {/* Long Writing / Essay */}
                         {['paragraph', 'essay'].includes(currentQItem.question.type) && (
-                          <div className="space-y-1.5 pt-1 answer-area">
-                            <textarea
-                              rows={8}
-                              value={mockAnswers[currentQItem.question.id] || ''}
-                              onChange={(e) => handleSelectAnswer(currentQItem.question.id, e.target.value)}
-                              placeholder="Type your written response here..."
-                              className="w-full p-4 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 leading-relaxed shadow-2xs resize-y min-h-[220px] max-h-[280px]"
-                            />
-                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold px-1">
-                              <span>Organize your thoughts into coherent sentences and paragraphs.</span>
-                              <span className="font-mono text-slate-700 font-bold">
-                                {getWordCount(mockAnswers[currentQItem.question.id])} words
-                                {(currentQItem.question as any).minWords ? ` / ${(currentQItem.question as any).minWords} min words` : ''}
-                              </span>
-                            </div>
-                          </div>
+                          <EssayQuestionComponent
+                            question={currentQItem.question as any}
+                            currentAnswer={mockAnswers[currentQItem.question.id]}
+                            onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+                          />
                         )}
                       </div>
                     </div>
@@ -887,7 +797,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-1.5 max-h-56 overflow-y-auto pr-0.5">
                   {flattenedQuestions.map((q, idx) => {
                     const isCurrent = currentIndex === idx;
-                    const isAnswered = mockAnswers[q.question.id] !== undefined && mockAnswers[q.question.id] !== '';
+                    const isAnswered = isQuestionAnswered(q.question.id);
                     const isFlagged = flaggedIds.has(q.question.id);
 
                     let bgClass = 'bg-white text-slate-900 font-bold border-slate-300 hover:border-indigo-400 shadow-2xs';

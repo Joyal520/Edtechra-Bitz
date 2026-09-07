@@ -39,22 +39,33 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
 
   const total = questions.length;
 
+  const isQuestionAnswered = (q: FlattenedExamQuestion): boolean => {
+    const qId = q.question.id;
+    const ans = answers[qId];
+    if (ans !== undefined && ans !== null) {
+      if (typeof ans === 'string') return ans.trim().length > 0;
+      if (Array.isArray(ans)) return ans.length > 0;
+      if (typeof ans === 'object') {
+        return Object.values(ans).some((v) => Boolean(v && String(v).trim().length > 0));
+      }
+      return true;
+    }
+    // Check for sub-keys like `${qId}_`
+    const subKeys = Object.keys(answers).filter((k) => k.startsWith(`${qId}_`));
+    if (subKeys.length > 0) {
+      return subKeys.some((k) => Boolean(answers[k] && String(answers[k]).trim().length > 0));
+    }
+    return false;
+  };
+
   // Compute status for each question
   const getStatus = (q: FlattenedExamQuestion, idx: number): QuestionAnswerStatus => {
     if (idx === currentIndex) return 'current';
     if (bookmarkedIds.has(q.question.id)) return 'marked_for_review';
-    const ans = answers[q.question.id];
-    if (ans !== undefined && ans !== null && String(ans).trim().length > 0) {
-      if (Array.isArray(ans) && ans.length === 0) return 'unanswered';
-      return 'answered';
-    }
-    return 'unanswered';
+    return isQuestionAnswered(q) ? 'answered' : 'unanswered';
   };
 
-  const answeredCount = questions.filter((q) => {
-    const ans = answers[q.question.id];
-    return ans !== undefined && ans !== null && String(ans).trim().length > 0 && !(Array.isArray(ans) && ans.length === 0);
-  }).length;
+  const answeredCount = questions.filter(isQuestionAnswered).length;
 
   const reviewCount = bookmarkedIds.size;
   const unansweredCount = total - answeredCount;

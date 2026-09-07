@@ -18,17 +18,20 @@ import { ReadingQuestionLayout } from './renderers/ReadingQuestion';
 import { ImageQuestionComponent } from './renderers/ImageQuestion';
 import { AudioQuestionComponent } from './renderers/AudioQuestion';
 import { ClozeQuestionComponent } from './renderers/ClozeQuestion';
+import { renderFormattedPrompt } from '../shared/formattedText';
 
 interface QuestionRendererProps {
   questionItem: FlattenedExamQuestion;
   currentAnswer: any;
   onAnswerChange: (answer: any) => void;
+  showAnswerKey?: boolean;
 }
 
 export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
   questionItem,
   currentAnswer,
-  onAnswerChange
+  onAnswerChange,
+  showAnswerKey = false
 }) => {
   const {
     question,
@@ -69,6 +72,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             question={question}
             currentAnswer={currentAnswer}
             onAnswerChange={onAnswerChange}
+            showAnswerKey={showAnswerKey}
           />
         );
 
@@ -87,6 +91,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             question={question}
             currentAnswer={currentAnswer}
             onAnswerChange={onAnswerChange}
+            showAnswerKey={showAnswerKey}
           />
         );
 
@@ -96,6 +101,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             question={question}
             currentAnswer={currentAnswer}
             onAnswerChange={onAnswerChange}
+            showAnswerKey={showAnswerKey}
           />
         );
 
@@ -123,6 +129,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             question={question}
             currentAnswer={currentAnswer}
             onAnswerChange={onAnswerChange}
+            showAnswerKey={showAnswerKey}
           />
         );
 
@@ -159,6 +166,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             question={question}
             currentAnswer={currentAnswer}
             onAnswerChange={onAnswerChange}
+            showAnswerKey={showAnswerKey}
           />
         );
 
@@ -209,7 +217,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           {/* Short Instruction */}
           <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-2">
             <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-              {question.question}
+              {renderFormattedPrompt(question.question)}
             </p>
             {rubric && (
               <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-indigo-100/80">
@@ -298,7 +306,12 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
 
           {/* Question Prompt */}
           <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900 leading-relaxed tracking-wide">
-            {question.question}
+            {renderFormattedPrompt(question.question, {
+              isMCQ: question.type === 'multiple_choice',
+              isFillBlank: question.type === 'fill_in_blank',
+              inlineInputValue: question.type === 'fill_in_blank' ? currentAnswer : undefined,
+              onInlineInputChange: question.type === 'fill_in_blank' ? onAnswerChange : undefined
+            })}
           </h2>
 
           {/* Interactive Question Input Form */}
