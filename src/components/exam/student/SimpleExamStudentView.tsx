@@ -74,60 +74,60 @@ interface OptionTheme {
 }
 
 const OPTION_THEMES: OptionTheme[] = [
-  // Option A - Pink / Rose
+  // Option A - Pink / Rose Pastel
   {
     letter: 'A',
     badgeBg: 'bg-[#f43f5e]',
     badgeText: 'text-white',
-    cardBg: 'bg-[#fff0f4]',
+    cardBg: 'bg-gradient-to-r from-[#fff0f4] to-[#ffe4eb]',
     cardBorder: 'border-[#fecdd6]',
-    cardHover: 'hover:border-[#fb7185] hover:bg-[#ffe4eb]',
-    cardSelectedBg: 'bg-[#ffe2e8]',
+    cardHover: 'hover:border-[#fb7185] hover:shadow-md hover:shadow-pink-100',
+    cardSelectedBg: 'bg-gradient-to-r from-[#ffe2e8] to-[#fecdd6]',
     cardSelectedBorder: 'border-[#f43f5e]',
     cardSelectedRing: 'ring-4 ring-[#f43f5e]/25',
     accentRays: 'text-[#f43f5e]',
     chevronBg: 'bg-[#ffd3dc]',
     chevronText: 'text-[#f43f5e]'
   },
-  // Option B - Blue / Sky
+  // Option B - Blue / Sky Pastel
   {
     letter: 'B',
     badgeBg: 'bg-[#3b82f6]',
     badgeText: 'text-white',
-    cardBg: 'bg-[#f0f7ff]',
+    cardBg: 'bg-gradient-to-r from-[#f0f7ff] to-[#e0f0fe]',
     cardBorder: 'border-[#bae0fd]',
-    cardHover: 'hover:border-[#60a5fa] hover:bg-[#e0f0fe]',
-    cardSelectedBg: 'bg-[#dbeafe]',
+    cardHover: 'hover:border-[#60a5fa] hover:shadow-md hover:shadow-sky-100',
+    cardSelectedBg: 'bg-gradient-to-r from-[#dbeafe] to-[#bae0fd]',
     cardSelectedBorder: 'border-[#3b82f6]',
     cardSelectedRing: 'ring-4 ring-[#3b82f6]/25',
     accentRays: 'text-[#3b82f6]',
     chevronBg: 'bg-[#bfdbfe]',
     chevronText: 'text-[#2563eb]'
   },
-  // Option C - Green / Emerald
+  // Option C - Green / Mint Pastel
   {
     letter: 'C',
     badgeBg: 'bg-[#10b981]',
     badgeText: 'text-white',
-    cardBg: 'bg-[#f0fdf4]',
+    cardBg: 'bg-gradient-to-r from-[#f0fdf4] to-[#dcfce7]',
     cardBorder: 'border-[#bbf7d0]',
-    cardHover: 'hover:border-[#4ade80] hover:bg-[#dcfce7]',
-    cardSelectedBg: 'bg-[#d1fae5]',
+    cardHover: 'hover:border-[#4ade80] hover:shadow-md hover:shadow-emerald-100',
+    cardSelectedBg: 'bg-gradient-to-r from-[#d1fae5] to-[#bbf7d0]',
     cardSelectedBorder: 'border-[#10b981]',
     cardSelectedRing: 'ring-4 ring-[#10b981]/25',
     accentRays: 'text-[#10b981]',
     chevronBg: 'bg-[#bbf7d0]',
     chevronText: 'text-[#059669]'
   },
-  // Option D - Yellow / Amber
+  // Option D - Yellow / Amber Pastel
   {
     letter: 'D',
     badgeBg: 'bg-[#f59e0b]',
     badgeText: 'text-white',
-    cardBg: 'bg-[#fffbeb]',
+    cardBg: 'bg-gradient-to-r from-[#fffbeb] to-[#fef3c7]',
     cardBorder: 'border-[#fde68a]',
-    cardHover: 'hover:border-[#fbbf24] hover:bg-[#fef3c7]',
-    cardSelectedBg: 'bg-[#fef3c7]',
+    cardHover: 'hover:border-[#fbbf24] hover:shadow-md hover:shadow-amber-100',
+    cardSelectedBg: 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a]',
     cardSelectedBorder: 'border-[#f59e0b]',
     cardSelectedRing: 'ring-4 ring-[#f59e0b]/25',
     accentRays: 'text-[#f59e0b]',

@@ -49,6 +49,7 @@ import { ClozeQuestionComponent } from '../../student/renderers/ClozeQuestion';
 import { EssayQuestionComponent } from '../../student/renderers/EssayQuestion';
 import { QuestionVisualEditorModal } from '../modals/QuestionVisualEditorModal';
 import { SimplePublishModal } from '../publishing/SimplePublishModal';
+import { SimpleExamStudentView } from '../../student/SimpleExamStudentView';
 
 interface LivePreviewModalProps {
   isOpen: boolean;
@@ -130,6 +131,34 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
       [qId]: value
     }));
   };
+
+  // Countdown timer state for student preview
+  const [liveTimerSeconds, setLiveTimerSeconds] = useState(
+    (liveAssessment.exam.durationMinutes || 60) * 60
+  );
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveTimerSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Determine if the assessment conforms to the Simple Exam template
+  const isSimpleExam = useMemo(() => {
+    const typeStr = (liveAssessment.exam.examType || '').toLowerCase();
+    const titleStr = (liveAssessment.exam.title || '').toLowerCase();
+    const template = (liveAssessment as any).exam_template || (liveAssessment.exam as any)?.exam_template;
+    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
+      return true;
+    }
+    const allMCQ =
+      flattenedQuestions.length > 0 &&
+      flattenedQuestions.every((q) => q.question.type === 'multiple_choice');
+    if (allMCQ && (flattenedQuestions.length === 25 || typeStr.includes('quick') || (flattenedQuestions[0]?.question?.marks === 4))) {
+      return true;
+    }
+    return false;
+  }, [liveAssessment, flattenedQuestions]);
 
   const handleToggleFlag = (qId: string) => {
     setFlaggedIds((prev) => {
@@ -389,9 +418,33 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
       {/* Main Student Examination Viewport */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex justify-center custom-scrollbar bg-slate-100/70">
-        <div
-          className={`w-full transition-all duration-300 rounded-3xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col my-auto ${deviceWidthClass}`}
-        >
+        {viewMode === 'student' && isSimpleExam ? (
+          <div className={`w-full transition-all duration-300 rounded-3xl overflow-hidden shadow-xl my-auto ${deviceWidthClass}`}>
+            <SimpleExamStudentView
+              exam={liveAssessment as any}
+              questions={flattenedQuestions}
+              currentIndex={currentIndex}
+              currentAnswer={mockAnswers[currentQItem?.question?.id]}
+              answers={mockAnswers}
+              bookmarkedIds={flaggedIds}
+              timeRemainingSeconds={liveTimerSeconds}
+              answeredCount={answeredCount}
+              unansweredCount={Math.max(0, totalQuestions - answeredCount)}
+              markedCount={flaggedIds.size}
+              onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
+              onClearAnswer={() => handleSelectAnswer(currentQItem.question.id, undefined)}
+              onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+              onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
+              onSelectIndex={(idx) => setCurrentIndex(idx)}
+              onToggleBookmark={() => handleToggleFlag(currentQItem.question.id)}
+              onSubmit={() => setIsPublishModalOpen(true)}
+              onClose={onClose}
+            />
+          </div>
+        ) : (
+          <div
+            className={`w-full transition-all duration-300 rounded-3xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col my-auto ${deviceWidthClass}`}
+          >
           {/* 1. Top Online Examination Header */}
           <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -896,7 +949,8 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      )}
+    </div>
 
       {/* Visual Question Editor Modal */}
       <QuestionVisualEditorModal
