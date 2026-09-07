@@ -20,6 +20,7 @@ import { QuestionRenderer } from './QuestionRenderer';
 import { SubmitDialog } from './SubmitDialog';
 import { ExamInstructions } from './ExamInstructions';
 import { ExamResultView } from './ExamResultView';
+import { SimpleExamStudentView } from './SimpleExamStudentView';
 
 export interface ExamSessionAttemptData {
   attemptId?: string;
@@ -310,6 +311,72 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       handleAnswerChange(undefined);
     }
   };
+
+  // Check if exam conforms to Simple Exam template
+  const isSimpleExam = useMemo(() => {
+    const typeStr = (exam.exam.examType || '').toLowerCase();
+    const titleStr = (exam.exam.title || '').toLowerCase();
+    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
+    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
+      return true;
+    }
+    const allMCQ =
+      flattenedQuestions.length > 0 &&
+      flattenedQuestions.every((q) => q.question.type === 'multiple_choice');
+    if (allMCQ && (flattenedQuestions.length === 25 || typeStr.includes('quick'))) {
+      return true;
+    }
+    return false;
+  }, [exam, flattenedQuestions]);
+
+  // Render dedicated Simple Exam student UI when applicable
+  if (isSimpleExam && currentQ) {
+    return (
+      <div className="relative min-h-screen bg-gradient-to-b from-[#eef6ff] via-[#f7faff] to-[#eaf3fe]">
+        {/* Preview Watermark Badge if Teacher is Previewing */}
+        {isPreview && (
+          <div className="bg-amber-50 border-b border-amber-200 py-1.5 px-4 text-center text-xs font-bold text-amber-900 flex items-center justify-center gap-2">
+            <span>TEACHER PREVIEW MODE — Student scores will not be recorded</span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="underline text-amber-950 hover:text-indigo-600 font-semibold cursor-pointer ml-2"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+
+        <SimpleExamStudentView
+          exam={exam}
+          questions={flattenedQuestions}
+          currentIndex={currentIndex}
+          currentAnswer={answers[currentQ.question.id]}
+          bookmarkedIds={bookmarkedIds}
+          timeRemainingSeconds={timeRemainingSeconds}
+          syncState={syncState}
+          onAnswerChange={handleAnswerChange}
+          onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+          onNext={() => setCurrentIndex((prev) => Math.min(flattenedQuestions.length - 1, prev + 1))}
+          onToggleBookmark={handleToggleBookmark}
+          onSubmit={() => setShowSubmitConfirm(true)}
+          onClose={onClose}
+        />
+
+        {/* Submit Confirmation Dialog */}
+        <SubmitDialog
+          isOpen={showSubmitConfirm}
+          totalQuestions={flattenedQuestions.length}
+          answeredCount={answeredCount}
+          unansweredCount={unansweredCount}
+          markedForReviewCount={markedCount}
+          isSubmitting={isSubmitting}
+          onClose={() => setShowSubmitConfirm(false)}
+          onConfirmSubmit={performSubmission}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

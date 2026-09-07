@@ -20,8 +20,15 @@ import {
   Image as ImageIcon,
   Headphones,
   Video,
-  Info
+  Info,
+  Zap,
+  Award,
+  GraduationCap,
+  Star,
+  Settings2
 } from 'lucide-react';
+
+export type ExamTemplate = 'simple' | 'standard' | 'advanced' | 'custom';
 import {
   CanonicalAssessmentV2,
   SupportedQuestionType
@@ -223,8 +230,11 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
   initialSubject = 'English Language',
   initialGrade = 'Grade 10'
 }) => {
-  // Wizard Step: 1 (Content), 2 (Blueprint), 3 (Media), 4 (Settings), 5 (AI Prompt & JSON)
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Wizard Step: 0 (Template), 1 (Content), 2 (Blueprint), 3 (Media), 4 (Settings), 5 (AI Prompt & JSON)
+  const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
+
+  // Panel 0: Template Selection State
+  const [selectedTemplate, setSelectedTemplate] = useState<ExamTemplate | null>(null);
 
   // Panel 1: Content State
   const [contentTitle, setContentTitle] = useState(initialTopic);
@@ -361,6 +371,63 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
         return { ...it, marksPerItem: Math.max(1, marks) };
       })
     );
+  };
+
+  // ============================================================================
+  // EXAM TEMPLATE APPLICATION FUNCTIONS
+  // These map the Simple/Standard/Advanced templates to existing blueprintItems.
+  // Each function only pre-fills the existing blueprint state — nothing downstream changes.
+  // ============================================================================
+
+  const applySimpleTemplate = () => {
+    setActivePreset('custom');
+    setBlueprintItems((prev) =>
+      prev.map((item) => {
+        if (item.id === 'mcq') return { ...item, enabled: true, count: 25, marksPerItem: 4 };
+        return { ...item, enabled: false };
+      })
+    );
+  };
+
+  const applyStandardTemplate = () => {
+    setActivePreset('custom');
+    setBlueprintItems((prev) =>
+      prev.map((item) => {
+        if (item.id === 'mcq') return { ...item, enabled: true, count: 15, marksPerItem: 2 };
+        if (item.id === 'tf') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
+        if (item.id === 'fill_blank') return { ...item, enabled: true, count: 8, marksPerItem: 2 };
+        if (item.id === 'short_ans') return { ...item, enabled: true, count: 7, marksPerItem: 2 };
+        if (item.id === 'reading') return { ...item, enabled: true, count: 1, marksPerItem: 20 };
+        if (item.id === 'error_corr') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
+        return { ...item, enabled: false };
+      })
+    );
+  };
+
+  const applyAdvancedTemplate = () => {
+    setActivePreset('custom');
+    setBlueprintItems((prev) =>
+      prev.map((item) => {
+        if (item.id === 'mcq') return { ...item, enabled: true, count: 10, marksPerItem: 2 };
+        if (item.id === 'tf') return { ...item, enabled: true, count: 5, marksPerItem: 1 };
+        if (item.id === 'fill_blank') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
+        if (item.id === 'short_ans') return { ...item, enabled: true, count: 5, marksPerItem: 3 };
+        if (item.id === 'reading') return { ...item, enabled: true, count: 1, marksPerItem: 15 };
+        if (item.id === 'error_corr') return { ...item, enabled: true, count: 3, marksPerItem: 2 };
+        if (item.id === 'sent_trans') return { ...item, enabled: true, count: 3, marksPerItem: 3 };
+        if (item.id === 'writing') return { ...item, enabled: true, count: 1, marksPerItem: 20 };
+        return { ...item, enabled: false };
+      })
+    );
+  };
+
+  const handleSelectTemplate = (template: ExamTemplate) => {
+    setSelectedTemplate(template);
+    if (template === 'simple') applySimpleTemplate();
+    else if (template === 'standard') applyStandardTemplate();
+    else if (template === 'advanced') applyAdvancedTemplate();
+    // 'custom' leaves blueprint items at defaults
+    setCurrentStep(1);
   };
 
   // Generate Grounded AI Prompt
@@ -529,7 +596,7 @@ Generate the complete examination JSON now:`;
             title: result.parsedExam.exam.title || `${subject}: ${contentTitle || 'Exam'}`,
             subject: result.parsedExam.exam.subject || subject,
             grade: result.parsedExam.exam.grade || grade,
-            examType: 'Standard Exam',
+            examType: selectedTemplate === 'simple' ? 'Simple Exam' : selectedTemplate === 'advanced' ? 'Advanced Exam' : result.parsedExam.exam.examType || 'Standard Exam',
             difficulty: difficulty,
             durationMinutes: result.parsedExam.exam.durationMinutes || durationMinutes,
             passPercentage: result.parsedExam.exam.passPercentage || passPercentage,
@@ -541,6 +608,11 @@ Generate the complete examination JSON now:`;
           brandKit: { enabled: false, watermark: false },
           sections: result.parsedExam.sections || []
         };
+
+        if (selectedTemplate) {
+          (finalAssessment as any).exam_template = selectedTemplate;
+          (finalAssessment.exam as any).exam_template = selectedTemplate;
+        }
 
         onExamCreated(finalAssessment);
         onClose();
@@ -579,9 +651,10 @@ Generate the complete examination JSON now:`;
                 AI Exam Generator
               </span>
               <span className="text-slate-300">•</span>
-              <span className="text-xs font-semibold text-slate-500">Step {currentStep} of 5</span>
+              <span className="text-xs font-semibold text-slate-500">Step {currentStep + 1} of 6</span>
             </div>
             <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-0.5">
+              {currentStep === 0 && 'Choose Exam Type'}
               {currentStep === 1 && '1. What should this exam test?'}
               {currentStep === 2 && '2. Choose your question types'}
               {currentStep === 3 && '3. Add Media'}
@@ -605,6 +678,7 @@ Generate the complete examination JSON now:`;
       <div className="px-6 py-3.5 sm:px-10 bg-white border-b border-slate-200 flex items-center justify-center shrink-0 z-10 shadow-2xs">
         <div className="flex items-center justify-between w-full max-w-4xl overflow-x-auto gap-2">
           {[
+            { step: 0, label: 'Template' },
             { step: 1, label: 'Content' },
             { step: 2, label: 'Blueprint' },
             { step: 3, label: 'Media' },
@@ -636,7 +710,7 @@ Generate the complete examination JSON now:`;
                       : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {isDone ? <Check className="w-3 h-3" /> : s.step}
+                  {isDone ? <Check className="w-3 h-3" /> : s.step + 1}
                 </div>
                 <span className="hidden sm:inline">{s.label}</span>
               </button>
@@ -648,6 +722,188 @@ Generate the complete examination JSON now:`;
       {/* Main Wizard Content Panels */}
       <div className="p-6 sm:px-10 sm:py-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
         <div className="max-w-4xl mx-auto space-y-6">
+          {/* ============================================================
+              PANEL 0 — TEMPLATE SELECTION
+          ============================================================ */}
+          {currentStep === 0 && (
+            <div className="space-y-8 animate-fadeIn">
+              {/* Header */}
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-black text-slate-900">Choose Exam Type</h3>
+                <p className="text-sm text-slate-500 font-medium max-w-lg mx-auto">
+                  Choose how you want your examination to be structured. The system will configure question types and marks automatically.
+                </p>
+              </div>
+
+              {/* Three Template Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* SIMPLE */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('simple')}
+                  className="p-6 rounded-3xl border-2 border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/30 text-left transition-all hover:scale-[1.02] hover:shadow-xl cursor-pointer group flex flex-col justify-between space-y-5 shadow-xs"
+                >
+                  <div className="space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-2xs group-hover:bg-blue-100 transition-colors">
+                      <Zap className="w-7 h-7" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-700 transition-colors">SIMPLE</h4>
+                      <p className="text-xs font-bold text-blue-600">Quick Knowledge Assessment</p>
+                    </div>
+
+                    <div className="space-y-2 pt-3 border-t border-slate-100 text-xs text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>25 questions — MCQ only</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>4 options per question</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>4 marks per question</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="font-bold text-slate-800">Total: 100 marks</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Designed for quick tests, revision, and basic knowledge checking.
+                    </p>
+                  </div>
+
+                  <div className="w-full py-3 rounded-2xl bg-slate-100 group-hover:bg-indigo-600 text-slate-700 group-hover:text-white font-black text-xs flex items-center justify-center gap-2 transition-all">
+                    <span>Select Simple</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+
+                {/* STANDARD — RECOMMENDED */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('standard')}
+                  className="p-6 rounded-3xl border-2 border-indigo-300 hover:border-indigo-500 bg-indigo-50/40 hover:bg-indigo-50 text-left transition-all hover:scale-[1.02] hover:shadow-xl cursor-pointer group flex flex-col justify-between space-y-5 shadow-md shadow-indigo-100 relative"
+                >
+                  {/* Recommended Badge */}
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                    <Star className="w-3 h-3" />
+                    <span>Recommended</span>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-2xs group-hover:bg-indigo-200 transition-colors">
+                      <Award className="w-7 h-7" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-700 transition-colors">STANDARD</h4>
+                      <p className="text-xs font-bold text-indigo-600">Cambridge-Style Assessment</p>
+                    </div>
+
+                    <div className="space-y-2 pt-3 border-t border-indigo-100 text-xs text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>~50 questions — Mixed types</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>MCQ, Fill-in-blank, Short answer</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Reading comprehension</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Mobile-friendly • Progressive difficulty</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="font-bold text-slate-800">Total: 100 marks</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Tests knowledge, understanding, and application. Default examination format.
+                    </p>
+                  </div>
+
+                  <div className="w-full py-3 rounded-2xl bg-indigo-600 group-hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-200">
+                    <span>Select Standard</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+
+                {/* ADVANCED */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('advanced')}
+                  className="p-6 rounded-3xl border-2 border-slate-200 hover:border-purple-400 bg-white hover:bg-purple-50/30 text-left transition-all hover:scale-[1.02] hover:shadow-xl cursor-pointer group flex flex-col justify-between space-y-5 shadow-xs"
+                >
+                  <div className="space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600 shadow-2xs group-hover:bg-purple-100 transition-colors">
+                      <GraduationCap className="w-7 h-7" />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <h4 className="text-lg font-black text-slate-900 group-hover:text-purple-700 transition-colors">ADVANCED</h4>
+                      <p className="text-xs font-bold text-purple-600">Comprehensive Examination</p>
+                    </div>
+
+                    <div className="space-y-2 pt-3 border-t border-slate-100 text-xs text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Structured — Multiple sections</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Higher-order thinking</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Reading, analysis, essay</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>Sentence transformation</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="font-bold text-slate-800">Total: 100 marks</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Suitable for major examinations with complex assessment blueprints.
+                    </p>
+                  </div>
+
+                  <div className="w-full py-3 rounded-2xl bg-slate-100 group-hover:bg-purple-600 text-slate-700 group-hover:text-white font-black text-xs flex items-center justify-center gap-2 transition-all">
+                    <span>Select Advanced</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Custom Option */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectTemplate('custom')}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Settings2 className="w-4 h-4" />
+                  <span>Custom Exam — Choose your own question types</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ============================================================
               PANEL 1 — CONTENT
           ============================================================ */}
@@ -1356,10 +1612,11 @@ Generate the complete examination JSON now:`;
       </div>
 
       {/* Wizard Footer Controls */}
+      {currentStep > 0 && (
       <div className="px-6 py-4 sm:px-10 bg-slate-50 border-t border-slate-200 shrink-0 z-20">
         <div className="w-full max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            {currentStep > 1 && (
+            {currentStep > 0 && (
               <button
                 type="button"
                 onClick={() => setCurrentStep((prev) => (prev - 1) as any)}
@@ -1408,6 +1665,7 @@ Generate the complete examination JSON now:`;
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
