@@ -352,12 +352,18 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           questions={flattenedQuestions}
           currentIndex={currentIndex}
           currentAnswer={answers[currentQ.question.id]}
+          answers={answers}
           bookmarkedIds={bookmarkedIds}
           timeRemainingSeconds={timeRemainingSeconds}
           syncState={syncState}
+          answeredCount={answeredCount}
+          unansweredCount={unansweredCount}
+          markedCount={markedCount}
           onAnswerChange={handleAnswerChange}
+          onClearAnswer={() => handleAnswerChange(undefined)}
           onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
           onNext={() => setCurrentIndex((prev) => Math.min(flattenedQuestions.length - 1, prev + 1))}
+          onSelectIndex={(idx) => setCurrentIndex(idx)}
           onToggleBookmark={handleToggleBookmark}
           onSubmit={() => setShowSubmitConfirm(true)}
           onClose={onClose}
