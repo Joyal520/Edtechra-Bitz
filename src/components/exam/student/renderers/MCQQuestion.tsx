@@ -16,10 +16,37 @@ interface MCQQuestionProps {
   showAnswerKey?: boolean;
 }
 
-// Helper to strip redundant option letter prefixes (e.g. "A. is" -> "is", "B) are" -> "are")
+// Helper to strip redundant option letter prefixes (e.g. "A. is" -> "is", "B) are" -> "are", "A  A. is" -> "is")
 export function cleanOptionText(text: string): string {
   if (!text || typeof text !== 'string') return '';
-  return text.replace(/^(\(?[A-Da-d]\)?[\.\:\-\)]\s*)/, '').trim();
+  let cleaned = text.trim();
+  let prev = '';
+  while (cleaned !== prev) {
+    prev = cleaned;
+    // Strip "(A) ", "[A] ", "A. ", "A) ", "A: ", "A - ", "A— ", "Option A: ", "Option A. ", "Option A - "
+    const withDelim = cleaned.replace(
+      /^(?:option\s+)?(?:[\(\[]?[A-Da-d][\)\]]?\s*[\.\:\-\–\—\)\]]|\(?[A-Da-d]\)\s*|(?:option\s+)[A-Da-d]\s*[:.-]?)\s*/i,
+      ''
+    ).trim();
+    if (withDelim !== cleaned && withDelim.length > 0) {
+      cleaned = withDelim;
+      continue;
+    }
+    // Strip standalone prefix like "A  " (A followed by 2 or more spaces)
+    const withMultiSpaces = cleaned.replace(/^[A-Da-d]\s{2,}/i, '').trim();
+    if (withMultiSpaces !== cleaned && withMultiSpaces.length > 0) {
+      cleaned = withMultiSpaces;
+      continue;
+    }
+    // Strip "A " when followed by another prefix like "A. "
+    const withRedundantLetter = cleaned.replace(/^[A-Da-d]\s+(?=[A-Da-d][\.\:\-\)]|[A-Da-d]\s+)/i, '').trim();
+    if (withRedundantLetter !== cleaned && withRedundantLetter.length > 0) {
+      cleaned = withRedundantLetter;
+      continue;
+    }
+    break;
+  }
+  return cleaned;
 }
 
 // Pastel style definition for options A, B, C, D
@@ -57,45 +84,45 @@ const OPTION_THEMES: OptionTheme[] = [
   // Option B - Blue / Sky Pastel
   {
     letter: 'B',
-    badgeBg: 'bg-[#3b82f6]',
+    badgeBg: 'bg-[#0284c7]',
     badgeText: 'text-white',
     cardBg: 'bg-gradient-to-r from-[#f0f7ff] to-[#e0f0fe]',
     cardBorder: 'border-[#bae0fd]',
-    cardHover: 'hover:border-[#60a5fa] hover:shadow-md hover:shadow-sky-100',
+    cardHover: 'hover:border-[#38bdf8] hover:shadow-md hover:shadow-sky-100',
     cardSelectedBg: 'bg-gradient-to-r from-[#dbeafe] to-[#bae0fd]',
-    cardSelectedBorder: 'border-[#3b82f6]',
-    cardSelectedRing: 'ring-4 ring-[#3b82f6]/25',
-    accentRays: 'text-[#3b82f6]',
+    cardSelectedBorder: 'border-[#0284c7]',
+    cardSelectedRing: 'ring-4 ring-[#0284c7]/25',
+    accentRays: 'text-[#0284c7]',
     chevronBg: 'bg-[#bfdbfe]',
-    chevronText: 'text-[#2563eb]'
+    chevronText: 'text-[#0284c7]'
   },
   // Option C - Green / Mint Pastel
   {
     letter: 'C',
-    badgeBg: 'bg-[#10b981]',
+    badgeBg: 'bg-[#059669]',
     badgeText: 'text-white',
     cardBg: 'bg-gradient-to-r from-[#f0fdf4] to-[#dcfce7]',
     cardBorder: 'border-[#bbf7d0]',
     cardHover: 'hover:border-[#4ade80] hover:shadow-md hover:shadow-emerald-100',
     cardSelectedBg: 'bg-gradient-to-r from-[#d1fae5] to-[#bbf7d0]',
-    cardSelectedBorder: 'border-[#10b981]',
-    cardSelectedRing: 'ring-4 ring-[#10b981]/25',
-    accentRays: 'text-[#10b981]',
+    cardSelectedBorder: 'border-[#059669]',
+    cardSelectedRing: 'ring-4 ring-[#059669]/25',
+    accentRays: 'text-[#059669]',
     chevronBg: 'bg-[#bbf7d0]',
     chevronText: 'text-[#059669]'
   },
   // Option D - Yellow / Amber Pastel
   {
     letter: 'D',
-    badgeBg: 'bg-[#f59e0b]',
+    badgeBg: 'bg-[#d97706]',
     badgeText: 'text-white',
     cardBg: 'bg-gradient-to-r from-[#fffbeb] to-[#fef3c7]',
     cardBorder: 'border-[#fde68a]',
     cardHover: 'hover:border-[#fbbf24] hover:shadow-md hover:shadow-amber-100',
     cardSelectedBg: 'bg-gradient-to-r from-[#fef3c7] to-[#fde68a]',
-    cardSelectedBorder: 'border-[#f59e0b]',
-    cardSelectedRing: 'ring-4 ring-[#f59e0b]/25',
-    accentRays: 'text-[#f59e0b]',
+    cardSelectedBorder: 'border-[#d97706]',
+    cardSelectedRing: 'ring-4 ring-[#d97706]/25',
+    accentRays: 'text-[#d97706]',
     chevronBg: 'bg-[#fde68a]',
     chevronText: 'text-[#d97706]'
   }
@@ -108,11 +135,12 @@ export const MCQQuestion: React.FC<MCQQuestionProps> = ({
   showAnswerKey = false
 }) => {
   const options = question.options || [];
+  const isShortOptions = options.every((o) => (o.text || '').length < 40);
 
   return (
     <div className="space-y-3 pt-2 answer-area w-full">
-      {/* 2x2 Grid on Desktop (md:grid-cols-2), 1-Column Stack on Mobile */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4 w-full">
+      {/* 2x2 Grid on Desktop (sm:grid-cols-2), 1-Column Stack on Mobile */}
+      <div className={`grid ${isShortOptions ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2'} gap-3.5 sm:gap-4 w-full`}>
         {options.map((opt, optIdx) => {
           const theme = OPTION_THEMES[optIdx % OPTION_THEMES.length];
           const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
@@ -132,7 +160,7 @@ export const MCQQuestion: React.FC<MCQQuestionProps> = ({
               key={opt.id || optIdx}
               type="button"
               onClick={() => onAnswerChange(opt.id || opt.text)}
-              className={`w-full p-4 sm:p-5 rounded-3xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
+              className={`w-full min-h-[48px] p-3 sm:p-3.5 md:p-4 rounded-xl sm:rounded-2xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
                 isSelected
                   ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md`
                   : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs`

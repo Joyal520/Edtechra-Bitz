@@ -439,6 +439,7 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
               onToggleBookmark={() => handleToggleFlag(currentQItem.question.id)}
               onSubmit={() => setIsPublishModalOpen(true)}
               onClose={onClose}
+              isMobilePreview={device === 'mobile'}
             />
           </div>
         ) : (
