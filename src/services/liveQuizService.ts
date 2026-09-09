@@ -800,12 +800,44 @@ class LiveQuizService {
    */
   createRealtimeChannel(pin: string): RealtimeChannel | null {
     if (!supabase || !pin) return null;
-    return supabase.channel(`live_quiz:${pin.trim()}`, {
+    const cleanPin = pin.trim();
+    return supabase.channel(`live_quiz:${cleanPin}`, {
       config: {
         broadcast: { ack: true, self: false },
-        presence: { key: pin.trim() }
+        presence: { key: cleanPin }
       }
     });
+  }
+
+  /**
+   * Checks if a student has already submitted an answer for a specific question in a session
+   */
+  async checkStudentExistingAnswer(
+    sessionId: string,
+    questionIndex: number,
+    studentId: string
+  ): Promise<{ answered: boolean; selectedOptionIndex?: number; pointsAwarded?: number }> {
+    if (!supabase || !sessionId || !studentId) return { answered: false };
+
+    try {
+      const { data, error } = await supabase
+        .from('live_quiz_answers')
+        .select('selected_option_index, points_awarded')
+        .eq('session_id', sessionId)
+        .eq('question_index', questionIndex)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (error || !data) return { answered: false };
+
+      return {
+        answered: true,
+        selectedOptionIndex: data.selected_option_index,
+        pointsAwarded: data.points_awarded
+      };
+    } catch {
+      return { answered: false };
+    }
   }
 }
 

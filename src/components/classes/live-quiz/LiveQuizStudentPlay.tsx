@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock,
   CheckCircle2,
@@ -34,6 +34,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 }) => {
   const { user } = useAuth();
 
+  // Rehydrate initial question immediately if session is already in_progress or reveal
   const [questionData, setQuestionData] = useState<{
     qIndex: number;
     question: string;
@@ -41,23 +42,71 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     durationSec: number;
     questionStartMs: number;
     totalQuestions: number;
-  } | null>(null);
+  } | null>(() => {
+    if (session.status === 'in_progress' || session.status === 'reveal') {
+      const idx = session.current_question_index ?? 0;
+      const q = session.quiz?.questions?.[idx];
+      if (q) {
+        return {
+          qIndex: idx,
+          question: q.question,
+          options: q.options,
+          durationSec: session.question_duration_sec || q.durationSec || 20,
+          questionStartMs: Number(session.question_start_ms) || Date.now(),
+          totalQuestions: session.quiz?.questions?.length || 0
+        };
+      }
+    }
+    return null;
+  });
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+
+  // Rehydrate initial reveal data if session is already in reveal
   const [revealData, setRevealData] = useState<{
     correctIndex: number;
     explanation?: string;
-  } | null>(null);
+  } | null>(() => {
+    if (session.status === 'reveal' && typeof session.correct_answer_index === 'number') {
+      const idx = session.current_question_index ?? 0;
+      const q = session.quiz?.questions?.[idx];
+      return {
+        correctIndex: session.correct_answer_index,
+        explanation: q?.explanation
+      };
+    }
+    return null;
+  });
 
   const [pointsEarned, setPointsEarned] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
-  const [questionTimeLeft, setQuestionTimeLeft] = useState(20);
+
+  // Rehydrate initial remaining time
+  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(() => {
+    if (session.status === 'in_progress' && session.question_start_ms) {
+      const elapsed = (Date.now() - Number(session.question_start_ms)) / 1000;
+      const duration = session.question_duration_sec || 20;
+      return Math.max(0, Math.ceil(duration - elapsed));
+    }
+    return 20;
+  });
 
   // Audio and Visual Celebration Feedback State
   const [soundEnabled, setSoundEnabled] = useState(() => quizAudioService.isSoundEnabled());
   const [showConfetti, setShowConfetti] = useState(false);
   const hasTriggeredFeedbackRef = useRef<number | null>(null);
+
+  // Stable ref for callbacks & active question index
+  const onQuizFinishedRef = useRef(onQuizFinished);
+  useEffect(() => {
+    onQuizFinishedRef.current = onQuizFinished;
+  }, [onQuizFinished]);
+
+  const activeQIndexRef = useRef<number | null>(questionData?.qIndex ?? null);
+  useEffect(() => {
+    activeQIndexRef.current = questionData?.qIndex ?? null;
+  }, [questionData?.qIndex]);
 
   // Total Quiz Timer State
   const isTotalTimed = Boolean(session.quiz?.timer_enabled || session.expires_at);
@@ -73,7 +122,108 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   });
   const [isTotalTimeExpired, setIsTotalTimeExpired] = useState(false);
 
-  // Connect to Supabase Realtime Channel
+  // Handlers for state updates
+  const applyQuestionStarted = useCallback((data: {
+    qIndex: number;
+    question: string;
+    options: string[];
+    durationSec: number;
+    questionStartMs: number;
+    totalQuestions: number;
+  }) => {
+    setQuestionData(data);
+    setSelectedIndex(null);
+    setIsLocked(false);
+    setRevealData(null);
+    setShowConfetti(false);
+    hasTriggeredFeedbackRef.current = null;
+    setPointsEarned(0);
+
+    const elapsed = (Date.now() - (data.questionStartMs || Date.now())) / 1000;
+    const remaining = Math.max(0, Math.ceil((data.durationSec || 20) - elapsed));
+    setQuestionTimeLeft(remaining);
+  }, []);
+
+  const applyQuestionReveal = useCallback((rData: {
+    qIndex?: number;
+    correctIndex: number;
+    explanation?: string;
+  }) => {
+    setRevealData(rData);
+  }, []);
+
+  // Sync with database helper
+  const syncWithDatabase = useCallback(async () => {
+    try {
+      const fresh = await liveQuizService.getSessionById(session.id);
+      if (!fresh) return;
+
+      if (fresh.status === 'finished') {
+        if (onQuizFinishedRef.current) {
+          onQuizFinishedRef.current([]);
+        }
+        return;
+      }
+
+      if (fresh.status === 'reveal') {
+        const correctIdx = fresh.correct_answer_index;
+        if (typeof correctIdx === 'number') {
+          const q = fresh.quiz?.questions?.[fresh.current_question_index ?? 0];
+          applyQuestionReveal({
+            qIndex: fresh.current_question_index,
+            correctIndex: correctIdx,
+            explanation: q?.explanation
+          });
+        }
+        return;
+      }
+
+      if (fresh.status === 'in_progress') {
+        const idx = fresh.current_question_index ?? 0;
+        if (activeQIndexRef.current !== idx || !questionData) {
+          const q = fresh.quiz?.questions?.[idx];
+          if (q) {
+            applyQuestionStarted({
+              qIndex: idx,
+              question: q.question,
+              options: q.options,
+              durationSec: fresh.question_duration_sec || q.durationSec || 20,
+              questionStartMs: Number(fresh.question_start_ms) || Date.now(),
+              totalQuestions: fresh.quiz?.questions?.length || 0
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[LiveQuizStudentPlay] sync error:', err);
+    }
+  }, [session.id, questionData, applyQuestionStarted, applyQuestionReveal]);
+
+  // Check if answer was already submitted for current question (e.g. after refresh or late load)
+  useEffect(() => {
+    if (!questionData || !user?.id) return;
+    let isCancelled = false;
+
+    liveQuizService.checkStudentExistingAnswer(session.id, questionData.qIndex, user.id)
+      .then((res) => {
+        if (isCancelled) return;
+        if (res.answered) {
+          setIsLocked(true);
+          if (typeof res.selectedOptionIndex === 'number') {
+            setSelectedIndex(res.selectedOptionIndex);
+          }
+          if (typeof res.pointsAwarded === 'number' && res.pointsAwarded > 0) {
+            setPointsEarned(res.pointsAwarded);
+          }
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [questionData?.qIndex, session.id, user?.id]);
+
+  // Connect to Supabase Realtime Channel with dual-lane listening: Broadcast + Postgres Changes
   useEffect(() => {
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
@@ -81,30 +231,105 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     channel
       .on('broadcast', { event: 'question_started' }, (payload: any) => {
         const data = payload.payload;
-        setQuestionData(data);
-        setSelectedIndex(null);
-        setIsLocked(false);
-        setRevealData(null);
-        setShowConfetti(false);
-        hasTriggeredFeedbackRef.current = null;
-        setPointsEarned(0);
-        setQuestionTimeLeft(data.durationSec || 20);
+        if (data) {
+          applyQuestionStarted(data);
+        }
       })
       .on('broadcast', { event: 'question_reveal' }, (payload: any) => {
         const rData = payload.payload;
-        setRevealData(rData);
-      })
-      .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
-        if (onQuizFinished) {
-          onQuizFinished(payload.payload?.results);
+        if (rData) {
+          applyQuestionReveal(rData);
         }
       })
-      .subscribe();
+      .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
+        if (onQuizFinishedRef.current) {
+          onQuizFinishedRef.current(payload.payload?.results);
+        }
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'live_quiz_sessions',
+          filter: `id=eq.${session.id}`
+        },
+        (payload: any) => {
+          const updated = payload.new as Partial<LiveQuizSession>;
+          if (!updated) return;
+
+          if (updated.status === 'finished') {
+            if (onQuizFinishedRef.current) {
+              onQuizFinishedRef.current([]);
+            }
+            return;
+          }
+
+          if (updated.status === 'reveal') {
+            const correctIdx = updated.correct_answer_index;
+            if (typeof correctIdx === 'number') {
+              const q = session.quiz?.questions?.[updated.current_question_index ?? 0];
+              applyQuestionReveal({
+                qIndex: updated.current_question_index,
+                correctIndex: correctIdx,
+                explanation: q?.explanation
+              });
+            }
+            return;
+          }
+
+          if (updated.status === 'in_progress') {
+            const newIdx = updated.current_question_index ?? 0;
+            if (activeQIndexRef.current !== newIdx || !questionData) {
+              const q = session.quiz?.questions?.[newIdx];
+              if (q) {
+                applyQuestionStarted({
+                  qIndex: newIdx,
+                  question: q.question,
+                  options: q.options,
+                  durationSec: updated.question_duration_sec || q.durationSec || 20,
+                  questionStartMs: Number(updated.question_start_ms) || Date.now(),
+                  totalQuestions: session.quiz?.questions?.length || 0
+                });
+              }
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Immediately sync with database upon successful connection to catch any state in flight
+          syncWithDatabase();
+        }
+      });
 
     return () => {
       channel.unsubscribe();
     };
-  }, [session.pin, onQuizFinished]);
+  }, [session.pin, session.id, session.quiz, syncWithDatabase, applyQuestionStarted, applyQuestionReveal]);
+
+  // Tab visibility, focus, and periodic heartbeat sync
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncWithDatabase();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    // Safety heartbeat: poll every 3.5 seconds to ensure student never gets left behind
+    const heartbeat = setInterval(() => {
+      syncWithDatabase();
+    }, 3500);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      clearInterval(heartbeat);
+    };
+  }, [syncWithDatabase]);
 
   // Trigger Local Answer Audio and Visual Feedback upon Reveal (Guarded against duplicates)
   useEffect(() => {
@@ -119,6 +344,8 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     if (isAnswerCorrect) {
       quizAudioService.playCorrect();
       setShowConfetti(true);
+      const timer = setTimeout(() => setShowConfetti(false), 2500);
+      return () => clearTimeout(timer);
     } else {
       quizAudioService.playIncorrect();
     }

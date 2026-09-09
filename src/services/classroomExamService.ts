@@ -604,22 +604,50 @@ class ClassroomExamService {
 
       const flatQuestions = assessment.sections.flatMap((s) => s.questions || []);
 
+      // Safe defaults for NOT NULL JSONB columns in public.classroom_exams
+      const safeThemeConfig = assessment.theme && typeof assessment.theme === 'object' ? assessment.theme : {};
+      const safeBrandKit = assessment.brandKit && typeof assessment.brandKit === 'object' ? assessment.brandKit : {};
+      const safeBranching = (assessment as any).branchingLogic || (assessment as any).branching_logic || {};
+
+      // Determine valid survey_settings payload:
+      // If surveySettings is defined and non-empty, use it.
+      // If missing/undefined:
+      // - For surveys, supply standard survey configuration so responses can be collected.
+      // - For exams, supply the canonical empty JSON object {} (matching the DB column DEFAULT '{}'::jsonb),
+      //   ensuring the NOT NULL constraint is satisfied without requiring exam creators to configure surveys.
+      let safeSurveySettings: Record<string, any> = {};
+      if (assessment.surveySettings && typeof assessment.surveySettings === 'object' && Object.keys(assessment.surveySettings).length > 0) {
+        safeSurveySettings = assessment.surveySettings;
+      } else if (assessment.assessmentType === 'survey') {
+        safeSurveySettings = {
+          isAnonymous: false,
+          collectEmail: true,
+          oneResponsePerUser: true,
+          thankYouMessage: 'Thank you for your valuable response!'
+        };
+      } else {
+        safeSurveySettings = {};
+      }
+
       const rowData: Record<string, any> = {
         classroom_id: classroomId,
         title: assessment.exam.title.trim() || 'Untitled Assessment',
         description: (assessment.exam.description || '').trim(),
         instructions: (assessment.exam.instructions || '').trim(),
-        assessment_type: assessment.assessmentType,
+        assessment_type: assessment.assessmentType || 'exam',
         duration_minutes: assessment.exam.durationMinutes || 60,
         total_marks: totalMarks,
         pass_marks: Math.round(totalMarks * ((assessment.exam.passPercentage || 60) / 100)),
         starts_at: assessment.exam.startsAt || null,
         ends_at: assessment.exam.endsAt || null,
-        theme_config: assessment.theme || null,
-        brand_kit: assessment.brandKit || null,
-        survey_settings: assessment.surveySettings || null,
+        theme_config: safeThemeConfig,
+        brand_kit: safeBrandKit,
+        branching_logic: safeBranching,
+        survey_settings: safeSurveySettings,
         questions: flatQuestions,
-        status: status || 'published'
+        questions_json: assessment.sections || [],
+        status: status || 'published',
+        updated_at: new Date().toISOString()
       };
 
       if (examId) {
@@ -634,6 +662,7 @@ class ClassroomExamService {
         return { data };
       } else {
         rowData.created_by = userId;
+        rowData.teacher_id = userId;
         const { data, error } = await supabase
           .from('classroom_exams')
           .insert(rowData)
@@ -665,13 +694,15 @@ class ClassroomExamService {
       if (error || !data) return null;
 
       const assessmentType = data.assessment_type || 'exam';
-      const sections = data.sections || [
-        {
-          id: 'sec_1',
-          title: 'Section 1',
-          questions: data.questions || []
-        }
-      ];
+      const sections = (Array.isArray(data.questions_json) && data.questions_json.length > 0)
+        ? data.questions_json
+        : (data.sections || [
+            {
+              id: 'sec_1',
+              title: 'Section 1',
+              questions: data.questions || []
+            }
+          ]);
 
       const assessment: CanonicalAssessmentV2 = {
         schemaVersion: '2.0',
@@ -686,12 +717,17 @@ class ClassroomExamService {
           instructions: data.instructions || '',
           durationMinutes: data.duration_minutes || 60,
           passPercentage: data.pass_marks && data.total_marks ? Math.round((data.pass_marks / data.total_marks) * 100) : 60,
+          maxAttempts: data.max_attempts || 1,
+          randomizeQuestions: Boolean(data.randomize_questions),
+          randomizeOptions: Boolean(data.randomize_options),
+          showMarksImmediately: data.show_marks_immediately !== false,
+          showCorrectAnswers: data.show_correct_answers !== false,
           startsAt: data.starts_at || null,
           endsAt: data.ends_at || null
         },
-        theme: data.theme_config || undefined,
-        brandKit: data.brand_kit || undefined,
-        surveySettings: data.survey_settings || undefined,
+        theme: data.theme_config && Object.keys(data.theme_config).length > 0 ? data.theme_config : undefined,
+        brandKit: data.brand_kit && Object.keys(data.brand_kit).length > 0 ? data.brand_kit : undefined,
+        surveySettings: data.survey_settings && Object.keys(data.survey_settings).length > 0 ? data.survey_settings : undefined,
         sections
       };
 

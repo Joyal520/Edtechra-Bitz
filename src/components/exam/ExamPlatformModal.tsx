@@ -64,6 +64,9 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
         showCorrectAnswers: activeExam.show_correct_answers !== false,
         password: activeExam.password || undefined
       },
+      theme: activeExam.theme_config || undefined,
+      brandKit: activeExam.brand_kit || undefined,
+      surveySettings: activeExam.survey_settings || undefined,
       sections: Array.isArray(rawSections) ? rawSections : []
     };
   }, [activeExam]);

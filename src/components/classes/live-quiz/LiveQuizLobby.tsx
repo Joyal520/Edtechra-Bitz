@@ -37,6 +37,14 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const joinUrl = `${window.location.origin}/classes/live-quiz/join/${pin}`;
 
   useEffect(() => {
+    // If student arrives when quiz is already active, redirect immediately to play
+    if (!isTeacher && session.status === 'in_progress') {
+      navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
+        state: { initialSession: session }
+      });
+      return;
+    }
+
     // 1. Initial participants load from database
     loadParticipants();
 
@@ -77,11 +85,29 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           });
         }
       })
-      .on('broadcast', { event: 'quiz_started' }, () => {
+      .on('broadcast', { event: 'quiz_started' }, (payload: any) => {
         if (!isTeacher) {
-          navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`);
+          navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
+            state: { initialSession: session, totalQuestions: payload?.payload?.total_questions }
+          });
         }
       })
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'live_quiz_sessions',
+          filter: `id=eq.${session.id}`
+        },
+        (payload: any) => {
+          if (!isTeacher && payload.new?.status === 'in_progress') {
+            navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
+              state: { initialSession: { ...session, ...payload.new } }
+            });
+          }
+        }
+      )
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' && user) {
           const name = profile?.full_name || profile?.name || user.email?.split('@')[0] || 'Student';
@@ -98,7 +124,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     return () => {
       channel.unsubscribe();
     };
-  }, [pin, session.id, user, isTeacher]);
+  }, [pin, session.id, session.status, session.classroom_id, user, isTeacher, navigate]);
 
   const loadParticipants = async () => {
     try {

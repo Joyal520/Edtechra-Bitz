@@ -606,6 +606,12 @@ Generate the complete examination JSON now:`;
           },
           theme: THEME_PRESETS.edtechra_light,
           brandKit: { enabled: false, watermark: false },
+          surveySettings: {
+            isAnonymous: false,
+            collectEmail: true,
+            oneResponsePerUser: true,
+            thankYouMessage: 'Thank you for submitting your examination!'
+          },
           sections: result.parsedExam.sections || []
         };
 

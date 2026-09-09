@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Clock,
   Users,
@@ -25,7 +25,7 @@ const OPTION_COLORS = [
   { bg: 'bg-emerald-600', border: 'border-emerald-500', text: 'text-emerald-100', label: 'D' }
 ];
 
-const REVEAL_DURATION_MS = 2500; // 2.5s automatic transition reveal
+const REVEAL_DURATION_MS = 3500; // 3.5s automatic transition reveal with feedback/confetti
 
 export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   session,
@@ -47,6 +47,14 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const isAdvancingRef = useRef(false);
   const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Channel management & subscription tracking
+  const channelRef = useRef<any>(null);
+  const isChannelSubscribedRef = useRef(false);
+  const pendingBroadcastRef = useRef<any>(null);
+
+  // Deduplication: track student IDs who submitted for current question
+  const answeredStudentIdsRef = useRef<Set<string>>(new Set());
+
   const activeQuestion = questions[currentQIndex];
   const durationSec = activeQuestion?.durationSec || 20;
 
@@ -59,11 +67,76 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     };
   }, []);
 
-  // 1. Initialize or advance question automatically
+  // Safe broadcast helper that awaits channel subscription
+  const safeBroadcast = useCallback((message: any) => {
+    if (channelRef.current && isChannelSubscribedRef.current) {
+      channelRef.current.send(message);
+    } else {
+      pendingBroadcastRef.current = message;
+    }
+  }, []);
+
+  // 1. Establish single Realtime channel and presence listener
+  useEffect(() => {
+    const channel = liveQuizService.createRealtimeChannel(session.pin);
+    if (!channel) return;
+    channelRef.current = channel;
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        let studentCount = 0;
+        Object.values(state).forEach((presences: any) => {
+          // Strictly count students only (exclude teacher)
+          studentCount += presences.filter((p: any) => p.role !== 'teacher').length;
+        });
+        setTotalStudents(studentCount);
+      })
+      .on('broadcast', { event: 'student_answered' }, (payload: any) => {
+        const studentId = payload.payload?.student_id;
+        const optIndex = payload.payload?.selected_option_index;
+
+        if (studentId) {
+          if (answeredStudentIdsRef.current.has(studentId)) {
+            return; // Ignore duplicate broadcast from same student
+          }
+          answeredStudentIdsRef.current.add(studentId);
+        }
+
+        setAnsweredCount(answeredStudentIdsRef.current.size);
+        if (typeof optIndex === 'number') {
+          setAnswerDistribution((prev) => ({
+            ...prev,
+            [optIndex]: (prev[optIndex] || 0) + 1
+          }));
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          isChannelSubscribedRef.current = true;
+          // Send any pending broadcast that was queued before subscription completed
+          if (pendingBroadcastRef.current) {
+            channel.send(pendingBroadcastRef.current);
+            pendingBroadcastRef.current = null;
+          }
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          isChannelSubscribedRef.current = false;
+        }
+      });
+
+    return () => {
+      isChannelSubscribedRef.current = false;
+      channel.unsubscribe();
+      channelRef.current = null;
+    };
+  }, [session.pin]);
+
+  // 2. Initialize or advance question: Update DB first, then broadcast
   useEffect(() => {
     if (!activeQuestion) return;
 
     isAdvancingRef.current = false;
+    answeredStudentIdsRef.current.clear();
     const startMs = Date.now();
     setQuestionStartMs(startMs);
     setTimeLeft(durationSec);
@@ -71,33 +144,34 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     setAnsweredCount(0);
     setAnswerDistribution({ 0: 0, 1: 0, 2: 0, 3: 0 });
 
-    // Broadcast question_started to all students
-    const channel = liveQuizService.createRealtimeChannel(session.pin);
-    if (channel) {
-      channel.send({
-        type: 'broadcast',
-        event: 'question_started',
-        payload: {
-          qIndex: currentQIndex,
-          question: activeQuestion.question,
-          options: activeQuestion.options,
-          durationSec: durationSec,
-          questionStartMs: startMs,
-          totalQuestions: questions.length
-        }
-      });
-    }
+    const broadcastPayload = {
+      type: 'broadcast',
+      event: 'question_started',
+      payload: {
+        qIndex: currentQIndex,
+        question: activeQuestion.question,
+        options: activeQuestion.options,
+        durationSec: durationSec,
+        questionStartMs: startMs,
+        totalQuestions: questions.length
+      }
+    };
 
-    // Persist active question in database
+    // 1. Authoritative DB update FIRST
     liveQuizService.startQuestion({
       session_id: session.id,
       question_index: currentQIndex,
       duration_sec: durationSec,
       correct_answer_index: activeQuestion.correctIndex
+    }).then(() => {
+      // 2. Fast-lane Realtime Broadcast
+      safeBroadcast(broadcastPayload);
+    }).catch(() => {
+      safeBroadcast(broadcastPayload);
     });
-  }, [currentQIndex, session.id, session.pin]);
+  }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast]);
 
-  // 2. Synchronized countdown timer with authoritative fallback
+  // 3. Synchronized countdown timer with authoritative fallback
   useEffect(() => {
     if (phase !== 'question' || isPaused) return;
 
@@ -116,44 +190,11 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     return () => clearInterval(timer);
   }, [phase, questionStartMs, durationSec, isPaused]);
 
-  // 3. Realtime listener for answer submissions and presence count
-  useEffect(() => {
-    const channel = liveQuizService.createRealtimeChannel(session.pin);
-    if (!channel) return;
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        let studentCount = 0;
-        Object.values(state).forEach((presences: any) => {
-          // Strictly count students only (exclude teacher)
-          studentCount += presences.filter((p: any) => p.role !== 'teacher').length;
-        });
-        setTotalStudents(studentCount);
-      })
-      .on('broadcast', { event: 'student_answered' }, (payload: any) => {
-        setAnsweredCount((prev) => prev + 1);
-        const optIndex = payload.payload?.selected_option_index;
-        if (typeof optIndex === 'number') {
-          setAnswerDistribution((prev) => ({
-            ...prev,
-            [optIndex]: (prev[optIndex] || 0) + 1
-          }));
-        }
-      })
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [session.pin]);
-
   // 4. Condition A check: When all active students have answered -> Automatically advance!
   useEffect(() => {
     if (phase !== 'question' || isAdvancingRef.current) return;
 
-    const activeCount = Math.max(totalStudents, 1);
-    if (totalStudents > 0 && answeredCount >= activeCount) {
+    if (totalStudents > 0 && answeredCount >= totalStudents) {
       triggerAutomaticRevealAndAdvance();
     }
   }, [answeredCount, totalStudents, phase]);
@@ -166,25 +207,22 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     setPhase('reveal');
     const correctIdx = activeQuestion?.correctIndex ?? 0;
 
-    // Persist reveal state
+    // 1. Persist reveal state in DB
     await liveQuizService.revealAnswer(session.id, correctIdx);
 
-    // Broadcast question_reveal to all students
-    const channel = liveQuizService.createRealtimeChannel(session.pin);
-    if (channel) {
-      await channel.send({
-        type: 'broadcast',
-        event: 'question_reveal',
-        payload: {
-          qIndex: currentQIndex,
-          correctIndex: correctIdx,
-          explanation: activeQuestion?.explanation || '',
-          distribution: answerDistribution
-        }
-      });
-    }
+    // 2. Broadcast question_reveal to all students
+    safeBroadcast({
+      type: 'broadcast',
+      event: 'question_reveal',
+      payload: {
+        qIndex: currentQIndex,
+        correctIndex: correctIdx,
+        explanation: activeQuestion?.explanation || '',
+        distribution: answerDistribution
+      }
+    });
 
-    // Schedule automatic advancement after REVEAL_DURATION_MS
+    // 3. Schedule automatic advancement after REVEAL_DURATION_MS (3.5s)
     revealTimerRef.current = setTimeout(() => {
       if (currentQIndex < questions.length - 1) {
         setCurrentQIndex((prev) => prev + 1);
@@ -201,17 +239,14 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     try {
       const res = await liveQuizService.finishQuiz(session.id);
       
-      const channel = liveQuizService.createRealtimeChannel(session.pin);
-      if (channel) {
-        await channel.send({
-          type: 'broadcast',
-          event: 'quiz_finished',
-          payload: {
-            session_id: session.id,
-            results: res.data || []
-          }
-        });
-      }
+      safeBroadcast({
+        type: 'broadcast',
+        event: 'quiz_finished',
+        payload: {
+          session_id: session.id,
+          results: res.data || []
+        }
+      });
 
       onFinish();
     } catch (err) {
