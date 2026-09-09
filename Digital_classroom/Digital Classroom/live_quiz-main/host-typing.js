@@ -44,13 +44,15 @@ const RACE_COLORS = ['#f59e0b', '#6366f1', '#22d3ee', '#10b981', '#ec4899', '#f9
 // -- Audio ---------------------------------------------------------------------
 const sounds = {
     lobby: new Audio("waiting_sound.wav"),
-    game: new Audio("quiz)background.mp3"),
+    game: new Audio("EdTechra Biz - Quiz Loop (Take 1).wav"),
+    click: new Audio("universfield-click-button-140881.mp3"),
     correct: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3"),
     podium: new Audio("https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3"),
     cheer: new Audio("popper.mp3")
 };
 sounds.lobby.loop = true;
 sounds.game.loop = true;
+sounds.game.volume = 0.20;
 
 function stopAllBg() {
     sounds.lobby.pause(); sounds.lobby.currentTime = 0;

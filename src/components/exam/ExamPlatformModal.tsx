@@ -45,7 +45,35 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   // Format active exam into canonical schema if needed
   const canonicalActiveExam: CanonicalExamV1 | null = React.useMemo(() => {
     if (!activeExam) return null;
-    const rawSections = activeExam.questions_json || (activeExam.questions ? [{ id: 'sec_1', title: 'General', questions: activeExam.questions }] : []);
+
+    let rawSections: any[] = [];
+    if (Array.isArray(activeExam.questions_json) && activeExam.questions_json.length > 0) {
+      rawSections = activeExam.questions_json;
+    } else if (typeof activeExam.questions_json === 'string' && activeExam.questions_json.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(activeExam.questions_json);
+        if (Array.isArray(parsed) && parsed.length > 0) rawSections = parsed;
+      } catch (e) {}
+    }
+
+    if (rawSections.length === 0) {
+      let rawQuestions = activeExam.questions;
+      if (typeof rawQuestions === 'string' && rawQuestions.trim().startsWith('[')) {
+        try {
+          rawQuestions = JSON.parse(rawQuestions);
+        } catch (e) {}
+      }
+      if (Array.isArray(rawQuestions) && rawQuestions.length > 0) {
+        rawSections = [{ id: 'sec_1', title: 'General', questions: rawQuestions }];
+      }
+    }
+
+    const formattedSections = rawSections.map((sec, idx) => ({
+      ...sec,
+      id: sec.id || `sec_${idx + 1}`,
+      title: sec.title || `Section ${String.fromCharCode(65 + idx)}`,
+      questions: Array.isArray(sec.questions) ? sec.questions : []
+    }));
 
     return {
       schemaVersion: '1.0',
@@ -67,7 +95,7 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
       theme: activeExam.theme_config || undefined,
       brandKit: activeExam.brand_kit || undefined,
       surveySettings: activeExam.survey_settings || undefined,
-      sections: Array.isArray(rawSections) ? rawSections : []
+      sections: formattedSections
     };
   }, [activeExam]);
 
@@ -96,12 +124,12 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
         setTeacherMode('studio');
       }
     } else {
-      // Student mode: check if already has result
-      if (activeExam?.latest_result) {
+      // Student mode: check if already has result (ignore in-progress sessions)
+      if (activeExam?.latest_result && activeExam.latest_result.status !== 'in_progress') {
         setStudentResult(activeExam.latest_result);
       } else if (activeExam?.id) {
         classroomExamService.getStudentExamResult(activeExam.id).then((r) => {
-          if (r) setStudentResult(r);
+          if (r && r.status !== 'in_progress') setStudentResult(r);
         });
       }
     }
@@ -247,5 +275,21 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
     );
   }
 
-  return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+      <div className="bg-[#0b142c] border border-blue-800/80 rounded-3xl p-6 max-w-md w-full text-center space-y-4 text-white shadow-2xl">
+        <h3 className="text-base font-black text-white">Assessment Notice</h3>
+        <p className="text-xs text-slate-300">
+          This assessment is currently preparing questions or not available. Please ensure the examination is published and try again.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl cursor-pointer transition-all"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
 };

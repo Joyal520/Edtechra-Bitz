@@ -1,14 +1,62 @@
 // ============================================================================
-// EDTECHRA LIVE QUIZ: AUDIO FEEDBACK SERVICE
-// Zero-latency Web Audio API synthesizers for correct/incorrect quiz sounds
-// with localStorage user preference persistence and browser policy safety.
+// EDTECHRA LIVE QUIZ: AUDIO SERVICE
+// Centralized audio controller managing:
+// 1. Background soundtrack: "EdTechra Biz - Quiz Loop (Take 1).wav"
+//    - Strictly active during live gameplay (not in lobby, podium, or builder)
+//    - Seamless looping, volume-controlled (~20%), single controlled HTMLAudioElement
+//    - Graceful browser autoplay handling without console errors
+// 2. Interactive UI clicks: "universfield-click-button-140881.mp3"
+//    - Subtle, rate-limited, pooled audio playback for snappy responsiveness
+// 3. Web Audio API synthesized correct / incorrect chimes
 // ============================================================================
 
 const STORAGE_KEY_SOUND_ENABLED = 'edtechra_quiz_sound_enabled';
+const STORAGE_KEY_MUSIC_MUTED = 'edtechra_quiz_music_muted';
+
+const BGM_PATH = encodeURI('/EdTechra Biz - Quiz Loop (Take 1).wav');
+const CLICK_PATH = encodeURI('/universfield-click-button-140881.mp3');
 
 class QuizAudioService {
   private audioCtx: AudioContext | null = null;
   private isUnlocked = false;
+
+  // Background Music singleton instance
+  private bgmAudio: HTMLAudioElement | null = null;
+  private bgmPlaying = false;
+
+  // Click Sound Audio Pool (prevents rapid overlapping distortion or garbage collection lag)
+  private clickPool: HTMLAudioElement[] = [];
+  private clickPoolIndex = 0;
+  private lastClickTimestamp = 0;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.initClickPool();
+
+      // Proactively unlock Web Audio & media playback on first user gesture
+      const unlock = () => {
+        this.unlockAudio();
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+      window.addEventListener('pointerdown', unlock, { once: true });
+      window.addEventListener('keydown', unlock, { once: true });
+    }
+  }
+
+  private initClickPool(): void {
+    try {
+      this.clickPool = [
+        new Audio(CLICK_PATH),
+        new Audio(CLICK_PATH),
+        new Audio(CLICK_PATH)
+      ];
+      this.clickPool.forEach((a) => {
+        a.volume = 0.40;
+        a.preload = 'auto';
+      });
+    } catch {}
+  }
 
   private getAudioContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -48,9 +96,167 @@ class QuizAudioService {
     }
   }
 
+  // ==========================================================================
+  // BACKGROUND MUSIC (BGM) CONTROLS
+  // ==========================================================================
+
+  private getBgmInstance(): HTMLAudioElement | null {
+    if (typeof window === 'undefined') return null;
+    if (!this.bgmAudio) {
+      try {
+        const audio = new Audio(BGM_PATH);
+        audio.loop = true;
+        audio.volume = this.isMusicMuted() ? 0 : 0.20; // Low 20% background level
+        audio.preload = 'auto';
+        this.bgmAudio = audio;
+      } catch (err) {
+        console.warn('[QuizAudioService] BGM initialization notice:', err);
+      }
+    }
+    return this.bgmAudio;
+  }
+
   /**
-   * Check if sound is enabled (defaults to true)
+   * Checks whether background music is currently muted
    */
+  public isMusicMuted(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_MUSIC_MUTED);
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Sets music mute state without restarting or interrupting track playback
+   */
+  public setMusicMuted(muted: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_KEY_MUSIC_MUTED, String(muted));
+      if (this.bgmAudio) {
+        this.bgmAudio.volume = muted ? 0 : 0.20;
+      }
+    } catch {}
+  }
+
+  /**
+   * Toggles music mute state and returns the new muted status
+   */
+  public toggleMusicMute(): boolean {
+    const nextMuted = !this.isMusicMuted();
+    this.setMusicMuted(nextMuted);
+    return nextMuted;
+  }
+
+  /**
+   * Starts background music during active quiz session.
+   * Idempotent: If already playing, keeps track running smoothly across questions without restart.
+   */
+  public startBackgroundMusic(): void {
+    if (typeof window === 'undefined') return;
+    const bgm = this.getBgmInstance();
+    if (!bgm) return;
+
+    bgm.volume = this.isMusicMuted() ? 0 : 0.20;
+
+    if (!this.bgmPlaying) {
+      const playPromise = bgm.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            this.bgmPlaying = true;
+          })
+          .catch(() => {
+            // Autoplay blocked: wait for first user tap to begin playing
+            const handleAutoplayPermission = () => {
+              if (bgm && !this.bgmPlaying) {
+                bgm.play().then(() => {
+                  this.bgmPlaying = true;
+                }).catch(() => {});
+              }
+              window.removeEventListener('pointerdown', handleAutoplayPermission);
+            };
+            window.addEventListener('pointerdown', handleAutoplayPermission, { once: true });
+          });
+      }
+    }
+  }
+
+  /**
+   * Stops background music immediately and resets playhead.
+   * Call when quiz ends, unmounts, or navigates to podium.
+   */
+  public stopBackgroundMusic(): void {
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.pause();
+        this.bgmAudio.currentTime = 0;
+      } catch {}
+      this.bgmPlaying = false;
+    }
+  }
+
+  /**
+   * Pauses background music (e.g. when teacher pauses the quiz)
+   */
+  public pauseBackgroundMusic(): void {
+    if (this.bgmAudio) {
+      try {
+        this.bgmAudio.pause();
+      } catch {}
+      this.bgmPlaying = false;
+    }
+  }
+
+  /**
+   * Resumes background music from current position
+   */
+  public resumeBackgroundMusic(): void {
+    if (this.bgmAudio && !this.bgmPlaying) {
+      this.bgmAudio.volume = this.isMusicMuted() ? 0 : 0.20;
+      this.bgmAudio.play().then(() => {
+        this.bgmPlaying = true;
+      }).catch(() => {});
+    }
+  }
+
+  // ==========================================================================
+  // BUTTON / UI CLICK SOUND
+  // ==========================================================================
+
+  /**
+   * Plays the UI click sound ("universfield-click-button-140881.mp3").
+   * Rate limited to 60ms debounce to prevent noisy overlapping on rapid clicks.
+   */
+  public playClick(): void {
+    if (typeof window === 'undefined') return;
+
+    const now = Date.now();
+    if (now - this.lastClickTimestamp < 60) {
+      return; // Debounce rapid multi-clicks
+    }
+    this.lastClickTimestamp = now;
+
+    try {
+      if (this.clickPool.length === 0) {
+        this.initClickPool();
+      }
+      const audio = this.clickPool[this.clickPoolIndex % this.clickPool.length];
+      this.clickPoolIndex = (this.clickPoolIndex + 1) % this.clickPool.length;
+
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+    } catch {}
+  }
+
+  // ==========================================================================
+  // GENERAL SOUND EFFECTS PREFERENCES & CHIMES
+  // ==========================================================================
+
   public isSoundEnabled(): boolean {
     if (typeof window === 'undefined') return true;
     try {
@@ -61,18 +267,12 @@ class QuizAudioService {
     }
   }
 
-  /**
-   * Update sound preference
-   */
   public setSoundEnabled(enabled: boolean): void {
     try {
       localStorage.setItem(STORAGE_KEY_SOUND_ENABLED, String(enabled));
     } catch {}
   }
 
-  /**
-   * Toggle sound preference
-   */
   public toggleSound(): boolean {
     const next = !this.isSoundEnabled();
     this.setSoundEnabled(next);

@@ -215,6 +215,13 @@ export interface ClassroomExam {
   status: ExamStatus;
   questions: ClassroomExamQuestion[];
   questions_json?: any[];
+  subject?: string;
+  grade?: string;
+  assessment_type?: 'exam' | 'survey' | string;
+  theme_config?: any;
+  brand_kit?: any;
+  branching_logic?: any;
+  survey_settings?: any;
   exam_type?: string;
   difficulty?: string;
   grading_mode?: string;
@@ -243,6 +250,10 @@ export interface ClassroomExamResult {
   exam_id: string;
   classroom_id: string;
   student_id: string;
+  status?: 'in_progress' | 'submitted' | 'graded' | string;
+  expires_at?: string;
+  session_answers?: Record<string, any>;
+  bookmarked_question_ids?: string[];
   score: number;
   total_marks: number;
   totalScore?: number;

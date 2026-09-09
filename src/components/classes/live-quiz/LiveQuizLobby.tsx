@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizParticipant } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
+import { quizAudioService } from '@/services/quizAudioService';
 import { useAuth } from '@/context/AuthContext';
 
 interface LiveQuizLobbyProps {
@@ -37,6 +38,9 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const joinUrl = `${window.location.origin}/classes/live-quiz/join/${pin}`;
 
   useEffect(() => {
+    // Strictly ensure no background music is playing in lobby
+    quizAudioService.stopBackgroundMusic();
+
     // If student arrives when quiz is already active, redirect immediately to play
     if (!isTeacher && session.status === 'in_progress') {
       navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
@@ -138,6 +142,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   };
 
   const handleCopyLink = () => {
+    quizAudioService.playClick();
     navigator.clipboard.writeText(joinUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -145,6 +150,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
   const handleStart = async () => {
     if (!onStartQuiz) return;
+    quizAudioService.playClick();
     setIsStarting(true);
 
     try {

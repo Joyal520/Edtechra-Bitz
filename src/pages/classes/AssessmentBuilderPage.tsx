@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { AssessmentBuilder } from '@/components/exam/builder/AssessmentBuilder';
 import { CanonicalAssessmentV2, AssessmentType } from '@/components/exam/shared/ExamSchema';
 import { classroomExamService } from '@/services/classroomExamService';
@@ -15,6 +16,7 @@ export const AssessmentBuilderPage: React.FC = () => {
   const { classroomId, assessmentId } = useParams<{ classroomId: string; assessmentId?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, isTeacher: authIsTeacher, isLoading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(Boolean(assessmentId));
   const [loadedAssessment, setLoadedAssessment] = useState<CanonicalAssessmentV2 | undefined>(undefined);
@@ -23,6 +25,12 @@ export const AssessmentBuilderPage: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
+
+    // If non-teacher opens an existing assessment builder URL, redirect to student taking view
+    if (!authLoading && assessmentId && (!user || !authIsTeacher)) {
+      navigate(`/classes/${classroomId}/exams/${assessmentId}`, { replace: true });
+      return;
+    }
 
     const loadAssessment = async () => {
       if (!assessmentId) {
@@ -45,11 +53,14 @@ export const AssessmentBuilderPage: React.FC = () => {
       }
     };
 
-    loadAssessment();
+    if (!authLoading) {
+      loadAssessment();
+    }
+
     return () => {
       isMounted = false;
     };
-  }, [assessmentId]);
+  }, [assessmentId, classroomId, authLoading, user, authIsTeacher, navigate]);
 
   const handleSaveAssessment = async (
     assessment: CanonicalAssessmentV2,

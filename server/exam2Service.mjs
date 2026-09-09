@@ -921,6 +921,11 @@ export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
     parent_exam_id: parentExamId,
     version,
     source: 'exam2',
+    assessment_type: payload.assessment_type || 'exam',
+    theme_config: payload.theme_config || {},
+    brand_kit: payload.brand_kit || {},
+    branching_logic: payload.branching_logic || {},
+    survey_settings: payload.survey_settings || {},
     updated_at: new Date().toISOString()
   };
 

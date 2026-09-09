@@ -60,6 +60,9 @@ class ClassroomExamService {
         .select('*')
         .eq('exam_id', examId)
         .eq('student_id', userId)
+        .neq('status', 'in_progress')
+        .order('submitted_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error || !data) return null;
@@ -90,14 +93,15 @@ class ClassroomExamService {
 
       const examIds = exams.map((e) => e.id);
 
-      // Fetch student results if logged in
+      // Fetch student results if logged in (only submitted/completed results)
       let resultsMap: Record<string, ClassroomExamResult> = {};
       if (userId) {
         const { data: results } = await supabase
           .from('classroom_exam_results')
           .select('*')
           .in('exam_id', examIds)
-          .eq('student_id', userId);
+          .eq('student_id', userId)
+          .neq('status', 'in_progress');
 
         (results || []).forEach((r: any) => {
           resultsMap[r.exam_id] = this.normalizeExamResult(r);
@@ -149,8 +153,13 @@ class ClassroomExamService {
           .select('*')
           .eq('exam_id', examId)
           .eq('student_id', userId)
+          .neq('status', 'in_progress')
+          .order('submitted_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
-        myResult = this.normalizeExamResult(res);
+        if (res) {
+          myResult = this.normalizeExamResult(res);
+        }
       }
 
       return {
@@ -200,6 +209,12 @@ class ClassroomExamService {
           ends_at: payload.ends_at || null,
           questions: payload.questions,
           created_by: userId,
+          teacher_id: userId,
+          assessment_type: 'exam',
+          theme_config: {},
+          brand_kit: {},
+          branching_logic: {},
+          survey_settings: {},
           status: 'published'
         })
         .select()

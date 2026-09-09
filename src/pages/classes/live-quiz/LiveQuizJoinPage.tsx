@@ -114,10 +114,17 @@ export const LiveQuizJoinPage: React.FC = () => {
           </button>
         </form>
 
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-2 border-t border-slate-100 space-y-2">
           <p className="text-[11px] text-slate-400 font-medium">
-            Playing in a classroom? You can also launch quizzes directly from your <strong className="text-slate-600">Classroom Workspace</strong>.
+            Enrolled in a class? You don't need a PIN — join directly from your classroom workspace.
           </p>
+          <button
+            type="button"
+            onClick={() => navigate('/classes')}
+            className="text-xs font-black text-[#026fc3] hover:underline"
+          >
+            Go to My Classrooms →
+          </button>
         </div>
 
       </div>

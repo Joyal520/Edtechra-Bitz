@@ -163,19 +163,38 @@ class ExamPlatformService {
     exam: any;
     answers: Record<string, any>;
   }): Promise<any> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch('/api/exams/attempts/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(payload)
-    });
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch('/api/exam-engine?action=submit-student-exam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(payload)
+      });
 
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to submit exam attempt.');
+      const data = await res.json();
+      if (res.ok && (data.success || data.score !== undefined)) {
+        return data;
+      }
+      if (!res.ok && data.error) {
+        console.warn('[ExamPlatformService] submitExamAttempt server returned error, trying Supabase fallback:', data.error);
+      }
+    } catch (e) {
+      console.warn('[ExamPlatformService] submitExamAttempt network error, falling back to Supabase:', e);
     }
 
-    return data;
+    // Fallback: direct Supabase submission via classroomExamService
+    const { classroomExamService } = await import('./classroomExamService');
+    const directResult = await classroomExamService.submitExam({
+      exam_id: payload.examId,
+      classroom_id: payload.classroomId,
+      answers: payload.answers
+    });
+
+    if (directResult.error) {
+      throw new Error(directResult.error || 'Failed to submit exam attempt.');
+    }
+
+    return directResult.data;
   }
 
   /**

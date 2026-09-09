@@ -14189,6 +14189,9 @@ app.all('/api/exam-engine', async (req, res) => {
           .select('*')
           .eq('exam_id', examId)
           .eq('student_id', user.id)
+          .neq('status', 'in_progress')
+          .order('submitted_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
         myResult = resData;
       }
@@ -14198,12 +14201,31 @@ app.all('/api/exam-engine', async (req, res) => {
       // If student has not submitted yet, strip correct answers and explanations for exam integrity
       let sanitizedExam = { ...exam };
       if (!myResult && action === 'get-student-exam') {
-        const rawSections = Array.isArray(exam.questions_json) && exam.questions_json.length > 0
-          ? exam.questions_json
-          : Array.isArray(exam.questions) ? [{ questions: exam.questions }] : [];
+        let rawSections = [];
+        if (Array.isArray(exam.questions_json) && exam.questions_json.length > 0) {
+          rawSections = exam.questions_json;
+        } else if (typeof exam.questions_json === 'string' && exam.questions_json.trim().startsWith('[')) {
+          try {
+            const parsed = JSON.parse(exam.questions_json);
+            if (Array.isArray(parsed) && parsed.length > 0) rawSections = parsed;
+          } catch (e) {}
+        }
+        if (rawSections.length === 0) {
+          let rawQuestions = exam.questions;
+          if (typeof rawQuestions === 'string' && rawQuestions.trim().startsWith('[')) {
+            try {
+              rawQuestions = JSON.parse(rawQuestions);
+            } catch (e) {}
+          }
+          if (Array.isArray(rawQuestions) && rawQuestions.length > 0) {
+            rawSections = [{ id: 'sec_1', title: 'General', questions: rawQuestions }];
+          }
+        }
 
-        const sanitizedSections = rawSections.map(s => ({
+        const sanitizedSections = rawSections.map((s, idx) => ({
           ...s,
+          id: s.id || `sec_${idx + 1}`,
+          title: s.title || `Section ${String.fromCharCode(65 + idx)}`,
           questions: (s.questions || []).map(q => ({
             ...q,
             correctAnswer: undefined,
@@ -14271,9 +14293,12 @@ app.all('/api/exam-engine', async (req, res) => {
             .select('*')
             .eq('exam_id', examId)
             .eq('student_id', user.id)
+            .neq('status', 'in_progress')
+            .order('submitted_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
 
-          if (existingResult) {
+          if (existingResult && existingResult.status !== 'in_progress') {
             const score = Number(existingResult.score || 0);
             const totalMarks = Number(existingResult.total_marks || 100);
             const percentage = Number(existingResult.percentage || (totalMarks > 0 ? ((score / totalMarks) * 100).toFixed(1) : 0));
@@ -14311,6 +14336,7 @@ app.all('/api/exam-engine', async (req, res) => {
             exam_id: examId,
             classroom_id: classroomId,
             student_id: user.id,
+            status: 'submitted',
             score: gradingResult.totalScore,
             total_marks: gradingResult.maxScore,
             percentage: gradingResult.percentage,
@@ -14341,6 +14367,7 @@ app.all('/api/exam-engine', async (req, res) => {
               exam_id: examId,
               classroom_id: classroomId,
               student_id: user.id,
+              status: 'submitted',
               score: gradingResult.totalScore,
               total_marks: gradingResult.maxScore,
               percentage: gradingResult.percentage,

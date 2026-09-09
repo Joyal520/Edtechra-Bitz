@@ -23,6 +23,7 @@ import { CoursePreviewPage } from '@/pages/course-studio/CoursePreviewPage';
 import { CourseAnalyticsPage } from '@/pages/course-studio/CourseAnalyticsPage';
 import { StudentCoursePlayerPage } from '@/pages/classes/courses/StudentCoursePlayerPage';
 import { AssessmentBuilderPage } from '@/pages/classes/AssessmentBuilderPage';
+import { StudentExamPage } from '@/pages/classes/StudentExamPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -38,9 +39,13 @@ export const AppRoutes: React.FC = () => {
         <Route path="classes/:id" element={<ClassroomDetailPage />} />
         <Route path="classes/:id/resources" element={<TeacherResourcesPage />} />
         
-        {/* Assessment & Survey Studio Routes */}
+        {/* Assessment & Survey Studio (Teacher Authoring) Routes */}
         <Route path="classes/:classroomId/assessments/builder" element={<AssessmentBuilderPage />} />
         <Route path="classes/:classroomId/assessments/builder/:assessmentId" element={<AssessmentBuilderPage />} />
+        
+        {/* Student Examination & Assessment Taking Routes */}
+        <Route path="classes/:classroomId/exams/:examId" element={<StudentExamPage />} />
+        <Route path="classes/:classroomId/assessments/:assessmentId" element={<StudentExamPage />} />
         
         {/* Live Quiz Routes */}
         <Route path="classes/live-quiz/join" element={<LiveQuizJoinPage />} />

@@ -335,7 +335,8 @@ function handleLiveQuizBackNavigation() {
 // -- Audio ---------------------------------------------------------------------
 const sounds = {
     lobby: new Audio("waiting_sound.wav"),
-    game: new Audio("quiz)background.mp3"),  // local bg during gameplay
+    game: new Audio("EdTechra Biz - Quiz Loop (Take 1).wav"),  // local bg during gameplay
+    click: new Audio("universfield-click-button-140881.mp3"),
     correct: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3"),
     tick: new Audio("https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3"),
     podium: new Audio("https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3"),
@@ -343,6 +344,7 @@ const sounds = {
 };
 sounds.lobby.loop = true;
 sounds.game.loop = true;
+sounds.game.volume = 0.20;
 
 const QUIZ_AMBIENCE_TRACKS = {
     A: "sound/ambient-a.mp3",

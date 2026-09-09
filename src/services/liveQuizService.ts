@@ -493,6 +493,40 @@ class LiveQuizService {
   }
 
   /**
+   * Retrieves the currently active Live Quiz session for a specific classroom (if any).
+   * Used for direct PIN-free student joining from the classroom workspace.
+   */
+  async getActiveSessionForClassroom(classroomId: string): Promise<LiveQuizSession | null> {
+    if (!supabase || !classroomId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('live_quiz_sessions')
+        .select(`
+          *,
+          classroom:classrooms!classroom_id (id, title, subject),
+          teacher:profiles!teacher_id (id, full_name, avatar_url)
+        `)
+        .eq('classroom_id', classroomId)
+        .in('status', ['lobby', 'in_progress', 'reveal'])
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      const quiz = data.quiz_id ? await this.getQuizById(data.quiz_id) : null;
+      return {
+        ...data,
+        quiz
+      };
+    } catch (err) {
+      console.error('[LiveQuizService] getActiveSessionForClassroom error:', err);
+      return null;
+    }
+  }
+
+  /**
    * Student joins a session and creates/updates participant record
    */
   async joinSession(payload: {

@@ -93,9 +93,17 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   });
 
   // Audio and Visual Celebration Feedback State
-  const [soundEnabled, setSoundEnabled] = useState(() => quizAudioService.isSoundEnabled());
+  const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
   const [showConfetti, setShowConfetti] = useState(false);
   const hasTriggeredFeedbackRef = useRef<number | null>(null);
+
+  // Background music lifecycle: start on mount, stop on unmount
+  useEffect(() => {
+    quizAudioService.startBackgroundMusic();
+    return () => {
+      quizAudioService.stopBackgroundMusic();
+    };
+  }, []);
 
   // Stable ref for callbacks & active question index
   const onQuizFinishedRef = useRef(onQuizFinished);
@@ -242,6 +250,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         }
       })
       .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
+        quizAudioService.stopBackgroundMusic();
         if (onQuizFinishedRef.current) {
           onQuizFinishedRef.current(payload.payload?.results);
         }
@@ -259,6 +268,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
           if (!updated) return;
 
           if (updated.status === 'finished') {
+            quizAudioService.stopBackgroundMusic();
             if (onQuizFinishedRef.current) {
               onQuizFinishedRef.current([]);
             }
@@ -399,7 +409,8 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const handleSelectOption = async (index: number) => {
     if (isLocked || revealData || !questionData || isTotalTimeExpired) return;
 
-    // Safely unlock Web Audio API on first student interaction
+    // Play subtle UI click sound & unlock audio
+    quizAudioService.playClick();
     quizAudioService.unlockAudio();
 
     setSelectedIndex(index);
@@ -439,9 +450,9 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   };
 
   const handleToggleSound = () => {
-    quizAudioService.unlockAudio();
-    const next = quizAudioService.toggleSound();
-    setSoundEnabled(next);
+    quizAudioService.playClick();
+    const nextMuted = quizAudioService.toggleMusicMute();
+    setIsMusicMuted(nextMuted);
   };
 
   const formatTotalTime = (seconds: number) => {
@@ -471,14 +482,14 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
             type="button"
             onClick={handleToggleSound}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
-              soundEnabled
+              !isMusicMuted
                 ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
                 : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
             }`}
-            title={soundEnabled ? 'Mute Sound' : 'Unmute Sound'}
+            title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
           >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-rose-300" />}
-            <span>Sound {soundEnabled ? 'ON' : 'OFF'}</span>
+            {isMusicMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-300" /> : <Volume2 className="w-3.5 h-3.5" />}
+            <span>Music {isMusicMuted ? 'OFF' : 'ON'}</span>
           </button>
         </div>
       </div>
@@ -516,19 +527,19 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         </span>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {/* Sound Toggle Control */}
+          {/* Background Music Toggle Control */}
           <button
             type="button"
             onClick={handleToggleSound}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black border transition-all cursor-pointer ${
-              soundEnabled
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-all cursor-pointer ${
+              !isMusicMuted
                 ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
                 : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
             }`}
-            title={soundEnabled ? 'Mute Sound Effects' : 'Unmute Sound Effects'}
+            title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
           >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{soundEnabled ? 'Sound' : 'Muted'}</span>
+            {isMusicMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{isMusicMuted ? 'Muted' : 'Music'}</span>
           </button>
 
           {/* Total Quiz Timer (if enabled) */}
