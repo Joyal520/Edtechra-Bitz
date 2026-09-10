@@ -223,123 +223,316 @@ export const ClassroomHeroIllustration: React.FC<IllustrationProps> = ({ classNa
 );
 
 // ============================================================================
-// 2. OVERVIEW: 3D Paper-Cut Analytics Window
+// 2. OVERVIEW: 3D Analytics & Performance Window (Transparent SVG)
 // ============================================================================
 export const OverviewIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_09_59 PM.png"
-    alt="Overview"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Window Base */}
+    <rect x="8" y="10" width="64" height="46" rx="8" fill="#0284c7" />
+    <rect x="8" y="10" width="64" height="12" rx="8" fill="#0369a1" />
+    <rect x="8" y="16" width="64" height="6" fill="#0369a1" />
+    {/* Window Dots */}
+    <circle cx="15" cy="16" r="2" fill="#f87171" />
+    <circle cx="21" cy="16" r="2" fill="#fbbf24" />
+    <circle cx="27" cy="16" r="2" fill="#34d399" />
+    {/* Graph Background */}
+    <rect x="12" y="26" width="56" height="26" rx="4" fill="#0f172a" />
+    {/* Bar Charts */}
+    <rect x="18" y="38" width="6" height="10" rx="1.5" fill="#38bdf8" />
+    <rect x="28" y="32" width="6" height="16" rx="1.5" fill="#818cf8" />
+    <rect x="38" y="35" width="6" height="13" rx="1.5" fill="#34d399" />
+    <rect x="48" y="29" width="6" height="19" rx="1.5" fill="#fbbf24" />
+    {/* Line Trend */}
+    <path d="M 21 37 L 31 31 L 41 34 L 51 28 L 60 24" stroke="#f8fafc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="60" cy="24" r="2.5" fill="#38bdf8" stroke="#ffffff" strokeWidth="1" />
+  </svg>
 );
 
 // ============================================================================
-// 3. TASKS: Emerald Checklist Clipboard with Metallic Clamp & Pencil
+// 3. TASKS: Emerald Checklist Clipboard with Pencil (Transparent SVG)
 // ============================================================================
 export const TaskIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_12_41 PM.png"
-    alt="Tasks"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Clipboard Base */}
+    <rect x="16" y="8" width="48" height="52" rx="7" fill="#059669" />
+    {/* Paper Sheet */}
+    <rect x="20" y="14" width="40" height="42" rx="4" fill="#f0fdf4" />
+    {/* Metallic Clip */}
+    <rect x="30" y="5" width="20" height="7" rx="3" fill="#047857" />
+    <rect x="34" y="3" width="12" height="4" rx="2" fill="#34d399" />
+    {/* Check Item 1 */}
+    <rect x="25" y="20" width="6" height="6" rx="1.5" fill="#10b981" />
+    <path d="M 26.5 23 L 28 24.5 L 30 21.5" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="34" y="21.5" width="20" height="3" rx="1.5" fill="#047857" />
+    {/* Check Item 2 */}
+    <rect x="25" y="29" width="6" height="6" rx="1.5" fill="#10b981" />
+    <path d="M 26.5 32 L 28 33.5 L 30 30.5" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="34" y="30.5" width="22" height="3" rx="1.5" fill="#047857" />
+    {/* Check Item 3 */}
+    <rect x="25" y="38" width="6" height="6" rx="1.5" fill="#10b981" />
+    <path d="M 26.5 41 L 28 42.5 L 30 39.5" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="34" y="39.5" width="16" height="3" rx="1.5" fill="#047857" />
+    {/* Check Item 4 */}
+    <rect x="25" y="46" width="6" height="3" rx="1.5" fill="#a7f3d0" />
+    <rect x="34" y="46" width="14" height="3" rx="1.5" fill="#a7f3d0" />
+    {/* Pencil */}
+    <g transform="translate(56, 26) rotate(22)">
+      <rect x="0" y="0" width="7" height="24" rx="2" fill="#f59e0b" />
+      <path d="M 0 24 L 3.5 29 L 7 24 Z" fill="#fed7aa" />
+      <path d="M 2.2 27 L 3.5 29 L 4.8 27 Z" fill="#1e293b" />
+      <rect x="0" y="0" width="7" height="4" rx="1" fill="#f43f5e" />
+    </g>
+  </svg>
 );
 
 // ============================================================================
-// 4. STUDENTS: Lavender Layered Student Avatars
+// 4. COURSES: Interactive Textbook with Bookmark & Ribbon (Transparent SVG)
+// ============================================================================
+export const CoursesIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Bottom Book (Cyan) */}
+    <rect x="14" y="38" width="52" height="15" rx="3.5" fill="#0284c7" />
+    <rect x="18" y="41" width="45" height="9" rx="2" fill="#e0f2fe" />
+    <rect x="14" y="38" width="8" height="15" rx="2" fill="#0369a1" />
+    {/* Middle Book (Indigo) */}
+    <rect x="17" y="26" width="46" height="14" rx="3.5" fill="#4f46e5" />
+    <rect x="21" y="28.5" width="39" height="9" rx="2" fill="#e0e7ff" />
+    <rect x="17" y="26" width="8" height="14" rx="2" fill="#3730a3" />
+    {/* Ribbon Bookmark Hanging Down */}
+    <path d="M 46 26 L 46 44 L 50 41 L 54 44 L 54 26 Z" fill="#f59e0b" />
+    {/* Top Book (Violet / Purple) */}
+    <rect x="21" y="14" width="40" height="13" rx="3" fill="#7c3aed" />
+    <rect x="25" y="16.5" width="33" height="8" rx="2" fill="#ede9fe" />
+    <rect x="21" y="14" width="7" height="13" rx="2" fill="#5b21b6" />
+    {/* Decorative Sparkle / Star */}
+    <g transform="translate(23, 7)">
+      <path d="M 6 0 L 7.5 4 L 12 5.5 L 7.5 7 L 6 11 L 4.5 7 L 0 5.5 L 4.5 4 Z" fill="#fbbf24" />
+    </g>
+  </svg>
+);
+
+// ============================================================================
+// 5. STUDENTS: Lavender Layered Student Avatars (Transparent SVG)
 // ============================================================================
 export const StudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_13_06 PM.png"
-    alt="Students"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Left Student (Lilac) */}
+    <g transform="translate(14, 18)">
+      <circle cx="12" cy="11" r="7.5" fill="#c084fc" />
+      <path d="M 7 9 C 7 5, 17 5, 17 9 Z" fill="#581c87" />
+      <path d="M 3 29 C 3 20, 21 20, 21 29 Z" fill="#9333ea" />
+      <circle cx="12" cy="11" r="5.5" fill="#f5d0fe" />
+      <path d="M 8 9 C 8 6, 16 6, 16 9 Z" fill="#581c87" />
+    </g>
+    {/* Right Student (Sky/Teal) */}
+    <g transform="translate(42, 18)">
+      <circle cx="12" cy="11" r="7.5" fill="#38bdf8" />
+      <path d="M 7 9 C 7 5, 17 5, 17 9 Z" fill="#0c4a6e" />
+      <path d="M 3 29 C 3 20, 21 20, 21 29 Z" fill="#0284c7" />
+      <circle cx="12" cy="11" r="5.5" fill="#e0f2fe" />
+      <path d="M 8 9 C 8 6, 16 6, 16 9 Z" fill="#0c4a6e" />
+    </g>
+    {/* Center Leading Student (Deep Purple with Golden Star) */}
+    <g transform="translate(26, 10)">
+      <circle cx="14" cy="13" r="9" fill="#fde047" stroke="#fbbf24" strokeWidth="1.5" />
+      <circle cx="14" cy="13" r="8" fill="#f3e8ff" />
+      <path d="M 8 11 C 8 4, 20 4, 20 11 Z" fill="#3b0764" />
+      {/* Eyeglasses */}
+      <circle cx="11" cy="13" r="2.2" stroke="#3b0764" strokeWidth="1" fill="none" />
+      <circle cx="17" cy="13" r="2.2" stroke="#3b0764" strokeWidth="1" fill="none" />
+      <line x1="13.2" y1="13" x2="14.8" y2="13" stroke="#3b0764" strokeWidth="1" />
+      {/* Shoulders / Shirt */}
+      <path d="M 3 37 C 3 25, 25 25, 25 37 Z" fill="#6b21a8" />
+      {/* Graduation Cap / Collar */}
+      <path d="M 14 26 L 11 31 L 17 31 Z" fill="#fbbf24" />
+    </g>
+  </svg>
 );
 
 // ============================================================================
-// 5. STREAM: Amber Layered Speech Bubbles
+// 6. STREAM: Amber Layered Speech Bubbles (Transparent SVG)
 // ============================================================================
 export const StreamIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_13_17 PM.png"
-    alt="Stream"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Back Bubble (Sky Blue) */}
+    <g transform="translate(36, 8)">
+      <rect x="0" y="0" width="34" height="24" rx="8" fill="#38bdf8" />
+      <path d="M 8 24 L 4 30 L 16 24 Z" fill="#38bdf8" />
+      <line x1="8" y1="9" x2="26" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+      <line x1="8" y1="15" x2="20" y2="15" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+    </g>
+    {/* Front Bubble (Warm Amber) */}
+    <g transform="translate(10, 18)">
+      <rect x="0" y="0" width="44" height="30" rx="10" fill="#f59e0b" />
+      <path d="M 12 30 L 8 38 L 22 30 Z" fill="#f59e0b" />
+      {/* Megaphone icon inside */}
+      <g transform="translate(8, 7)">
+        <path d="M 2 8 L 10 3 L 10 17 L 2 12 Z" fill="#ffffff" />
+        <path d="M 10 3 C 13 3, 15 6, 15 10 C 15 14, 13 17, 10 17 Z" fill="#fef3c7" />
+        <rect x="0" y="8" width="3" height="4" rx="1" fill="#ffffff" />
+        <path d="M 6 12 L 8 18 L 10 18 L 8 12 Z" fill="#ffffff" />
+        <path d="M 18 6 C 20 8, 20 12, 18 14" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+        <path d="M 22 3 C 25 7, 25 13, 22 17" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      </g>
+    </g>
+  </svg>
 );
 
 // ============================================================================
-// 6. RESOURCES: Golden-Peach File Folder with Papers
+// 7. RESOURCES: Golden-Peach File Folder with Papers (Transparent SVG)
 // ============================================================================
 export const ResourcesIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_15_06 PM.png"
-    alt="Resources"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Back Folder Tab */}
+    <path d="M 12 20 C 12 16, 14 14, 18 14 L 32 14 L 37 19 L 62 19 C 66 19, 68 21, 68 25 L 68 50 C 68 54, 66 56, 62 56 L 18 56 C 14 56, 12 54, 12 50 Z" fill="#e11d48" />
+    {/* Protruding Document Sheets */}
+    <rect x="22" y="10" width="36" height="34" rx="3" fill="#ffffff" stroke="#fecdd3" strokeWidth="1.2" />
+    <line x1="28" y1="16" x2="48" y2="16" stroke="#f43f5e" strokeWidth="2" strokeLinecap="round" />
+    <line x1="28" y1="22" x2="52" y2="22" stroke="#fda4af" strokeWidth="1.8" strokeLinecap="round" />
+    <line x1="28" y1="27" x2="44" y2="27" stroke="#fda4af" strokeWidth="1.8" strokeLinecap="round" />
+    {/* Secondary Sheet (Angled) */}
+    <g transform="translate(18, 14) rotate(-6)">
+      <rect x="0" y="0" width="32" height="30" rx="3" fill="#fff1f2" stroke="#fda4af" strokeWidth="1" />
+      <line x1="6" y1="6" x2="22" y2="6" stroke="#fb7185" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="6" y1="11" x2="26" y2="11" stroke="#fecdd3" strokeWidth="1.5" strokeLinecap="round" />
+    </g>
+    {/* Front Folder Pocket */}
+    <path d="M 10 27 C 10 24, 12 22, 16 22 L 64 22 C 68 22, 70 24, 70 27 L 67 52 C 67 55, 65 57, 61 57 L 19 57 C 15 57, 13 55, 13 52 Z" fill="#f43f5e" />
+    {/* Folder Stitch / Highlight */}
+    <line x1="16" y1="26" x2="64" y2="26" stroke="#fb7185" strokeWidth="1.5" strokeLinecap="round" />
+    {/* Golden Paperclip */}
+    <path d="M 52 16 L 52 30 C 52 32, 55 32, 55 30 L 55 19 C 55 18, 57 18, 57 19 L 57 28" stroke="#fbbf24" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+  </svg>
 );
 
 // ============================================================================
-// 7. ASSIGN YOUR STUDENTS: Graduation Cap Guiding Students
+// 8. ASSIGN YOUR STUDENTS: Graduation Cap Guiding Students (Transparent SVG)
 // ============================================================================
 export const AssignStudentsIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_17_45 PM.png"
-    alt="Assign Your Students"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Base Pedestal / Classroom Desk */}
+    <rect x="14" y="58" width="68" height="12" rx="4" fill="#0284c7" />
+    <rect x="22" y="62" width="52" height="4" rx="2" fill="#38bdf8" />
+    {/* Two Students in Foreground */}
+    <circle cx="34" cy="46" r="8" fill="#c084fc" />
+    <path d="M 24 58 C 24 51, 44 51, 44 58 Z" fill="#7c3aed" />
+    <circle cx="62" cy="46" r="8" fill="#34d399" />
+    <path d="M 52 58 C 52 51, 72 51, 72 58 Z" fill="#059669" />
+    {/* Large Graduation Mortarboard Hovering Above */}
+    <g transform="translate(48, 22)">
+      <path d="M 0 -12 L 32 0 L 0 12 L -32 0 Z" fill="#1e3a8a" stroke="#3b82f6" strokeWidth="1.5" />
+      <path d="M 0 -9 L 27 0 L 0 9 L -27 0 Z" fill="#2563eb" />
+      <path d="M -16 2 L -16 11 C -16 18, 16 18, 16 11 L 16 2 Z" fill="#1d4ed8" />
+      {/* Golden Tassel */}
+      <path d="M 0 0 L 24 7 L 24 20" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+      <circle cx="24" cy="21" r="3" fill="#fbbf24" />
+      <circle cx="0" cy="0" r="2.5" fill="#fde047" />
+    </g>
+  </svg>
 );
 
 // ============================================================================
-// 8. LIVE QUIZ: Screen with LIVE Badge & Golden Trophy
+// 9. LIVE QUIZ: Screen with LIVE Badge & Golden Trophy (Transparent SVG)
 // ============================================================================
 export const LiveQuizIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_20_42 PM.png"
-    alt="Live Quiz"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Monitor / Tablet Frame */}
+    <rect x="12" y="10" width="72" height="52" rx="9" fill="#0f172a" stroke="#334155" strokeWidth="2" />
+    <rect x="16" y="14" width="64" height="44" rx="6" fill="#1e1b4b" />
+    {/* Pulsing LIVE Pill */}
+    <rect x="22" y="20" width="26" height="8" rx="4" fill="#ef4444" />
+    <circle cx="26" cy="24" r="2" fill="#ffffff" />
+    <text x="31" y="26.5" fill="#ffffff" fontSize="5.5" fontWeight="900" fontFamily="sans-serif">LIVE</text>
+    {/* Golden Trophy Centered */}
+    <g transform="translate(48, 38)">
+      <path d="M -9 -12 L 9 -12 L 7 0 C 6 5, -6 5, -7 0 Z" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+      {/* Handles */}
+      <path d="M -9 -10 C -15 -10, -15 -2, -8 -2" stroke="#d97706" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      <path d="M 9 -10 C 15 -10, 15 -2, 8 -2" stroke="#d97706" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      {/* Trophy Stem & Base */}
+      <rect x="-2.5" y="3" width="5" height="5" fill="#d97706" />
+      <rect x="-7" y="8" width="14" height="4" rx="1.5" fill="#b45309" />
+      {/* Star */}
+      <path d="M 0 -7 L 1.2 -3.5 L 4.5 -3.5 L 2 -1.5 L 3 2 L 0 0 L -3 2 L -2 -1.5 L -4.5 -3.5 L -1.2 -3.5 Z" fill="#ffffff" />
+    </g>
+    {/* Stand */}
+    <path d="M 42 62 L 54 62 L 57 70 L 39 70 Z" fill="#334155" />
+    <rect x="32" y="70" width="32" height="3" rx="1.5" fill="#475569" />
+  </svg>
 );
 
 // ============================================================================
-// 9. EXAM: Exam Paper Clipboard with Glowing Red A+ Stamp
+// 10. EXAM: Exam Paper Clipboard with Glowing Red A+ Stamp (Transparent SVG)
 // ============================================================================
 export const ExamIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_20_56 PM.png"
-    alt="Exam"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Clipboard Base */}
+    <rect x="22" y="10" width="52" height="62" rx="7" fill="#1e293b" />
+    {/* White Paper Sheet */}
+    <rect x="26" y="16" width="44" height="52" rx="4" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
+    {/* Metallic Clip */}
+    <rect x="38" y="7" width="20" height="7" rx="3" fill="#475569" />
+    <rect x="42" y="5" width="12" height="4" rx="2" fill="#94a3b8" />
+    {/* Exam Question Lines */}
+    <line x1="32" y1="24" x2="48" y2="24" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="32" y1="30" x2="58" y2="30" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
+    <line x1="32" y1="35" x2="54" y2="35" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
+    <line x1="32" y1="41" x2="44" y2="41" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="32" y1="47" x2="56" y2="47" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
+    <line x1="32" y1="52" x2="50" y2="52" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
+    {/* Glowing Red A+ Stamp */}
+    <g transform="translate(56, 46)">
+      <circle cx="6" cy="6" r="11" fill="#fee2e2" stroke="#dc2626" strokeWidth="1.8" />
+      <text x="3" y="10" fill="#dc2626" fontSize="11" fontWeight="900" fontFamily="sans-serif">A</text>
+      <text x="10" y="8" fill="#dc2626" fontSize="8" fontWeight="900" fontFamily="sans-serif">+</text>
+    </g>
+  </svg>
 );
 
 // ============================================================================
-// 10. OCR ASSESSMENT: Worksheet with 4 Purple Scanning Brackets & OCR Tag
+// 11. OCR ASSESSMENT: Worksheet with Scanning Laser Brackets (Transparent SVG)
 // ============================================================================
 export const OCRIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_24_25 PM.png"
-    alt="OCR Assessment"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Sheet */}
+    <rect x="22" y="12" width="52" height="58" rx="6" fill="#f5f3ff" stroke="#ddd6fe" strokeWidth="1.5" />
+    <line x1="30" y1="22" x2="52" y2="22" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="30" y1="28" x2="66" y2="28" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round" />
+    <line x1="30" y1="34" x2="60" y2="34" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round" />
+    <line x1="30" y1="42" x2="50" y2="42" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="30" y1="48" x2="64" y2="48" stroke="#c4b5fd" strokeWidth="2" strokeLinecap="round" />
+    {/* Scanning Brackets in Glowing Purple */}
+    <path d="M 16 16 L 16 8 L 24 8" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M 80 16 L 80 8 L 72 8" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M 16 64 L 16 72 L 24 72" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <path d="M 80 64 L 80 72 L 72 72" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    {/* Horizontal Scanning Laser Bar */}
+    <line x1="18" y1="40" x2="78" y2="40" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="48" cy="40" r="4" fill="#a855f7" stroke="#ffffff" strokeWidth="1" />
+  </svg>
 );
 
 // ============================================================================
-// 11. COMPETITION: Golden Championship Trophy with Star
+// 12. COMPETITION: Golden Championship Trophy with Star (Transparent SVG)
 // ============================================================================
 export const CompetitionIllustration: React.FC<IllustrationProps> = ({ className = "w-24 h-20" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_27_39 PM.png"
-    alt="Competition"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 96 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Trophy Cup */}
+    <path d="M 32 14 L 64 14 L 60 40 C 58 48, 38 48, 36 40 Z" fill="#fbbf24" stroke="#d97706" strokeWidth="1.5" />
+    <path d="M 35 17 L 61 17 L 58 38 C 56 44, 40 44, 38 38 Z" fill="#fde047" />
+    {/* Handles */}
+    <path d="M 32 20 C 18 20, 18 36, 34 36" stroke="#d97706" strokeWidth="3" fill="none" strokeLinecap="round" />
+    <path d="M 64 20 C 78 20, 78 36, 62 36" stroke="#d97706" strokeWidth="3" fill="none" strokeLinecap="round" />
+    {/* Center Star */}
+    <g transform="translate(48, 28)">
+      <path d="M 0 -6 L 1.8 -1.8 L 6.5 -1.8 L 2.8 1 L 4.2 5.5 L 0 2.8 L -4.2 5.5 L -2.8 1 L -6.5 -1.8 L -1.8 -1.8 Z" fill="#d97706" />
+    </g>
+    {/* Stem */}
+    <rect x="44" y="44" width="8" height="10" rx="1" fill="#d97706" />
+    {/* Pedestal Base */}
+    <rect x="34" y="54" width="28" height="8" rx="2.5" fill="#92400e" />
+    <rect x="30" y="62" width="36" height="6" rx="2" fill="#78350f" />
+  </svg>
 );
 
 
@@ -484,15 +677,30 @@ export const AITeachingIntelligenceIllustration: React.FC<IllustrationProps> = (
 );
 
 // ============================================================================
-// 14. CREATE COURSE: Stack of Textbooks with Graduation Cap
+// 14. CREATE COURSE: Stack of Textbooks with Graduation Cap (Transparent SVG)
 // ============================================================================
 export const CreateCourseIllustration: React.FC<IllustrationProps> = ({ className = "w-20 h-16" }) => (
-  <img
-    src="/assets/ChatGPT Image Aug 28, 2026, 04_29_38 PM.png"
-    alt="Create a Course"
-    className={`object-contain ${className}`}
-    loading="lazy"
-  />
+  <svg viewBox="0 0 80 64" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Bottom Book (Emerald) */}
+    <rect x="14" y="42" width="52" height="14" rx="3.5" fill="#059669" />
+    <rect x="18" y="45" width="45" height="8" rx="2" fill="#ecfdf5" />
+    <rect x="14" y="42" width="8" height="14" rx="2" fill="#047857" />
+    {/* Middle Book (Indigo) */}
+    <rect x="18" y="30" width="44" height="13" rx="3" fill="#4338ca" />
+    <rect x="22" y="32.5" width="37" height="8" rx="2" fill="#e0e7ff" />
+    <rect x="18" y="30" width="7" height="13" rx="2" fill="#312e81" />
+    {/* Top Book (Amber) */}
+    <rect x="22" y="19" width="36" height="12" rx="3" fill="#d97706" />
+    <rect x="26" y="21" width="29" height="8" rx="2" fill="#fef3c7" />
+    <rect x="22" y="19" width="6" height="12" rx="2" fill="#b45309" />
+    {/* Mini Graduation Cap on Top */}
+    <g transform="translate(40, 10)">
+      <path d="M 0 -7 L 18 0 L 0 7 L -18 0 Z" fill="#1e1b4b" stroke="#38bdf8" strokeWidth="1" />
+      <path d="M -9 1 L -9 6 C -9 10, 9 10, 9 6 L 9 1 Z" fill="#0f172a" />
+      <path d="M 0 0 L 14 4 L 14 11" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <circle cx="14" cy="12" r="1.5" fill="#f59e0b" />
+    </g>
+  </svg>
 );
 
 

@@ -35,10 +35,9 @@ import { useAuth } from '@/context/AuthContext';
 
 import {
   ClassroomHeroIllustration,
-  OverviewIllustration,
   TaskIllustration,
+  CoursesIllustration,
   StudentsIllustration,
-  StreamIllustration,
   ResourcesIllustration,
   AssignStudentsIllustration,
   LiveQuizIllustration,
@@ -381,56 +380,57 @@ export const ClassroomDetailPage: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
+        {/* ========================================================================= */}
         {/* SECTION 1 — CLASSROOM HERO                                                */}
         {/* ========================================================================= */}
-        <section className="bg-[#0a213c] rounded-[28px] p-6 sm:p-8 lg:p-10 text-white shadow-xl relative overflow-hidden border border-slate-800">
+        <section className="bg-[#0a213c] rounded-[24px] p-5 sm:p-6 lg:p-7 text-white shadow-lg relative overflow-hidden border border-slate-800">
           
           {/* Subtle Organic Background Glow Waves */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center relative z-10">
             
             {/* LEFT: Hero Content, Classroom Details & Invite Actions (7 cols) */}
-            <div className="lg:col-span-7 space-y-5">
+            <div className="lg:col-span-7 space-y-3.5">
               
               {/* Motto Tagline */}
-              <div className="space-y-1">
-                <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-sky-300">
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-sky-300">
                   Empower your classroom,
                 </p>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight">
                   inspire your students.
                 </h1>
               </div>
 
               {/* Classroom Details & Badges */}
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap pt-1">
-                <span className="px-3 py-1 rounded-full bg-white/10 backdrop-blur-xs text-xs font-black text-white border border-white/15">
+              <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
+                <span className="px-3 py-0.5 rounded-full bg-white/10 backdrop-blur-xs text-xs font-black text-white border border-white/15">
                   {classroom.title}
                 </span>
 
-                <span className="px-3 py-1 rounded-full bg-sky-400/20 text-sky-200 text-xs font-black border border-sky-400/30">
+                <span className="px-3 py-0.5 rounded-full bg-sky-400/20 text-sky-200 text-xs font-black border border-sky-400/30">
                   {classroom.subject || 'General'}
                 </span>
 
                 {classroom.grade && (
-                  <span className="px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-200 text-xs font-black border border-amber-400/30">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-xs font-black border border-amber-400/30">
                     {classroom.grade}
                   </span>
                 )}
 
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-200 text-xs font-black border border-emerald-400/30">
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-xs font-black border border-emerald-400/30">
                   <Users className="w-3.5 h-3.5" />
                   <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
                 </span>
               </div>
 
               {/* Invite Code Box & Action Buttons */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+              <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-2.5 flex-wrap">
                 
                 {/* Monospace Invite Code Box */}
-                <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 px-3.5 py-2 rounded-xl shrink-0">
+                <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 px-3 py-1.5 rounded-xl shrink-0">
                   <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Code:</span>
                   <span className="font-mono font-black text-sm text-sky-300 tracking-widest">{inviteCode}</span>
                 </div>
@@ -439,7 +439,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCopyInvite}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
                 >
                   {copiedInvite ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-600" />}
                   <span>{copiedInvite ? 'Copied Link!' : 'Copy Code & Link'}</span>
@@ -449,7 +449,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleWhatsAppShare}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
                 >
                   <MessageSquareShare className="w-3.5 h-3.5" />
                   <span>Share via WhatsApp</span>
@@ -461,7 +461,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
             {/* RIGHT: 3D Paper-Cut Classroom Scene (5 cols) */}
             <div className="lg:col-span-5 flex justify-center lg:justify-end">
-              <ClassroomHeroIllustration className="w-full max-w-[380px] sm:max-w-[420px] h-auto drop-shadow-2xl" />
+              <ClassroomHeroIllustration className="w-full max-w-[280px] sm:max-w-[320px] h-auto drop-shadow-xl" />
             </div>
 
           </div>
@@ -469,190 +469,194 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 2 — MAIN TEACHER TOOLS (6 Pastel Cards)                           */}
+        {/* SECTION 2 — PRIMARY NAVIGATION (4 Compact Tiles)                          */}
         {/* ========================================================================= */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           
-          {/* Card 1: Overview */}
-          <div
-            onClick={() => handleSelectTab('overview')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
-              activeTab === 'overview'
-                ? 'bg-[#e8f3fa] border-sky-300 shadow-md ring-2 ring-sky-400/50'
-                : 'bg-[#e8f3fa] border-sky-100/90 hover:border-sky-300'
-            }`}
-          >
-            <div className="space-y-3">
-              <div className="flex justify-center py-1">
-                <OverviewIllustration className="w-20 h-16 transition-transform group-hover:scale-105" />
-              </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">Overview</h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  See class summary, performance & activity.
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-sky-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-sky-200">
-                <ArrowRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Tasks */}
+          {/* Card 1: My Tasks (Soft Green) */}
           <div
             onClick={() => handleSelectTab('assignments')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
               activeTab === 'assignments'
                 ? 'bg-[#eef8f1] border-emerald-300 shadow-md ring-2 ring-emerald-400/50'
                 : 'bg-[#eef8f1] border-emerald-100/90 hover:border-emerald-300'
             }`}
           >
-            <div className="space-y-3">
-              <div className="flex justify-center py-1">
-                <TaskIllustration className="w-20 h-16 transition-transform group-hover:scale-105" />
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-10 h-10 rounded-xl bg-white/80 border border-emerald-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+                <TaskIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
               </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">
-                  {isTeacher ? 'Tasks' : 'My Tasks'}
-                </h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  {isTeacher
-                    ? 'Create, manage and review assignments.'
-                    : 'View assigned tasks and submit work.'}
-                </p>
+              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-emerald-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-emerald-200">
+                <ArrowRight className="w-3 h-3" />
               </div>
             </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-emerald-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-emerald-200">
-                <ArrowRight className="w-3.5 h-3.5" />
-              </div>
+            <div className="pt-2 text-left">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                {isTeacher ? 'Tasks' : 'My Tasks'}
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
+                {isTeacher
+                  ? 'Create, manage and review assignments.'
+                  : 'View assigned tasks and submit work.'}
+              </p>
             </div>
           </div>
 
-          {/* Card 3: Students */}
-          <div
-            onClick={() => handleSelectTab('roster')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
-              activeTab === 'roster'
-                ? 'bg-[#f3edf9] border-purple-300 shadow-md ring-2 ring-purple-400/50'
-                : 'bg-[#f3edf9] border-purple-100/90 hover:border-purple-300'
-            }`}
-          >
-            <div className="space-y-3">
-              <div className="flex justify-center py-1">
-                <StudentsIllustration className="w-20 h-16 transition-transform group-hover:scale-105" />
-              </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">
-                  {isTeacher ? 'Students' : 'Classmates'}
-                </h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  {isTeacher
-                    ? 'View students, progress and engagement.'
-                    : 'View classmates & learning progress.'}
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-purple-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-purple-200">
-                <ArrowRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Stream */}
-          <div
-            onClick={() => handleSelectTab('stream')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
-              activeTab === 'stream'
-                ? 'bg-[#fbf4e4] border-amber-300 shadow-md ring-2 ring-amber-400/50'
-                : 'bg-[#fbf4e4] border-amber-100/90 hover:border-amber-300'
-            }`}
-          >
-            <div className="space-y-3">
-              <div className="flex justify-center py-1">
-                <StreamIllustration className="w-20 h-16 transition-transform group-hover:scale-105" />
-              </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">Stream</h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  View class updates, announcements & posts.
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-amber-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-amber-200">
-                <ArrowRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 5: Resources */}
-          <div
-            onClick={() => handleSelectTab('resources')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
-              activeTab === 'resources'
-                ? 'bg-[#faecea] border-rose-300 shadow-md ring-2 ring-rose-400/50'
-                : 'bg-[#faecea] border-rose-100/90 hover:border-rose-300'
-            }`}
-          >
-            <div className="space-y-3">
-              <div className="flex justify-center py-1">
-                <ResourcesIllustration className="w-20 h-16 transition-transform group-hover:scale-105" />
-              </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">Resources</h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  Access learning materials, files and links.
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-rose-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-rose-200">
-                <ArrowRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 6: Courses */}
+          {/* Card 2: Courses (Soft Blue / Lavender) */}
           <div
             onClick={() => handleSelectTab('courses')}
-            className={`rounded-[24px] p-5 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-lg hover:-translate-y-0.5 relative overflow-hidden ${
+            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
               activeTab === 'courses'
                 ? 'bg-[#eef2ff] border-indigo-300 shadow-md ring-2 ring-indigo-400/50'
                 : 'bg-[#eef2ff] border-indigo-100/90 hover:border-indigo-300'
             }`}
           >
-            <div className="space-y-3">
-              <div className="flex justify-center py-2">
-                <div className="w-16 h-14 rounded-2xl bg-indigo-100/80 text-indigo-700 flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform">
-                  <BookOpen className="w-7 h-7" />
-                </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+                <CoursesIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
               </div>
-              <div className="space-y-1 text-left">
-                <h3 className="text-base font-black text-slate-900">
-                  {isTeacher ? 'Courses' : 'My Courses'}
-                </h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  {isTeacher
-                    ? 'Structured multi-day digital courses.'
-                    : 'Access assigned interactive course lessons.'}
-                </p>
+              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-indigo-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-indigo-200">
+                <ArrowRight className="w-3 h-3" />
               </div>
             </div>
-            <div className="flex justify-end pt-3">
-              <div className="w-8 h-8 rounded-full bg-white/90 group-hover:bg-white text-indigo-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-indigo-200">
-                <ArrowRight className="w-3.5 h-3.5" />
+            <div className="pt-2 text-left">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                Courses
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
+                {isTeacher
+                  ? 'Structured multi-day digital courses.'
+                  : 'Access assigned interactive course lessons.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Classmates (Soft Purple) */}
+          <div
+            onClick={() => handleSelectTab('roster')}
+            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+              activeTab === 'roster'
+                ? 'bg-[#f3edf9] border-purple-300 shadow-md ring-2 ring-purple-400/50'
+                : 'bg-[#f3edf9] border-purple-100/90 hover:border-purple-300'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-10 h-10 rounded-xl bg-white/80 border border-purple-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+                <StudentsIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
               </div>
+              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-purple-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-purple-200">
+                <ArrowRight className="w-3 h-3" />
+              </div>
+            </div>
+            <div className="pt-2 text-left">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                {isTeacher ? 'Students' : 'Classmates'}
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
+                {isTeacher
+                  ? 'View students, progress and engagement.'
+                  : 'View classmates & learning progress.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Card 4: Resources (Soft Pink) */}
+          <div
+            onClick={() => handleSelectTab('resources')}
+            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+              activeTab === 'resources'
+                ? 'bg-[#faecea] border-rose-300 shadow-md ring-2 ring-rose-400/50'
+                : 'bg-[#faecea] border-rose-100/90 hover:border-rose-300'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-10 h-10 rounded-xl bg-white/80 border border-rose-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+                <ResourcesIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
+              </div>
+              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-rose-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-rose-200">
+                <ArrowRight className="w-3 h-3" />
+              </div>
+            </div>
+            <div className="pt-2 text-left">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+                Resources
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
+                {isTeacher
+                  ? 'Access learning materials, files and links.'
+                  : 'Access learning materials, files and links.'}
+              </p>
             </div>
           </div>
 
         </section>
 
+        {/* Contextual Active Live Quiz Banner (Only renders when a live quiz is actively running) */}
+        {activeLiveQuizSession && (
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    Live Now
+                  </span>
+                  <h4 className="text-sm font-black text-white">
+                    {activeLiveQuizSession.quiz?.title || (activeLiveQuizSession as any).title || 'Live Quiz in Session'}
+                  </h4>
+                </div>
+                <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                  {isTeacher
+                    ? 'You have an active live quiz session running. Open host controls below.'
+                    : 'Your teacher has started a live quiz! Click to join your classmates directly.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={isJoiningLiveQuiz}
+              onClick={() => {
+                if (isTeacher) {
+                  setLiveQuizBankOpen(true);
+                } else {
+                  handleStudentJoinLiveQuiz();
+                }
+              }}
+              className="px-4 py-2 bg-white text-emerald-900 hover:bg-emerald-50 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer self-start sm:self-center"
+            >
+              {isTeacher ? 'Host Controls →' : isJoiningLiveQuiz ? 'Connecting...' : 'Join Active Quiz Now →'}
+            </button>
+          </div>
+        )}
+
         {/* ========================================================================= */}
-        {/* SECTION 3 — ASSIGN YOUR STUDENTS (5 Action Cards)                          */}
+        {/* SECTION 3 — CLASS STREAM (Announcements, Posts & Updates)                  */}
+        {/* ========================================================================= */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-black text-slate-900 tracking-wider uppercase">
+                Class Stream
+              </h2>
+              <span className="text-[11px] font-bold text-slate-500 bg-stone-100 px-2.5 py-0.5 rounded-full">
+                Announcements & Updates
+              </span>
+            </div>
+          </div>
+
+          <ClassroomMessages
+            classroomId={classroom.id}
+            messages={messages}
+            isTeacher={isTeacher}
+            onMessageUpdated={loadAllClassroomData}
+          />
+        </section>
+
+        {/* ========================================================================= */}
+        {/* SECTION 4 — CLASSROOM ACTIVITIES & LEARNING (5 Action Cards)               */}
         {/* ========================================================================= */}
         <section className="space-y-4">
           {/* Header */}
@@ -958,17 +962,6 @@ export const ClassroomDetailPage: React.FC = () => {
 
         </section>
 
-        {/* ========================================================================= */}
-        {/* SECTION 6 — CLASSROOM ANNOUNCEMENTS                                       */}
-        {/* ========================================================================= */}
-        <section>
-          <ClassroomMessages
-            classroomId={classroom.id}
-            messages={messages}
-            isTeacher={isTeacher}
-            onMessageUpdated={loadAllClassroomData}
-          />
-        </section>
 
         {/* ========================================================================= */}
         {/* SECTION 7 — DANGER ZONE (Teacher/Admin Only)                              */}
@@ -1006,19 +999,7 @@ export const ClassroomDetailPage: React.FC = () => {
               </button>
             </div>
 
-            {/* TAB: OVERVIEW */}
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <AssignmentList
-                  assignments={assignments}
-                  isTeacher={isTeacher}
-                  onCreateAssignment={() => setShowQuickCreateTask(true)}
-                  onOpenSubmissions={(a) => setActiveReviewAssignment(a)}
-                  onSubmitWork={(a) => setActiveSubmitAssignment(a)}
-                  onDeleteAssignment={handleDeleteAssignment}
-                />
-              </div>
-            )}
+
 
             {/* TAB: TASKS (ASSIGNMENTS) */}
             {activeTab === 'assignments' && (
@@ -1116,15 +1097,7 @@ export const ClassroomDetailPage: React.FC = () => {
               />
             )}
 
-            {/* TAB: STREAM */}
-            {activeTab === 'stream' && (
-              <ClassroomMessages
-                classroomId={classroom.id}
-                messages={messages}
-                isTeacher={isTeacher}
-                onMessageUpdated={loadAllClassroomData}
-              />
-            )}
+
 
             {/* TAB: RESOURCES */}
             {activeTab === 'resources' && (
