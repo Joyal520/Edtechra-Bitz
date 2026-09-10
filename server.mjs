@@ -3704,6 +3704,45 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
 
     const { classroomId } = req.params;
 
+    if (serverSupabase) {
+      const { data: classroom, error: classErr } = await serverSupabase
+        .from('classrooms')
+        .select('id, teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      if (classErr) throw classErr;
+      if (!classroom) {
+        return res.status(404).json({ success: false, error: 'Classroom not found.' });
+      }
+
+      const userId = authData.user.id;
+      const isTeacherOrAdmin = (
+        classroom.teacher_id === userId ||
+        authData.profile?.role === 'admin' ||
+        authData.profile?.role === 'teacher'
+      );
+
+      let isAuthorized = isTeacherOrAdmin;
+
+      if (!isAuthorized) {
+        const { data: membership } = await serverSupabase
+          .from('classroom_members')
+          .select('role, status')
+          .eq('classroom_id', classroomId)
+          .eq('profile_id', userId)
+          .maybeSingle();
+
+        if (membership && (membership.status === 'active' || !membership.status)) {
+          isAuthorized = true;
+        }
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ success: false, error: 'You are not enrolled in this classroom.' });
+      }
+    }
+
     const { data: assignments, error } = await serverSupabase
       .from('course_classroom_assignments')
       .select(`
@@ -14877,6 +14916,11 @@ app.post('/api/exams/publish', async (req, res) => {
       questions_json: canonicalExam.sections || [],
       questions: canonicalExam.sections || [],
       pedagogical_config: canonicalExam.requirements || {},
+      assessment_type: examData.assessmentType || canonicalExam.assessmentType || 'exam',
+      theme_config: canonicalExam.theme || {},
+      brand_kit: canonicalExam.brandKit || {},
+      branching_logic: canonicalExam.branchingLogic || {},
+      survey_settings: canonicalExam.surveySettings || examData.surveySettings || {},
       status: 'published',
       published_at: new Date().toISOString()
     };

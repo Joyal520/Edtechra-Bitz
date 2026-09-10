@@ -28,16 +28,19 @@ import { optimizeImageForUpload } from '@/utils/imageOptimization';
 
 const API_BASE = '/api/course-studio';
 
-async function getAuthHeader(): Promise<{ Authorization: string; 'Content-Type': string }> {
+async function getAuthHeader(): Promise<Record<string, string>> {
   let token = '';
   if (supabase) {
     const { data: sessionData } = await supabase.auth.getSession();
     token = sessionData?.session?.access_token || '';
   }
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
   };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 export const courseStudioService = {

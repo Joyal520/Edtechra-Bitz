@@ -61,7 +61,10 @@ export const StudentExamPage: React.FC = () => {
         // Layer 2: Resilient server API fallback if direct Supabase returned null
         if (!examData) {
           try {
-            const apiRes = await fetch(`/api/exam-engine?action=get-student-exam&examId=${effectiveExamId}&classroomId=${classroomId || ''}`);
+            const headers: Record<string, string> = {};
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || (user as any)?.access_token;
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const apiRes = await fetch(`/api/exam-engine?action=get-student-exam&examId=${effectiveExamId}&classroomId=${classroomId || ''}`, { headers });
             if (apiRes.ok) {
               const resJson = await apiRes.json();
               if (resJson.success && resJson.exam) {
@@ -103,6 +106,18 @@ export const StudentExamPage: React.FC = () => {
 
         if (!examData) {
           setErrorMessage('This assessment was not found or is no longer available.');
+          setLoading(false);
+          return;
+        }
+
+        // Gating: If assessment is in draft mode, only teachers/creators can preview it
+        const isTeacher = Boolean(
+          examData.teacher_id === user?.id ||
+          examData.created_by === user?.id ||
+          authIsTeacher
+        );
+        if (examData.status === 'draft' && !isTeacher) {
+          setErrorMessage('This assessment is currently in draft mode and has not been published to students yet.');
           setLoading(false);
           return;
         }

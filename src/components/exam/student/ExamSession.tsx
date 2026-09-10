@@ -264,6 +264,46 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   const unansweredCount = flattenedQuestions.length - answeredCount;
   const markedCount = bookmarkedIds.size;
 
+  const currentQ = flattenedQuestions[currentIndex];
+  const isBookmarked = currentQ ? bookmarkedIds.has(currentQ.question.id) : false;
+
+  // Section Navigation List (Hook called unconditionally to preserve hook order)
+  const sectionsList = useMemo(() => {
+    return exam.sections.map((sec, idx) => {
+      const firstQIndex = flattenedQuestions.findIndex(q => q.sectionId === sec.id);
+      const isCurrent = currentQ ? currentQ.sectionId === sec.id : idx === 0;
+      return {
+        id: sec.id,
+        title: sec.title || `Section ${String.fromCharCode(65 + idx)}`,
+        firstQIndex: firstQIndex >= 0 ? firstQIndex : 0,
+        isCurrent
+      };
+    });
+  }, [exam.sections, flattenedQuestions, currentQ]);
+
+  // Check if exam conforms to Simple Exam template (Hook called unconditionally to preserve hook order)
+  const isSimpleExam = useMemo(() => {
+    const typeStr = (exam.exam.examType || '').toLowerCase();
+    const titleStr = (exam.exam.title || '').toLowerCase();
+    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
+    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
+      return true;
+    }
+    const allMCQ =
+      flattenedQuestions.length > 0 &&
+      flattenedQuestions.every((q) => q.question.type === 'multiple_choice');
+    if (allMCQ && (flattenedQuestions.length === 25 || typeStr.includes('quick'))) {
+      return true;
+    }
+    return false;
+  }, [exam, flattenedQuestions]);
+
+  const handleClearCurrentAnswer = () => {
+    if (currentQ) {
+      handleAnswerChange(undefined);
+    }
+  };
+
   // Phase: Instructions Screen
   if (sessionPhase === 'instructions') {
     return (
@@ -288,46 +328,6 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       />
     );
   }
-
-  const currentQ = flattenedQuestions[currentIndex];
-  const isBookmarked = currentQ ? bookmarkedIds.has(currentQ.question.id) : false;
-
-  // Section Navigation List
-  const sectionsList = useMemo(() => {
-    return exam.sections.map((sec, idx) => {
-      const firstQIndex = flattenedQuestions.findIndex(q => q.sectionId === sec.id);
-      const isCurrent = currentQ ? currentQ.sectionId === sec.id : idx === 0;
-      return {
-        id: sec.id,
-        title: sec.title || `Section ${String.fromCharCode(65 + idx)}`,
-        firstQIndex: firstQIndex >= 0 ? firstQIndex : 0,
-        isCurrent
-      };
-    });
-  }, [exam.sections, flattenedQuestions, currentQ]);
-
-  const handleClearCurrentAnswer = () => {
-    if (currentQ) {
-      handleAnswerChange(undefined);
-    }
-  };
-
-  // Check if exam conforms to Simple Exam template
-  const isSimpleExam = useMemo(() => {
-    const typeStr = (exam.exam.examType || '').toLowerCase();
-    const titleStr = (exam.exam.title || '').toLowerCase();
-    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
-    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
-      return true;
-    }
-    const allMCQ =
-      flattenedQuestions.length > 0 &&
-      flattenedQuestions.every((q) => q.question.type === 'multiple_choice');
-    if (allMCQ && (flattenedQuestions.length === 25 || typeStr.includes('quick'))) {
-      return true;
-    }
-    return false;
-  }, [exam, flattenedQuestions]);
 
   // Render dedicated Simple Exam student UI when applicable
   if (isSimpleExam && currentQ) {

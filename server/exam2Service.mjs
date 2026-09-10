@@ -968,6 +968,10 @@ export async function saveExamToSupabase(serverSupabase, arg1, arg2) {
         status: insertRecord.status === 'published' ? 'published' : 'draft',
         questions: sections,
         created_by: teacherId,
+        assessment_type: insertRecord.assessment_type || 'exam',
+        survey_settings: insertRecord.survey_settings || {},
+        theme_config: insertRecord.theme_config || {},
+        brand_kit: insertRecord.brand_kit || {},
         updated_at: new Date().toISOString()
       };
       if (classroomId) baseRecord.classroom_id = classroomId;
@@ -1065,6 +1069,11 @@ export async function republishExamToClassrooms(serverSupabase, {
       ends_at: endsAt,
       questions: sourceExam.questions,
       questions_json: sourceExam.questions_json,
+      assessment_type: sourceExam.assessment_type || 'exam',
+      survey_settings: sourceExam.survey_settings || {},
+      theme_config: sourceExam.theme_config || {},
+      brand_kit: sourceExam.brand_kit || {},
+      branching_logic: sourceExam.branching_logic || {},
       exam_config_json: {
         ...(sourceExam.exam_config_json || {}),
         publishing: {
@@ -1100,6 +1109,10 @@ export async function republishExamToClassrooms(serverSupabase, {
         pass_marks: pubRecord.pass_marks,
         status: 'published',
         questions: pubRecord.questions,
+        assessment_type: sourceExam.assessment_type || 'exam',
+        survey_settings: sourceExam.survey_settings || {},
+        theme_config: sourceExam.theme_config || {},
+        brand_kit: sourceExam.brand_kit || {},
         starts_at: startsAt,
         ends_at: endsAt,
         updated_at: new Date().toISOString()

@@ -77,7 +77,7 @@ type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 
 export const ClassroomDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, profile, isTeacher: authIsTeacher } = useAuth();
+  const { user, profile, isTeacher: authIsTeacher, isLoading: authLoading } = useAuth();
 
   const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [invite, setInvite] = useState<ClassroomInvite | null>(null);
@@ -199,10 +199,10 @@ export const ClassroomDetailPage: React.FC = () => {
   }, [id]);
 
   useEffect(() => {
-    if (id) {
+    if (id && !authLoading) {
       loadAllClassroomData();
     }
-  }, [id, user]);
+  }, [id, user, authLoading]);
 
   const loadAllClassroomData = async () => {
     if (!id) return;
@@ -230,7 +230,7 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomExamService.getExamsByClassroom(id),
         classroomPointsService.getClassroomLeaderboard(id),
         classroomService.getClassroomStats(id),
-        courseStudioService.getClassroomCourses(id).catch(() => [])
+        user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([])
       ]);
 
       if (!classData) {
@@ -655,38 +655,6 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* SECTION 3 — ASSIGN YOUR STUDENTS (5 Action Cards)                          */}
         {/* ========================================================================= */}
         <section className="space-y-4">
-          
-          {/* Active Live Quiz Alert Banner for Enrolled Students */}
-          {activeLiveQuizSession && !isTeacher && (
-            <div className="bg-gradient-to-r from-[#0b1b3d] via-[#102a5c] to-[#0b1b3d] text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-sky-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
-              <div className="flex items-center gap-4 text-center sm:text-left">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-400/30">
-                  <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping" />
-                </div>
-                <div className="space-y-0.5">
-                  <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-black uppercase tracking-wider">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    Live Quiz In Session
-                  </div>
-                  <h3 className="text-base font-black text-white">
-                    {activeLiveQuizSession.quiz?.title || 'Classroom Live Quiz'}
-                  </h3>
-                  <p className="text-xs text-sky-200/80">
-                    Your teacher started a live game! Join directly without entering a PIN.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={isJoiningLiveQuiz}
-                onClick={handleStudentJoinLiveQuiz}
-                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer shrink-0 animate-pulse"
-              >
-                {isJoiningLiveQuiz ? 'Connecting...' : 'Join Class Quiz Directly →'}
-              </button>
-            </div>
-          )}
-
           {/* Header */}
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-black text-slate-900 tracking-wider uppercase">
@@ -1170,136 +1138,139 @@ export const ClassroomDetailPage: React.FC = () => {
             )}
 
             {/* TAB: EXAMS */}
-            {activeTab === 'exams' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
-                  <div>
-                    <h2 className="text-base font-black text-slate-900">Assessments & Surveys Studio</h2>
-                    <p className="text-xs text-slate-500 font-semibold">{exams.length} active assessments & surveys</p>
-                  </div>
-                  {isTeacher && (
-                    <button
-                      type="button"
-                      onClick={() => setAssessmentTypeModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Create Assessment</span>
-                    </button>
-                  )}
-                </div>
+            {activeTab === 'exams' && (() => {
+              const visibleExams = isTeacher
+                ? exams
+                : exams.filter((e) => e.status === 'published' || e.status === 'active');
 
-                {exams.length === 0 ? (
-                  <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-2">
-                    <Award className="w-10 h-10 text-slate-300 mx-auto" />
-                    <p className="text-xs font-bold text-slate-500">No assessments or surveys created for this classroom.</p>
-                    <p className="text-[11px] text-slate-400">
-                      {isTeacher
-                        ? 'Click "+ Create Assessment" to launch the Canva-style visual builder.'
-                        : 'Check back when your teacher announces an assessment.'}
-                    </p>
+              return (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Assessments & Surveys Studio</h2>
+                      <p className="text-xs text-slate-500 font-semibold">{visibleExams.length} active assessments & surveys</p>
+                    </div>
+                    {isTeacher && (
+                      <button
+                        type="button"
+                        onClick={() => setAssessmentTypeModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Create Assessment</span>
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {exams.map((exam) => {
-                      const isSurveyItem = (exam as any).assessment_type === 'survey';
 
-                      return (
-                        <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                isSurveyItem ? 'text-amber-700 bg-amber-50' : 'text-indigo-700 bg-indigo-50'
-                              }`}>
-                                {isSurveyItem ? 'Survey' : `${exam.duration_minutes} Mins`}
-                              </span>
-                              <span className="text-xs font-extrabold text-slate-600">
-                                {isSurveyItem ? 'Feedback / Poll' : `${exam.total_marks} Marks Total`}
-                              </span>
+                  {visibleExams.length === 0 ? (
+                    <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-2">
+                      <Award className="w-10 h-10 text-slate-300 mx-auto" />
+                      <p className="text-xs font-bold text-slate-500">No assessments or surveys created for this classroom.</p>
+                      <p className="text-[11px] text-slate-400">
+                        {isTeacher
+                          ? 'Click "+ Create Assessment" to launch the Canva-style visual builder.'
+                          : 'Check back when your teacher announces an assessment.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {visibleExams.map((exam) => {
+                        const isSurveyItem = (exam as any).assessment_type === 'survey';
+
+                        return (
+                          <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                  isSurveyItem ? 'text-amber-700 bg-amber-50' : 'text-indigo-700 bg-indigo-50'
+                                }`}>
+                                  {isSurveyItem ? 'Survey' : `${exam.duration_minutes} Mins`}
+                                </span>
+                                <span className="text-xs font-extrabold text-slate-600">
+                                  {isSurveyItem ? 'Feedback / Poll' : `${exam.total_marks} Marks Total`}
+                                </span>
+                              </div>
+
+                              <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
+                              {exam.description && (
+                                <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
+                              )}
                             </div>
 
-                            <h3 className="text-base font-black text-slate-900 mt-2">{exam.title}</h3>
-                            {exam.description && (
-                              <p className="text-xs text-slate-500 mt-1 font-medium">{exam.description}</p>
-                            )}
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                            {exam.latest_result ? (
-                              <span className="text-xs font-black text-emerald-600 truncate">
-                                {isSurveyItem
-                                  ? 'Submitted'
-                                  : `Score: ${exam.latest_result.score} / ${exam.total_marks} (${exam.latest_result.percentage}%)`}
-                              </span>
-                            ) : (
-                              <span className="text-xs font-semibold text-slate-400">
-                                {(Array.isArray(exam.questions_json) && exam.questions_json.length > 0
-                                  ? exam.questions_json.flatMap((s: any) => s.questions || []).length
-                                  : Array.isArray(exam.questions)
-                                  ? exam.questions.length
-                                  : 0)} questions
-                              </span>
-                            )}
-
-                            <div className="flex items-center gap-1.5">
-                              {isTeacher && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const url = `${window.location.origin}/classes/${classroom.id}/exams/${exam.id}`;
-                                      try {
-                                        await navigator.clipboard.writeText(url);
-                                        setCopiedExamCardId(exam.id);
-                                        setTimeout(() => setCopiedExamCardId(null), 2500);
-                                      } catch (e) {}
-                                    }}
-                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                                    title="Copy direct student exam link"
-                                  >
-                                    {copiedExamCardId === exam.id ? (
-                                      <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                        <span className="text-emerald-700 font-extrabold">Copied</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3.5 h-3.5 text-slate-500" />
-                                        <span>Copy Link</span>
-                                      </>
-                                    )}
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => navigate(`/classes/${classroom.id}/assessments/builder/${exam.id}`)}
-                                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                                    title="Edit in Assessment Studio"
-                                  >
-                                    Edit Studio
-                                  </button>
-                                </>
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                              {exam.latest_result ? (
+                                <span className="text-xs font-black text-emerald-600 truncate">
+                                  {isSurveyItem
+                                    ? 'Submitted'
+                                    : `Score: ${exam.latest_result.score} / ${exam.total_marks} (${exam.latest_result.percentage}%)`}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-semibold text-slate-400">
+                                  {(Array.isArray(exam.questions_json) && exam.questions_json.length > 0
+                                    ? exam.questions_json.flatMap((s: any) => s.questions || []).length
+                                    : Array.isArray(exam.questions)
+                                    ? exam.questions.length
+                                    : 0)} questions
+                                </span>
                               )}
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedExam(exam);
-                                  setExamModalOpen(true);
-                                }}
-                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
-                              >
-                                {exam.latest_result ? 'View Result' : isSurveyItem ? 'Take Survey' : 'Take Exam'}
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                {isTeacher && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const url = `${window.location.origin}/classes/${classroom.id}/exams/${exam.id}`;
+                                        try {
+                                          await navigator.clipboard.writeText(url);
+                                          setCopiedExamCardId(exam.id);
+                                          setTimeout(() => setCopiedExamCardId(null), 2500);
+                                        } catch (e) {}
+                                      }}
+                                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                      title="Copy direct student exam link"
+                                    >
+                                      {copiedExamCardId === exam.id ? (
+                                        <>
+                                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                          <span className="text-emerald-700 font-extrabold">Copied</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>Copy Link</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/classes/${classroom.id}/assessments/builder/${exam.id}`)}
+                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                      title="Edit in Assessment Studio"
+                                    >
+                                      Edit Studio
+                                    </button>
+                                  </>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/classes/${classroom.id}/exams/${exam.id}`)}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                                >
+                                  {exam.latest_result ? 'View Result' : isSurveyItem ? 'Take Survey' : 'Take Exam'}
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* TAB: LEADERBOARD */}
             {activeTab === 'leaderboard' && (
