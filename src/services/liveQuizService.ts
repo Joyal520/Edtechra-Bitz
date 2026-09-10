@@ -10,7 +10,8 @@ import {
   LiveQuizParticipant,
   LiveQuizResult,
   LiveQuizQuestion,
-  LiveQuizStudentQuestion
+  LiveQuizStudentQuestion,
+  EffectiveLiveQuizState
 } from '@/types/liveQuiz';
 import { READY_MADE_QUIZZES } from '@/data/readyMadeQuizzes';
 import { classroomPointsService } from './classroomPointsService';
@@ -333,22 +334,66 @@ class LiveQuizService {
   }
 
   // ==========================================================================
-  // LIVE SESSIONS & LOBBY
+  // LIVE SESSIONS, SCHEDULING & STATE MANAGEMENT
   // ==========================================================================
 
   /**
-   * Teacher creates a new Live Quiz session and gets 6-digit PIN
+   * Deterministically calculates the effective lifecycle state of a Live Quiz session:
+   * 'draft' | 'scheduled' | 'live' | 'completed' | 'cancelled'
+   */
+  getEffectiveSessionState(session: LiveQuizSession | null | undefined): EffectiveLiveQuizState {
+    if (!session) return 'draft';
+    if (session.status === 'cancelled') return 'cancelled';
+    if (session.status === 'finished' || (session.status as string) === 'completed') return 'completed';
+    if (session.status === 'draft') return 'draft';
+
+    const scheduledTime = session.scheduled_start_at || session.started_at;
+    const nowMs = Date.now();
+
+    // If explicitly scheduled or has a future start timestamp
+    if (session.status === 'scheduled') {
+      if (scheduledTime && new Date(scheduledTime).getTime() <= nowMs) {
+        return 'live';
+      }
+      return 'scheduled';
+    }
+
+    if (session.status === 'lobby' && scheduledTime) {
+      const scheduledMs = new Date(scheduledTime).getTime();
+      if (scheduledMs > nowMs + 2000) {
+        return 'scheduled';
+      }
+    }
+
+    if (session.status === 'lobby' || session.status === 'in_progress' || session.status === 'reveal') {
+      return 'live';
+    }
+
+    return 'draft';
+  }
+
+  /**
+   * Teacher creates a new Live Quiz session (immediate or scheduled)
    */
   async createSession(payload: {
     classroom_id: string;
     quiz_id?: string;
     custom_quiz?: LiveQuiz;
+    is_scheduled?: boolean;
+    scheduled_start_at?: string;
   }): Promise<{ data?: LiveQuizSession; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const userId = await this.getUserId();
     if (!userId) return { error: 'Teacher authentication required' };
 
     try {
+      // Double-click protection / idempotency guard:
+      // If an active session already exists for this classroom, return it
+      const existing = await this.getActiveSessionForClassroom(payload.classroom_id);
+      if (existing) {
+        return { data: existing };
+      }
+
       let targetQuizId = payload.quiz_id;
 
       // If a custom quiz or ready-made quiz needs to be persisted in DB
@@ -389,7 +434,9 @@ class LiveQuizService {
       const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null);
       const totalTimerEnabled = Boolean(quiz?.timer_enabled);
       const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
-      const startedAt = new Date().toISOString();
+      const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
+      const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
+      const startedAt = isScheduled ? scheduledStartAt : new Date().toISOString();
       const expiresAt = totalTimerEnabled && totalTimerSeconds
         ? new Date(Date.now() + totalTimerSeconds * 1000).toISOString()
         : null;
@@ -397,9 +444,38 @@ class LiveQuizService {
       // Generate unique PIN
       const pin = this.generatePin();
 
-      const { data, error } = await supabase
+      // Primary insertion attempt with scheduled properties
+      const insertRow: any = {
+        classroom_id: payload.classroom_id,
+        teacher_id: userId,
+        quiz_id: targetQuizId || null,
+        pin,
+        status: isScheduled ? 'scheduled' : 'lobby',
+        current_question_index: 0,
+        question_duration_sec: 20,
+        started_at: startedAt,
+        expires_at: expiresAt
+      };
+
+      if (scheduledStartAt) {
+        insertRow.scheduled_start_at = scheduledStartAt;
+      }
+
+      let { data, error } = await supabase
         .from('live_quiz_sessions')
-        .insert({
+        .insert(insertRow)
+        .select(`
+          *,
+          classroom:classrooms!classroom_id (id, title, subject),
+          teacher:profiles!teacher_id (id, full_name, avatar_url)
+        `)
+        .single();
+
+      // Defensive fallback if scheduled_start_at column or status check constraint fails
+      if (error) {
+        console.warn('[LiveQuizService] createSession initial attempt notice:', error);
+        // Retry with status 'lobby' and omit scheduled_start_at (saving target time in started_at)
+        const fallbackInsert = {
           classroom_id: payload.classroom_id,
           teacher_id: userId,
           quiz_id: targetQuizId || null,
@@ -409,15 +485,20 @@ class LiveQuizService {
           question_duration_sec: 20,
           started_at: startedAt,
           expires_at: expiresAt
-        })
-        .select(`
-          *,
-          classroom:classrooms!classroom_id (id, title, subject),
-          teacher:profiles!teacher_id (id, full_name, avatar_url)
-        `)
-        .single();
+        };
+        const retryResult = await supabase
+          .from('live_quiz_sessions')
+          .insert(fallbackInsert)
+          .select(`
+            *,
+            classroom:classrooms!classroom_id (id, title, subject),
+            teacher:profiles!teacher_id (id, full_name, avatar_url)
+          `)
+          .single();
 
-      if (error) throw error;
+        if (retryResult.error) throw retryResult.error;
+        data = retryResult.data;
+      }
 
       return {
         data: {
@@ -429,6 +510,124 @@ class LiveQuizService {
       console.error('[LiveQuizService] createSession error:', err);
       return { error: err.message || 'Failed to start live quiz session' };
     }
+  }
+
+  /**
+   * Schedules a live quiz session for a future date/time
+   */
+  async scheduleSession(payload: {
+    classroom_id: string;
+    quiz_id?: string;
+    custom_quiz?: LiveQuiz;
+    scheduled_start_at: string;
+  }): Promise<{ data?: LiveQuizSession; error?: string }> {
+    return this.createSession({
+      ...payload,
+      is_scheduled: true,
+      scheduled_start_at: payload.scheduled_start_at
+    });
+  }
+
+  /**
+   * Cancels an active or scheduled Live Quiz session
+   */
+  async cancelSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    if (!supabase || !sessionId) return { success: false, error: 'Session ID required' };
+    try {
+      const { data: session } = await supabase
+        .from('live_quiz_sessions')
+        .select('id, pin, classroom_id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from('live_quiz_sessions')
+        .update({
+          status: 'cancelled',
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      if (session?.pin) {
+        try {
+          const channel = this.createRealtimeChannel(session.pin);
+          if (channel) {
+            channel.subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'quiz_cancelled',
+                  payload: { sessionId }
+                });
+                supabase?.removeChannel(channel);
+              }
+            });
+          }
+        } catch {
+          // ignore channel error
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[LiveQuizService] cancelSession error:', err);
+      return { success: false, error: err.message || 'Failed to cancel session' };
+    }
+  }
+
+  /**
+   * Reconciles a scheduled session that has reached its start time
+   */
+  async reconcileScheduledSession(sessionId: string, classroomId: string): Promise<LiveQuizSession | null> {
+    if (!sessionId) return null;
+
+    try {
+      // First try backend authoritative reconciliation endpoint
+      const response = await fetch(`/api/classes/${classroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json.success && json.session) {
+          return json.session;
+        }
+      }
+    } catch {
+      // Backend not reached or offline, fallback to client Supabase transition
+    }
+
+    if (!supabase) return null;
+    try {
+      const startMs = Date.now();
+      const { data, error } = await supabase
+        .from('live_quiz_sessions')
+        .update({
+          status: 'in_progress',
+          current_question_index: 0,
+          question_start_ms: startMs,
+          question_duration_sec: 20
+        })
+        .eq('id', sessionId)
+        .select(`
+          *,
+          classroom:classrooms!classroom_id (id, title, subject),
+          teacher:profiles!teacher_id (id, full_name, avatar_url)
+        `)
+        .maybeSingle();
+
+      if (!error && data) {
+        const quiz = data.quiz_id ? await this.getQuizById(data.quiz_id) : null;
+        return { ...data, quiz };
+      }
+    } catch (err) {
+      console.warn('[LiveQuizService] Client reconcile fallback notice:', err);
+    }
+
+    return null;
   }
 
   /**
@@ -493,8 +692,8 @@ class LiveQuizService {
   }
 
   /**
-   * Retrieves the currently active Live Quiz session for a specific classroom (if any).
-   * Used for direct PIN-free student joining from the classroom workspace.
+   * Retrieves the currently active or scheduled Live Quiz session for a specific classroom (if any).
+   * Used for direct PIN-free student joining and classroom dashboard state banner.
    */
   async getActiveSessionForClassroom(classroomId: string): Promise<LiveQuizSession | null> {
     if (!supabase || !classroomId) return null;
@@ -508,12 +707,24 @@ class LiveQuizService {
           teacher:profiles!teacher_id (id, full_name, avatar_url)
         `)
         .eq('classroom_id', classroomId)
-        .in('status', ['lobby', 'in_progress', 'reveal'])
-        .order('started_at', { ascending: false })
+        .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (error || !data) return null;
+
+      const effectiveState = this.getEffectiveSessionState(data);
+      if (effectiveState === 'completed' || effectiveState === 'cancelled') {
+        return null;
+      }
+
+      // If scheduled time has arrived, trigger auto-reconciliation
+      const scheduledTime = data.scheduled_start_at || (data.status === 'scheduled' ? data.started_at : null);
+      if (scheduledTime && new Date(scheduledTime).getTime() <= Date.now() && data.status === 'scheduled') {
+        const reconciled = await this.reconcileScheduledSession(data.id, classroomId);
+        if (reconciled) return reconciled;
+      }
 
       const quiz = data.quiz_id ? await this.getQuizById(data.quiz_id) : null;
       return {

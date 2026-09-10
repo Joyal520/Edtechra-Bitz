@@ -19,7 +19,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Lora:ital,wght@0,400..700;1,400..700&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=DM+Serif+Display:ital@0;1&family=Lora:ital,wght@0,400..700;1,400..700&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- High-speed preconnections for instant YouTube Shorts streaming & poster delivery -->
     <link rel="preconnect" href="https://www.youtube.com">
@@ -39,96 +39,342 @@
         flex-direction: column;
         align-items: center;
         justify-content: space-between;
-        padding: 1.5rem;
-        background: radial-gradient(circle at 50% 30%, #08203e 0%, #030d1e 50%, #020813 100%);
+        padding: 1rem 1.5rem;
+        background: radial-gradient(ellipse 75% 65% at 50% 36%, #0a254a 0%, #031326 48%, #01060f 100%);
         color: #ffffff;
-        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         user-select: none;
         overflow: hidden;
-        transition: opacity 0.4s ease-out;
+        transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+      }
+      .splash-bg-glow {
+        position: absolute;
+        top: 32%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 440px;
+        height: 440px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(37, 99, 235, 0.1) 45%, transparent 70%);
+        filter: blur(40px);
+        pointer-events: none;
+      }
+      .splash-left-script {
+        display: none;
+        position: absolute;
+        left: 6%;
+        top: 12%;
+        font-family: 'Caveat', cursive;
+        color: rgba(56, 189, 248, 0.4);
+        font-size: 1.75rem;
+        line-height: 1.15;
+        transform: rotate(-6deg);
+        pointer-events: none;
+        text-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+      }
+      .splash-right-script {
+        display: none;
+        position: absolute;
+        right: 6%;
+        top: 55%;
+        text-align: right;
+        font-family: 'Caveat', cursive;
+        color: rgba(56, 189, 248, 0.35);
+        font-size: 1.75rem;
+        line-height: 1.15;
+        transform: rotate(3deg);
+        pointer-events: none;
+        text-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+      }
+      @media (min-width: 1024px) {
+        .splash-left-script, .splash-right-script {
+          display: block;
+        }
+      }
+      .splash-center {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        position: relative;
+        z-index: 20;
+        max-width: 580px;
+        width: 100%;
+        margin: auto 0;
+      }
+      .splash-logo-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .splash-logo {
-        width: 140px;
-        height: 140px;
+        position: relative;
+        width: 144px;
+        height: 144px;
         object-fit: contain;
-        filter: drop-shadow(0 12px 28px rgba(2, 111, 195, 0.45));
+        filter: drop-shadow(0 12px 32px rgba(2, 111, 195, 0.55));
+        pointer-events: none;
+      }
+      @media (min-width: 640px) {
+        .splash-logo {
+          width: 176px;
+          height: 176px;
+        }
       }
       .splash-title {
-        font-size: 1.6rem;
+        font-size: 2rem;
         font-weight: 900;
-        letter-spacing: 0.15em;
-        margin-top: 1.25rem;
-        text-align: center;
+        letter-spacing: 0.14em;
+        margin-top: 0.5rem;
+        color: #ffffff;
+        line-height: 1;
+      }
+      @media (min-width: 640px) {
+        .splash-title {
+          font-size: 2.5rem;
+        }
       }
       .splash-title span {
-        color: #38bdf8;
+        color: #00b4ff;
+        text-shadow: 0 0 18px rgba(0, 180, 255, 0.65);
       }
       .splash-subtitle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 0.4rem;
+      }
+      .splash-subtitle-line {
+        width: 2.5rem;
+        height: 1.5px;
+      }
+      .splash-subtitle-text {
         font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.35em;
-        color: #7dd3fc;
-        margin-top: 0.25rem;
-        text-align: center;
+        font-weight: 900;
+        letter-spacing: 0.45em;
+        color: #bae6fd;
+        text-transform: uppercase;
+        padding-left: 0.25rem;
       }
       .splash-tagline {
         font-size: 0.65rem;
-        font-weight: 700;
-        letter-spacing: 0.25em;
-        color: #94a3b8;
-        margin-top: 0.4rem;
-        text-align: center;
+        font-weight: 800;
+        letter-spacing: 0.3em;
+        color: rgba(186, 230, 253, 0.75);
+        margin-top: 0.35rem;
+        text-transform: uppercase;
       }
-      .splash-spinner {
-        width: 2rem;
-        height: 2rem;
-        border: 3px solid rgba(56, 189, 248, 0.2);
-        border-top-color: #38bdf8;
-        border-radius: 50%;
-        animation: splash-spin 0.8s linear infinite;
-        margin: 1.5rem auto 0.75rem auto;
-        box-shadow: 0 0 16px rgba(56, 189, 248, 0.5);
+      @media (min-width: 640px) {
+        .splash-tagline {
+          font-size: 0.75rem;
+        }
+      }
+      .splash-spinner-wrap {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .splash-spinner-svg {
+        width: 2.25rem;
+        height: 2.25rem;
+        animation: splash-spin 1s linear infinite;
       }
       .splash-status {
         font-size: 0.75rem;
-        font-weight: 600;
-        color: #94a3b8;
-        text-align: center;
+        font-weight: 500;
+        color: rgba(203, 213, 225, 0.85);
+        letter-spacing: 0.05em;
+      }
+      .splash-indicators {
+        margin-top: 1.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        color: #cbd5e1;
+      }
+      @media (min-width: 640px) {
+        .splash-indicators {
+          gap: 1.5rem;
+        }
+      }
+      .splash-indicator-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .splash-indicator-item span {
+        font-size: 0.55rem;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        color: rgba(186, 230, 253, 0.9);
+        text-transform: uppercase;
+      }
+      @media (min-width: 640px) {
+        .splash-indicator-item span {
+          font-size: 0.625rem;
+        }
+      }
+      .splash-indicator-divider {
+        width: 1px;
+        height: 1.5rem;
+        background: rgba(14, 165, 233, 0.25);
+      }
+      .splash-waves-container {
+        width: 100%;
+        height: 7rem;
+        position: relative;
+        z-index: 10;
+        flex-shrink: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      @media (min-width: 640px) {
+        .splash-waves-container {
+          height: 9rem;
+        }
+      }
+      .splash-waves-svg {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 200%;
+        height: 100%;
+        animation: splashWaveFlow 14s linear infinite;
       }
       @keyframes splash-spin {
         to { transform: rotate(360deg); }
+      }
+      @keyframes splashWaveFlow {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-spinner-svg, .splash-waves-svg {
+          animation: none !important;
+        }
       }
     </style>
   </head>
   <body class="bg-[#fbfbf7] text-slate-900 antialiased selection:bg-[#026fc3] selection:text-white">
     <!-- Initial Splash Screen -->
     <div id="initial-splash">
-      <div style="height: 20px;"></div>
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
-        <img src="/logo-emblem.png" alt="EdTechra Bitz" class="splash-logo" />
-        <div class="splash-title">EDTECH<span>RA</span></div>
-        <div class="splash-subtitle">— B I T Z —</div>
-        <div class="splash-tagline">LEARN. DISCOVER. GROW.</div>
-        <div class="splash-spinner"></div>
-        <div class="splash-status">Loading amazing learning...</div>
+      <div class="splash-bg-glow"></div>
+      
+      <!-- Left decorative script on desktop -->
+      <div class="splash-left-script">
+        <div>Better</div>
+        <div style="padding-left: 0.75rem;">Learning</div>
+        <div style="padding-left: 0.25rem;">Brighter</div>
+        <div style="padding-left: 1rem;">Futures</div>
       </div>
-      <div style="height: 20px;"></div>
+
+      <!-- Right decorative script on desktop -->
+      <div class="splash-right-script">
+        <div>Knowledge</div>
+        <div style="padding-right: 0.75rem;">Changes</div>
+        <div style="padding-right: 0.25rem;">Lives</div>
+      </div>
+
+      <!-- Center Branding & Spinner -->
+      <div class="splash-center">
+        <div class="splash-logo-wrap">
+          <img src="/logo-emblem.png" alt="EdTechra Logo" class="splash-logo" />
+        </div>
+        
+        <div class="splash-title">EDTECH<span>RA</span></div>
+        
+        <div class="splash-subtitle">
+          <div class="splash-subtitle-line" style="background: linear-gradient(to right, transparent, rgba(56, 189, 248, 0.7));"></div>
+          <span class="splash-subtitle-text">BITZ</span>
+          <div class="splash-subtitle-line" style="background: linear-gradient(to left, transparent, rgba(56, 189, 248, 0.7));"></div>
+        </div>
+
+        <div class="splash-tagline">LEARN. DISCOVER. GROW.</div>
+
+        <div class="splash-spinner-wrap">
+          <svg class="splash-spinner-svg" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="initSpinnerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00b4ff" />
+                <stop offset="60%" stop-color="#38bdf8" />
+                <stop offset="100%" stop-color="#a5f3fc" />
+              </linearGradient>
+              <filter id="initSpinnerGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2.5" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+            <circle cx="22" cy="22" r="18" stroke="rgba(56, 189, 248, 0.15)" stroke-width="2.5" />
+            <circle cx="22" cy="22" r="18" stroke="url(#initSpinnerGrad)" stroke-width="3" stroke-linecap="round" stroke-dasharray="72 42" filter="url(#initSpinnerGlow)" />
+          </svg>
+          <div class="splash-status">Loading amazing learning...</div>
+        </div>
+
+        <!-- 4 Feature Indicators -->
+        <div class="splash-indicators">
+          <div class="splash-indicator-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <span>LEARN</span>
+          </div>
+          <div class="splash-indicator-divider"></div>
+          <div class="splash-indicator-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+            <span>DISCOVER</span>
+          </div>
+          <div class="splash-indicator-divider"></div>
+          <div class="splash-indicator-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            <span>GROW</span>
+          </div>
+          <div class="splash-indicator-divider"></div>
+          <div class="splash-indicator-item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>TOGETHER</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Waves -->
+      <div class="splash-waves-container">
+        <svg class="splash-waves-svg" viewBox="0 0 2880 200" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="initWaveEdge" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0284c7" stop-opacity="0.4" />
+              <stop offset="25%" stop-color="#00f0ff" stop-opacity="0.95" />
+              <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.9" />
+              <stop offset="75%" stop-color="#00f0ff" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#0284c7" stop-opacity="0.4" />
+            </linearGradient>
+            <linearGradient id="initWaveFill" x1="50%" y1="0%" x2="50%" y2="100%">
+              <stop offset="0%" stop-color="#0284c7" stop-opacity="0.35" />
+              <stop offset="40%" stop-color="#0369a1" stop-opacity="0.18" />
+              <stop offset="100%" stop-color="#01060f" stop-opacity="0.0" />
+            </linearGradient>
+            <filter id="initWaveGlow" x="-5%" y="-30%" width="110%" height="160%">
+              <feGaussianBlur stdDeviation="5" result="glow" />
+              <feMerge>
+                <feMergeNode in="glow" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <path d="M 0 110 C 360 160 720 70 1080 120 C 1440 170 1800 110 2160 160 C 2520 70 2880 120 L 2880 200 L 0 200 Z" fill="#0369a1" fill-opacity="0.2" />
+          <path d="M 0 80 C 320 150 640 160 960 90 C 1280 20 1600 130 1920 80 C 2240 150 2560 160 2880 90 L 2880 200 L 0 200 Z" fill="url(#initWaveFill)" />
+          <path d="M 0 80 C 320 150 640 160 960 90 C 1280 20 1600 130 1920 80 C 2240 150 2560 160 2880 90" stroke="url(#initWaveEdge)" stroke-width="3.5" filter="url(#initWaveGlow)" stroke-linecap="round" />
+        </svg>
+      </div>
     </div>
 
     <div id="root"></div>
 
-    <script>
-      // Smoothly dismiss initial splash screen once React bundle mounts
-      window.addEventListener('DOMContentLoaded', () => {
-        const splash = document.getElementById('initial-splash');
-        if (splash) {
-          setTimeout(() => {
-            splash.style.opacity = '0';
-            setTimeout(() => splash.remove(), 400);
-          }, 300);
-        }
-      });
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

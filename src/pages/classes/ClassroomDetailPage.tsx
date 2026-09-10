@@ -10,7 +10,8 @@ import {
   Check,
   MessageSquareShare,
   Users,
-  BookOpen
+  BookOpen,
+  Clock
 } from 'lucide-react';
 import {
   Classroom,
@@ -64,6 +65,7 @@ import { ExamLibraryModal } from '@/components/exam/library/ExamLibraryModal';
 import { AITeachingIntelligenceModal } from '@/components/classes/AITeachingIntelligenceModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
+import { LiveQuizLaunchDecisionModal } from '@/components/classes/live-quiz/LiveQuizLaunchDecisionModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
 import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
 import { StudentAssessmentHistoryModal } from '@/components/classes/StudentAssessmentHistoryModal';
@@ -118,8 +120,11 @@ export const ClassroomDetailPage: React.FC = () => {
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
   const [createLiveQuizOpen, setCreateLiveQuizOpen] = useState(false);
+  const [launchDecisionModalOpen, setLaunchDecisionModalOpen] = useState(false);
+  const [quizToLaunch, setQuizToLaunch] = useState<LiveQuiz | null>(null);
   const [activeLiveQuizSession, setActiveLiveQuizSession] = useState<LiveQuizSession | null>(null);
   const [isJoiningLiveQuiz, setIsJoiningLiveQuiz] = useState(false);
+  const [scheduledCountdownText, setScheduledCountdownText] = useState('');
 
   // AI Challenge Competition State
   const [challengeListModalOpen, setChallengeListModalOpen] = useState(false);
@@ -134,13 +139,56 @@ export const ClassroomDetailPage: React.FC = () => {
 
   const tabSectionRef = useRef<HTMLDivElement>(null);
 
-  const handleLaunchLiveQuiz = async (selectedQuiz: LiveQuiz) => {
+  const effectiveLiveQuizState = liveQuizService.getEffectiveSessionState(activeLiveQuizSession);
+  const scheduledTimeStr = activeLiveQuizSession?.scheduled_start_at || activeLiveQuizSession?.started_at;
+
+  // Live countdown ticker for scheduled session banner
+  useEffect(() => {
+    if (effectiveLiveQuizState !== 'scheduled' || !scheduledTimeStr) {
+      setScheduledCountdownText('');
+      return;
+    }
+
+    const updateCountdown = () => {
+      const diffMs = new Date(scheduledTimeStr).getTime() - Date.now();
+      if (diffMs <= 0) {
+        setScheduledCountdownText('00:00');
+        if (id) {
+          liveQuizService.getActiveSessionForClassroom(id).then(setActiveLiveQuizSession);
+        }
+        return;
+      }
+      const totalSec = Math.ceil(diffMs / 1000);
+      const hours = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+      if (hours > 0) {
+        setScheduledCountdownText(`${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      } else {
+        setScheduledCountdownText(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [effectiveLiveQuizState, scheduledTimeStr, id]);
+
+  const handleOpenLaunchDecision = (quiz: LiveQuiz) => {
+    setLiveQuizBankOpen(false);
+    setCreateLiveQuizOpen(false);
+    setQuizToLaunch(quiz);
+    setLaunchDecisionModalOpen(true);
+  };
+
+  const handleLaunchNow = async (selectedQuiz: LiveQuiz) => {
     if (!id) return;
     try {
       const res = await liveQuizService.createSession({
         classroom_id: id,
         quiz_id: selectedQuiz.id,
-        custom_quiz: selectedQuiz
+        custom_quiz: selectedQuiz,
+        is_scheduled: false
       });
 
       if (res.error || !res.data) {
@@ -148,9 +196,31 @@ export const ClassroomDetailPage: React.FC = () => {
         return;
       }
 
+      setActiveLiveQuizSession(res.data);
       navigate(`/classes/${id}/live-quiz/lobby/${res.data.pin}`);
     } catch (err: any) {
       alert(err.message || 'Error launching quiz');
+    }
+  };
+
+  const handleScheduleQuiz = async (selectedQuiz: LiveQuiz, scheduledStartAt: string) => {
+    if (!id) return;
+    try {
+      const res = await liveQuizService.scheduleSession({
+        classroom_id: id,
+        quiz_id: selectedQuiz.id,
+        custom_quiz: selectedQuiz,
+        scheduled_start_at: scheduledStartAt
+      });
+
+      if (res.error || !res.data) {
+        alert(res.error || 'Failed to schedule live quiz');
+        return;
+      }
+
+      setActiveLiveQuizSession(res.data);
+    } catch (err: any) {
+      alert(err.message || 'Error scheduling quiz');
     }
   };
 
@@ -591,45 +661,87 @@ export const ClassroomDetailPage: React.FC = () => {
 
         </section>
 
-        {/* Contextual Active Live Quiz Banner (Only renders when a live quiz is actively running) */}
-        {activeLiveQuizSession && (
-          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-amber-300" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                    Live Now
-                  </span>
-                  <h4 className="text-sm font-black text-white">
-                    {activeLiveQuizSession.quiz?.title || (activeLiveQuizSession as any).title || 'Live Quiz in Session'}
-                  </h4>
+        {/* Contextual Active Live Quiz Banner (Only renders when a quiz is actively live or scheduled) */}
+        {activeLiveQuizSession && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled') && (
+          effectiveLiveQuizState === 'scheduled' ? (
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5 text-amber-200 animate-pulse" />
                 </div>
-                <p className="text-xs text-emerald-100 font-medium mt-0.5">
-                  {isTeacher
-                    ? 'You have an active live quiz session running. Open host controls below.'
-                    : 'Your teacher has started a live quiz! Click to join your classmates directly.'}
-                </p>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                      Starting Soon
+                    </span>
+                    <span className="font-mono font-black text-xs text-amber-200 bg-black/20 px-2 py-0.5 rounded-md">
+                      in {scheduledCountdownText || 'a few moments'}
+                    </span>
+                    <h4 className="text-sm font-black text-white">
+                      {activeLiveQuizSession.quiz?.title || 'Scheduled Live Quiz'}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-amber-100 font-medium mt-0.5">
+                    {isTeacher
+                      ? 'Scheduled quiz is queued. Click Host Controls to view the lobby.'
+                      : 'A scheduled quiz is starting soon! Enter the waiting lobby now.'}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                disabled={isJoiningLiveQuiz}
+                onClick={() => {
+                  if (isTeacher) {
+                    navigate(`/classes/${id}/live-quiz/lobby/${activeLiveQuizSession.pin}`);
+                  } else {
+                    handleStudentJoinLiveQuiz();
+                  }
+                }}
+                className="px-4 py-2 bg-white text-amber-900 hover:bg-amber-50 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer self-start sm:self-center"
+              >
+                {isTeacher ? 'Host Controls →' : isJoiningLiveQuiz ? 'Connecting...' : 'Join Waiting Lobby →'}
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={isJoiningLiveQuiz}
-              onClick={() => {
-                if (isTeacher) {
-                  setLiveQuizBankOpen(true);
-                } else {
-                  handleStudentJoinLiveQuiz();
-                }
-              }}
-              className="px-4 py-2 bg-white text-emerald-900 hover:bg-emerald-50 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer self-start sm:self-center"
-            >
-              {isTeacher ? 'Host Controls →' : isJoiningLiveQuiz ? 'Connecting...' : 'Join Active Quiz Now →'}
-            </button>
-          </div>
+          ) : (
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                      Live Now
+                    </span>
+                    <h4 className="text-sm font-black text-white">
+                      {activeLiveQuizSession.quiz?.title || (activeLiveQuizSession as any).title || 'Live Quiz in Session'}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                    {isTeacher
+                      ? 'You have an active live quiz session running. Open host controls below.'
+                      : 'Your teacher has started a live quiz! Click to join your classmates directly.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isJoiningLiveQuiz}
+                onClick={() => {
+                  if (isTeacher) {
+                    navigate(`/classes/${id}/live-quiz/lobby/${activeLiveQuizSession.pin}`);
+                  } else {
+                    handleStudentJoinLiveQuiz();
+                  }
+                }}
+                className="px-4 py-2 bg-white text-emerald-900 hover:bg-emerald-50 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer self-start sm:self-center"
+              >
+                {isTeacher ? 'Host Controls →' : isJoiningLiveQuiz ? 'Connecting...' : 'Join Active Quiz Now →'}
+              </button>
+            </div>
+          )
         )}
 
         {/* ========================================================================= */}
@@ -715,12 +827,22 @@ export const ClassroomDetailPage: React.FC = () => {
 
             {/* Card 2: Live Quiz */}
             <div className={`bg-white rounded-[24px] p-5 border shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group relative overflow-hidden ${
-              activeLiveQuizSession ? 'border-emerald-400/80 ring-2 ring-emerald-400/20' : 'border-stone-200/70'
+              effectiveLiveQuizState === 'live'
+                ? 'border-emerald-400/80 ring-2 ring-emerald-400/20'
+                : effectiveLiveQuizState === 'scheduled'
+                ? 'border-amber-400/80 ring-2 ring-amber-400/20'
+                : 'border-stone-200/70'
             }`}>
-              {activeLiveQuizSession && (
+              {effectiveLiveQuizState === 'live' && (
                 <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                   Live Now
+                </div>
+              )}
+              {effectiveLiveQuizState === 'scheduled' && (
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider">
+                  <Clock className="w-3 h-3 animate-pulse" />
+                  <span>{scheduledCountdownText ? `Starts ${scheduledCountdownText}` : 'Starting Soon'}</span>
                 </div>
               )}
               <div className="space-y-3">
@@ -731,9 +853,15 @@ export const ClassroomDetailPage: React.FC = () => {
                   <h3 className="text-sm font-black text-slate-900">Live Quiz</h3>
                   <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
                     {isTeacher
-                      ? 'Conduct live quizzes, engage students in real time.'
-                      : activeLiveQuizSession
+                      ? effectiveLiveQuizState === 'live'
+                        ? 'A live quiz session is currently running.'
+                        : effectiveLiveQuizState === 'scheduled'
+                        ? 'A quiz is scheduled and waiting to start.'
+                        : 'Conduct live quizzes, engage students in real time.'
+                      : effectiveLiveQuizState === 'live'
                       ? 'A live quiz is currently in session! Click below to join directly.'
+                      : effectiveLiveQuizState === 'scheduled'
+                      ? 'A quiz is starting soon! Enter the waiting lobby.'
                       : 'Join real-time classroom quizzes directly without a PIN.'}
                   </p>
                 </div>
@@ -743,23 +871,33 @@ export const ClassroomDetailPage: React.FC = () => {
                 disabled={isJoiningLiveQuiz}
                 onClick={() => {
                   if (isTeacher) {
-                    setLiveQuizBankOpen(true);
+                    if (activeLiveQuizSession?.pin && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled')) {
+                      navigate(`/classes/${id}/live-quiz/lobby/${activeLiveQuizSession.pin}`);
+                    } else {
+                      setLiveQuizBankOpen(true);
+                    }
                   } else {
                     handleStudentJoinLiveQuiz();
                   }
                 }}
                 className={`w-full py-2.5 px-4 text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer ${
-                  activeLiveQuizSession && !isTeacher
+                  effectiveLiveQuizState === 'live'
                     ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25 animate-pulse'
+                    : effectiveLiveQuizState === 'scheduled'
+                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 shadow-amber-500/25'
                     : 'bg-[#026fc3] hover:bg-[#03589e]'
                 }`}
               >
                 {isTeacher
-                  ? 'Host Live Quiz'
+                  ? effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled'
+                    ? 'Host Controls →'
+                    : 'Host Live Quiz'
                   : isJoiningLiveQuiz
                   ? 'Connecting...'
-                  : activeLiveQuizSession
+                  : effectiveLiveQuizState === 'live'
                   ? 'Join Active Quiz Now →'
+                  : effectiveLiveQuizState === 'scheduled'
+                  ? 'Join Waiting Lobby →'
                   : 'Join Quiz'}
               </button>
             </div>
@@ -1474,7 +1612,7 @@ export const ClassroomDetailPage: React.FC = () => {
         isOpen={liveQuizBankOpen}
         classroomId={classroom.id}
         onClose={() => setLiveQuizBankOpen(false)}
-        onSelectQuiz={handleLaunchLiveQuiz}
+        onSelectQuiz={handleOpenLaunchDecision}
         onCreateCustomQuiz={() => setCreateLiveQuizOpen(true)}
       />
 
@@ -1482,7 +1620,18 @@ export const ClassroomDetailPage: React.FC = () => {
         isOpen={createLiveQuizOpen}
         classroomId={classroom.id}
         onClose={() => setCreateLiveQuizOpen(false)}
-        onSuccess={handleLaunchLiveQuiz}
+        onSuccess={handleOpenLaunchDecision}
+      />
+
+      <LiveQuizLaunchDecisionModal
+        isOpen={launchDecisionModalOpen}
+        quiz={quizToLaunch}
+        onClose={() => {
+          setLaunchDecisionModalOpen(false);
+          setQuizToLaunch(null);
+        }}
+        onLaunchNow={handleLaunchNow}
+        onScheduleQuiz={handleScheduleQuiz}
       />
 
       <ChallengeListModal

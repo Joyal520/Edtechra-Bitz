@@ -172,6 +172,191 @@ class TeachingIntelligenceService {
     }
     return data.reports || [];
   }
+
+  /**
+   * Retrieves list of recent completed/active exams with calculated summary metrics
+   */
+  async getRecentExamReports(classroomId: string): Promise<RecentExamReportCard[]> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/recent-exams`, {
+      headers
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load recent exam reports.');
+    }
+    return data.exams || [];
+  }
+
+  /**
+   * Retrieves comprehensive in-modal exam analysis
+   */
+  async getExamAnalysis(classroomId: string, examId: string, forceRefresh = false): Promise<ExamDetailedAnalysisData> {
+    const headers = await this.getAuthHeaders();
+    const query = forceRefresh ? '?refresh=true' : '';
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/exams/${examId}/analysis${query}`, {
+      headers
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load exam analysis.');
+    }
+    return data.analysis;
+  }
+
+  /**
+   * Triggers on-demand fresh AI analysis for a specific exam
+   */
+  async refreshExamAIAnalysis(classroomId: string, examId: string): Promise<ExamDetailedAnalysisData> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/exams/${examId}/ai-analysis`, {
+      method: 'POST',
+      headers
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to refresh exam AI analysis.');
+    }
+    return data.analysis;
+  }
+}
+
+export interface RecentExamReportCard {
+  id: string;
+  exam_id: string;
+  exam_name: string;
+  classroom_id: string;
+  status: string;
+  date: string;
+  timeframe: string;
+  total_marks: number;
+  pass_marks: number;
+  enrolled_students: number;
+  completed_students: number;
+  completion_rate: number;
+  average_score: number;
+  highest_score: number;
+  lowest_score: number;
+  passed_count: number;
+  failed_count: number;
+  pass_rate: number;
+  performance_indicator: 'Excellent' | 'Good' | 'Needs Attention' | 'Not Started';
+}
+
+export interface ExamSummaryStrip {
+  total_students: number;
+  completed_students: number;
+  completion_rate: number;
+  average_score: number;
+  highest_score: number;
+  lowest_score: number;
+  pass_rate: number;
+  passed_count: number;
+  failed_count: number;
+  total_marks: number;
+  pass_marks: number;
+}
+
+export interface ExamScoreDistribution {
+  passed_vs_failed: {
+    passed: number;
+    failed: number;
+    pass_rate: number;
+    fail_rate: number;
+  };
+  score_ranges: Array<{
+    range: string;
+    label: string;
+    count: number;
+    percentage: number;
+    color: string;
+  }>;
+}
+
+export interface ExamTopicPerformance {
+  topic: string;
+  score: number;
+  questionsCount: number;
+  status: 'strong' | 'moderate' | 'weak';
+}
+
+export interface ExamQuestionPerformance {
+  questionId: string;
+  questionText: string;
+  questionType: string;
+  topic: string;
+  marks: number;
+  attemptCount: number;
+  correctCount: number;
+  accuracy: number;
+  status: 'strong' | 'moderate' | 'weak';
+}
+
+export interface ExamStudentPerformance {
+  rank: number;
+  student_id: string;
+  student_name: string;
+  email: string;
+  avatar_url?: string | null;
+  score: number;
+  total_marks: number;
+  percentage: number;
+  grade: string;
+  status: 'Pass' | 'Fail';
+  submitted_at: string;
+}
+
+export interface ExamAIAnalysis {
+  class_performance_summary: string;
+  strongest_topics: string[];
+  weakest_topics: Array<{
+    topic: string;
+    accuracy: number;
+    misconception: string;
+  }>;
+  common_mistakes: string[];
+  exceptional_performers: Array<{
+    student_ref: string;
+    score: number;
+    highlight: string;
+  }>;
+  students_needing_attention: Array<{
+    student_ref: string;
+    score: number;
+    issue: string;
+    suggested_support: string;
+  }>;
+  recommended_revision_topics: string[];
+  recommended_actions: Array<{
+    type: 'reteach' | 'practice' | 'intervention';
+    action: string;
+    priority: 'High' | 'Medium' | 'Low';
+  }>;
+  ai_provider?: string;
+  cached?: boolean;
+  updated_at?: string;
+}
+
+export interface ExamDetailedAnalysisData {
+  exam: {
+    id: string;
+    title: string;
+    description: string;
+    subject: string;
+    grade: string;
+    total_marks: number;
+    pass_marks: number;
+    status: string;
+    published_at: string;
+    timeframe: string;
+  };
+  summary: ExamSummaryStrip;
+  distribution: ExamScoreDistribution;
+  topic_performance: ExamTopicPerformance[];
+  question_performance: ExamQuestionPerformance[];
+  students: ExamStudentPerformance[];
+  ai_analysis: ExamAIAnalysis;
 }
 
 export const teachingIntelligenceService = new TeachingIntelligenceService();
+

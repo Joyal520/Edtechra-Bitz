@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -8,7 +8,9 @@ import {
   Volume2,
   VolumeX,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Clock,
+  Calendar
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizParticipant } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -32,10 +34,66 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const [participants, setParticipants] = useState<LiveQuizParticipant[]>([]);
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  const effectiveState = liveQuizService.getEffectiveSessionState(session);
+  const isScheduled = effectiveState === 'scheduled';
+  const scheduledTimeStr = session.scheduled_start_at || session.started_at;
+  const targetStartMs = useMemo(() => {
+    return scheduledTimeStr ? new Date(scheduledTimeStr).getTime() : null;
+  }, [scheduledTimeStr]);
+
+  const [remainingSec, setRemainingSec] = useState<number>(() => {
+    if (!targetStartMs) return 0;
+    return Math.max(0, Math.ceil((targetStartMs - Date.now()) / 1000));
+  });
+
+  const hasAutoStartedRef = useRef(false);
 
   const pin = session.pin;
   const joinUrl = `${window.location.origin}/classes/live-quiz/join/${pin}`;
+
+  // Synchronized countdown timer & zero-second auto-transition
+  useEffect(() => {
+    if (!isScheduled || !targetStartMs) return;
+
+    const tick = async () => {
+      const now = Date.now();
+      const diff = Math.max(0, Math.ceil((targetStartMs - now) / 1000));
+      setRemainingSec(diff);
+
+      if (diff <= 0 && !hasAutoStartedRef.current) {
+        hasAutoStartedRef.current = true;
+        // Countdown reached 0: Automatically start quiz!
+        if (isTeacher) {
+          handleStart();
+        } else {
+          // Student triggers authoritative reconciliation fallback
+          try {
+            await liveQuizService.reconcileScheduledSession(session.id, session.classroom_id);
+          } catch (e) {
+            console.warn('[LiveQuizLobby] Student auto-reconcile trigger:', e);
+          }
+        }
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 500);
+    return () => clearInterval(interval);
+  }, [isScheduled, targetStartMs, isTeacher, session.id, session.classroom_id]);
+
+  const formattedCountdown = useMemo(() => {
+    const hours = Math.floor(remainingSec / 3600);
+    const mins = Math.floor((remainingSec % 3600) / 60);
+    const secs = remainingSec % 60;
+
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }, [remainingSec]);
 
   useEffect(() => {
     // Strictly ensure no background music is playing in lobby
@@ -96,6 +154,17 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           });
         }
       })
+      .on('broadcast', { event: 'question_started' }, () => {
+        if (!isTeacher) {
+          navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
+            state: { initialSession: session }
+          });
+        }
+      })
+      .on('broadcast', { event: 'quiz_cancelled' }, () => {
+        alert('This Live Quiz was cancelled by the teacher.');
+        navigate(`/classes/${session.classroom_id}`);
+      })
       .on(
         'postgres_changes',
         {
@@ -109,6 +178,10 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
             navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
               state: { initialSession: { ...session, ...payload.new } }
             });
+          }
+          if (payload.new?.status === 'cancelled') {
+            alert('This Live Quiz was cancelled.');
+            navigate(`/classes/${session.classroom_id}`);
           }
         }
       )
@@ -148,6 +221,19 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCancelSession = async () => {
+    if (!confirm('Are you sure you want to cancel this scheduled quiz? Students will be notified.')) return;
+    setIsCancelling(true);
+    try {
+      await liveQuizService.cancelSession(session.id);
+      navigate(`/classes/${session.classroom_id}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to cancel quiz session');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const handleStart = async () => {
     if (!onStartQuiz) return;
     quizAudioService.playClick();
@@ -183,7 +269,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
       <div className="absolute bottom-0 left-1/4 -mb-20 w-80 h-80 rounded-full bg-sky-400/15 blur-3xl pointer-events-none" />
 
       {/* Top Header */}
-      <div className="relative z-10 flex items-center justify-between gap-4">
+      <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
         <button
           type="button"
           onClick={() => navigate(`/classes/${session.classroom_id}`)}
@@ -192,6 +278,23 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Exit Lobby</span>
         </button>
+
+        {/* SCHEDULED / LIVE BADGE */}
+        {isScheduled && scheduledTimeStr ? (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-black">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>STATUS: SCHEDULED</span>
+            <span className="text-white/60">•</span>
+            <span>
+              Starts at {new Date(scheduledTimeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>STATUS: LIVE NOW</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <button
@@ -205,20 +308,42 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         </div>
       </div>
 
-      {/* Center PIN Display & Game Title */}
-      <div className="relative z-10 text-center space-y-5 max-w-2xl mx-auto">
-        <div className="space-y-1">
+      {/* Center Display: Scheduled Countdown OR Live PIN Display */}
+      <div className="relative z-10 text-center space-y-6 max-w-2xl mx-auto">
+        <div className="space-y-1.5">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-400/20 text-sky-300 text-xs font-black uppercase tracking-wider border border-sky-400/30">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Live Multiplayer Game</span>
+            <span>{isScheduled ? 'Scheduled Live Challenge' : 'Live Multiplayer Game'}</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
             {session.quiz?.title || 'Classroom Live Quiz'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 font-medium">
-            Join on your phone or computer to compete in real-time!
+            {isScheduled
+              ? !isTeacher
+                ? 'You are connected. Please wait for the quiz to start.'
+                : 'Students are entering the waiting lobby. The quiz will begin automatically at 00:00.'
+              : 'Join on your phone or computer to compete in real-time!'}
           </p>
         </div>
+
+        {/* Prominent Synchronized Countdown for Scheduled Sessions */}
+        {isScheduled && (
+          <div className="p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl space-y-3 animate-in zoom-in-95">
+            <div className="flex items-center justify-center gap-2 text-xs font-extrabold uppercase tracking-widest text-emerald-300">
+              <Clock className="w-4 h-4 animate-pulse" />
+              <span>Quiz Starts In</span>
+            </div>
+            <div className="font-mono font-black text-5xl sm:text-7xl text-emerald-300 drop-shadow-md tracking-wider">
+              {formattedCountdown}
+            </div>
+            <p className="text-xs text-sky-200 font-medium">
+              {!isTeacher
+                ? 'Sit tight! Question 1 will automatically appear when the timer reaches zero.'
+                : 'Synchronized server-authoritative countdown active across all student devices.'}
+            </p>
+          </div>
+        )}
 
         {/* 6-Digit PIN Boxes */}
         <div className="inline-block p-4 sm:p-5 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl">
@@ -252,22 +377,41 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
       {/* Participants Live Grid & Action Bar */}
       <div className="relative z-10 space-y-4">
         
-        <div className="flex items-center justify-between border-b border-white/15 pb-3">
+        <div className="flex items-center justify-between border-b border-white/15 pb-3 flex-wrap gap-3">
           <div className="flex items-center gap-2 text-sm font-black text-white">
             <Users className="w-4 h-4 text-sky-300" />
             <span>Players Connected ({participants.length})</span>
           </div>
 
           {isTeacher && (
-            <button
-              type="button"
-              disabled={isStarting || participants.length === 0}
-              onClick={handleStart}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-2xl text-xs font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>{isStarting ? 'Starting Quiz...' : `Start Quiz (${participants.length} Ready)`}</span>
-            </button>
+            <div className="flex items-center gap-3">
+              {isScheduled && (
+                <button
+                  type="button"
+                  disabled={isCancelling || isStarting}
+                  onClick={handleCancelSession}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-400/40 text-rose-300 hover:bg-rose-500/20 text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Cancel Scheduled Quiz'}
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={isStarting || participants.length === 0}
+                onClick={handleStart}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-2xl text-xs font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>
+                  {isStarting
+                    ? 'Starting Quiz...'
+                    : isScheduled
+                    ? `Start Quiz Now (${participants.length} Ready)`
+                    : `Start Quiz (${participants.length} Ready)`}
+                </span>
+              </button>
+            </div>
           )}
         </div>
 

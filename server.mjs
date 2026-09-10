@@ -57,7 +57,9 @@ import {
 import {
   getClassroomTeachingIntelligence,
   createThirtyDayReport,
-  computeClassroomMetrics
+  computeClassroomMetrics,
+  getRecentExamReportsForClassroom,
+  getExamDetailedAnalysis
 } from './server/teachingIntelligenceService.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
@@ -2425,6 +2427,96 @@ app.get('/api/classes/:id/teaching-intelligence/reports', async (req, res) => {
   }
 });
 
+// GET /api/classes/:id/teaching-intelligence/recent-exams - List recent completed/active exams with calculated summary stats
+app.get('/api/classes/:id/teaching-intelligence/recent-exams', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to view exam reports.' });
+    }
+
+    const result = await getRecentExamReportsForClassroom({
+      serverSupabase,
+      classroomId
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-intelligence/recent-exams:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve recent exam reports' });
+  }
+});
+
+// GET /api/classes/:id/teaching-intelligence/exams/:examId/analysis - Detailed in-modal exam analysis
+app.get('/api/classes/:id/teaching-intelligence/exams/:examId/analysis', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const examId = req.params.examId;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to view exam analysis.' });
+    }
+
+    const forceAiRefresh = req.query.refresh === 'true';
+
+    const result = await getExamDetailedAnalysis({
+      serverSupabase,
+      classroomId,
+      examId,
+      teacherId: authData.user.id,
+      serverOpenAI,
+      forceAiRefresh
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-intelligence/exams/:examId/analysis:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve exam analysis' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/exams/:examId/ai-analysis - Refresh AI insights for exam
+app.post('/api/classes/:id/teaching-intelligence/exams/:examId/ai-analysis', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const examId = req.params.examId;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await getExamDetailedAnalysis({
+      serverSupabase,
+      classroomId,
+      examId,
+      teacherId: authData.user.id,
+      serverOpenAI,
+      forceAiRefresh: true
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/exams/:examId/ai-analysis:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to refresh exam AI analysis' });
+  }
+});
+
 // POST /api/classes/ai-feedback - Backwards-compatible endpoint for executive summary
 app.post('/api/classes/ai-feedback', async (req, res) => {
   try {
@@ -2454,6 +2546,159 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom report' });
   }
 });
+
+// POST /api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-scheduled
+// Authoritatively transitions a scheduled session to live when countdown expires
+app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-scheduled', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId, sessionId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database uninitialized.' });
+    }
+
+    const { data: session, error: fetchErr } = await serverSupabase
+      .from('live_quiz_sessions')
+      .select('*, quiz:live_quizzes(*)')
+      .eq('id', sessionId)
+      .eq('classroom_id', classroomId)
+      .maybeSingle();
+
+    if (fetchErr || !session) {
+      return res.status(404).json({ success: false, error: 'Live quiz session not found.' });
+    }
+
+    // Determine target start timestamp
+    const scheduledTime = session.scheduled_start_at || session.started_at;
+    const scheduledMs = scheduledTime ? new Date(scheduledTime).getTime() : 0;
+    const now = Date.now();
+
+    // Only reconcile if already reached start time or within 2 seconds
+    if (scheduledMs > now + 2000) {
+      return res.json({
+        success: true,
+        reconciled: false,
+        remaining_sec: Math.ceil((scheduledMs - now) / 1000),
+        session
+      });
+    }
+
+    // Transition session: start Question 0
+    const startMs = Date.now();
+    const updatePayload = {
+      status: 'in_progress',
+      current_question_index: 0,
+      question_start_ms: startMs,
+      question_duration_sec: 20
+    };
+
+    const { data: updatedSession, error: updateErr } = await serverSupabase
+      .from('live_quiz_sessions')
+      .update(updatePayload)
+      .eq('id', sessionId)
+      .select()
+      .single();
+
+    if (updateErr) {
+      // Fallback: if status 'in_progress' update had any constraint issue, try 'lobby'
+      console.warn('Reconcile update retry with lobby status:', updateErr);
+      await serverSupabase
+        .from('live_quiz_sessions')
+        .update({ status: 'lobby' })
+        .eq('id', sessionId);
+    }
+
+    // Broadcast Realtime question_started event if pin exists
+    if (session.pin) {
+      try {
+        const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
+        await channel.send({
+          type: 'broadcast',
+          event: 'question_started',
+          payload: {
+            questionIndex: 0,
+            durationSec: 20,
+            startMs
+          }
+        });
+      } catch (broadcastErr) {
+        console.warn('Realtime broadcast warning:', broadcastErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      reconciled: true,
+      session: updatedSession || session
+    });
+  } catch (error) {
+    console.error('Error reconciling scheduled live quiz:', error);
+    res.status(500).json({ success: false, error: error.message || 'Reconciliation failed.' });
+  }
+});
+
+// POST /api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel
+app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId, sessionId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database uninitialized.' });
+    }
+
+    const { data: session, error: fetchErr } = await serverSupabase
+      .from('live_quiz_sessions')
+      .select('id, pin, teacher_id')
+      .eq('id', sessionId)
+      .eq('classroom_id', classroomId)
+      .maybeSingle();
+
+    if (fetchErr || !session) {
+      return res.status(404).json({ success: false, error: 'Session not found.' });
+    }
+
+    // Verify user is the teacher or admin
+    if (session.teacher_id !== authData.user.id && authData.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized to cancel this session.' });
+    }
+
+    await serverSupabase
+      .from('live_quiz_sessions')
+      .update({
+        status: 'cancelled',
+        ended_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+
+    // Broadcast cancellation
+    if (session.pin) {
+      try {
+        const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
+        await channel.send({
+          type: 'broadcast',
+          event: 'quiz_cancelled',
+          payload: { sessionId }
+        });
+      } catch (e) {
+        // ignore broadcast error
+      }
+    }
+
+    res.json({ success: true, message: 'Live quiz session cancelled.' });
+  } catch (error) {
+    console.error('Error cancelling live quiz session:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to cancel session.' });
+  }
+});
+
 
 // ============================================================================
 // EDTECHRA COURSE STUDIO API (TEACHER-LEVEL STUDIO & MULTI-CLASSROOM DELIVERY)

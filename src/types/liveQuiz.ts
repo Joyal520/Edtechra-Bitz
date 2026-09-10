@@ -3,7 +3,8 @@
 // ============================================================================
 
 export type LiveQuizDifficulty = 'Easy' | 'Medium' | 'Hard';
-export type LiveQuizSessionStatus = 'lobby' | 'in_progress' | 'reveal' | 'finished' | 'cancelled';
+export type LiveQuizSessionStatus = 'draft' | 'scheduled' | 'lobby' | 'in_progress' | 'reveal' | 'finished' | 'completed' | 'cancelled';
+export type EffectiveLiveQuizState = 'draft' | 'scheduled' | 'live' | 'completed' | 'cancelled';
 
 export interface LiveQuizQuestion {
   id: string;
@@ -53,6 +54,7 @@ export interface LiveQuizSession {
   current_question_index: number;
   question_start_ms?: number | null;
   question_duration_sec: number;
+  scheduled_start_at?: string | null;
   started_at?: string | null;
   expires_at?: string | null;
   correct_answer_index?: number | null;
