@@ -222,7 +222,10 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   };
 
   const handleCancelSession = async () => {
-    if (!confirm('Are you sure you want to cancel this scheduled quiz? Students will be notified.')) return;
+    const confirmMsg = isScheduled
+      ? 'Are you sure you want to cancel this scheduled quiz? Students will be notified.'
+      : 'Are you sure you want to cancel this live quiz session? The lobby will be closed.';
+    if (!confirm(confirmMsg)) return;
     setIsCancelling(true);
     try {
       await liveQuizService.cancelSession(session.id);
@@ -272,7 +275,14 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
       <div className="relative z-10 flex items-center justify-between gap-4 flex-wrap">
         <button
           type="button"
-          onClick={() => navigate(`/classes/${session.classroom_id}`)}
+          onClick={() => {
+            if (isTeacher && !isScheduled && participants.length === 0) {
+              if (confirm('Do you want to cancel this live quiz lobby before leaving?')) {
+                liveQuizService.cancelSession(session.id).catch(() => {});
+              }
+            }
+            navigate(`/classes/${session.classroom_id}`);
+          }}
           className="inline-flex items-center gap-2 text-xs font-bold text-sky-200 hover:text-white bg-white/10 hover:bg-white/15 px-3.5 py-1.5 rounded-full transition-all border border-white/10 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -385,16 +395,14 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
           {isTeacher && (
             <div className="flex items-center gap-3">
-              {isScheduled && (
-                <button
-                  type="button"
-                  disabled={isCancelling || isStarting}
-                  onClick={handleCancelSession}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-400/40 text-rose-300 hover:bg-rose-500/20 text-xs font-bold transition-all disabled:opacity-50"
-                >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Scheduled Quiz'}
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={isCancelling || isStarting}
+                onClick={handleCancelSession}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-400/40 text-rose-300 hover:bg-rose-500/20 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isCancelling ? 'Cancelling...' : isScheduled ? 'Cancel Scheduled Quiz' : 'Cancel Live Quiz'}
+              </button>
 
               <button
                 type="button"

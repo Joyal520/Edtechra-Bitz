@@ -347,6 +347,14 @@ class LiveQuizService {
     if (session.status === 'finished' || (session.status as string) === 'completed') return 'completed';
     if (session.status === 'draft') return 'draft';
 
+    // Staleness guard: sessions created > 2 hours ago without activity are considered completed/expired
+    if (session.created_at) {
+      const ageMs = Date.now() - new Date(session.created_at).getTime();
+      if (ageMs > 2 * 60 * 60 * 1000) {
+        return 'completed';
+      }
+    }
+
     const scheduledTime = session.scheduled_start_at || session.started_at;
     const nowMs = Date.now();
 
@@ -696,8 +704,27 @@ class LiveQuizService {
    * Used for direct PIN-free student joining and classroom dashboard state banner.
    */
   async getActiveSessionForClassroom(classroomId: string): Promise<LiveQuizSession | null> {
-    if (!supabase || !classroomId) return null;
+    if (!classroomId) return null;
 
+    // 1. Authoritative Backend Check (bypasses RLS, cleans stale sessions server-side)
+    try {
+      const res = await fetch(`/api/classes/${classroomId}/live-quiz/active-session`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          if (!json.session || json.state === 'draft' || json.state === 'completed' || json.state === 'cancelled') {
+            return null;
+          }
+          return json.session;
+        }
+      }
+    } catch {
+      // Backend offline or unreachable, proceed to Supabase fallback
+    }
+
+    if (!supabase) return null;
+
+    // 2. Direct Supabase Query Fallback
     try {
       const { data, error } = await supabase
         .from('live_quiz_sessions')
@@ -714,8 +741,19 @@ class LiveQuizService {
 
       if (error || !data) return null;
 
+      // Staleness check: if created > 2 hours ago, auto-expire in DB and return null
+      const ageMs = Date.now() - new Date(data.created_at).getTime();
+      if (ageMs > 2 * 60 * 60 * 1000) {
+        supabase
+          .from('live_quiz_sessions')
+          .update({ status: 'finished', ended_at: new Date().toISOString() })
+          .eq('id', data.id)
+          .then();
+        return null;
+      }
+
       const effectiveState = this.getEffectiveSessionState(data);
-      if (effectiveState === 'completed' || effectiveState === 'cancelled') {
+      if (effectiveState === 'completed' || effectiveState === 'cancelled' || effectiveState === 'draft') {
         return null;
       }
 
@@ -1028,6 +1066,15 @@ class LiveQuizService {
           ended_at: new Date().toISOString()
         })
         .eq('id', sessionId);
+
+      if (session.classroom_id) {
+        try {
+          await fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${sessionId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch {}
+      }
 
       return { data: finalResults };
     } catch (err: any) {

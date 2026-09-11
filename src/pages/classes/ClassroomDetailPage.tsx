@@ -28,6 +28,7 @@ import { LiveQuiz, LiveQuizSession } from '@/types/liveQuiz';
 import { classroomService } from '@/services/classroomService';
 import { assignmentService } from '@/services/assignmentService';
 import { classroomPointsService } from '@/services/classroomPointsService';
+import { supabase } from '@/lib/supabase';
 import { classroomMessageService } from '@/services/classroomMessageService';
 import { classroomResourceService } from '@/services/classroomResourceService';
 import { classroomExamService } from '@/services/classroomExamService';
@@ -257,14 +258,67 @@ export const ClassroomDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return;
-    const pollActiveQuiz = async () => {
+    let isMounted = true;
+
+    const refreshActiveQuiz = async () => {
       try {
         const s = await liveQuizService.getActiveSessionForClassroom(id);
-        setActiveLiveQuizSession(s);
-      } catch {}
+        if (isMounted) {
+          const state = liveQuizService.getEffectiveSessionState(s);
+          if (state === 'live' || state === 'scheduled') {
+            setActiveLiveQuizSession(s);
+          } else {
+            setActiveLiveQuizSession(null);
+          }
+        }
+      } catch {
+        if (isMounted) setActiveLiveQuizSession(null);
+      }
     };
-    const interval = setInterval(pollActiveQuiz, 5000);
-    return () => clearInterval(interval);
+
+    // Immediate authoritative query
+    refreshActiveQuiz();
+
+    // Periodic safety poll
+    const interval = setInterval(refreshActiveQuiz, 5000);
+
+    // Realtime postgres_changes subscription on live_quiz_sessions for this classroom
+    const channel = supabase
+      ? supabase
+          .channel(`classroom_live_quiz_${id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'live_quiz_sessions',
+              filter: `classroom_id=eq.${id}`
+            },
+            (payload: any) => {
+              const row = payload.new || payload.old;
+              if (
+                payload.eventType === 'DELETE' ||
+                row?.status === 'finished' ||
+                row?.status === 'completed' ||
+                row?.status === 'cancelled'
+              ) {
+                // Immediately remove panel
+                if (isMounted) setActiveLiveQuizSession(null);
+              } else {
+                refreshActiveQuiz();
+              }
+            }
+          )
+          .subscribe()
+      : null;
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [id]);
 
   useEffect(() => {

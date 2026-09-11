@@ -162,7 +162,35 @@ const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 // Initialize AI OCR Worksheet Grader Engine
 ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
 
-// Background cleanup workers: purge stale temporary OCR files and expired challenges (only in long-running environments, not in serverless)
+// Helper: Purge stale abandoned live quiz sessions (> 2 hours old) to prevent ghost active sessions
+async function cleanStaleLiveQuizSessions(supabaseClient) {
+  if (!supabaseClient) return;
+  try {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const { data: staleSessions, error } = await supabaseClient
+      .from('live_quiz_sessions')
+      .select('id, status, created_at')
+      .in('status', ['lobby', 'in_progress', 'reveal', 'scheduled'])
+      .lt('created_at', twoHoursAgo);
+
+    if (!error && staleSessions && staleSessions.length > 0) {
+      console.log(`[LiveQuiz Worker] Purging ${staleSessions.length} stale live quiz session(s) to finished...`);
+      for (const s of staleSessions) {
+        await supabaseClient
+          .from('live_quiz_sessions')
+          .update({
+            status: 'finished',
+            ended_at: new Date().toISOString()
+          })
+          .eq('id', s.id);
+      }
+    }
+  } catch (err) {
+    console.warn('[LiveQuiz Worker] Stale session purge notice:', err.message);
+  }
+}
+
+// Background cleanup workers: purge stale temporary OCR files, expired challenges, and stale live quiz sessions (only in long-running environments, not in serverless)
 if (serverSupabase && process.env.VERCEL !== '1') {
   cleanupStaleTemporaryFiles(serverSupabase).catch(() => {});
   setInterval(() => {
@@ -173,6 +201,11 @@ if (serverSupabase && process.env.VERCEL !== '1') {
   setInterval(() => {
     cleanupExpiredChallengeFiles(serverSupabase).catch(() => {});
   }, 60 * 60 * 1000);
+
+  cleanStaleLiveQuizSessions(serverSupabase).catch(() => {});
+  setInterval(() => {
+    cleanStaleLiveQuizSessions(serverSupabase).catch(() => {});
+  }, 15 * 60 * 1000);
 }
 
 // Initialize AI Challenge Competition Queue Worker
@@ -2698,6 +2731,117 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel', async
     res.status(500).json({ success: false, error: error.message || 'Failed to cancel session.' });
   }
 });
+
+// GET /api/classes/:classroomId/live-quiz/active-session
+// Authoritative check for currently scheduled or live session in a classroom
+app.get('/api/classes/:classroomId/live-quiz/active-session', async (req, res) => {
+  try {
+    const { classroomId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database uninitialized.' });
+    }
+
+    const { data: session, error: fetchErr } = await serverSupabase
+      .from('live_quiz_sessions')
+      .select(`
+        *,
+        classroom:classrooms!classroom_id (id, title, subject),
+        teacher:profiles!teacher_id (id, full_name, avatar_url),
+        quiz:live_quizzes(*)
+      `)
+      .eq('classroom_id', classroomId)
+      .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchErr || !session) {
+      return res.json({ success: true, session: null, state: 'draft' });
+    }
+
+    // Staleness check: if created more than 2 hours ago and still in lobby/in_progress, auto-expire
+    const sessionAgeMs = Date.now() - new Date(session.created_at).getTime();
+    if (sessionAgeMs > 2 * 60 * 60 * 1000) {
+      await serverSupabase
+        .from('live_quiz_sessions')
+        .update({
+          status: 'finished',
+          ended_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+      return res.json({ success: true, session: null, state: 'draft' });
+    }
+
+    // Determine effective state
+    const scheduledTime = session.scheduled_start_at || (session.status === 'scheduled' ? session.started_at : null);
+    const nowMs = Date.now();
+    let effectiveState = 'draft';
+
+    if (session.status === 'scheduled') {
+      if (scheduledTime && new Date(scheduledTime).getTime() <= nowMs) {
+        effectiveState = 'live';
+      } else {
+        effectiveState = 'scheduled';
+      }
+    } else if (session.status === 'lobby' || session.status === 'in_progress' || session.status === 'reveal') {
+      effectiveState = 'live';
+    }
+
+    return res.json({
+      success: true,
+      session,
+      state: effectiveState
+    });
+  } catch (error) {
+    console.error('Error fetching active live quiz session:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch active session.' });
+  }
+});
+
+// POST /api/classes/:classroomId/live-quiz/sessions/:sessionId/complete
+// Authoritatively finalizes a live quiz session
+app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', async (req, res) => {
+  try {
+    const { classroomId, sessionId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database uninitialized.' });
+    }
+
+    const { data: session } = await serverSupabase
+      .from('live_quiz_sessions')
+      .select('id, pin')
+      .eq('id', sessionId)
+      .eq('classroom_id', classroomId)
+      .maybeSingle();
+
+    await serverSupabase
+      .from('live_quiz_sessions')
+      .update({
+        status: 'finished',
+        ended_at: new Date().toISOString()
+      })
+      .eq('id', sessionId);
+
+    if (session?.pin) {
+      try {
+        const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
+        await channel.send({
+          type: 'broadcast',
+          event: 'quiz_finished',
+          payload: { sessionId }
+        });
+      } catch (e) {
+        // ignore broadcast error
+      }
+    }
+
+    res.json({ success: true, message: 'Session completed successfully.' });
+  } catch (error) {
+    console.error('Error completing live quiz session:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to complete session.' });
+  }
+});
+
 
 
 // ============================================================================

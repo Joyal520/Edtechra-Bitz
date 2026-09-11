@@ -206,7 +206,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
           {/* Genuine uncropped emblem with object-fit: contain */}
           <img
             src="/logo-emblem.png"
-            alt="EdTechra Logo"
+            alt="EdTechra Bitz Logo"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (!target.src.endsWith('/logo.png')) {
+                target.src = '/logo.png';
+              }
+            }}
             className="relative w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 object-contain drop-shadow-[0_12px_32px_rgba(2,111,195,0.55)] select-none pointer-events-none animate-logo-breathe"
           />
         </div>
