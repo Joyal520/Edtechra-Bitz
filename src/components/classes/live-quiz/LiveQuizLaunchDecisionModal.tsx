@@ -136,7 +136,12 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col relative overflow-hidden animate-in zoom-in-95 duration-200">
+      <div
+        data-theme-mode="light"
+        data-light-surface="true"
+        style={{ colorScheme: 'light' }}
+        className="bg-white text-slate-900 light edtechra-light-surface rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col relative overflow-hidden animate-in zoom-in-95 duration-200 [color-scheme:light]"
+      >
         
         {/* TOP HEADER */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
@@ -146,7 +151,7 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-900">Quiz Ready to Deploy</h2>
-              <p className="text-xs font-semibold text-slate-500">
+              <p className="text-xs font-semibold text-slate-600">
                 Choose how and when to launch this Live Quiz
               </p>
             </div>
@@ -154,7 +159,8 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            aria-label="Close modal"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -178,11 +184,11 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                 {quiz.difficulty || 'Medium'}
               </span>
             </div>
-            <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
+            <div className="flex items-center gap-4 text-xs font-semibold text-slate-600">
               <span>{quiz.questions?.length || 0} Questions</span>
               {quiz.timer_enabled && quiz.timer_seconds && (
-                <span className="flex items-center gap-1 text-slate-600">
-                  <Timer className="w-3.5 h-3.5" />
+                <span className="flex items-center gap-1 text-slate-700 font-semibold">
+                  <Timer className="w-3.5 h-3.5 text-slate-500" />
                   {Math.round(quiz.timer_seconds / 60)} min total
                 </span>
               )}
@@ -257,11 +263,11 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-extrabold transition-all text-center"
+                className="w-full py-3 px-4 rounded-xl border border-slate-300 text-slate-700 hover:text-slate-950 hover:bg-slate-100 text-xs font-extrabold transition-all text-center cursor-pointer"
               >
                 Keep in Quiz Bank (Decide Later / Draft)
               </button>
-              <p className="text-[11px] text-center text-slate-500 font-medium mt-1">
+              <p className="text-[11px] text-center text-slate-600 font-medium mt-1">
                 Your quiz is securely saved. No live panel or banner will appear to students.
               </p>
             </div>
@@ -269,18 +275,18 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
         ) : (
           /* SCHEDULE CONFIGURATION FORM */
           <form onSubmit={handleConfirmSchedule} className="mt-5 space-y-4">
-            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80">
-              <div className="flex items-center gap-2 text-emerald-800 text-xs font-extrabold mb-1">
-                <Clock className="w-4 h-4" />
+            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
+              <div className="flex items-center gap-2 text-emerald-900 text-xs font-extrabold mb-1">
+                <Clock className="w-4 h-4 text-emerald-700" />
                 <span>Select Start Time ({userTimezone})</span>
               </div>
-              <p className="text-[11px] text-emerald-700 font-medium mb-3">
+              <p className="text-[11px] text-emerald-800 font-semibold mb-3">
                 Students will enter a waiting lobby with a synchronized countdown timer.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-800 mb-1">
                     Date
                   </label>
                   <input
@@ -289,11 +295,13 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                     value={scheduleDate}
                     onChange={(e) => setScheduleDate(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-300 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    data-color-scheme="light"
+                    style={{ colorScheme: 'light' }}
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-300 text-xs font-bold text-slate-900 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none cursor-pointer"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-800 mb-1">
                     Time
                   </label>
                   <input
@@ -301,17 +309,19 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                     value={scheduleTime}
                     onChange={(e) => setScheduleTime(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-300 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    data-color-scheme="light"
+                    style={{ colorScheme: 'light' }}
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-slate-300 text-xs font-bold text-slate-900 shadow-2xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none cursor-pointer"
                   />
                 </div>
               </div>
 
               {/* COUNTDOWN PREVIEW */}
-              <div className="mt-3 pt-3 border-t border-emerald-200/60 flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-semibold">Countdown Preview:</span>
+              <div className="mt-3 pt-3 border-t border-emerald-200/80 flex items-center justify-between text-xs">
+                <span className="text-slate-700 font-bold">Countdown Preview:</span>
                 <span
                   className={`font-black ${
-                    isValidTime ? 'text-emerald-700' : 'text-rose-600'
+                    isValidTime ? 'text-emerald-800' : 'text-rose-700'
                   }`}
                 >
                   {countdownText}
@@ -324,7 +334,7 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                 type="button"
                 onClick={() => setSelectedMode('decision')}
                 disabled={isSubmitting}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-all"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-800 hover:bg-slate-100 hover:text-slate-950 text-xs font-extrabold transition-all cursor-pointer"
               >
                 Back
               </button>
@@ -332,7 +342,7 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
               <button
                 type="submit"
                 disabled={!isValidTime || isSubmitting}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmitting ? (
                   <>

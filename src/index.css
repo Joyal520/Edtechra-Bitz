@@ -961,6 +961,171 @@
   caret-color: #38bdf8 !important;
 }
 
+/* ========================================================================== */
+/* LIGHT SURFACES, LIGHT MODALS & LIGHT INPUT CONTRAST SYSTEM                 */
+/* Prevents global dark-theme input inversion from leaking onto light cards,  */
+/* modals, white inputs, and native date/time pickers.                        */
+/* ========================================================================== */
+
+.light,
+[data-theme-mode="light"],
+.edtechra-light-surface,
+[data-light-surface="true"] {
+  color-scheme: light !important;
+}
+
+.light input:not([type="checkbox"]):not([type="radio"]),
+.light textarea,
+.light select,
+.light [contenteditable="true"],
+[data-theme-mode="light"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme-mode="light"] textarea,
+[data-theme-mode="light"] select,
+[data-theme-mode="light"] [contenteditable="true"],
+.edtechra-light-surface input:not([type="checkbox"]):not([type="radio"]),
+.edtechra-light-surface textarea,
+.edtechra-light-surface select,
+.edtechra-light-surface [contenteditable="true"],
+input.bg-white:not([type="checkbox"]):not([type="radio"]),
+textarea.bg-white,
+select.bg-white,
+input[data-color-scheme="light"],
+textarea[data-color-scheme="light"] {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #026fc3 !important;
+  color-scheme: light !important;
+}
+
+.light input::placeholder,
+.light textarea::placeholder,
+[data-theme-mode="light"] input::placeholder,
+[data-theme-mode="light"] textarea::placeholder,
+.edtechra-light-surface input::placeholder,
+.edtechra-light-surface textarea::placeholder,
+input.bg-white::placeholder,
+textarea.bg-white::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+/* Chrome / Safari / Edge Autofill Light Mode Correction */
+.light input:-webkit-autofill,
+.light textarea:-webkit-autofill,
+[data-theme-mode="light"] input:-webkit-autofill,
+[data-theme-mode="light"] textarea:-webkit-autofill,
+.edtechra-light-surface input:-webkit-autofill,
+.edtechra-light-surface textarea:-webkit-autofill,
+input.bg-white:-webkit-autofill,
+textarea.bg-white:-webkit-autofill {
+  -webkit-text-fill-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  caret-color: #026fc3 !important;
+}
+
+/* Native Date, Time, and DateTime-Local pickers on light surfaces */
+.light input[type="date"],
+.light input[type="time"],
+.light input[type="datetime-local"],
+[data-theme-mode="light"] input[type="date"],
+[data-theme-mode="light"] input[type="time"],
+[data-theme-mode="light"] input[type="datetime-local"],
+.edtechra-light-surface input[type="date"],
+.edtechra-light-surface input[type="time"],
+.edtechra-light-surface input[type="datetime-local"],
+input[type="date"].bg-white,
+input[type="time"].bg-white,
+input[type="datetime-local"].bg-white,
+input[type="date"][style*="color-scheme: light"],
+input[type="date"][style*="colorScheme: 'light'"],
+input[type="time"][style*="color-scheme: light"],
+input[type="time"][style*="colorScheme: 'light'"] {
+  color-scheme: light !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+/* WebKit/Blink internal date & time picker subcomponents */
+.light input[type="date"]::-webkit-datetime-edit,
+.light input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.light input[type="date"]::-webkit-datetime-edit-text,
+.light input[type="date"]::-webkit-datetime-edit-month-field,
+.light input[type="date"]::-webkit-datetime-edit-day-field,
+.light input[type="date"]::-webkit-datetime-edit-year-field,
+.light input[type="time"]::-webkit-datetime-edit,
+.light input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.light input[type="time"]::-webkit-datetime-edit-text,
+.light input[type="time"]::-webkit-datetime-edit-hour-field,
+.light input[type="time"]::-webkit-datetime-edit-minute-field,
+.light input[type="time"]::-webkit-datetime-edit-ampm-field,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit-text,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit-month-field,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit-day-field,
+[data-theme-mode="light"] input[type="date"]::-webkit-datetime-edit-year-field,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit-text,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit-hour-field,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit-minute-field,
+[data-theme-mode="light"] input[type="time"]::-webkit-datetime-edit-ampm-field,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit-text,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit-month-field,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit-day-field,
+.edtechra-light-surface input[type="date"]::-webkit-datetime-edit-year-field,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit-text,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit-hour-field,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit-minute-field,
+.edtechra-light-surface input[type="time"]::-webkit-datetime-edit-ampm-field,
+input[type="date"].bg-white::-webkit-datetime-edit,
+input[type="date"].bg-white::-webkit-datetime-edit-fields-wrapper,
+input[type="date"].bg-white::-webkit-datetime-edit-text,
+input[type="date"].bg-white::-webkit-datetime-edit-month-field,
+input[type="date"].bg-white::-webkit-datetime-edit-day-field,
+input[type="date"].bg-white::-webkit-datetime-edit-year-field,
+input[type="time"].bg-white::-webkit-datetime-edit,
+input[type="time"].bg-white::-webkit-datetime-edit-fields-wrapper,
+input[type="time"].bg-white::-webkit-datetime-edit-text,
+input[type="time"].bg-white::-webkit-datetime-edit-hour-field,
+input[type="time"].bg-white::-webkit-datetime-edit-minute-field,
+input[type="time"].bg-white::-webkit-datetime-edit-ampm-field {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+/* Native Calendar & Clock Picker Icons on light surfaces */
+.light input[type="date"]::-webkit-calendar-picker-indicator,
+.light input[type="time"]::-webkit-calendar-picker-indicator,
+[data-theme-mode="light"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme-mode="light"] input[type="time"]::-webkit-calendar-picker-indicator,
+.edtechra-light-surface input[type="date"]::-webkit-calendar-picker-indicator,
+.edtechra-light-surface input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"].bg-white::-webkit-calendar-picker-indicator,
+input[type="time"].bg-white::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.light input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.light input[type="time"]::-webkit-calendar-picker-indicator:hover,
+[data-theme-mode="light"] input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme-mode="light"] input[type="time"]::-webkit-calendar-picker-indicator:hover,
+.edtechra-light-surface input[type="date"]::-webkit-calendar-picker-indicator:hover,
+.edtechra-light-surface input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="date"].bg-white::-webkit-calendar-picker-indicator:hover,
+input[type="time"].bg-white::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+
 @keyframes subtle-shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-3px); }
