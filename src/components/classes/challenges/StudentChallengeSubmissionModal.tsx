@@ -11,9 +11,7 @@ import {
   Paperclip,
   Check,
   ShieldAlert,
-  ArrowRight,
-  Eye,
-  BarChart2
+  Eye
 } from 'lucide-react';
 import { AiChallenge, AiChallengeSubmission, AiChallengeLeaderboardEntry } from '@/types/aiChallenge';
 import { aiChallengeService } from '@/services/aiChallengeService';

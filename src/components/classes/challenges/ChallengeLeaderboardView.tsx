@@ -4,13 +4,7 @@ import {
   Medal,
   Crown,
   Sparkles,
-  ShieldCheck,
-  Award,
-  CheckCircle2,
-  Clock,
-  HelpCircle,
-  TrendingUp,
-  UserCheck
+  ShieldCheck
 } from 'lucide-react';
 import {
   AiChallengeLeaderboardEntry,

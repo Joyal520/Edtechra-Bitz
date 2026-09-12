@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Trophy,
-  Medal,
   Users,
   CheckCircle2,
   Clock,

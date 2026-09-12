@@ -16,8 +16,7 @@ import {
   ChevronRight,
   Clock,
   Trophy,
-  ShieldCheck,
-  Award
+  ShieldCheck
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import {

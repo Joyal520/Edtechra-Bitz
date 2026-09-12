@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v10';
+const CACHE_NAME = 'edtechra-bitz-v12';
 
 const STATIC_PRECACHE = [
   '/',
