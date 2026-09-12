@@ -80,6 +80,8 @@ class LiveQuizService {
 
             return {
               ...q,
+              cover_image: q.cover_image || q.cover_image_url || null,
+              cover_image_url: q.cover_image_url || q.cover_image || null,
               visibility: q.visibility || 'private',
               timer_enabled: q.timer_enabled ?? false,
               timer_seconds: q.timer_seconds ?? null,
@@ -206,6 +208,8 @@ class LiveQuizService {
     category?: string;
     difficulty?: 'Easy' | 'Medium' | 'Hard';
     accent_color?: string;
+    cover_image?: string | null;
+    cover_image_url?: string | null;
     questions: LiveQuizQuestion[];
     is_public?: boolean;
     visibility?: 'private' | 'common';
@@ -229,26 +233,49 @@ class LiveQuizService {
 
     // Strictly default to 'private' unless explicitly declared 'common'
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
+    const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
 
     try {
-      // 1. Insert quiz header
-      const { data: quizData, error: quizError } = await supabase
-        .from('live_quizzes')
-        .insert({
-          classroom_id: payload.classroom_id || null,
-          title: payload.title.trim(),
-          description: (payload.description || '').trim(),
-          category: payload.category || 'General',
-          difficulty: payload.difficulty || 'Medium',
-          accent_color: payload.accent_color || '#026fc3',
-          is_public: visibility === 'common',
-          visibility,
-          timer_enabled: timerEnabled,
-          timer_seconds: timerSeconds,
-          created_by: userId
-        })
-        .select()
-        .single();
+      // 1. Insert quiz header (with fallback if cover_image column not yet migrated)
+      const baseInsertPayload = {
+        classroom_id: payload.classroom_id || null,
+        title: payload.title.trim(),
+        description: (payload.description || '').trim(),
+        category: payload.category || 'General',
+        difficulty: payload.difficulty || 'Medium',
+        accent_color: payload.accent_color || '#026fc3',
+        is_public: visibility === 'common',
+        visibility,
+        timer_enabled: timerEnabled,
+        timer_seconds: timerSeconds,
+        created_by: userId
+      };
+
+      let quizData: any = null;
+      let quizError: any = null;
+
+      if (coverImage) {
+        const attempt = await supabase
+          .from('live_quizzes')
+          .insert({
+            ...baseInsertPayload,
+            cover_image: coverImage
+          })
+          .select()
+          .single();
+        quizData = attempt.data;
+        quizError = attempt.error;
+      }
+
+      if (!quizData && (!coverImage || quizError)) {
+        const fallbackAttempt = await supabase
+          .from('live_quizzes')
+          .insert(baseInsertPayload)
+          .select()
+          .single();
+        quizData = fallbackAttempt.data;
+        quizError = fallbackAttempt.error;
+      }
 
       if (quizError) throw quizError;
 
@@ -295,6 +322,8 @@ class LiveQuizService {
       return {
         data: {
           ...quizData,
+          cover_image: coverImage || quizData.cover_image || null,
+          cover_image_url: coverImage || quizData.cover_image || null,
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerSeconds,
@@ -586,16 +615,89 @@ class LiveQuizService {
   }
 
   /**
+   * Authoritatively starts Question 1 for a session, transitioning status to 'in_progress'
+   */
+  async startSession(
+    sessionId: string,
+    classroomId: string,
+    _totalQuestions: number = 0
+  ): Promise<{ success: boolean; session?: LiveQuizSession | null; error?: string }> {
+    if (!sessionId) return { success: false, error: 'Session ID is required' };
+
+    const startMs = Date.now();
+    let updatedSession: LiveQuizSession | null = null;
+
+    // 1. Direct Supabase update (Immediate for teacher / session owner)
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('live_quiz_sessions')
+          .update({
+            status: 'in_progress',
+            current_question_index: 0,
+            question_start_ms: startMs,
+            question_duration_sec: 20
+          })
+          .eq('id', sessionId)
+          .select(`
+            *,
+            classroom:classrooms!classroom_id (id, title, subject),
+            teacher:profiles!teacher_id (id, full_name, avatar_url)
+          `)
+          .maybeSingle();
+
+        if (!error && data) {
+          const quiz = data.quiz_id ? await this.getQuizById(data.quiz_id) : null;
+          updatedSession = { ...data, quiz };
+        }
+      } catch (err) {
+        console.warn('[LiveQuizService] Direct supabase startSession update notice:', err);
+      }
+    }
+
+    // 2. Also invoke backend authoritative reconciliation endpoint with auth token
+    try {
+      const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
+      const token = authSessionData.session?.access_token;
+
+      const response = await fetch(`/api/classes/${classroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json.success && json.session) {
+          updatedSession = json.session;
+        }
+      }
+    } catch {
+      // Backend optional
+    }
+
+    return { success: true, session: updatedSession };
+  }
+
+  /**
    * Reconciles a scheduled session that has reached its start time
    */
   async reconcileScheduledSession(sessionId: string, classroomId: string): Promise<LiveQuizSession | null> {
     if (!sessionId) return null;
 
     try {
-      // First try backend authoritative reconciliation endpoint
+      const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
+      const token = authSessionData.session?.access_token;
+
+      // First try backend authoritative reconciliation endpoint with Bearer auth token
       const response = await fetch(`/api/classes/${classroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
       });
 
       if (response.ok) {

@@ -25,6 +25,8 @@ export interface LiveQuiz {
   category: string;
   difficulty: LiveQuizDifficulty;
   accent_color?: string;
+  cover_image?: string | null;
+  cover_image_url?: string | null;
   questions: LiveQuizQuestion[];
   is_public: boolean;
   visibility?: 'private' | 'common';

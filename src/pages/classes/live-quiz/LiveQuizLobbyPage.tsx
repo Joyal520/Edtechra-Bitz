@@ -30,6 +30,21 @@ export const LiveQuizLobbyPage: React.FC = () => {
         setLoading(false);
         return;
       }
+
+      const isHostTeacher = isTeacher || s.teacher_id === user?.id;
+      if (s.status === 'in_progress' || s.status === 'reveal') {
+        if (isHostTeacher) {
+          navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/host/${s.id}`, { replace: true });
+          return;
+        } else {
+          navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/play/${s.id}`, {
+            state: { initialSession: s },
+            replace: true
+          });
+          return;
+        }
+      }
+
       setSession(s);
     } catch (err: any) {
       setError(err.message || 'Error loading lobby');

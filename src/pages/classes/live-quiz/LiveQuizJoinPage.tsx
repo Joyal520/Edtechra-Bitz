@@ -54,8 +54,14 @@ export const LiveQuizJoinPage: React.FC = () => {
         avatar_url: profile?.avatar_url || profile?.avatarUrl || undefined
       });
 
-      // 3. Navigate to lobby
-      navigate(`/classes/${session.classroom_id}/live-quiz/lobby/${cleanPin}`);
+      // 3. Navigate to play if already active, otherwise to lobby
+      if (session.status === 'in_progress' || session.status === 'reveal') {
+        navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
+          state: { initialSession: session }
+        });
+      } else {
+        navigate(`/classes/${session.classroom_id}/live-quiz/lobby/${cleanPin}`);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to join game');
       setLoading(false);

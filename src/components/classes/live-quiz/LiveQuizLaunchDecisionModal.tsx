@@ -14,6 +14,7 @@ import {
   Timer
 } from 'lucide-react';
 import { LiveQuiz } from '@/types/liveQuiz';
+import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 
 interface LiveQuizLaunchDecisionModalProps {
   isOpen: boolean;
@@ -168,11 +169,15 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
 
         {/* QUIZ PREVIEW CARD */}
         <div className="mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start gap-4">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs font-black text-base"
-            style={{ backgroundColor: quiz.accent_color || '#026fc3' }}
-          >
-            Q
+          <div className="w-16 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0 shadow-xs">
+            <img
+              src={getQuizCover(quiz)}
+              alt={quiz.title}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = DEFAULT_QUIZ_COVER;
+              }}
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">

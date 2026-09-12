@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   X,
   Plus,
@@ -16,10 +16,15 @@ import {
   BookmarkPlus,
   FileText,
   Clock,
-  Globe
+  Globe,
+  Image as ImageIcon,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { LiveQuizQuestion, LiveQuizDifficulty, LiveQuiz } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
+import { courseStudioService } from '@/services/courseStudioService';
+import { DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 import {
   generateAiQuizPrompt,
   validateAndParseAiQuiz,
@@ -112,7 +117,48 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cover Image State
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverFileInputRef = useRef<HTMLInputElement | null>(null);
+
   if (!isOpen) return null;
+
+  const handleCoverPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Cover image size must be under 5MB.');
+      return;
+    }
+
+    setUploadingCover(true);
+    setError(null);
+    try {
+      const res = await courseStudioService.uploadCourseImage(file, 'quiz-covers', true);
+      setCoverImageUrl(res.publicUrl);
+    } catch (uploadErr) {
+      console.warn('R2 upload notice, falling back to local data URL:', uploadErr);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImageUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingCover(false);
+      if (coverFileInputRef.current) {
+        coverFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleResetCover = () => {
+    setCoverImageUrl(null);
+    if (coverFileInputRef.current) {
+      coverFileInputRef.current.value = '';
+    }
+  };
 
   // Handle Question Count Selection
   const handleSelectCount = (count: number) => {
@@ -215,6 +261,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         category: parsedQuiz.category || category,
         difficulty: parsedQuiz.difficulty || difficulty,
         questions: parsedQuiz.questions,
+        cover_image: coverImageUrl,
+        cover_image_url: coverImageUrl,
         visibility,
         timer_enabled: timerEnabled,
         timer_seconds: timerEnabled ? timerSeconds : null,
@@ -284,6 +332,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         category: manualCategory,
         difficulty: manualDifficulty,
         questions: manualQuestions,
+        cover_image: coverImageUrl,
+        cover_image_url: coverImageUrl,
         visibility,
         timer_enabled: timerEnabled,
         timer_seconds: timerEnabled ? timerSeconds : null,
@@ -629,8 +679,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
                   </div>
 
-                  {/* Quiz Timer & Visibility Settings */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Quiz Timer, Visibility & Cover Settings */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     
                     {/* Quiz Timer */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
@@ -758,6 +808,67 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                           ? 'Available in Common Quizzes for other teachers to view and reuse.'
                           : 'Visible only under "Your Quizzes" for your personal use.'}
                       </p>
+                    </div>
+
+                    {/* Quiz Cover Image */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4 text-purple-600" />
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                            Quiz Cover
+                          </span>
+                        </div>
+                        {coverImageUrl && (
+                          <button
+                            type="button"
+                            onClick={handleResetCover}
+                            className="text-[10px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative w-20 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0">
+                          <img
+                            src={coverImageUrl || DEFAULT_QUIZ_COVER}
+                            alt="Quiz Cover"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <input
+                            ref={coverFileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            onChange={handleCoverPick}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            disabled={uploadingCover}
+                            onClick={() => coverFileInputRef.current?.click()}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            {uploadingCover ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin text-purple-600" />
+                                <span>Uploading...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3 h-3 text-purple-600" />
+                                <span>{coverImageUrl ? 'Change Cover' : 'Upload Custom Cover'}</span>
+                              </>
+                            )}
+                          </button>
+                          <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+                            {coverImageUrl ? 'Custom cover active' : 'Official papercut cover'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                   </div>
@@ -1149,8 +1260,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 />
               </div>
 
-              {/* Quiz Timer & Visibility Settings (Manual Mode) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Quiz Timer, Visibility & Cover Settings (Manual Mode) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 
                 {/* Quiz Timer */}
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
@@ -1278,6 +1389,67 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       ? 'Available in Common Quizzes for other teachers to view and reuse.'
                       : 'Visible only under "Your Quizzes" for your personal use.'}
                   </p>
+                </div>
+
+                {/* Quiz Cover Image */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Quiz Cover
+                      </span>
+                    </div>
+                    {coverImageUrl && (
+                      <button
+                        type="button"
+                        onClick={handleResetCover}
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative w-20 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shrink-0">
+                      <img
+                        src={coverImageUrl || DEFAULT_QUIZ_COVER}
+                        alt="Quiz Cover"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <input
+                        ref={coverFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleCoverPick}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={uploadingCover}
+                        onClick={() => coverFileInputRef.current?.click()}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        {uploadingCover ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin text-purple-600" />
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-3 h-3 text-purple-600" />
+                            <span>{coverImageUrl ? 'Change Cover' : 'Upload Custom Cover'}</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+                        {coverImageUrl ? 'Custom cover active' : 'Official papercut cover'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
               </div>

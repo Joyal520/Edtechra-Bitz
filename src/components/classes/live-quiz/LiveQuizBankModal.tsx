@@ -12,10 +12,12 @@ import {
   Globe,
   Lock,
   Sparkles,
-  Loader2
+  Loader2,
+  BarChart2
 } from 'lucide-react';
 import { LiveQuiz } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
+import { getQuizCover, DEFAULT_QUIZ_COVER, getQuizCategoryBadgeStyle } from '@/utils/quizCover';
 
 interface LiveQuizBankModalProps {
   isOpen: boolean;
@@ -219,7 +221,7 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
                 key={cat}
                 type="button"
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   activeCategory === cat
                     ? 'bg-slate-900 text-white font-extrabold shadow-2xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -231,13 +233,13 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
           </div>
 
           <div className="relative max-w-xs w-full">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search quizzes..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+              className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-600 shadow-2xs transition-all"
             />
           </div>
         </div>
@@ -292,91 +294,114 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
                 return (
                   <div
                     key={quiz.id}
-                    className="bg-white rounded-3xl p-5 border border-slate-200 hover:border-purple-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3 group"
+                    className="bg-white rounded-2xl border border-slate-200/90 hover:border-purple-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
                   >
-                    <div className="space-y-2.5">
-                      {/* Top Badges (Category, Difficulty, Timer) */}
-                      <div className="flex items-center justify-between gap-1 flex-wrap">
-                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                          {quiz.category}
-                        </span>
+                    {/* Top Fixed Aspect Ratio Cover Image */}
+                    <div className="relative w-full aspect-[16/9] overflow-hidden bg-slate-900 shrink-0">
+                      <img
+                        src={getQuizCover(quiz)}
+                        alt={quiz.title}
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = DEFAULT_QUIZ_COVER;
+                        }}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {quiz.difficulty}
+                    {/* Card Content */}
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                      <div className="space-y-2">
+                        {/* Top Badges (Category, Difficulty, Timer) */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(() => {
+                            const badgeStyle = getQuizCategoryBadgeStyle(quiz.category);
+                            return (
+                              <span
+                                className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}
+                              >
+                                {quiz.category}
+                              </span>
+                            );
+                          })()}
+
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200/70 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                            <BarChart2 className="w-2.5 h-2.5 text-slate-500" />
+                            <span>{quiz.difficulty}</span>
                           </span>
 
                           <span
-                            className={`text-[10px] font-black inline-flex items-center gap-1 px-2 py-0.5 rounded-md border ${
+                            className={`text-[10px] font-bold inline-flex items-center gap-1 px-2 py-0.5 rounded-md border ${
                               isTimed
                                 ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : 'bg-slate-50 text-slate-500 border-slate-200'
+                                : 'bg-slate-50 text-slate-500 border-slate-200/70'
                             }`}
                           >
                             <Clock className="w-2.5 h-2.5" />
                             <span>{timerDisplay}</span>
                           </span>
                         </div>
+
+                        {/* Quiz Title */}
+                        <h3 className="text-sm font-extrabold text-slate-900 line-clamp-1 group-hover:text-purple-700 transition-colors">
+                          {quiz.title}
+                        </h3>
+
+                        {/* Description */}
+                        <p className="text-xs text-slate-500 font-medium line-clamp-2 min-h-[32px] leading-relaxed">
+                          {quiz.description || `${quiz.questions.length} interactive questions`}
+                        </p>
                       </div>
 
-                      {/* Quiz Title */}
-                      <h3 className="text-sm sm:text-base font-black text-slate-900 line-clamp-1 group-hover:text-purple-700 transition-colors">
-                        {quiz.title}
-                      </h3>
+                      {/* Footer Actions */}
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
+                        {/* Creator attribution badge */}
+                        <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 min-w-0 truncate">
+                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className={`truncate ${quiz.is_owner ? 'text-purple-700 font-black' : 'text-slate-600'}`}>
+                            {quiz.creator_name || (quiz.is_owner ? 'Created by You' : 'Created by Teacher')}
+                          </span>
+                        </div>
 
-                      {/* Description */}
-                      <p className="text-xs text-slate-500 font-medium line-clamp-2">
-                        {quiz.description || `${quiz.questions.length} interactive questions`}
-                      </p>
-
-                      {/* Creator attribution badge */}
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                        <User className="w-3 h-3 text-slate-400" />
-                        <span className={quiz.is_owner ? 'text-purple-700 font-black' : 'text-slate-600'}>
-                          {quiz.creator_name || (quiz.is_owner ? 'Created by You' : 'Created by Teacher')}
+                        <span className="text-xs font-black text-slate-400 shrink-0">
+                          {quiz.questions.length} Qs
                         </span>
-                      </div>
-                    </div>
 
-                    {/* Footer Actions */}
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <span className="text-xs font-black text-slate-400">
-                        {quiz.questions.length} Qs
-                      </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Use / Copy Quiz Button for Common Quizzes */}
+                          {!quiz.is_owner && (
+                            <button
+                              type="button"
+                              disabled={copyingId === quiz.id}
+                              onClick={() => handleCopyQuiz(quiz)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-xl text-xs font-black border border-slate-200 transition-colors cursor-pointer"
+                              title="Copy this quiz to Your Quizzes so you can edit and customize it"
+                            >
+                              {copyingId === quiz.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : copiedSuccessId === quiz.id ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                              <span>{copiedSuccessId === quiz.id ? 'Copied' : 'Use Quiz'}</span>
+                            </button>
+                          )}
 
-                      <div className="flex items-center gap-1.5">
-                        {/* Use / Copy Quiz Button for Common Quizzes */}
-                        {!quiz.is_owner && (
+                          {/* Launch Lobby Button */}
                           <button
                             type="button"
-                            disabled={copyingId === quiz.id}
-                            onClick={() => handleCopyQuiz(quiz)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-xl text-xs font-black border border-slate-200 transition-colors cursor-pointer"
-                            title="Copy this quiz to Your Quizzes so you can edit and customize it"
+                            onClick={() => {
+                              onClose();
+                              onSelectQuiz(quiz);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
                           >
-                            {copyingId === quiz.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : copiedSuccessId === quiz.id ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                            <span>{copiedSuccessId === quiz.id ? 'Copied' : 'Use Quiz'}</span>
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Launch</span>
                           </button>
-                        )}
-
-                        {/* Launch Lobby Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClose();
-                            onSelectQuiz(quiz);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
-                        >
-                          <Play className="w-3 h-3 fill-current" />
-                          <span>Launch</span>
-                        </button>
+                        </div>
                       </div>
                     </div>
 

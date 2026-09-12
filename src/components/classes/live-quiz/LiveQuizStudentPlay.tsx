@@ -160,6 +160,24 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     setRevealData(rData);
   }, []);
 
+  // Ensure Question 1 / current question rehydrates immediately if session prop updates or loads fresh
+  useEffect(() => {
+    if (!questionData && (session.status === 'in_progress' || session.status === 'reveal')) {
+      const idx = session.current_question_index ?? 0;
+      const q = session.quiz?.questions?.[idx];
+      if (q) {
+        applyQuestionStarted({
+          qIndex: idx,
+          question: q.question,
+          options: q.options,
+          durationSec: session.question_duration_sec || q.durationSec || 20,
+          questionStartMs: Number(session.question_start_ms) || Date.now(),
+          totalQuestions: session.quiz?.questions?.length || 0
+        });
+      }
+    }
+  }, [session, questionData, applyQuestionStarted]);
+
   // Sync with database helper
   const syncWithDatabase = useCallback(async () => {
     try {
