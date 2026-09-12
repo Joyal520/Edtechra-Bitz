@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, KeyRound, ArrowRight } from 'lucide-react';
+import { X, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
 import { classroomService } from '@/services/classroomService';
 
 interface JoinClassroomModalProps {
@@ -63,7 +63,8 @@ export const JoinClassroomModal: React.FC<JoinClassroomModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -71,37 +72,51 @@ export const JoinClassroomModal: React.FC<JoinClassroomModalProps> = ({
 
         {/* Error notification */}
         {errorMessage && (
-          <div className="mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
-            {errorMessage}
+          <div className="mt-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-center gap-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span className="leading-snug">{errorMessage}</span>
           </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+            <label
+              htmlFor="classroom-code-input"
+              className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-2"
+            >
               Classroom Code *
             </label>
             <input
+              id="classroom-code-input"
               type="text"
               required
               maxLength={10}
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="e.g. 7K9X2B"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-center font-mono text-lg tracking-widest font-black text-slate-900 placeholder:text-slate-400 placeholder:tracking-normal placeholder:font-sans placeholder:text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+              autoComplete="off"
+              spellCheck={false}
+              style={{
+                color: '#0F172A',
+                backgroundColor: '#ffffff',
+                caretColor: '#0F172A',
+                fontWeight: 600,
+                WebkitTextFillColor: '#0F172A'
+              }}
+              className="w-full h-14 px-4 bg-white border-2 border-slate-200 hover:border-slate-300 focus:border-emerald-500 rounded-2xl text-center font-mono text-xl tracking-widest font-semibold text-[#0F172A] placeholder:text-[#64748B] placeholder:font-sans placeholder:text-sm placeholder:tracking-normal placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all shadow-inner select-text"
             />
-            <p className="text-[11px] text-slate-400 font-medium text-center mt-2">
+            <p className="text-xs text-slate-500 font-medium text-center mt-2.5">
               Ask your teacher for the 6-character class code to get access.
             </p>
           </div>
 
           {/* Form Actions */}
-          <div className="pt-3 flex items-center justify-end gap-2.5">
+          <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
