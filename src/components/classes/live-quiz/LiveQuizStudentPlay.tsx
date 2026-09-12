@@ -45,15 +45,19 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   } | null>(() => {
     if (session.status === 'in_progress' || session.status === 'reveal') {
       const idx = session.current_question_index ?? 0;
-      const q = session.quiz?.questions?.[idx];
+      const questions = session.quiz?.questions || [];
+      if (questions.length > 0 && idx >= questions.length) {
+        return null;
+      }
+      const q = questions[idx];
       if (q) {
         return {
           qIndex: idx,
-          question: q.question,
-          options: q.options,
+          question: q.question || `Question ${idx + 1}`,
+          options: Array.isArray(q.options) ? q.options : [],
           durationSec: session.question_duration_sec || q.durationSec || 20,
           questionStartMs: Number(session.question_start_ms) || Date.now(),
-          totalQuestions: session.quiz?.questions?.length || 0
+          totalQuestions: questions.length || 0
         };
       }
     }
@@ -131,15 +135,42 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const [isTotalTimeExpired, setIsTotalTimeExpired] = useState(false);
 
   // Handlers for state updates
-  const applyQuestionStarted = useCallback((data: {
-    qIndex: number;
-    question: string;
-    options: string[];
-    durationSec: number;
-    questionStartMs: number;
-    totalQuestions: number;
-  }) => {
-    setQuestionData(data);
+  const applyQuestionStarted = useCallback((raw: any) => {
+    if (!raw) return;
+
+    const questions = session.quiz?.questions || [];
+    const totalCount = questions.length || raw.totalQuestions || raw.total_questions || 1;
+    const rawIdx = typeof raw.qIndex === 'number'
+      ? raw.qIndex
+      : (typeof raw.questionIndex === 'number'
+        ? raw.questionIndex
+        : (typeof raw.current_question_index === 'number' ? raw.current_question_index : 0));
+
+    // Bounds check: if quiz has questions and index is past the end, complete quiz!
+    if (questions.length > 0 && rawIdx >= questions.length) {
+      quizAudioService.stopBackgroundMusic();
+      if (onQuizFinishedRef.current) {
+        onQuizFinishedRef.current([]);
+      }
+      return;
+    }
+
+    const fallbackQ = questions[rawIdx];
+    const resolvedQuestion = raw.question || fallbackQ?.question || `Question ${rawIdx + 1}`;
+    const rawOptions = Array.isArray(raw.options) && raw.options.length > 0 ? raw.options : fallbackQ?.options;
+    const resolvedOptions = Array.isArray(rawOptions) ? rawOptions : [];
+
+    const duration = raw.durationSec || raw.duration_sec || session.question_duration_sec || fallbackQ?.durationSec || 20;
+    const startMs = Number(raw.questionStartMs || raw.startMs || raw.question_start_ms) || Date.now();
+
+    setQuestionData({
+      qIndex: rawIdx,
+      question: resolvedQuestion,
+      options: resolvedOptions,
+      durationSec: duration,
+      questionStartMs: startMs,
+      totalQuestions: totalCount
+    });
     setSelectedIndex(null);
     setIsLocked(false);
     setRevealData(null);
@@ -147,10 +178,10 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     hasTriggeredFeedbackRef.current = null;
     setPointsEarned(0);
 
-    const elapsed = (Date.now() - (data.questionStartMs || Date.now())) / 1000;
-    const remaining = Math.max(0, Math.ceil((data.durationSec || 20) - elapsed));
+    const elapsed = (Date.now() - startMs) / 1000;
+    const remaining = Math.max(0, Math.ceil(duration - elapsed));
     setQuestionTimeLeft(remaining);
-  }, []);
+  }, [session.quiz?.questions, session.question_duration_sec]);
 
   const applyQuestionReveal = useCallback((rData: {
     qIndex?: number;
@@ -158,21 +189,29 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     explanation?: string;
   }) => {
     setRevealData(rData);
+    setIsLocked(true);
   }, []);
 
   // Ensure Question 1 / current question rehydrates immediately if session prop updates or loads fresh
   useEffect(() => {
     if (!questionData && (session.status === 'in_progress' || session.status === 'reveal')) {
       const idx = session.current_question_index ?? 0;
-      const q = session.quiz?.questions?.[idx];
+      const questions = session.quiz?.questions || [];
+      if (questions.length > 0 && idx >= questions.length) {
+        if (onQuizFinishedRef.current) {
+          onQuizFinishedRef.current([]);
+        }
+        return;
+      }
+      const q = questions[idx];
       if (q) {
         applyQuestionStarted({
           qIndex: idx,
           question: q.question,
-          options: q.options,
+          options: Array.isArray(q.options) ? q.options : [],
           durationSec: session.question_duration_sec || q.durationSec || 20,
           questionStartMs: Number(session.question_start_ms) || Date.now(),
-          totalQuestions: session.quiz?.questions?.length || 0
+          totalQuestions: questions.length
         });
       }
     }
@@ -206,16 +245,23 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
       if (fresh.status === 'in_progress') {
         const idx = fresh.current_question_index ?? 0;
+        const questions = fresh.quiz?.questions || session.quiz?.questions || [];
+        if (questions.length > 0 && idx >= questions.length) {
+          if (onQuizFinishedRef.current) {
+            onQuizFinishedRef.current([]);
+          }
+          return;
+        }
         if (activeQIndexRef.current !== idx || !questionData) {
-          const q = fresh.quiz?.questions?.[idx];
+          const q = questions[idx];
           if (q) {
             applyQuestionStarted({
               qIndex: idx,
               question: q.question,
-              options: q.options,
+              options: Array.isArray(q.options) ? q.options : [],
               durationSec: fresh.question_duration_sec || q.durationSec || 20,
               questionStartMs: Number(fresh.question_start_ms) || Date.now(),
-              totalQuestions: fresh.quiz?.questions?.length || 0
+              totalQuestions: questions.length
             });
           }
         }
@@ -256,13 +302,13 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
     channel
       .on('broadcast', { event: 'question_started' }, (payload: any) => {
-        const data = payload.payload;
+        const data = payload?.payload;
         if (data) {
           applyQuestionStarted(data);
         }
       })
       .on('broadcast', { event: 'question_reveal' }, (payload: any) => {
-        const rData = payload.payload;
+        const rData = payload?.payload;
         if (rData) {
           applyQuestionReveal(rData);
         }
@@ -270,7 +316,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
         quizAudioService.stopBackgroundMusic();
         if (onQuizFinishedRef.current) {
-          onQuizFinishedRef.current(payload.payload?.results);
+          onQuizFinishedRef.current(payload?.payload?.results || []);
         }
       })
       .on(
@@ -308,16 +354,23 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
           if (updated.status === 'in_progress') {
             const newIdx = updated.current_question_index ?? 0;
+            const questions = session.quiz?.questions || [];
+            if (questions.length > 0 && newIdx >= questions.length) {
+              if (onQuizFinishedRef.current) {
+                onQuizFinishedRef.current([]);
+              }
+              return;
+            }
             if (activeQIndexRef.current !== newIdx || !questionData) {
-              const q = session.quiz?.questions?.[newIdx];
+              const q = questions[newIdx];
               if (q) {
                 applyQuestionStarted({
                   qIndex: newIdx,
                   question: q.question,
-                  options: q.options,
+                  options: Array.isArray(q.options) ? q.options : [],
                   durationSec: updated.question_duration_sec || q.durationSec || 20,
                   questionStartMs: Number(updated.question_start_ms) || Date.now(),
-                  totalQuestions: session.quiz?.questions?.length || 0
+                  totalQuestions: questions.length
                 });
               }
             }
@@ -389,6 +442,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       setQuestionTimeLeft(remaining);
 
       if (remaining <= 0) {
+        setIsLocked(true);
         clearInterval(timer);
       }
     }, 500);
@@ -425,7 +479,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   }, [isTotalTimed, session.expires_at]);
 
   const handleSelectOption = async (index: number) => {
-    if (isLocked || revealData || !questionData || isTotalTimeExpired) return;
+    if (isLocked || revealData || !questionData || isTotalTimeExpired || questionTimeLeft <= 0) return;
 
     // Play subtle UI click sound & unlock audio
     quizAudioService.playClick();
@@ -479,7 +533,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (!questionData) {
+  if (!questionData || !Array.isArray(questionData.options) || questionData.options.length === 0) {
     return (
       <div className="min-h-[70vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-sky-500/20">
         <Sparkles className="w-12 h-12 text-sky-400 animate-pulse" />
@@ -635,7 +689,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
       {/* 4 Interactive Option Cards with Polished Feedback */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-4xl mx-auto w-full">
-        {questionData.options.map((opt, idx) => {
+        {(Array.isArray(questionData.options) ? questionData.options : []).map((opt, idx) => {
           const theme = OPTION_THEMES[idx] || OPTION_THEMES[0];
           const isSelected = selectedIndex === idx;
           const isRevealed = Boolean(revealData);
@@ -666,7 +720,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
             <button
               key={idx}
               type="button"
-              disabled={isLocked || isRevealed || isTotalTimeExpired}
+              disabled={isLocked || isRevealed || isTotalTimeExpired || questionTimeLeft <= 0}
               onClick={() => handleSelectOption(idx)}
               className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
             >
@@ -709,7 +763,11 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
       {/* Footer Lock Status */}
       <div className="text-center text-xs text-slate-400 font-bold">
-        {isLocked && !revealData ? (
+        {questionTimeLeft <= 0 && !revealData ? (
+          <span className="text-amber-300 font-black animate-pulse">
+            ⏳ Time's up! Waiting for teacher to reveal the answer...
+          </span>
+        ) : isLocked && !revealData ? (
           <span className="text-sky-300 font-black animate-pulse">
             ✓ Answer submitted. Waiting for teacher reveal...
           </span>

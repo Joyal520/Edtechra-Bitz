@@ -212,13 +212,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       // 1. Call secure complete_user_onboarding stored procedure
-      try {
-        await supabase.rpc('complete_user_onboarding', {
-          p_full_name: trimmed,
-          p_role: effectiveRole
-        });
-      } catch (rpcErr) {
-        console.warn('[AuthContext] complete_user_onboarding RPC notice:', rpcErr);
+      if (trimmed && supabase) {
+        try {
+          await supabase.rpc('complete_user_onboarding', {
+            p_full_name: trimmed,
+            p_role: effectiveRole
+          });
+        } catch (rpcErr) {
+          console.warn('[AuthContext] complete_user_onboarding RPC notice:', rpcErr);
+        }
       }
 
       // 2. Upsert into public.profiles table
@@ -603,11 +605,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (savedRole && (savedRole === 'student' || savedRole === 'teacher')) {
                   if (!userProfile?.role || userProfile.role === 'student') {
                     if (savedRole === 'teacher' && supabase) {
-                      await supabase.rpc('complete_user_onboarding', {
-                        p_full_name: userProfile?.full_name || newSession.user.user_metadata?.full_name || '',
-                        p_role: 'teacher'
-                      });
-                      userProfile = await fetchUserProfile(newSession.user);
+                      const candidateName = (userProfile?.full_name || newSession.user.user_metadata?.full_name || '').trim();
+                      if (candidateName) {
+                        try {
+                          await supabase.rpc('complete_user_onboarding', {
+                            p_full_name: candidateName,
+                            p_role: 'teacher'
+                          });
+                          userProfile = await fetchUserProfile(newSession.user);
+                        } catch {
+                          // RPC failure fallback
+                        }
+                      }
                     }
                   }
                   localStorage.removeItem('edtechra_onboarding_role');

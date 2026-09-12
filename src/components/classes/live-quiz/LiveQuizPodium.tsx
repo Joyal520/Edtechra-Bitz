@@ -60,14 +60,15 @@ const BronzeCrown = () => (
 );
 
 export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
-  results,
+  results = [],
   classroomId,
   onExit
 }) => {
   const navigate = useNavigate();
   const [showConfetti, setShowConfetti] = useState(true);
 
-  const sorted = [...results].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const safeResults = Array.isArray(results) ? results : [];
+  const sorted = [...safeResults].sort((a, b) => (b.score || 0) - (a.score || 0));
   const first = sorted[0];
   const second = sorted[1];
   const third = sorted[2];

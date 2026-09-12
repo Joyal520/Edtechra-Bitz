@@ -659,8 +659,9 @@ class LiveQuizService {
     try {
       const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
       const token = authSessionData.session?.access_token;
+      const cleanClassroomId = classroomId && classroomId !== 'undefined' && classroomId !== 'null' ? classroomId : 'all';
 
-      const response = await fetch(`/api/classes/${classroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+      const response = await fetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -690,9 +691,10 @@ class LiveQuizService {
     try {
       const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
       const token = authSessionData.session?.access_token;
+      const cleanClassroomId = classroomId && classroomId !== 'undefined' && classroomId !== 'null' ? classroomId : 'all';
 
       // First try backend authoritative reconciliation endpoint with Bearer auth token
-      const response = await fetch(`/api/classes/${classroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+      const response = await fetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1231,6 +1233,28 @@ class LiveQuizService {
       };
     } catch {
       return { answered: false };
+    }
+  }
+
+  /**
+   * Retrieves final results for a completed live quiz session
+   */
+  async getResults(sessionId: string): Promise<{ data?: LiveQuizResult[]; error?: string }> {
+    if (!supabase || !sessionId) return { data: [] };
+    try {
+      const { data, error } = await supabase
+        .from('live_quiz_results')
+        .select(`
+          *,
+          student:profiles!student_id (id, full_name, avatar_url, email)
+        `)
+        .eq('session_id', sessionId)
+        .order('final_rank', { ascending: true });
+
+      if (error) throw error;
+      return { data: data || [] };
+    } catch (err: any) {
+      return { error: err.message, data: [] };
     }
   }
 }

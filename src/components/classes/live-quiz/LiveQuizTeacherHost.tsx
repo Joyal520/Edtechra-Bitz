@@ -302,6 +302,13 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     }
   };
 
+  // Safe fallback: if currentQIndex reaches or exceeds questions length, immediately finalize quiz
+  useEffect(() => {
+    if (questions.length > 0 && currentQIndex >= questions.length && !isFinishing) {
+      handleFinishQuiz();
+    }
+  }, [currentQIndex, questions.length, isFinishing]);
+
   // Manual Next Question handler (skips reveal wait if already in reveal, or triggers reveal first)
   const handleManualNext = () => {
     quizAudioService.playClick();
@@ -658,7 +665,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
       {/* 4 ANSWER CARDS (2x2 GRID)                                                 */}
       {/* ========================================================================= */}
       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 max-w-5xl mx-auto w-full my-3 sm:my-4">
-        {activeQuestion.options.map((optionText, idx) => {
+        {(activeQuestion?.options || []).map((optionText, idx) => {
           const style = OPTION_STYLES[idx] || OPTION_STYLES[0];
           const isCorrect = idx === activeQuestion.correctIndex;
           const isRevealed = phase === 'reveal';

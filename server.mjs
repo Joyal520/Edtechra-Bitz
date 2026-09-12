@@ -2594,14 +2594,27 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
       return res.status(500).json({ success: false, error: 'Database uninitialized.' });
     }
 
-    const { data: session, error: fetchErr } = await serverSupabase
-      .from('live_quiz_sessions')
-      .select('*, quiz:live_quizzes(*)')
-      .eq('id', sessionId)
-      .eq('classroom_id', classroomId)
-      .maybeSingle();
+    let session = null;
+    if (classroomId && classroomId !== 'undefined' && classroomId !== 'null') {
+      const { data } = await serverSupabase
+        .from('live_quiz_sessions')
+        .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+        .eq('id', sessionId)
+        .eq('classroom_id', classroomId)
+        .maybeSingle();
+      session = data;
+    }
 
-    if (fetchErr || !session) {
+    if (!session) {
+      const { data } = await serverSupabase
+        .from('live_quiz_sessions')
+        .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+        .eq('id', sessionId)
+        .maybeSingle();
+      session = data;
+    }
+
+    if (!session) {
       return res.status(404).json({ success: false, error: 'Live quiz session not found.' });
     }
 
@@ -2648,14 +2661,29 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
     // Broadcast Realtime question_started event if pin exists
     if (session.pin) {
       try {
+        const questions = Array.isArray(session.quiz?.questions)
+          ? [...session.quiz.questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
+          : [];
+        const q0 = questions[0];
+        let q0Options = [];
+        if (Array.isArray(q0?.options)) {
+          q0Options = q0.options;
+        } else if (typeof q0?.options === 'string') {
+          try { q0Options = JSON.parse(q0.options); } catch { q0Options = []; }
+        }
+
         const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
         await channel.send({
           type: 'broadcast',
           event: 'question_started',
           payload: {
+            qIndex: 0,
             questionIndex: 0,
-            durationSec: 20,
-            startMs
+            question: q0?.question_text || q0?.question || 'Question 1',
+            options: q0Options,
+            durationSec: q0?.duration_sec || 20,
+            questionStartMs: startMs,
+            totalQuestions: questions.length || 1
           }
         });
       } catch (broadcastErr) {
@@ -2672,6 +2700,12 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
     console.error('Error reconciling scheduled live quiz:', error);
     res.status(500).json({ success: false, error: error.message || 'Reconciliation failed.' });
   }
+});
+
+// Register alias route for reconcile without classroomId
+app.post('/api/live-quiz/sessions/:sessionId/reconcile-scheduled', async (req, res) => {
+  req.params.classroomId = 'all';
+  return app._router.handle(req, res, () => {});
 });
 
 // POST /api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel
@@ -2807,12 +2841,25 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
       return res.status(500).json({ success: false, error: 'Database uninitialized.' });
     }
 
-    const { data: session } = await serverSupabase
-      .from('live_quiz_sessions')
-      .select('id, pin')
-      .eq('id', sessionId)
-      .eq('classroom_id', classroomId)
-      .maybeSingle();
+    let session = null;
+    if (classroomId && classroomId !== 'undefined' && classroomId !== 'null') {
+      const { data } = await serverSupabase
+        .from('live_quiz_sessions')
+        .select('id, pin')
+        .eq('id', sessionId)
+        .eq('classroom_id', classroomId)
+        .maybeSingle();
+      session = data;
+    }
+
+    if (!session) {
+      const { data } = await serverSupabase
+        .from('live_quiz_sessions')
+        .select('id, pin')
+        .eq('id', sessionId)
+        .maybeSingle();
+      session = data;
+    }
 
     await serverSupabase
       .from('live_quiz_sessions')
@@ -2840,6 +2887,12 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
     console.error('Error completing live quiz session:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to complete session.' });
   }
+});
+
+// Register alias route for complete without classroomId
+app.post('/api/live-quiz/sessions/:sessionId/complete', async (req, res) => {
+  req.params.classroomId = 'all';
+  return app._router.handle(req, res, () => {});
 });
 
 

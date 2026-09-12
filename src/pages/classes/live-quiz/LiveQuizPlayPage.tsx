@@ -28,7 +28,16 @@ export const LiveQuizPlayPage: React.FC = () => {
     }
     try {
       const s = await liveQuizService.getSessionById(sessionId || '');
-      if (s) setSession(s);
+      if (s) {
+        setSession(s);
+        if (s.status === 'finished') {
+          setIsFinished(true);
+          const { data } = await liveQuizService.getResults(s.id);
+          if (data && data.length > 0) {
+            setFinalResults(data);
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to load play session', err);
     } finally {
@@ -36,12 +45,21 @@ export const LiveQuizPlayPage: React.FC = () => {
     }
   };
 
-  const handleQuizFinished = useCallback((results: any) => {
-    if (Array.isArray(results)) {
+  const handleQuizFinished = useCallback(async (results: any) => {
+    if (Array.isArray(results) && results.length > 0) {
       setFinalResults(results);
+    } else if (sessionId) {
+      try {
+        const { data } = await liveQuizService.getResults(sessionId);
+        if (data && data.length > 0) {
+          setFinalResults(data);
+        }
+      } catch {
+        // ignore
+      }
     }
     setIsFinished(true);
-  }, []);
+  }, [sessionId]);
 
   if (loading || !session) {
     return (

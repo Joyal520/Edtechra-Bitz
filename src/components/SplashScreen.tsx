@@ -389,7 +389,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
           {/* Layer 1: Background Soft Flowing Wave */}
           <path
-            d="M 0 110 C 360 160 720 70 1080 120 C 1440 170 1800 110 2160 160 C 2520 70 2880 120 L 2880 200 L 0 200 Z"
+            d="M 0 110 C 360 160 720 70 1080 120 C 1440 170 1800 110 2160 160 C 2400 210 2640 70 2880 120 L 2880 200 L 0 200 Z"
             fill="url(#backWaveGrad)"
           />
 
