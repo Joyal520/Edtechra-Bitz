@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, BookOpen, CheckCircle, Award } from 'lucide-react';
+import { Users, BookOpen, CheckCircle, Award, ChevronRight } from 'lucide-react';
 import { ClassroomStats as IClassroomStats } from '@/types/classroom';
 
 interface ClassroomStatsProps {
@@ -8,69 +8,82 @@ interface ClassroomStatsProps {
 
 export const ClassroomStats: React.FC<ClassroomStatsProps> = ({ stats }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       
-      {/* 1. Enrolled Students (Pastel Blue) */}
-      <div className="bg-[#e8f3fa] rounded-[24px] p-5 border border-sky-200/80 shadow-xs flex items-center gap-4.5 transition-all hover:shadow-md">
-        <div className="w-13 h-13 rounded-full bg-white text-[#026fc3] flex items-center justify-center shrink-0 shadow-2xs border border-sky-100">
-          <Users className="w-6 h-6 stroke-[2.2]" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {stats.total_students.toLocaleString()}
+      {/* 1. Enrolled Students (Blue) */}
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition-all duration-200">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center shrink-0 border border-sky-100">
+            <Users className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <div className="text-xs text-slate-600 font-bold tracking-wide">
-            Enrolled Students
+          <div className="min-w-0">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+              {stats.total_students.toLocaleString()}
+            </div>
+            <div className="text-[11px] sm:text-xs text-slate-500 font-semibold truncate mt-1">
+              Enrolled Students
+            </div>
           </div>
         </div>
+        <ChevronRight className="w-4 h-4 text-sky-400 shrink-0 ml-1" />
       </div>
 
-      {/* 2. Active Tasks (Pastel Purple) */}
-      <div className="bg-[#f3edf9] rounded-[24px] p-5 border border-purple-200/80 shadow-xs flex items-center gap-4.5 transition-all hover:shadow-md">
-        <div className="w-13 h-13 rounded-full bg-white text-[#7c3aed] flex items-center justify-center shrink-0 shadow-2xs border border-purple-100">
-          <BookOpen className="w-6 h-6 stroke-[2.2]" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {stats.total_assignments.toLocaleString()}
+      {/* 2. Active Tasks (Purple) */}
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition-all duration-200">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#7c3aed] flex items-center justify-center shrink-0 border border-purple-100">
+            <BookOpen className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <div className="text-xs text-slate-600 font-bold tracking-wide">
-            Active Tasks
+          <div className="min-w-0">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+              {stats.total_assignments.toLocaleString()}
+            </div>
+            <div className="text-[11px] sm:text-xs text-slate-500 font-semibold truncate mt-1">
+              Active Tasks
+            </div>
           </div>
         </div>
+        <ChevronRight className="w-4 h-4 text-purple-400 shrink-0 ml-1" />
       </div>
 
-      {/* 3. Submissions (Pastel Green) */}
-      <div className="bg-[#eef8f1] rounded-[24px] p-5 border border-emerald-200/80 shadow-xs flex items-center gap-4.5 transition-all hover:shadow-md">
-        <div className="w-13 h-13 rounded-full bg-white text-[#059669] flex items-center justify-center shrink-0 shadow-2xs border border-emerald-100">
-          <CheckCircle className="w-6 h-6 stroke-[2.2]" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {stats.total_submissions.toLocaleString()}
+      {/* 3. Submissions (Green) */}
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition-all duration-200">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#059669] flex items-center justify-center shrink-0 border border-emerald-100">
+            <CheckCircle className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <div className="text-xs text-slate-600 font-bold tracking-wide">
-            Submissions
+          <div className="min-w-0">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+              {stats.total_submissions.toLocaleString()}
+            </div>
+            <div className="text-[11px] sm:text-xs text-slate-500 font-semibold truncate mt-1">
+              Submissions
+            </div>
           </div>
         </div>
+        <ChevronRight className="w-4 h-4 text-emerald-400 shrink-0 ml-1" />
       </div>
 
-      {/* 4. Completion Rate (Pastel Amber) */}
-      <div className="bg-[#fbf4e4] rounded-[24px] p-5 border border-amber-200/80 shadow-xs flex items-center gap-4.5 transition-all hover:shadow-md">
-        <div className="w-13 h-13 rounded-full bg-white text-[#d97706] flex items-center justify-center shrink-0 shadow-2xs border border-amber-100">
-          <Award className="w-6 h-6 stroke-[2.2]" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {stats.average_completion_percent}%
+      {/* 4. Completion Rate (Amber) */}
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between hover:shadow-xs transition-all duration-200">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#d97706] flex items-center justify-center shrink-0 border border-amber-100">
+            <Award className="w-5 h-5 stroke-[2.2]" />
           </div>
-          <div className="text-xs text-slate-600 font-bold tracking-wide">
-            Completion Rate
+          <div className="min-w-0">
+            <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+              {stats.average_completion_percent}%
+            </div>
+            <div className="text-[11px] sm:text-xs text-slate-500 font-semibold truncate mt-1">
+              Completion Rate
+            </div>
           </div>
         </div>
+        <ChevronRight className="w-4 h-4 text-amber-400 shrink-0 ml-1" />
       </div>
 
     </div>
   );
 };
+
 

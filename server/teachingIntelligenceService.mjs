@@ -29,6 +29,142 @@ const CANDIDATE_GEMINI_MODELS = [
   'gemini-1.5-pro'
 ];
 
+/**
+ * Aggregates writing challenge analytics, criteria mastery, and AI authenticity signals for the classroom.
+ */
+export async function computeWritingChallengeInsights(serverSupabase, classroomId) {
+  if (!serverSupabase || !classroomId) {
+    return {
+      total_submissions: 0,
+      total_challenges: 0,
+      average_final_score: 0,
+      criteria_mastery: [],
+      authenticity: { minimal_risk_percent: 100, elevated_risk_count: 0 },
+      writing_insights: []
+    };
+  }
+
+  try {
+    const { data: challenges } = await serverSupabase
+      .from('ai_challenges')
+      .select('id, title, category, max_marks')
+      .eq('classroom_id', classroomId);
+
+    if (!challenges || challenges.length === 0) {
+      return {
+        total_submissions: 0,
+        total_challenges: 0,
+        average_final_score: 0,
+        criteria_mastery: [],
+        authenticity: { minimal_risk_percent: 100, elevated_risk_count: 0 },
+        writing_insights: []
+      };
+    }
+
+    const challengeIds = challenges.map((c) => c.id);
+
+    const { data: submissions } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select(`
+        id,
+        challenge_id,
+        student_id,
+        ai_original_score,
+        final_score,
+        ai_score,
+        percentage,
+        criteria_json,
+        ai_penalty,
+        ai_detection_score,
+        ai_risk_level,
+        word_count,
+        submitted_at
+      `)
+      .in('challenge_id', challengeIds)
+      .eq('status', 'completed');
+
+    if (!submissions || submissions.length === 0) {
+      return {
+        total_submissions: 0,
+        total_challenges: challenges.length,
+        average_final_score: 0,
+        criteria_mastery: [],
+        authenticity: { minimal_risk_percent: 100, elevated_risk_count: 0 },
+        writing_insights: []
+      };
+    }
+
+    const criteriaBuckets = {};
+    let totalScore = 0;
+    let minimalRiskCount = 0;
+    let elevatedRiskCount = 0;
+
+    for (const sub of submissions) {
+      const finalScore = sub.final_score ?? sub.ai_score ?? 0;
+      totalScore += finalScore;
+
+      const detectionScore = Number(sub.ai_detection_score) || 0;
+      if (detectionScore <= 30) {
+        minimalRiskCount++;
+      } else {
+        elevatedRiskCount++;
+      }
+
+      const rawCriteria = Array.isArray(sub.criteria_json) ? sub.criteria_json : [];
+      for (const crit of rawCriteria) {
+        if (!crit || typeof crit !== 'object' || !crit.name || crit.is_ai_analysis || crit.__is_ai_analysis) continue;
+        const name = crit.name.trim();
+        if (!criteriaBuckets[name]) {
+          criteriaBuckets[name] = { totalEarned: 0, totalMax: 0, count: 0 };
+        }
+        criteriaBuckets[name].totalEarned += Number(crit.score) || 0;
+        criteriaBuckets[name].totalMax += Number(crit.max) || 20;
+        criteriaBuckets[name].count++;
+      }
+    }
+
+    const criteriaMastery = Object.entries(criteriaBuckets).map(([name, stat]) => ({
+      name,
+      average_percentage: stat.totalMax > 0 ? Math.round((stat.totalEarned / stat.totalMax) * 100) : 0,
+      evaluations_count: stat.count
+    })).sort((a, b) => b.average_percentage - a.average_percentage);
+
+    const avgScore = Math.round(totalScore / submissions.length);
+    const minimalRiskPercent = Math.round((minimalRiskCount / submissions.length) * 100);
+
+    const writingInsights = [];
+    if (criteriaMastery.length > 0) {
+      writingInsights.push(`Strongest writing dimension: ${criteriaMastery[0].name} (${criteriaMastery[0].average_percentage}% mastery)`);
+      if (criteriaMastery.length > 1) {
+        const lowest = criteriaMastery[criteriaMastery.length - 1];
+        writingInsights.push(`Area for pedagogical focus: ${lowest.name} (${lowest.average_percentage}% average)`);
+      }
+    }
+
+    return {
+      total_submissions: submissions.length,
+      total_challenges: challenges.length,
+      average_final_score: avgScore,
+      criteria_mastery: criteriaMastery,
+      authenticity: {
+        minimal_risk_percent: minimalRiskPercent,
+        elevated_risk_count: elevatedRiskCount
+      },
+      writing_insights: writingInsights
+    };
+  } catch (err) {
+    console.warn('[TeachingIntelligence] Notice computing writing insights:', err.message);
+    return {
+      total_submissions: 0,
+      total_challenges: 0,
+      average_final_score: 0,
+      criteria_mastery: [],
+      authenticity: { minimal_risk_percent: 100, elevated_risk_count: 0 },
+      writing_insights: []
+    };
+  }
+}
+
 // ----------------------------------------------------------------------------
 // 1. DETERMINISTIC CLASSROOM ANALYTICS AGGREGATOR (0 AI TOKENS)
 // ----------------------------------------------------------------------------
@@ -93,6 +229,8 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
 
     const dataHash = crypto.createHash('sha256').update(hashPayload).digest('hex').slice(0, 16);
 
+    const writingIntelligence = await computeWritingChallengeInsights(serverSupabase, classroomId);
+
     return {
       classroom: {
         id: analytics.classroom.id,
@@ -119,6 +257,7 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       students_needing_attention: studentsNeedingAttention.length > 0 ? studentsNeedingAttention : [
         { student_ref: 'Classroom', issue: 'All students are currently performing steadily.', suggested_support: 'Continue with planned curriculum units.' }
       ],
+      writing_intelligence: writingIntelligence,
       data_hash: dataHash,
       computed_at: new Date().toISOString()
     };
@@ -388,6 +527,7 @@ function normalizeIntelligenceOutput(raw, metrics) {
     students_needing_attention: Array.isArray(raw.students_needing_attention) && raw.students_needing_attention.length > 0
       ? raw.students_needing_attention.slice(0, 4)
       : metrics.students_needing_attention,
+    writing_intelligence: raw.writing_intelligence || metrics.writing_intelligence,
     recommended_actions: Array.isArray(raw.recommended_actions) && raw.recommended_actions.length > 0
       ? raw.recommended_actions.slice(0, 3)
       : [
@@ -422,6 +562,7 @@ function synthesizeDeterministicIntelligence(metrics) {
       detail: `Scored ${w.score}% — students need reinforcement on foundational examples.`
     })),
     students_needing_attention: metrics.students_needing_attention,
+    writing_intelligence: metrics.writing_intelligence,
     recommended_actions: [
       `Review ${primaryWeak.topic} using guided classroom examples before the next major exam.`,
       'Assign differentiated practice tasks to students scoring below 60%.',

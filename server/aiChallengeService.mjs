@@ -99,6 +99,57 @@ export const CATEGORY_DEFAULT_CRITERIA = {
 };
 
 /**
+ * AI Content Analysis and Threshold Policy
+ * Safeguarded tiers ensure constructive probabilistic analysis without unduly punishing students.
+ */
+export const AI_CONTENT_POLICY = {
+  TIERS: [
+    { maxLikelihood: 30, penaltyPercent: 0, maxDeduction: 0, riskLevel: 'Minimal' },
+    { maxLikelihood: 60, penaltyPercent: 0.05, maxDeduction: 4, riskLevel: 'Low' },
+    { maxLikelihood: 80, penaltyPercent: 0.10, maxDeduction: 8, riskLevel: 'Moderate' },
+    { maxLikelihood: 100, penaltyPercent: 0.18, maxDeduction: 16, riskLevel: 'High' }
+  ],
+  MAX_SAFEGUARD_PENALTY_RATIO: 0.30 // Total penalty cannot exceed 30% of original score
+};
+
+/**
+ * Calculates AI content likelihood penalty with safeguards.
+ */
+export function calculateAiContentPenalty({ originalScore, maxMarks = 100, aiLikelihood = 0 }) {
+  const score = Math.max(0, Number(originalScore) || 0);
+  const likelihood = Math.min(100, Math.max(0, Number(aiLikelihood) || 0));
+
+  let matchedTier = AI_CONTENT_POLICY.TIERS[0];
+  for (const tier of AI_CONTENT_POLICY.TIERS) {
+    if (likelihood <= tier.maxLikelihood) {
+      matchedTier = tier;
+      break;
+    }
+  }
+
+  // Tier raw deduction based on percentage of original score, bounded by maxDeduction
+  const tierDeduction = Math.min(score * matchedTier.penaltyPercent, matchedTier.maxDeduction);
+
+  // Safeguard: penalty cannot exceed 30% of original score
+  const maxSafeguard = score * AI_CONTENT_POLICY.MAX_SAFEGUARD_PENALTY_RATIO;
+  const rawPenalty = Math.min(tierDeduction, maxSafeguard);
+
+  // Round penalty to 1 decimal place or integer
+  const penalty = Math.round(rawPenalty * 10) / 10;
+  const finalScore = Math.max(0, Math.round((score - penalty) * 10) / 10);
+  const percentage = maxMarks > 0 ? Math.min(100, Math.max(0, Math.round((finalScore / maxMarks) * 100))) : 0;
+
+  return {
+    originalScore: score,
+    penalty,
+    finalScore,
+    percentage,
+    aiLikelihood: Math.round(likelihood),
+    riskLevel: matchedTier.riskLevel
+  };
+}
+
+/**
  * Calculates programmatic word count from string
  */
 export function calculateWordCount(text) {
@@ -501,29 +552,59 @@ class AiChallengeQueue {
         : null;
 
       if (this.serverSupabase) {
+        const updatePayload = {
+          word_count: actualWordCount,
+          ai_score: validated.final_score,
+          final_score: validated.final_score,
+          percentage: validated.percentage,
+          criteria_json: validated.criteria,
+          ai_feedback: validated.feedback,
+          ai_original_score: validated.original_score,
+          ai_penalty: validated.penalty,
+          ai_detection_score: validated.ai_detection_score,
+          ai_risk_level: validated.ai_risk_level,
+          status: 'completed',
+          processed_at: processedAt.toISOString(),
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString()
+        };
+
         const { error: updateError } = await this.serverSupabase
           .from('ai_challenge_submissions')
-          .update({
-            word_count: actualWordCount,
-            ai_score: validated.score,
-            final_score: validated.score,
-            percentage: validated.percentage,
-            criteria_json: validated.criteria,
-            ai_feedback: validated.feedback,
-            ai_original_score: validated.score,
-            status: 'completed',
-            processed_at: processedAt.toISOString(),
-            expires_at: expiresAt,
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload)
           .eq('id', submissionId);
 
         if (updateError) {
-          throw new Error(`Failed to update submission record: ${updateError.message}`);
+          // If specific new columns are not yet in DB schema, gracefully update without them
+          if (updateError.message && (updateError.message.includes('column') || updateError.message.includes('does not exist'))) {
+            console.warn('[AI Challenge Engine] Retrying update with basic columns:', updateError.message);
+            const fallbackPayload = {
+              word_count: actualWordCount,
+              ai_score: validated.final_score,
+              final_score: validated.final_score,
+              percentage: validated.percentage,
+              criteria_json: validated.criteria,
+              ai_feedback: validated.feedback,
+              ai_original_score: validated.original_score,
+              status: 'completed',
+              processed_at: processedAt.toISOString(),
+              expires_at: expiresAt,
+              updated_at: new Date().toISOString()
+            };
+            const { error: fallbackError } = await this.serverSupabase
+              .from('ai_challenge_submissions')
+              .update(fallbackPayload)
+              .eq('id', submissionId);
+            if (fallbackError) {
+              throw new Error(`Failed to update submission record: ${fallbackError.message}`);
+            }
+          } else {
+            throw new Error(`Failed to update submission record: ${updateError.message}`);
+          }
         }
       }
 
-      console.log(`[AI Challenge Engine] Successfully evaluated submission ${submissionId} (Score: ${validated.score}/${maxMarks})`);
+      console.log(`[AI Challenge Engine] Successfully evaluated submission ${submissionId} (Original: ${validated.original_score}, Penalty: -${validated.penalty}, Final: ${validated.final_score}/${maxMarks})`);
     } catch (err) {
       console.error(`[AI Challenge Engine] Error evaluating submission ${submissionId}:`, err);
       if (this.serverSupabase) {
@@ -570,6 +651,10 @@ Student Submission Data:
 ${normalizedText ? normalizedText.slice(0, 4000) : '[Uploaded visual/image submission attached]'}
 """
 
+Evaluate both:
+1. Writing quality across the fixed criteria rubric (assign scores strictly reflecting the student's execution).
+2. AI Content Analysis: Assess likelihood (0 to 100) that this text was generated or heavily assisted by an AI model (evaluating formulaic phrase transitions, lack of natural idiosyncrasies, uniform clause lengths, robotic tone).
+
 Return ONLY a valid JSON object matching this schema:
 {
   "score": number (0 to ${maxMarks}),
@@ -578,6 +663,11 @@ Return ONLY a valid JSON object matching this schema:
   "criteria": [
     ${evalSpec.criteria.map((c) => `{"name": "${c.name}", "score": number (0 to ${c.max}), "max": ${c.max}}`).join(',\n    ')}
   ],
+  "ai_content_analysis": {
+    "likelihood_percentage": number (integer 0 to 100 estimated likelihood of AI generation/assistance),
+    "risk_level": "Minimal" | "Low" | "Moderate" | "High",
+    "observation": string (STRICT LIMIT: 25 words or fewer. Objective, non-accusatory observation on voice and stylistic variation)
+  },
   "feedback": string (STRICT LIMIT: 50 words or fewer. Constructive, educational summary highlighting key strength and area to improve.)
 }
 
@@ -585,7 +675,8 @@ RULES:
 1. Feedback MUST contain 50 words or fewer.
 2. Every criterion score must be non-negative and <= criterion max.
 3. Total score must equal the sum of criteria scores.
-4. Do NOT reproduce the student text or provide chain-of-thought.`;
+4. ai_content_analysis.observation must be non-accusatory, objective, and <= 25 words.
+5. Do NOT reproduce the student text or provide chain-of-thought.`;
 
     if (!this.serverOpenAI) {
       // Fallback evaluation if OpenAI is not initialized in local test
@@ -600,6 +691,11 @@ RULES:
         max_score: maxMarks,
         percentage: Math.round((sumScore / maxMarks) * 100),
         criteria: fallbackCriteria,
+        ai_content_analysis: {
+          likelihood_percentage: 12,
+          risk_level: 'Minimal',
+          observation: 'Natural student phrasing with authentic voice and varied sentence structures.'
+        },
         feedback: 'Creative and well-structured response that meets the prompt requirements with clear organization and appropriate vocabulary.'
       };
     }
@@ -628,7 +724,7 @@ RULES:
       messages,
       response_format: { type: 'json_object' },
       temperature: 0.2,
-      max_tokens: 500
+      max_tokens: 600
     });
 
     const content = response.choices[0]?.message?.content;
@@ -640,14 +736,12 @@ RULES:
   }
 
   /**
-   * Validates and ensures AI output adheres to schema and ≤50 word limit
+   * Validates and ensures AI output adheres to schema, calculates AI penalty, and bounds limits
    */
   validateAndNormalizeAiOutput(rawOutput, maxMarks, expectedCriteria = []) {
     let score = Number(rawOutput?.score);
     if (isNaN(score) || score < 0) score = 0;
     if (score > maxMarks) score = maxMarks;
-
-    const percentage = Math.min(100, Math.max(0, Math.round((score / maxMarks) * 100)));
 
     let criteria = Array.isArray(rawOutput?.criteria) ? rawOutput.criteria : [];
     if (criteria.length === 0 && expectedCriteria.length > 0) {
@@ -675,10 +769,47 @@ RULES:
       feedback = words.slice(0, 50).join(' ') + '.';
     }
 
+    // AI content analysis normalization & penalty computation
+    const rawAnalysis = rawOutput?.ai_content_analysis || {};
+    let likelihood = Math.min(100, Math.max(0, Math.round(Number(rawAnalysis.likelihood_percentage) || 0)));
+
+    const penaltyResult = calculateAiContentPenalty({
+      originalScore: score,
+      maxMarks,
+      aiLikelihood: likelihood
+    });
+
+    let observation = (rawAnalysis.observation || '').trim();
+    if (!observation) {
+      observation = likelihood <= 30
+        ? 'Natural student voice with varied phrasing.'
+        : likelihood <= 60
+        ? 'Generally authentic voice with some uniform patterns.'
+        : likelihood <= 80
+        ? 'Noticeable structural patterns and formulaic phrasing.'
+        : 'Predominantly uniform sentence complexity and formulaic cadence.';
+    }
+    const obsWords = observation.split(/\s+/).filter(Boolean);
+    if (obsWords.length > 25) {
+      observation = obsWords.slice(0, 25).join(' ') + '.';
+    }
+
+    const aiContentAnalysis = {
+      likelihood_percentage: penaltyResult.aiLikelihood,
+      risk_level: penaltyResult.riskLevel,
+      observation,
+      penalty: penaltyResult.penalty
+    };
+
     return {
-      score,
-      max_score: maxMarks,
-      percentage,
+      original_score: penaltyResult.originalScore,
+      final_score: penaltyResult.finalScore,
+      score: penaltyResult.finalScore, // For backwards compatibility
+      penalty: penaltyResult.penalty,
+      percentage: penaltyResult.percentage,
+      ai_detection_score: penaltyResult.aiLikelihood,
+      ai_risk_level: penaltyResult.riskLevel,
+      ai_content_analysis: aiContentAnalysis,
       criteria,
       feedback
     };

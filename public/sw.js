@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edtechra-bitz-v9';
+const CACHE_NAME = 'edtechra-bitz-v10';
 
 const STATIC_PRECACHE = [
   '/',
@@ -89,19 +89,25 @@ self.addEventListener('fetch', (event) => {
   // Handle Navigation requests: Network-First to guarantee fresh application state
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && response.type === 'basic' && isHttpUrl) {
+      (async () => {
+        try {
+          const response = await fetch(event.request);
+          if (response && response.status === 200 && (response.type === 'basic' || response.type === 'default') && isHttpUrl) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, clone).catch(() => {});
-            });
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, clone).catch(() => {});
           }
           return response;
-        })
-        .catch(() => {
-          return caches.match('/index.html') || caches.match('/');
-        })
+        } catch (err) {
+          const cached = (await caches.match('/index.html')) || (await caches.match('/'));
+          if (cached) return cached;
+          return new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+        }
+      })()
     );
     return;
   }
@@ -113,37 +119,53 @@ self.addEventListener('fetch', (event) => {
     event.request.destination === 'document'
   ) {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic' && isHttpUrl) {
+      (async () => {
+        try {
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'default') && isHttpUrl) {
             const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, clone).catch(() => {});
-            });
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, clone).catch(() => {});
           }
           return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
+        } catch (err) {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return new Response('', { status: 408, statusText: 'Request Timeout' });
+        }
+      })()
     );
     return;
   }
 
   // Cache-first with network revalidation for images/icons
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic' && isHttpUrl) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
+    (async () => {
+      const cached = await caches.match(event.request);
+      if (cached) {
+        fetch(event.request)
+          .then(async (networkResponse) => {
+            if (networkResponse && networkResponse.status === 200 && isHttpUrl) {
+              const clone = networkResponse.clone();
+              const cache = await caches.open(CACHE_NAME);
               cache.put(event.request, clone).catch(() => {});
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
+            }
+          })
+          .catch(() => {});
+        return cached;
+      }
 
-      return cachedResponse || fetchPromise;
-    })
+      try {
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && networkResponse.status === 200 && isHttpUrl) {
+          const clone = networkResponse.clone();
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(event.request, clone).catch(() => {});
+        }
+        return networkResponse;
+      } catch (err) {
+        return new Response('', { status: 404, statusText: 'Not Found' });
+      }
+    })()
   );
 });

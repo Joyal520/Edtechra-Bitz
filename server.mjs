@@ -5366,13 +5366,20 @@ app.get('/api/classes/challenges/:id/leaderboard', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
-    const { data: submissions, error } = await serverSupabase
+    let submissions = [];
+    const { data: subData, error } = await serverSupabase
       .from('ai_challenge_submissions')
       .select(`
         id,
         student_id,
         final_score,
         ai_score,
+        ai_original_score,
+        ai_penalty,
+        ai_detection_score,
+        ai_risk_level,
+        criteria_json,
+        ai_feedback,
         percentage,
         status,
         submitted_at,
@@ -5384,7 +5391,35 @@ app.get('/api/classes/challenges/:id/leaderboard', async (req, res) => {
       .order('final_score', { ascending: false })
       .order('submitted_at', { ascending: true });
 
-    if (error) throw error;
+    if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
+      console.warn('[Leaderboard] Fallback to standard columns:', error.message);
+      const fallback = await serverSupabase
+        .from('ai_challenge_submissions')
+        .select(`
+          id,
+          student_id,
+          final_score,
+          ai_score,
+          ai_original_score,
+          criteria_json,
+          ai_feedback,
+          percentage,
+          status,
+          submitted_at,
+          teacher_adjusted,
+          student:profiles!student_id (id, full_name, avatar_url)
+        `)
+        .eq('challenge_id', challengeId)
+        .eq('status', 'completed')
+        .order('final_score', { ascending: false })
+        .order('submitted_at', { ascending: true });
+      if (fallback.error) throw fallback.error;
+      submissions = fallback.data || [];
+    } else if (error) {
+      throw error;
+    } else {
+      submissions = subData || [];
+    }
 
     const ranked = (submissions || []).map((sub, idx) => ({
       rank: idx + 1,

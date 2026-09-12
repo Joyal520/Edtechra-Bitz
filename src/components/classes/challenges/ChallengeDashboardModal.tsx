@@ -20,6 +20,7 @@ import {
 } from '@/types/aiChallenge';
 import { aiChallengeService } from '@/services/aiChallengeService';
 import { useClassroomAuth } from '@/hooks/useClassroomAuth';
+import { ChallengeLeaderboardView } from './ChallengeLeaderboardView';
 
 interface ChallengeDashboardModalProps {
   isOpen: boolean;
@@ -253,72 +254,13 @@ export const ChallengeDashboardModal: React.FC<ChallengeDashboardModalProps> = (
               <p className="text-xs text-slate-500 font-bold">Loading challenge data...</p>
             </div>
           ) : activeTab === 'leaderboard' ? (
-            /* Leaderboard View */
-            leaderboard.length === 0 ? (
-              <div className="py-12 text-center space-y-2">
-                <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
-                <h4 className="text-sm font-black text-slate-700">No evaluations completed yet</h4>
-                <p className="text-xs text-slate-400 max-w-xs mx-auto font-medium">
-                  Submissions are processed asynchronously by the AI assessment engine. Rankings appear once evaluated.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-slate-600 font-black uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="py-3 px-4">Rank</th>
-                      <th className="py-3 px-4">Student</th>
-                      <th className="py-3 px-4">Score</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4">Submitted</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold">
-                    {leaderboard.map((entry) => {
-                      const isTop1 = entry.rank === 1;
-                      const isTop2 = entry.rank === 2;
-                      const isTop3 = entry.rank === 3;
-
-                      return (
-                        <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-1.5">
-                              {isTop1 && <Medal className="w-5 h-5 text-amber-500 shrink-0" />}
-                              {isTop2 && <Medal className="w-5 h-5 text-slate-400 shrink-0" />}
-                              {isTop3 && <Medal className="w-5 h-5 text-amber-700 shrink-0" />}
-                              <span className={`font-black ${isTop1 ? 'text-amber-600 text-sm' : 'text-slate-700'}`}>
-                                #{entry.rank}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-black shrink-0">
-                                {entry.student?.full_name?.charAt(0) || 'S'}
-                              </div>
-                              <span className="text-slate-900">{entry.student?.full_name || 'Student'}</span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className="text-sm font-black text-indigo-700">{entry.final_score}</span>
-                            <span className="text-[10px] text-slate-400 font-bold"> / {challenge.max_marks}</span>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700">
-                              Complete
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-400 text-[11px] font-medium">
-                            {new Date(entry.submitted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
+            <ChallengeLeaderboardView
+              maxMarks={challenge.max_marks}
+              leaderboard={leaderboard}
+              mySubmission={challenge.my_submission}
+              currentUserId={classroomAuth.user?.id}
+              isLoading={loading}
+            />
           ) : (
             /* Teacher Submissions View */
             <div className="space-y-3">

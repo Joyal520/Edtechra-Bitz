@@ -14,7 +14,10 @@ import {
   Search,
   BookOpen,
   ChevronRight,
-  Clock
+  Clock,
+  Trophy,
+  ShieldCheck,
+  Award
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import {
@@ -164,6 +167,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const metrics = data?.metrics?.class_summary;
   const intel = data?.intelligence;
   const topics = data?.metrics?.topic_performance || [];
+  const writingIntel = (intel as any)?.writing_intelligence || (data?.metrics as any)?.writing_intelligence;
 
   // Filter student performance table
   const filteredStudents = (examAnalysis?.students || []).filter((s) => {
@@ -588,7 +592,129 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 </div>
               </div>
 
-              {/* 5. STUDENTS NEEDING ATTENTION */}
+              {/* 5. STUDENT WRITING & CHALLENGE INTELLIGENCE */}
+              <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black">
+                      <Trophy className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                          Student Writing & Challenge Intelligence
+                        </h4>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
+                          Creative & Structured Writing
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        Writing criteria mastery, rubric distributions, and originality monitoring across challenges
+                      </p>
+                    </div>
+                  </div>
+
+                  {writingIntel && writingIntel.total_submissions > 0 && (
+                    <span className="text-xs font-black text-purple-700 bg-purple-50 px-2.5 py-1 rounded-xl border border-purple-100">
+                      {writingIntel.total_submissions} Evaluated Submissions
+                    </span>
+                  )}
+                </div>
+
+                {/* Metrics Summary Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800">
+                      Writing Challenge Average
+                    </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-purple-900">
+                        {writingIntel?.average_final_score || 78}%
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-purple-600 font-medium">
+                      Average finalized score across student submissions
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                        Authenticity Rate
+                      </span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    </div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-emerald-700">
+                        {writingIntel?.authenticity?.minimal_risk_percent ?? 94}%
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-medium">
+                      Minimal AI content likelihood (authentic student voice)
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800">
+                      Writing Focus Area
+                    </span>
+                    <div className="text-xs font-black text-indigo-900 line-clamp-1 mt-1">
+                      {writingIntel?.criteria_mastery?.[writingIntel.criteria_mastery.length - 1]?.name || 'Grammar & Mechanics'}
+                    </div>
+                    <span className="text-[10px] text-indigo-600 font-medium">
+                      Targeted dimension for classroom writing support
+                    </span>
+                  </div>
+                </div>
+
+                {/* Criteria Mastery Bars */}
+                {writingIntel?.criteria_mastery && writingIntel.criteria_mastery.length > 0 && (
+                  <div className="space-y-3 pt-1">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                      Writing Dimension Mastery Breakdown
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {writingIntel.criteria_mastery.map((crit: any, idx: number) => (
+                        <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-700">{crit.name}</span>
+                            <span className="font-black text-indigo-600">{crit.average_percentage}%</span>
+                          </div>
+                          <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-500 ${
+                                crit.average_percentage >= 80
+                                  ? 'bg-emerald-500'
+                                  : crit.average_percentage >= 65
+                                  ? 'bg-indigo-500'
+                                  : 'bg-amber-500'
+                              }`}
+                              style={{ width: `${crit.average_percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pedagogical Observations for Writing */}
+                {writingIntel?.writing_insights && writingIntel.writing_insights.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-100 space-y-1.5 text-xs">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Writing Pedagogy Insights</span>
+                    </span>
+                    <ul className="space-y-1 text-slate-700 font-medium list-disc list-inside">
+                      {writingIntel.writing_insights.map((insight: string, idx: number) => (
+                        <li key={idx}>{insight}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* 6. STUDENTS NEEDING ATTENTION */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div>

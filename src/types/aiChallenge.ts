@@ -104,6 +104,10 @@ export interface AiChallengeSubmission {
   criteria_json?: AiChallengeCriterion[] | null;
   ai_feedback?: string | null;
   ai_original_score?: number | null;
+  ai_detection_score?: number | null;
+  ai_risk_level?: string | null;
+  ai_penalty?: number | null;
+  ai_content_analysis?: AiContentAnalysis | null;
   teacher_adjusted?: boolean;
   teacher_adjustment_reason?: string | null;
   error_message?: string | null;
@@ -119,16 +123,30 @@ export interface AiChallengeSubmission {
   } | null;
 }
 
+export interface AiContentAnalysis {
+  likelihood_percentage: number;
+  risk_level: 'Minimal' | 'Low' | 'Moderate' | 'High' | string;
+  observation?: string;
+  penalty?: number;
+}
+
 export interface AiChallengeLeaderboardEntry {
   rank: number;
   id: string;
   student_id: string;
   final_score: number;
   ai_score?: number | null;
+  ai_original_score?: number | null;
+  ai_penalty?: number | null;
+  ai_detection_score?: number | null;
+  ai_risk_level?: string | null;
   percentage: number;
   status: AiChallengeSubmissionStatus;
   submitted_at: string;
   teacher_adjusted?: boolean;
+  ai_feedback?: string | null;
+  criteria_json?: AiChallengeCriterion[] | null;
+  ai_content_analysis?: AiContentAnalysis | null;
   student?: {
     id: string;
     full_name?: string | null;
