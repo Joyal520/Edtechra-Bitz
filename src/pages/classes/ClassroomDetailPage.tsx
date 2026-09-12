@@ -246,10 +246,21 @@ export const ClassroomDetailPage: React.FC = () => {
       });
 
       // Direct navigation without PIN prompt
-      if (session.status === 'scheduled' || session.status === 'lobby') {
+      const scheduledTimeStr = session.scheduled_start_at || session.started_at;
+      const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
+
+      if ((session.status === 'scheduled' || session.status === 'lobby') && !isScheduledTimeReached) {
         navigate(`/classes/${id}/live-quiz/lobby/${session.pin}`);
       } else {
-        navigate(`/classes/${id}/live-quiz/play/${session.id}`);
+        navigate(`/classes/${id}/live-quiz/play/${session.id}`, {
+          state: {
+            initialSession: {
+              ...session,
+              status: 'in_progress',
+              current_question_index: session.current_question_index ?? 0
+            }
+          }
+        });
       }
     } catch (err: any) {
       alert(err.message || 'Failed to join live quiz');

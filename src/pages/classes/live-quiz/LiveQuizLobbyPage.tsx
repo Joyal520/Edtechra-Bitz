@@ -32,13 +32,24 @@ export const LiveQuizLobbyPage: React.FC = () => {
       }
 
       const isHostTeacher = isTeacher || s.teacher_id === user?.id;
-      if (s.status === 'in_progress' || s.status === 'reveal') {
+      const scheduledTimeStr = s.scheduled_start_at || s.started_at;
+      const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
+
+      if (s.status === 'in_progress' || s.status === 'reveal' || (s.status === 'scheduled' && isScheduledTimeReached)) {
+        const activeSession = {
+          ...s,
+          status: 'in_progress' as const,
+          current_question_index: s.current_question_index ?? 0
+        };
         if (isHostTeacher) {
-          navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/host/${s.id}`, { replace: true });
+          navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/host/${s.id}`, {
+            state: { initialSession: activeSession },
+            replace: true
+          });
           return;
         } else {
           navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/play/${s.id}`, {
-            state: { initialSession: s },
+            state: { initialSession: activeSession },
             replace: true
           });
           return;

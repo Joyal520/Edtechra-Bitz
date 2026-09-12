@@ -109,19 +109,48 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }, [remainingSec]);
 
-  // 3. Student Auto-Transition Polling Fallback (ensures smooth transition even without WebSockets)
+  // 3. Auto-Transition when countdown expires (Scheduled quizzes start automatically — zero teacher action needed!)
+  const hasAutoStartedRef = useRef(false);
+
   useEffect(() => {
-    if (isTeacher) return;
+    if (!targetStartMs) return;
 
-    // Trigger reconciliation fallback once when countdown hits zero
-    if (targetStartMs && remainingSec <= 0) {
-      liveQuizService.reconcileScheduledSession(session.id, session.classroom_id).catch(() => {});
-    }
+    if (remainingSec <= 0 && !hasAutoStartedRef.current) {
+      hasAutoStartedRef.current = true;
+      setIsStarting(true);
 
-    // When countdown is near zero (<= 2s) or past zero, poll every 1.5s for authoritative status change
-    let pollInterval = null;
-    if (remainingSec <= 2) {
-      pollInterval = setInterval(async () => {
+      // 1. Authoritatively reconcile session state
+      liveQuizService.reconcileScheduledSession(session.id, session.classroom_id).then((fresh) => {
+        const activeSession = fresh || { ...session, status: 'in_progress', current_question_index: 0 };
+
+        // 2. Broadcast on channel if present
+        if (channelRef.current) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'quiz_started',
+            payload: { session_id: session.id, total_questions: questionsCount, starts_at: Date.now() }
+          }).catch(() => {});
+        }
+
+        // 3. Navigate automatically
+        if (isTeacher) {
+          if (onStartQuiz) onStartQuiz();
+          else navigate(`/classes/${session.classroom_id}/live-quiz/host/${session.id}`, { state: { initialSession: activeSession } });
+        } else {
+          navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, { state: { initialSession: activeSession } });
+        }
+      }).catch(() => {
+        // Fallback navigation even if offline/network error
+        const fallbackSession = { ...session, status: 'in_progress', current_question_index: 0 };
+        if (isTeacher) {
+          navigate(`/classes/${session.classroom_id}/live-quiz/host/${session.id}`, { state: { initialSession: fallbackSession } });
+        } else {
+          navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, { state: { initialSession: fallbackSession } });
+        }
+      });
+    } else if (remainingSec <= 2 && !isTeacher) {
+      // Periodic safety check if countdown is within 2s
+      const pollInterval = setInterval(async () => {
         try {
           const fresh = await liveQuizService.getSessionById(session.id);
           if (fresh && (fresh.status === 'in_progress' || fresh.status === 'reveal')) {
@@ -130,15 +159,13 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
             });
           }
         } catch {
-          // ignore transient poll error
+          // ignore
         }
       }, 1500);
-    }
 
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [isTeacher, remainingSec, targetStartMs, session.id, session.classroom_id, navigate]);
+      return () => clearInterval(pollInterval);
+    }
+  }, [isTeacher, remainingSec, targetStartMs, session, questionsCount, navigate, onStartQuiz]);
 
   // 4. Initial participants load from database
   const loadParticipants = useCallback(async () => {
@@ -467,10 +494,22 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           </div>
         )}
 
-        {/* State B: LIVE NOW / READY — Teacher Starts Question 1 OR Student Awaits */}
+        {/* State B: LIVE NOW / READY — Auto-Start for Scheduled, or Teacher Controls for Live */}
         {isReady && (
           <div className="max-w-lg mx-auto w-full animate-in zoom-in-95">
-            {isTeacher ? (
+            {targetStartMs ? (
+              <div className="p-6 sm:p-7 bg-emerald-500/20 backdrop-blur-md rounded-3xl border border-emerald-400/40 shadow-2xl space-y-3">
+                <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Scheduled Start Reached</span>
+                </div>
+                <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto my-2" />
+                <h3 className="text-lg sm:text-xl font-black text-white">Starting Quiz Automatically!</h3>
+                <p className="text-xs text-slate-200 font-medium">
+                  The countdown is complete. Transitioning to Question 1 automatically...
+                </p>
+              </div>
+            ) : isTeacher ? (
               <div className="p-6 sm:p-7 bg-emerald-500/15 backdrop-blur-md rounded-3xl border border-emerald-400/30 shadow-2xl space-y-4">
                 <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />

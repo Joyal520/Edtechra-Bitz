@@ -2584,11 +2584,6 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
 // Authoritatively transitions a scheduled session to live when countdown expires
 app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-scheduled', async (req, res) => {
   try {
-    const authData = await verifyAuthUser(req);
-    if (!authData) {
-      return res.status(401).json({ success: false, error: 'Authentication required.' });
-    }
-
     const { classroomId, sessionId } = req.params;
     if (!serverSupabase) {
       return res.status(500).json({ success: false, error: 'Database uninitialized.' });
@@ -2623,40 +2618,54 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
     const scheduledMs = scheduledTime ? new Date(scheduledTime).getTime() : 0;
     const now = Date.now();
 
-    // Only reconcile if already reached start time or within 2 seconds
-    if (scheduledMs > now + 2000) {
+    // Verify auth if attempting to force-start ahead of scheduled time (> 5s early)
+    if (scheduledMs > now + 5000) {
+      const authData = await verifyAuthUser(req);
+      if (!authData || authData.user.id !== session.teacher_id) {
+        return res.json({
+          success: true,
+          reconciled: false,
+          remaining_sec: Math.ceil((scheduledMs - now) / 1000),
+          session
+        });
+      }
+    }
+
+    // If session is already in_progress or reveal, return current session directly
+    if (session.status === 'in_progress' || session.status === 'reveal') {
       return res.json({
         success: true,
-        reconciled: false,
-        remaining_sec: Math.ceil((scheduledMs - now) / 1000),
+        reconciled: true,
         session
       });
     }
 
     // Transition session: start Question 0
     const startMs = Date.now();
+    const duration = session.question_duration_sec || 20;
     const updatePayload = {
       status: 'in_progress',
       current_question_index: 0,
       question_start_ms: startMs,
-      question_duration_sec: 20
+      question_duration_sec: duration
     };
 
     const { data: updatedSession, error: updateErr } = await serverSupabase
       .from('live_quiz_sessions')
       .update(updatePayload)
       .eq('id', sessionId)
-      .select()
+      .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
       .single();
 
     if (updateErr) {
-      // Fallback: if status 'in_progress' update had any constraint issue, try 'lobby'
       console.warn('Reconcile update retry with lobby status:', updateErr);
       await serverSupabase
         .from('live_quiz_sessions')
         .update({ status: 'lobby' })
         .eq('id', sessionId);
     }
+
+    const effectiveSession = updatedSession || { ...session, ...updatePayload };
 
     // Broadcast Realtime question_started event if pin exists
     if (session.pin) {
@@ -2673,28 +2682,36 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
         }
 
         const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
-        await channel.send({
-          type: 'broadcast',
-          event: 'question_started',
-          payload: {
-            qIndex: 0,
-            questionIndex: 0,
-            question: q0?.question_text || q0?.question || 'Question 1',
-            options: q0Options,
-            durationSec: q0?.duration_sec || 20,
-            questionStartMs: startMs,
-            totalQuestions: questions.length || 1
+        channel.subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            try {
+              await channel.send({
+                type: 'broadcast',
+                event: 'question_started',
+                payload: {
+                  qIndex: 0,
+                  questionIndex: 0,
+                  question: q0?.question_text || q0?.question || 'Question 1',
+                  options: q0Options,
+                  durationSec: q0?.duration_sec || duration,
+                  questionStartMs: startMs,
+                  totalQuestions: questions.length || 1
+                }
+              });
+            } catch (broadcastErr) {
+              console.warn('Realtime broadcast send warning:', broadcastErr);
+            }
           }
         });
-      } catch (broadcastErr) {
-        console.warn('Realtime broadcast warning:', broadcastErr);
+      } catch (channelErr) {
+        console.warn('Realtime channel warning:', channelErr);
       }
     }
 
     return res.json({
       success: true,
       reconciled: true,
-      session: updatedSession || session
+      session: effectiveSession
     });
   } catch (error) {
     console.error('Error reconciling scheduled live quiz:', error);

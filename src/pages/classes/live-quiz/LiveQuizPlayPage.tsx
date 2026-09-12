@@ -29,6 +29,23 @@ export const LiveQuizPlayPage: React.FC = () => {
     try {
       const s = await liveQuizService.getSessionById(sessionId || '');
       if (s) {
+        const scheduledTimeStr = s.scheduled_start_at || s.started_at;
+        const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
+
+        // If scheduled start time is reached, authoritatively treat as in_progress and reconcile
+        if ((s.status === 'scheduled' || s.status === 'lobby') && isScheduledTimeReached) {
+          s.status = 'in_progress';
+          liveQuizService.reconcileScheduledSession(s.id, s.classroom_id).catch(() => {});
+        } else if (initialSession?.status === 'in_progress' && (s.status === 'scheduled' || s.status === 'lobby')) {
+          // Never downgrade an active session back to lobby
+          s.status = 'in_progress';
+        }
+
+        // Guarantee quiz questions are retained if s.quiz is missing
+        if (!s.quiz?.questions?.length && initialSession?.quiz?.questions?.length) {
+          s.quiz = initialSession.quiz;
+        }
+
         setSession(s);
         if (s.status === 'finished') {
           setIsFinished(true);

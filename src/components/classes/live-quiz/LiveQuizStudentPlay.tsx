@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import {
   Clock,
   CheckCircle2,
   XCircle,
-  Sparkles,
   Lock,
   Hourglass,
   Volume2,
   VolumeX,
-  Check
+  Check,
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { LiveQuizSession } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -28,13 +29,90 @@ const OPTION_THEMES = [
   { bg: 'bg-emerald-600 hover:bg-emerald-500 active:scale-95', label: 'D', ring: 'ring-emerald-400' }
 ];
 
-export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
+// ---------------------------------------------------------------------------
+// Error Boundary to prevent any blank screen in student player
+// ---------------------------------------------------------------------------
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  onReset?: () => void;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class LiveQuizErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[LiveQuizErrorBoundary] Caught runtime error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[60vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-8 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-rose-500/30">
+          <AlertCircle className="w-12 h-12 text-rose-400 animate-pulse" />
+          <h2 className="text-xl font-black">Something went wrong</h2>
+          <p className="text-xs text-slate-300 max-w-sm">
+            We hit an unexpected issue loading the quiz question. Click below to reload your question smoothly.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false });
+              if (this.props.onReset) this.props.onReset();
+              else window.location.reload();
+            }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reload Question</span>
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main Player Inner Component
+// ---------------------------------------------------------------------------
+const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   session,
   onQuizFinished
 }) => {
   const { user } = useAuth();
 
-  // Rehydrate initial question immediately if session is already in_progress or reveal
+  // Helper to parse options safely
+  const parseOptions = (opts: any): string[] => {
+    if (Array.isArray(opts)) return opts.map(String);
+    if (typeof opts === 'string') {
+      try {
+        const parsed = JSON.parse(opts);
+        if (Array.isArray(parsed)) return parsed.map(String);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Determine if quiz should be active (in_progress, reveal, OR scheduled time reached)
+  const scheduledTimeStr = session.scheduled_start_at || session.started_at;
+  const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
+  const isPlayingStatus = session.status === 'in_progress' || session.status === 'reveal' || isScheduledTimeReached;
+
+  // Rehydrate initial question immediately if session is playing or scheduled time has arrived
   const [questionData, setQuestionData] = useState<{
     qIndex: number;
     question: string;
@@ -43,18 +121,19 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     questionStartMs: number;
     totalQuestions: number;
   } | null>(() => {
-    if (session.status === 'in_progress' || session.status === 'reveal') {
+    if (isPlayingStatus) {
       const idx = session.current_question_index ?? 0;
       const questions = session.quiz?.questions || [];
       if (questions.length > 0 && idx >= questions.length) {
         return null;
       }
-      const q = questions[idx];
+      const q = questions[idx] || questions[0];
       if (q) {
+        const opts = parseOptions(q.options);
         return {
           qIndex: idx,
           question: q.question || `Question ${idx + 1}`,
-          options: Array.isArray(q.options) ? q.options : [],
+          options: opts,
           durationSec: session.question_duration_sec || q.durationSec || 20,
           questionStartMs: Number(session.question_start_ms) || Date.now(),
           totalQuestions: questions.length || 0
@@ -123,7 +202,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   // Total Quiz Timer State
   const isTotalTimed = Boolean(session.quiz?.timer_enabled || session.expires_at);
   const totalDurationSec = session.quiz?.timer_seconds || 60;
-  
+
   const [totalTimeLeft, setTotalTimeLeft] = useState<number>(() => {
     if (!isTotalTimed) return 0;
     if (session.expires_at) {
@@ -157,8 +236,10 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
     const fallbackQ = questions[rawIdx];
     const resolvedQuestion = raw.question || fallbackQ?.question || `Question ${rawIdx + 1}`;
-    const rawOptions = Array.isArray(raw.options) && raw.options.length > 0 ? raw.options : fallbackQ?.options;
-    const resolvedOptions = Array.isArray(rawOptions) ? rawOptions : [];
+    const rawOpts = (Array.isArray(raw.options) && raw.options.length > 0)
+      ? raw.options
+      : fallbackQ?.options;
+    const resolvedOptions = parseOptions(rawOpts);
 
     const duration = raw.durationSec || raw.duration_sec || session.question_duration_sec || fallbackQ?.durationSec || 20;
     const startMs = Number(raw.questionStartMs || raw.startMs || raw.question_start_ms) || Date.now();
@@ -194,7 +275,8 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
   // Ensure Question 1 / current question rehydrates immediately if session prop updates or loads fresh
   useEffect(() => {
-    if (!questionData && (session.status === 'in_progress' || session.status === 'reveal')) {
+    const isPlaying = session.status === 'in_progress' || session.status === 'reveal' || isScheduledTimeReached;
+    if (!questionData && isPlaying) {
       const idx = session.current_question_index ?? 0;
       const questions = session.quiz?.questions || [];
       if (questions.length > 0 && idx >= questions.length) {
@@ -203,19 +285,19 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         }
         return;
       }
-      const q = questions[idx];
+      const q = questions[idx] || questions[0];
       if (q) {
         applyQuestionStarted({
           qIndex: idx,
           question: q.question,
-          options: Array.isArray(q.options) ? q.options : [],
+          options: parseOptions(q.options),
           durationSec: session.question_duration_sec || q.durationSec || 20,
           questionStartMs: Number(session.question_start_ms) || Date.now(),
           totalQuestions: questions.length
         });
       }
     }
-  }, [session, questionData, applyQuestionStarted]);
+  }, [session, questionData, isScheduledTimeReached, applyQuestionStarted]);
 
   // Sync with database helper
   const syncWithDatabase = useCallback(async () => {
@@ -224,6 +306,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       if (!fresh) return;
 
       if (fresh.status === 'finished') {
+        quizAudioService.stopBackgroundMusic();
         if (onQuizFinishedRef.current) {
           onQuizFinishedRef.current([]);
         }
@@ -243,7 +326,11 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         return;
       }
 
-      if (fresh.status === 'in_progress') {
+      const freshScheduledTime = fresh.scheduled_start_at || fresh.started_at;
+      const freshTimeReached = Boolean(freshScheduledTime && new Date(freshScheduledTime).getTime() <= Date.now());
+      const isFreshPlaying = fresh.status === 'in_progress' || freshTimeReached;
+
+      if (isFreshPlaying) {
         const idx = fresh.current_question_index ?? 0;
         const questions = fresh.quiz?.questions || session.quiz?.questions || [];
         if (questions.length > 0 && idx >= questions.length) {
@@ -253,12 +340,12 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
           return;
         }
         if (activeQIndexRef.current !== idx || !questionData) {
-          const q = questions[idx];
+          const q = questions[idx] || questions[0];
           if (q) {
             applyQuestionStarted({
               qIndex: idx,
               question: q.question,
-              options: Array.isArray(q.options) ? q.options : [],
+              options: parseOptions(q.options),
               durationSec: fresh.question_duration_sec || q.durationSec || 20,
               questionStartMs: Number(fresh.question_start_ms) || Date.now(),
               totalQuestions: questions.length
@@ -269,7 +356,29 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     } catch (err) {
       console.warn('[LiveQuizStudentPlay] sync error:', err);
     }
-  }, [session.id, questionData, applyQuestionStarted, applyQuestionReveal]);
+  }, [session.id, session.quiz?.questions, questionData, applyQuestionStarted, applyQuestionReveal]);
+
+  // Active question safety fallback: if questions array is missing on session, fetch immediately
+  useEffect(() => {
+    if (!questionData || !session.quiz?.questions?.length) {
+      liveQuizService.getSessionById(session.id).then((fresh) => {
+        if (fresh?.quiz?.questions?.length) {
+          const idx = fresh.current_question_index ?? 0;
+          const q = fresh.quiz.questions[idx] || fresh.quiz.questions[0];
+          if (q) {
+            applyQuestionStarted({
+              qIndex: idx,
+              question: q.question,
+              options: parseOptions(q.options),
+              durationSec: fresh.question_duration_sec || q.durationSec || 20,
+              questionStartMs: Number(fresh.question_start_ms) || Date.now(),
+              totalQuestions: fresh.quiz.questions.length
+            });
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [session.id, questionData, session.quiz?.questions?.length, applyQuestionStarted]);
 
   // Check if answer was already submitted for current question (e.g. after refresh or late load)
   useEffect(() => {
@@ -295,7 +404,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     };
   }, [questionData?.qIndex, session.id, user?.id]);
 
-  // Connect to Supabase Realtime Channel with dual-lane listening: Broadcast + Postgres Changes
+  // Connect to Supabase Realtime Channel: Broadcast + Postgres Changes
   useEffect(() => {
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
@@ -367,7 +476,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
                 applyQuestionStarted({
                   qIndex: newIdx,
                   question: q.question,
-                  options: Array.isArray(q.options) ? q.options : [],
+                  options: parseOptions(q.options),
                   durationSec: updated.question_duration_sec || q.durationSec || 20,
                   questionStartMs: Number(updated.question_start_ms) || Date.now(),
                   totalQuestions: questions.length
@@ -379,7 +488,6 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          // Immediately sync with database upon successful connection to catch any state in flight
           syncWithDatabase();
         }
       });
@@ -400,7 +508,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
 
-    // Safety heartbeat: poll every 3.5 seconds to ensure student never gets left behind
+    // Heartbeat: poll every 3.5 seconds to ensure student never falls behind
     const heartbeat = setInterval(() => {
       syncWithDatabase();
     }, 3500);
@@ -416,23 +524,19 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   useEffect(() => {
     if (!revealData || !questionData) return;
 
-    // Check if feedback already fired for this question index
     if (hasTriggeredFeedbackRef.current === questionData.qIndex) return;
     hasTriggeredFeedbackRef.current = questionData.qIndex;
 
-    const isAnswerCorrect = selectedIndex !== null && selectedIndex === revealData.correctIndex;
-
-    if (isAnswerCorrect) {
+    const isCorrect = selectedIndex !== null && selectedIndex === revealData.correctIndex;
+    if (isCorrect) {
       quizAudioService.playCorrect();
       setShowConfetti(true);
-      const timer = setTimeout(() => setShowConfetti(false), 2500);
-      return () => clearTimeout(timer);
-    } else {
+    } else if (selectedIndex !== null) {
       quizAudioService.playIncorrect();
     }
   }, [revealData, questionData, selectedIndex]);
 
-  // Question synchronized countdown
+  // Question synchronized countdown timer
   useEffect(() => {
     if (!questionData || revealData) return;
 
@@ -449,6 +553,60 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
     return () => clearInterval(timer);
   }, [questionData, revealData]);
+
+  // ==========================================================================
+  // AUTONOMOUS PROGRESSION (Zero Teacher Required for Scheduled Quizzes)
+  // ==========================================================================
+
+  // 1. Autonomous Answer Reveal: When question timer reaches zero, reveal answer automatically
+  useEffect(() => {
+    if (!questionData || revealData) return;
+    if (questionTimeLeft > 0) return;
+
+    const questions = session.quiz?.questions || [];
+    const q = questions[questionData.qIndex];
+    const correctIdx = typeof q?.correctIndex === 'number'
+      ? q.correctIndex
+      : (typeof session.correct_answer_index === 'number' ? session.correct_answer_index : 0);
+
+    applyQuestionReveal({
+      qIndex: questionData.qIndex,
+      correctIndex: correctIdx,
+      explanation: q?.explanation || ''
+    });
+  }, [questionTimeLeft, questionData, revealData, session.quiz?.questions, session.correct_answer_index, applyQuestionReveal]);
+
+  // 2. Autonomous Question Advancement: After 3.5s in reveal phase, advance to next question or finish quiz
+  useEffect(() => {
+    if (!revealData || !questionData) return;
+
+    const advanceTimer = setTimeout(() => {
+      const nextIdx = questionData.qIndex + 1;
+      const questions = session.quiz?.questions || [];
+
+      if (questions.length > 0 && nextIdx < questions.length) {
+        // Advance to next question
+        const nextQ = questions[nextIdx];
+        applyQuestionStarted({
+          qIndex: nextIdx,
+          question: nextQ.question,
+          options: parseOptions(nextQ.options),
+          durationSec: nextQ.durationSec || session.question_duration_sec || 20,
+          questionStartMs: Date.now(),
+          totalQuestions: questions.length
+        });
+      } else {
+        // Quiz is finished! Finalize and display podium
+        quizAudioService.stopBackgroundMusic();
+        if (onQuizFinishedRef.current) {
+          onQuizFinishedRef.current([]);
+        }
+        liveQuizService.finishQuiz(session.id).catch(() => {});
+      }
+    }, 3500);
+
+    return () => clearTimeout(advanceTimer);
+  }, [revealData, questionData, session.quiz?.questions, session.question_duration_sec, session.id, applyQuestionStarted]);
 
   // Total Quiz authoritative countdown timer
   useEffect(() => {
@@ -481,7 +639,6 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
   const handleSelectOption = async (index: number) => {
     if (isLocked || revealData || !questionData || isTotalTimeExpired || questionTimeLeft <= 0) return;
 
-    // Play subtle UI click sound & unlock audio
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
 
@@ -503,7 +660,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         setTotalScore((prev) => prev + pts);
       }
 
-      // Notify host of response submission
+      // Notify host of response submission via realtime broadcast
       const channel = liveQuizService.createRealtimeChannel(session.pin);
       if (channel) {
         channel.send({
@@ -514,7 +671,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
             qIndex: questionData.qIndex,
             selected_option_index: index
           }
-        });
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('Error submitting answer:', err);
@@ -533,13 +690,16 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Fallback Loading / Rehydration View
   if (!questionData || !Array.isArray(questionData.options) || questionData.options.length === 0) {
     return (
       <div className="min-h-[70vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-sky-500/20">
-        <Sparkles className="w-12 h-12 text-sky-400 animate-pulse" />
-        <h2 className="text-xl sm:text-2xl font-black">Get Ready!</h2>
+        <div className="w-12 h-12 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
+        <h2 className="text-xl sm:text-2xl font-black">
+          Loading Question {((session.current_question_index ?? 0) + 1)}...
+        </h2>
         <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-medium">
-          The teacher will start the next question shortly. Fast answers earn up to +1000 points!
+          Synchronizing question data. Question will appear automatically on your screen!
         </p>
 
         <div className="flex items-center gap-3 pt-2">
@@ -552,16 +712,11 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
           <button
             type="button"
-            onClick={handleToggleSound}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
-              !isMusicMuted
-                ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
-                : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
-            }`}
-            title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
+            onClick={syncWithDatabase}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-sky-400/30 bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 text-xs font-bold transition-all cursor-pointer"
           >
-            {isMusicMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-300" /> : <Volume2 className="w-3.5 h-3.5" />}
-            <span>Music {isMusicMuted ? 'OFF' : 'ON'}</span>
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Refresh Question</span>
           </button>
         </div>
       </div>
@@ -687,7 +842,7 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         </div>
       )}
 
-      {/* 4 Interactive Option Cards with Polished Feedback */}
+      {/* 4 Interactive Option Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-4xl mx-auto w-full">
         {(Array.isArray(questionData.options) ? questionData.options : []).map((opt, idx) => {
           const theme = OPTION_THEMES[idx] || OPTION_THEMES[0];
@@ -700,16 +855,12 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
 
           if (isRevealed) {
             if (isSelected && isThisOptionCorrect) {
-              // Student selected correct answer
               cardStyling = 'bg-emerald-600 ring-4 ring-emerald-300 text-white shadow-2xl shadow-emerald-500/40 scale-[1.02] animate-correct-bounce brightness-110';
             } else if (isThisOptionIncorrectSelection) {
-              // Student selected incorrect answer
               cardStyling = 'bg-rose-600 ring-4 ring-rose-400 text-white shadow-xl shadow-rose-600/40 animate-error-shake brightness-100';
             } else if (isThisOptionCorrect) {
-              // Highlight the correct answer if student chose wrong or missed
               cardStyling = 'bg-emerald-700/90 ring-4 ring-emerald-400 text-white shadow-md brightness-105';
             } else {
-              // Non-selected wrong options
               cardStyling = 'opacity-35 grayscale-[50%] bg-slate-800 text-slate-400';
             }
           } else if (isSelected) {
@@ -761,15 +912,15 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
         })}
       </div>
 
-      {/* Footer Lock Status */}
+      {/* Footer Lock / Progress Status */}
       <div className="text-center text-xs text-slate-400 font-bold">
         {questionTimeLeft <= 0 && !revealData ? (
           <span className="text-amber-300 font-black animate-pulse">
-            ⏳ Time's up! Waiting for teacher to reveal the answer...
+            ⏳ Time's up! Revealing correct answer...
           </span>
         ) : isLocked && !revealData ? (
           <span className="text-sky-300 font-black animate-pulse">
-            ✓ Answer submitted. Waiting for teacher reveal...
+            ✓ Answer locked in! Revealing results when timer expires...
           </span>
         ) : !revealData ? (
           <span>Select an answer card above before the timer expires</span>
@@ -781,5 +932,16 @@ export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = ({
       </div>
 
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Exported Component Wrapped in Error Boundary
+// ---------------------------------------------------------------------------
+export const LiveQuizStudentPlay: React.FC<LiveQuizStudentPlayProps> = (props) => {
+  return (
+    <LiveQuizErrorBoundary>
+      <LiveQuizStudentPlayInner {...props} />
+    </LiveQuizErrorBoundary>
   );
 };

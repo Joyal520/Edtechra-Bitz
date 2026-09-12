@@ -685,7 +685,7 @@ class LiveQuizService {
   /**
    * Reconciles a scheduled session that has reached its start time
    */
-  async reconcileScheduledSession(sessionId: string, classroomId: string): Promise<LiveQuizSession | null> {
+  async reconcileScheduledSession(sessionId: string, classroomId?: string): Promise<LiveQuizSession | null> {
     if (!sessionId) return null;
 
     try {
@@ -705,7 +705,21 @@ class LiveQuizService {
       if (response.ok) {
         const json = await response.json();
         if (json.success && json.session) {
-          return json.session;
+          let sessionObj = json.session;
+          if (sessionObj.quiz_id && (!sessionObj.quiz?.questions || sessionObj.quiz.questions.length === 0)) {
+            const fullQuiz = await this.getQuizById(sessionObj.quiz_id);
+            sessionObj = { ...sessionObj, quiz: fullQuiz || sessionObj.quiz };
+          } else if (sessionObj.quiz?.questions) {
+            sessionObj.quiz.questions = (sessionObj.quiz.questions || []).map((item: any) => ({
+              id: item.id,
+              question: item.question_text || item.question,
+              options: Array.isArray(item.options) ? item.options : (typeof item.options === 'string' ? JSON.parse(item.options) : []),
+              correctIndex: typeof item.correct_index === 'number' ? item.correct_index : item.correctIndex,
+              durationSec: item.duration_sec || item.durationSec || 20,
+              explanation: item.explanation
+            }));
+          }
+          return sessionObj;
         }
       }
     } catch {
@@ -739,7 +753,8 @@ class LiveQuizService {
       console.warn('[LiveQuizService] Client reconcile fallback notice:', err);
     }
 
-    return null;
+    // Direct read fallback: if already in_progress or scheduled, return session with quiz
+    return this.getSessionById(sessionId);
   }
 
   /**
