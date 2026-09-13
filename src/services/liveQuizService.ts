@@ -421,25 +421,19 @@ class LiveQuizService {
       }
     }
 
-    const scheduledTime = session.scheduled_start_at || session.started_at;
     const nowMs = Date.now();
 
-    // If explicitly scheduled or has a future start timestamp
-    if (session.status === 'scheduled') {
-      if (scheduledTime && new Date(scheduledTime).getTime() <= nowMs) {
-        return 'live';
+    if (session.status === 'lobby') {
+      if (session.started_at) {
+        const scheduledMs = new Date(session.started_at).getTime();
+        if (scheduledMs > nowMs + 1000) {
+          return 'scheduled';
+        }
       }
-      return 'scheduled';
+      return 'lobby';
     }
 
-    if (session.status === 'lobby' && scheduledTime) {
-      const scheduledMs = new Date(scheduledTime).getTime();
-      if (scheduledMs > nowMs + 2000) {
-        return 'scheduled';
-      }
-    }
-
-    if (session.status === 'lobby' || session.status === 'in_progress' || session.status === 'reveal') {
+    if (session.status === 'in_progress' || session.status === 'reveal') {
       return 'live';
     }
 
@@ -525,7 +519,9 @@ class LiveQuizService {
       const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
       const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
       const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
-      const startedAt = isScheduled ? scheduledStartAt : new Date().toISOString();
+      // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
+      // For Scheduled: started_at stores the future scheduled start time
+      const startedAt = isScheduled ? scheduledStartAt : null;
       const expiresAt = totalTimerEnabled && totalTimerSeconds
         ? new Date(Date.now() + totalTimerSeconds * 1000).toISOString()
         : null;
@@ -533,24 +529,20 @@ class LiveQuizService {
       // Generate unique PIN
       const pin = this.generatePin();
 
-      // Primary insertion attempt with scheduled properties
+      // Clean insertion row matching live_quiz_sessions table schema & check constraints
       const insertRow: any = {
         classroom_id: payload.classroom_id,
         teacher_id: userId,
         quiz_id: targetQuizId || null,
         pin,
-        status: isScheduled ? 'scheduled' : 'lobby',
+        status: 'lobby',
         current_question_index: 0,
         question_duration_sec: 20,
         started_at: startedAt,
         expires_at: expiresAt
       };
 
-      if (scheduledStartAt) {
-        insertRow.scheduled_start_at = scheduledStartAt;
-      }
-
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('live_quiz_sessions')
         .insert(insertRow)
         .select(`
@@ -560,34 +552,7 @@ class LiveQuizService {
         `)
         .single();
 
-      // Defensive fallback if scheduled_start_at column or status check constraint fails
-      if (error) {
-        console.warn('[LiveQuizService] createSession initial attempt notice:', error);
-        // Retry with status 'lobby' and omit scheduled_start_at (saving target time in started_at)
-        const fallbackInsert = {
-          classroom_id: payload.classroom_id,
-          teacher_id: userId,
-          quiz_id: targetQuizId || null,
-          pin,
-          status: 'lobby',
-          current_question_index: 0,
-          question_duration_sec: 20,
-          started_at: startedAt,
-          expires_at: expiresAt
-        };
-        const retryResult = await supabase
-          .from('live_quiz_sessions')
-          .insert(fallbackInsert)
-          .select(`
-            *,
-            classroom:classrooms!classroom_id (id, title, subject),
-            teacher:profiles!teacher_id (id, full_name, avatar_url)
-          `)
-          .single();
-
-        if (retryResult.error) throw retryResult.error;
-        data = retryResult.data;
-      }
+      if (error) throw error;
 
       return {
         data: {
@@ -686,9 +651,11 @@ class LiveQuizService {
           .from('live_quiz_sessions')
           .update({
             status: 'in_progress',
+            started_at: new Date(startMs).toISOString(),
             current_question_index: 0,
             question_start_ms: startMs,
-            question_duration_sec: 20
+            question_duration_sec: 20,
+            correct_answer_index: null
           })
           .eq('id', sessionId)
           .select(`
@@ -718,7 +685,8 @@ class LiveQuizService {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        },
+        body: JSON.stringify({ action: 'start_now' })
       });
 
       if (response.ok) {

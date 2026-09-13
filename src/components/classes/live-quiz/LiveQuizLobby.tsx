@@ -43,7 +43,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const channelRef = useRef<any>(null);
 
   const effectiveState = liveQuizService.getEffectiveSessionState(session);
-  const scheduledTimeStr = session.scheduled_start_at || session.started_at;
+  const scheduledTimeStr = effectiveState === 'scheduled' ? session.started_at : null;
   const targetStartMs = useMemo(() => {
     return scheduledTimeStr ? new Date(scheduledTimeStr).getTime() : null;
   }, [scheduledTimeStr]);
@@ -66,7 +66,8 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
   // 1. Stale-state / Reconnection Guard: If quiz is already active, navigate immediately
   useEffect(() => {
-    quizAudioService.stopBackgroundMusic();
+    // Start background lobby music
+    quizAudioService.startBackgroundMusic();
 
     if (!isTeacher && (session.status === 'in_progress' || session.status === 'reveal')) {
       navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
@@ -411,19 +412,21 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
         {/* Right Controls: Compact Game PIN & Audio */}
         <div className="flex items-center gap-2.5">
-          {/* Compact Game PIN Pill — Secondary Join Control */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-sm">
-            <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">Game PIN:</span>
-            <span className="font-mono font-black text-amber-300 tracking-wider text-sm">{pin}</span>
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="p-1 rounded-md hover:bg-white/15 text-sky-200 hover:text-white transition-colors cursor-pointer"
-              title="Copy Direct Join Link"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </div>
+          {/* Compact Game PIN Pill — Only shown to teacher to display to class */}
+          {isTeacher && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">Game PIN:</span>
+              <span className="font-mono font-black text-amber-300 tracking-wider text-sm">{pin}</span>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="p-1 rounded-md hover:bg-white/15 text-sky-200 hover:text-white transition-colors cursor-pointer"
+                title="Copy Direct Join Link"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          )}
 
           {/* Sound Toggle */}
           <button
@@ -517,35 +520,40 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-white">
                   {participants.length > 0
-                    ? `${participants.length} Student${participants.length > 1 ? 's' : ''} Connected & Waiting`
-                    : 'Lobby is Open — Waiting for Students'}
+                    ? `${participants.length} Student${participants.length > 1 ? 's' : ''} Connected & Ready`
+                    : 'Lobby is Open — Waiting for Students to Join'}
                 </h3>
                 <p className="text-xs text-slate-200 font-medium">
-                  Click below to start Question 1. All connected student devices will transition automatically.
+                  When students have joined, click below to begin. All connected student devices will automatically transition to Question 1.
                 </p>
                 <button
                   type="button"
-                  disabled={isStarting || participants.length === 0}
+                  disabled={isStarting}
                   onClick={handleStart}
-                  className="w-full py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 rounded-2xl text-sm font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-2"
+                  className="w-full py-4 px-6 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 rounded-2xl text-base font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-2.5"
                 >
-                  <Play className="w-4 h-4 fill-current" />
+                  <Play className="w-5 h-5 fill-current" />
                   <span>
                     {isStarting
                       ? 'Starting Question 1...'
-                      : `Start Question 1 (${participants.length} Ready)`}
+                      : participants.length > 0
+                        ? `Start Quiz (${participants.length} Ready)`
+                        : 'Start Quiz'}
                   </span>
                 </button>
               </div>
             ) : (
-              <div className="p-6 sm:p-7 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl space-y-3">
+              <div className="p-6 sm:p-7 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl space-y-4">
                 <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Status: Live Now</span>
+                  <span>Get Ready!</span>
                 </div>
                 <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto my-2" />
-                <p className="text-sm sm:text-base font-black text-white">
-                  Waiting for teacher to start Question 1...
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Get Ready!
+                </h3>
+                <p className="text-sm text-sky-100 font-semibold">
+                  Waiting for the teacher to start the quiz.
                 </p>
                 <p className="text-xs text-slate-300 font-medium">
                   Sit tight! Question 1 will appear automatically on your screen without refreshing.

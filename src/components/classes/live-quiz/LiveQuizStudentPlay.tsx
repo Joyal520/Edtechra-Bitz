@@ -558,58 +558,30 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   // AUTONOMOUS PROGRESSION (Zero Teacher Required for Scheduled Quizzes)
   // ==========================================================================
 
-  // 1. Autonomous Answer Reveal: When question timer reaches zero, reveal answer automatically
+  // 1. Timer Expiry: Lock answering when question time ends and sync with server
   useEffect(() => {
     if (!questionData || revealData) return;
-    if (questionTimeLeft > 0) return;
+    if (questionTimeLeft <= 0) {
+      setIsLocked(true);
+      // If reveal hasn't arrived via broadcast, sync with database
+      const timeout = setTimeout(() => {
+        syncWithDatabase();
+      }, 1000);
+      return () => clearTimeout(timeout);
+    }
+  }, [questionTimeLeft, questionData, revealData, syncWithDatabase]);
 
-    const questions = session.quiz?.questions || [];
-    const q = questions[questionData.qIndex];
-    const correctIdx = typeof q?.correctIndex === 'number'
-      ? q.correctIndex
-      : (typeof session.correct_answer_index === 'number' ? session.correct_answer_index : 0);
-
-    applyQuestionReveal({
-      qIndex: questionData.qIndex,
-      correctIndex: correctIdx,
-      explanation: q?.explanation || ''
-    });
-  }, [questionTimeLeft, questionData, revealData, session.quiz?.questions, session.correct_answer_index, applyQuestionReveal]);
-
-  // 2. Autonomous Question Advancement: After 3.5s in reveal phase, advance to next question or finish quiz
+  // 2. Reveal Expiry Fallback: After reveal duration, ensure transition to next question via server state
   useEffect(() => {
     if (!revealData || !questionData) return;
 
-    const advanceTimer = setTimeout(() => {
-      const nextIdx = questionData.qIndex + 1;
-      const questions = session.quiz?.questions || [];
+    // Server advances after 3.5s reveal. If no event arrived after 4.5s, trigger authoritative sync
+    const fallbackSync = setTimeout(() => {
+      syncWithDatabase();
+    }, 4500);
 
-      if (questions.length > 0 && nextIdx < questions.length) {
-        // Advance to next question
-        const nextQ = questions[nextIdx];
-        applyQuestionStarted({
-          qIndex: nextIdx,
-          question: nextQ.question,
-          options: parseOptions(nextQ.options),
-          durationSec: nextQ.durationSec || session.question_duration_sec || 20,
-          questionStartMs: Date.now(),
-          totalQuestions: questions.length
-        });
-        // Trigger server sync to keep database updated authoritatively
-        fetch(`/api/live-quiz/sessions/${session.id}/sync`, { method: 'POST' }).catch(() => {});
-      } else {
-        // Quiz is finished! Finalize and display podium
-        quizAudioService.stopBackgroundMusic();
-        if (onQuizFinishedRef.current) {
-          onQuizFinishedRef.current([]);
-        }
-        liveQuizService.finishQuiz(session.id).catch(() => {});
-        fetch(`/api/live-quiz/sessions/${session.id}/sync`, { method: 'POST' }).catch(() => {});
-      }
-    }, 3500);
-
-    return () => clearTimeout(advanceTimer);
-  }, [revealData, questionData, session.quiz?.questions, session.question_duration_sec, session.id, applyQuestionStarted]);
+    return () => clearTimeout(fallbackSync);
+  }, [revealData, questionData, syncWithDatabase]);
 
   // Total Quiz authoritative countdown timer
   useEffect(() => {

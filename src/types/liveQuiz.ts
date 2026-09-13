@@ -4,7 +4,7 @@
 
 export type LiveQuizDifficulty = 'Easy' | 'Medium' | 'Hard';
 export type LiveQuizSessionStatus = 'draft' | 'scheduled' | 'lobby' | 'in_progress' | 'reveal' | 'finished' | 'completed' | 'cancelled';
-export type EffectiveLiveQuizState = 'draft' | 'scheduled' | 'live' | 'completed' | 'cancelled';
+export type EffectiveLiveQuizState = 'draft' | 'scheduled' | 'live' | 'completed' | 'cancelled' | 'lobby';
 
 export interface LiveQuizQuestion {
   id: string;

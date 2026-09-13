@@ -32,10 +32,10 @@ export const LiveQuizLobbyPage: React.FC = () => {
       }
 
       const isHostTeacher = isTeacher || s.teacher_id === user?.id;
-      const scheduledTimeStr = s.scheduled_start_at || s.started_at;
+      const scheduledTimeStr = s.started_at;
       const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
 
-      if (s.status === 'in_progress' || s.status === 'reveal' || (s.status === 'scheduled' && isScheduledTimeReached)) {
+      if (s.status === 'in_progress' || s.status === 'reveal' || (scheduledTimeStr && isScheduledTimeReached)) {
         const activeSession = {
           ...s,
           status: 'in_progress' as const,

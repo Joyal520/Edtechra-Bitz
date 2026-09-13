@@ -243,13 +243,8 @@ export const ClassroomDetailPage: React.FC = () => {
         avatar_url: profile?.avatar_url || profile?.avatarUrl || undefined
       });
 
-      // Direct navigation without PIN prompt
-      const scheduledTimeStr = session.scheduled_start_at || session.started_at;
-      const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
-
-      if ((session.status === 'scheduled' || session.status === 'lobby') && !isScheduledTimeReached) {
-        navigate(`/classes/${id}/live-quiz/lobby/${session.pin}`);
-      } else {
+      // Direct navigation: enter game directly if in progress, otherwise join waiting lobby
+      if (session.status === 'in_progress' || session.status === 'reveal') {
         navigate(`/classes/${id}/live-quiz/play/${session.id}`, {
           state: {
             initialSession: {
@@ -259,6 +254,8 @@ export const ClassroomDetailPage: React.FC = () => {
             }
           }
         });
+      } else {
+        navigate(`/classes/${id}/live-quiz/lobby/${session.pin}`);
       }
     } catch (err: any) {
       alert(err.message || 'Failed to join live quiz');
@@ -475,108 +472,135 @@ export const ClassroomDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f9f7f1] font-sans antialiased text-slate-800 py-4 sm:py-6 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 py-4 sm:py-6 relative overflow-x-hidden">
       
       {/* 3D Botanical Cut-Paper Decorative Border Frame */}
       <BotanicalPaperCutFrame />
 
       {/* MAIN DIGITAL CLASSROOM WORKSPACE CONTAINER */}
-      <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-7 relative z-10">
+      <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7 relative z-10">
         
         {/* ========================================================================= */}
-        {/* CLEAN CLASSROOM SUBHEADER (Search & AI Report Buttons Removed)            */}
+        {/* TOP SUBHEADER / BREADCRUMB                                                */}
         {/* ========================================================================= */}
-        <div className="flex items-center justify-between gap-3 flex-wrap pb-2 border-b border-stone-200/60">
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <div className="flex items-center justify-between gap-3 flex-wrap pb-1 sm:pb-2">
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
             <Link
               to="/classes"
-              className="inline-flex items-center gap-1.5 text-xs font-black text-slate-700 hover:text-slate-900 bg-white hover:bg-stone-50 px-3.5 py-1.5 rounded-full transition-all border border-stone-200/80 shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3.5 py-1.5 rounded-full transition-all border border-slate-200/80 shadow-2xs cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>All Classes</span>
             </Link>
 
-            <span className="text-stone-300">/</span>
+            <span className="text-slate-300 font-light">/</span>
 
-            <span className="px-3 py-1 rounded-full bg-sky-50 text-sky-800 text-xs font-black border border-sky-100">
+            <span className="px-3 py-1 rounded-full bg-sky-50 text-sky-800 text-xs font-extrabold border border-sky-100/90 shadow-2xs">
               {classroom.subject || 'Classroom'}
             </span>
 
             {classroom.grade && (
-              <span className="px-2.5 py-1 rounded-full bg-stone-100 text-slate-700 text-xs font-extrabold">
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-extrabold border border-slate-200/60 shadow-2xs">
                 {classroom.grade}
               </span>
             )}
 
-            <h2 className="text-sm sm:text-base font-black text-slate-900 truncate max-w-[220px] sm:max-w-md">
+            <h2 className="text-xs sm:text-sm font-black text-slate-800 truncate max-w-[200px] sm:max-w-md hidden sm:inline-block">
               {classroom.title}
             </h2>
           </div>
         </div>
 
         {/* ========================================================================= */}
+        {/* SECTION 1 — PREMIUM HERO CLASSROOM HEADER                                 */}
         {/* ========================================================================= */}
-        {/* SECTION 1 — CLASSROOM HERO                                                */}
-        {/* ========================================================================= */}
-        <section className="bg-[#0a213c] rounded-[24px] p-5 sm:p-6 lg:p-7 text-white shadow-lg relative overflow-hidden border border-slate-800">
+        <section className="relative bg-gradient-to-br from-[#06152b] via-[#092347] to-[#071a36] text-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 lg:p-10 shadow-[0_20px_50px_-10px_rgba(2,25,55,0.45)] overflow-hidden border border-sky-500/25 transition-all">
           
           {/* Subtle Organic Background Glow Waves */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -top-28 -left-28 w-96 h-96 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/2 -right-24 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 left-1/3 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center relative z-10">
+          {/* Top Bar: Back to Classes & Quick Category Tag */}
+          <div className="flex items-center justify-between gap-4 mb-5 sm:mb-6 relative z-10 flex-wrap">
+            <Link
+              to="/classes"
+              className="group inline-flex items-center gap-2 text-xs font-bold text-sky-200 hover:text-white bg-white/10 hover:bg-white/15 backdrop-blur-md px-4 py-2 rounded-full transition-all duration-200 border border-white/15 shadow-2xs active:scale-95 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back to Classes</span>
+            </Link>
+
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-sky-400/15 border border-sky-400/30 text-sky-300 text-[11px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
+              <Sparkles className="w-3 h-3 text-sky-300" />
+              <span>CLASSROOM</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center relative z-10">
             
-            {/* LEFT: Hero Content, Classroom Details & Invite Actions (7 cols) */}
-            <div className="lg:col-span-7 space-y-3.5">
+            {/* LEFT: Hero Headline, Classroom Details, Tagline & Invite Actions (7 cols) */}
+            <div className="lg:col-span-7 space-y-4">
               
-              {/* Motto Tagline */}
-              <div className="space-y-0.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-sky-300">
-                  Empower your classroom,
-                </p>
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight">
-                  inspire your students.
-                </h1>
-              </div>
-
-              {/* Classroom Details & Badges */}
-              <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-                <span className="px-3 py-0.5 rounded-full bg-white/10 backdrop-blur-xs text-xs font-black text-white border border-white/15">
+              {/* Classroom Title — The strongest element */}
+              <div className="space-y-2.5">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[42px] font-black text-white tracking-tight leading-[1.15] drop-shadow-sm">
                   {classroom.title}
-                </span>
+                </h1>
 
-                <span className="px-3 py-0.5 rounded-full bg-sky-400/20 text-sky-200 text-xs font-black border border-sky-400/30">
-                  {classroom.subject || 'General'}
-                </span>
-
-                {classroom.grade && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-xs font-black border border-amber-400/30">
-                    {classroom.grade}
+                {/* Floating Metadata Pills */}
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold text-sky-100 border border-white/15 shadow-2xs">
+                    <BookOpen className="w-3.5 h-3.5 text-sky-300" />
+                    <span>{classroom.subject || 'General'}</span>
                   </span>
-                )}
 
-                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-xs font-black border border-emerald-400/30">
-                  <Users className="w-3.5 h-3.5" />
-                  <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
-                </span>
+                  {classroom.grade && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 backdrop-blur-md text-xs font-bold text-amber-200 border border-amber-400/30 shadow-2xs">
+                      <span>{classroom.grade}</span>
+                    </span>
+                  )}
+
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 backdrop-blur-md text-xs font-bold text-emerald-200 border border-emerald-400/30 shadow-2xs">
+                    <Users className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
+                  </span>
+
+                  {isTeacher && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/25 backdrop-blur-md text-xs font-bold text-purple-200 border border-purple-400/30 shadow-2xs">
+                      <span>Teacher Workspace</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Invite Code Box & Action Buttons */}
-              <div className="pt-1 flex flex-col sm:flex-row sm:items-center gap-2.5 flex-wrap">
+              {/* Tagline / Motto Quote */}
+              <blockquote className="text-sm sm:text-base text-sky-100/90 font-medium italic border-l-2 border-sky-400/50 pl-3.5 py-0.5 max-w-xl">
+                &ldquo;Empower your classroom, inspire your students.&rdquo;
+              </blockquote>
+
+              {/* Class Code & Action Buttons (Section 3 of user prompt) */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
                 
-                {/* Monospace Invite Code Box */}
-                <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 px-3 py-1.5 rounded-xl shrink-0">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Code:</span>
-                  <span className="font-mono font-black text-sm text-sky-300 tracking-widest">{inviteCode}</span>
+                {/* Elegant Glass/Liquid Code Pill */}
+                <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-sky-400/35 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_2px_12px_rgba(0,0,0,0.25)] shrink-0">
+                  <span className="text-[10px] font-black uppercase text-sky-300 tracking-wider">CODE</span>
+                  <span className="font-mono font-black text-sm sm:text-base text-white tracking-widest selection:bg-sky-400 selection:text-slate-950">
+                    {inviteCode}
+                  </span>
                 </div>
 
                 {/* Copy Code & Link Button */}
                 <button
                   type="button"
                   onClick={handleCopyInvite}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="btn-liquid-secondary px-5 py-2.5 text-xs sm:text-sm font-bold shadow-sm active:scale-95 shrink-0"
                 >
-                  {copiedInvite ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-600" />}
+                  {copiedInvite ? (
+                    <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-[#026fc3]" />
+                  )}
                   <span>{copiedInvite ? 'Copied Link!' : 'Copy Code & Link'}</span>
                 </button>
 
@@ -584,19 +608,20 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleWhatsAppShare}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl text-xs font-black shadow-sm active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#20bd5a] hover:to-[#0f7a6e] shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_4px_14px_rgba(37,211,102,0.32)] border-t border-white/30 border-b border-emerald-800/30 active:scale-95 transition-all duration-200 shrink-0 cursor-pointer"
                 >
-                  <MessageSquareShare className="w-3.5 h-3.5" />
-                  <span>Share via WhatsApp</span>
+                  <MessageSquareShare className="w-4 h-4 stroke-[2.2]" />
+                  <span>Share Classroom</span>
                 </button>
 
               </div>
 
             </div>
 
-            {/* RIGHT: 3D Paper-Cut Classroom Scene (5 cols) */}
-            <div className="lg:col-span-5 flex justify-center lg:justify-end">
-              <ClassroomHeroIllustration className="w-full max-w-[280px] sm:max-w-[320px] h-auto drop-shadow-xl" />
+            {/* RIGHT: 3D Classroom Illustration (5 cols) */}
+            <div className="lg:col-span-5 flex justify-center lg:justify-end relative">
+              <div className="absolute inset-0 bg-gradient-to-tr from-sky-500/10 via-blue-600/15 to-transparent rounded-full blur-2xl pointer-events-none transform scale-90" />
+              <ClassroomHeroIllustration className="w-full max-w-[280px] sm:max-w-[340px] h-auto drop-shadow-2xl relative z-10 hover:scale-[1.02] transition-transform duration-300" />
             </div>
 
           </div>
@@ -604,29 +629,29 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 2 — PRIMARY NAVIGATION (4 Compact Tiles)                          */}
+        {/* SECTION 2 — QUICK-ACTION PANELS (4 Harmonious Liquid Surfaces)             */}
         {/* ========================================================================= */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
           
-          {/* Card 1: My Tasks (Soft Green) */}
+          {/* Card 1: My Tasks (Mint / Emerald Liquid Surface) */}
           <div
             onClick={() => handleSelectTab('assignments')}
-            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
               activeTab === 'assignments'
-                ? 'bg-[#eef8f1] border-emerald-300 shadow-md ring-2 ring-emerald-400/50'
-                : 'bg-[#eef8f1] border-emerald-100/90 hover:border-emerald-300'
+                ? 'bg-gradient-to-b from-emerald-50/90 via-white to-teal-50/70 border-emerald-300 shadow-[0_8px_24px_-4px_rgba(5,150,105,0.22)] ring-2 ring-emerald-500/50'
+                : 'bg-gradient-to-b from-emerald-50/80 via-white to-teal-50/40 border-emerald-200/80 hover:border-emerald-300 shadow-[0_4px_16px_-2px_rgba(5,150,105,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(5,150,105,0.18)]'
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="w-10 h-10 rounded-xl bg-white/80 border border-emerald-200/60 flex items-center justify-center shrink-0 shadow-2xs">
-                <TaskIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
+              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-emerald-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                <TaskIllustration className="w-8 h-8" />
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-emerald-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-emerald-200">
-                <ArrowRight className="w-3 h-3" />
+              <div className="w-7 h-7 rounded-full bg-white text-emerald-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-emerald-600 group-hover:text-white shadow-2xs border border-emerald-200">
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
               </div>
             </div>
             <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-emerald-950 transition-colors leading-snug">
                 {isTeacher ? 'Tasks' : 'My Tasks'}
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
@@ -637,88 +662,88 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Card 2: Courses (Soft Blue / Lavender) */}
+          {/* Card 2: Courses (Sky / Blue Liquid Surface) */}
           <div
             onClick={() => handleSelectTab('courses')}
-            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
               activeTab === 'courses'
-                ? 'bg-[#eef2ff] border-indigo-300 shadow-md ring-2 ring-indigo-400/50'
-                : 'bg-[#eef2ff] border-indigo-100/90 hover:border-indigo-300'
+                ? 'bg-gradient-to-b from-sky-50/90 via-white to-indigo-50/70 border-sky-300 shadow-[0_8px_24px_-4px_rgba(2,111,195,0.22)] ring-2 ring-sky-500/50'
+                : 'bg-gradient-to-b from-sky-50/80 via-white to-indigo-50/40 border-sky-200/80 hover:border-sky-300 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.18)]'
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="w-10 h-10 rounded-xl bg-white/80 border border-indigo-200/60 flex items-center justify-center shrink-0 shadow-2xs">
-                <CoursesIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
+              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-sky-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                <CoursesIllustration className="w-8 h-8" />
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-indigo-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-indigo-200">
-                <ArrowRight className="w-3 h-3" />
+              <div className="w-7 h-7 rounded-full bg-white text-[#026fc3] flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-[#026fc3] group-hover:text-white shadow-2xs border border-sky-200">
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
               </div>
             </div>
             <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-[#025ca5] transition-colors leading-snug">
                 Courses
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
                 {isTeacher
-                  ? 'Structured multi-day digital courses.'
+                  ? 'Build structured learning experiences.'
                   : 'Access assigned interactive course lessons.'}
               </p>
             </div>
           </div>
 
-          {/* Card 3: Classmates (Soft Purple) */}
+          {/* Card 3: Classmates / Students (Purple / Lavender Liquid Surface) */}
           <div
             onClick={() => handleSelectTab('roster')}
-            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
               activeTab === 'roster'
-                ? 'bg-[#f3edf9] border-purple-300 shadow-md ring-2 ring-purple-400/50'
-                : 'bg-[#f3edf9] border-purple-100/90 hover:border-purple-300'
+                ? 'bg-gradient-to-b from-purple-50/90 via-white to-violet-50/70 border-purple-300 shadow-[0_8px_24px_-4px_rgba(124,58,237,0.22)] ring-2 ring-purple-500/50'
+                : 'bg-gradient-to-b from-purple-50/80 via-white to-violet-50/40 border-purple-200/80 hover:border-purple-300 shadow-[0_4px_16px_-2px_rgba(124,58,237,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(124,58,237,0.18)]'
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="w-10 h-10 rounded-xl bg-white/80 border border-purple-200/60 flex items-center justify-center shrink-0 shadow-2xs">
-                <StudentsIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
+              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-purple-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                <StudentsIllustration className="w-8 h-8" />
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-purple-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-purple-200">
-                <ArrowRight className="w-3 h-3" />
+              <div className="w-7 h-7 rounded-full bg-white text-purple-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-purple-600 group-hover:text-white shadow-2xs border border-purple-200">
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
               </div>
             </div>
             <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-purple-950 transition-colors leading-snug">
                 {isTeacher ? 'Students' : 'Classmates'}
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
                 {isTeacher
-                  ? 'View students, progress and engagement.'
+                  ? 'View learners, progress and engagement.'
                   : 'View classmates & learning progress.'}
               </p>
             </div>
           </div>
 
-          {/* Card 4: Resources (Soft Pink) */}
+          {/* Card 4: Resources (Peach / Rose Liquid Surface) */}
           <div
             onClick={() => handleSelectTab('resources')}
-            className={`rounded-[20px] p-3.5 sm:p-4 border transition-all cursor-pointer flex flex-col justify-between group hover:shadow-md hover:-translate-y-0.5 relative overflow-hidden min-h-[110px] sm:min-h-[118px] ${
+            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
               activeTab === 'resources'
-                ? 'bg-[#faecea] border-rose-300 shadow-md ring-2 ring-rose-400/50'
-                : 'bg-[#faecea] border-rose-100/90 hover:border-rose-300'
+                ? 'bg-gradient-to-b from-rose-50/90 via-white to-amber-50/70 border-rose-300 shadow-[0_8px_24px_-4px_rgba(244,63,94,0.22)] ring-2 ring-rose-500/50'
+                : 'bg-gradient-to-b from-rose-50/80 via-white to-amber-50/40 border-rose-200/80 hover:border-rose-300 shadow-[0_4px_16px_-2px_rgba(244,63,94,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(244,63,94,0.18)]'
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="w-10 h-10 rounded-xl bg-white/80 border border-rose-200/60 flex items-center justify-center shrink-0 shadow-2xs">
-                <ResourcesIllustration className="w-7 h-7 transition-transform group-hover:scale-105" />
+              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-rose-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                <ResourcesIllustration className="w-8 h-8" />
               </div>
-              <div className="w-6 h-6 rounded-full bg-white/90 group-hover:bg-white text-rose-900 flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-2xs border border-rose-200">
-                <ArrowRight className="w-3 h-3" />
+              <div className="w-7 h-7 rounded-full bg-white text-rose-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-rose-600 group-hover:text-white shadow-2xs border border-rose-200">
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
               </div>
             </div>
             <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-rose-950 transition-colors leading-snug">
                 Resources
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
                 {isTeacher
-                  ? 'Access learning materials, files and links.'
+                  ? 'Access files, materials and links.'
                   : 'Access learning materials, files and links.'}
               </p>
             </div>
@@ -726,7 +751,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
         </section>
 
-        {/* Contextual Active Live Quiz Banner (Upgraded to match Reference Design) */}
+        {/* Contextual Active Live Quiz Banner (Liquid Surface) */}
         {activeLiveQuizSession && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled') && (() => {
           const totalQuestions = activeLiveQuizSession.quiz?.questions?.length || 10;
           const durationMinutes = activeLiveQuizSession.quiz?.timer_seconds
@@ -735,7 +760,7 @@ export const ClassroomDetailPage: React.FC = () => {
           const isLive = effectiveLiveQuizState === 'live';
 
           return (
-            <div className="relative bg-gradient-to-r from-sky-50 via-blue-50/70 to-indigo-50/70 border border-blue-200/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+            <div className="relative bg-gradient-to-r from-sky-50/90 via-white to-blue-50/80 border border-sky-200/90 rounded-2xl sm:rounded-[26px] p-4 sm:p-5 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.1)] hover:shadow-[0_8px_25px_-4px_rgba(2,111,195,0.16)] transition-all overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
               {/* Subtle Decorative Educational Vectors */}
               <div className="absolute right-0 top-0 bottom-0 w-80 pointer-events-none overflow-hidden select-none opacity-40">
                 <svg className="w-full h-full text-blue-400" viewBox="0 0 320 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -768,12 +793,12 @@ export const ClassroomDetailPage: React.FC = () => {
                   {/* Status Overlay Badge on Cover */}
                   <div className="absolute top-2 left-2">
                     {isLive ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                         LIVE QUIZ
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
                         <Clock className="w-2.5 h-2.5" />
                         STARTING SOON
                       </span>
@@ -844,7 +869,7 @@ export const ClassroomDetailPage: React.FC = () => {
                       handleStudentJoinLiveQuiz();
                     }
                   }}
-                  className="px-6 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs sm:text-sm font-black shadow-md hover:shadow-lg active:scale-95 transition-all cursor-pointer inline-flex items-center gap-2"
+                  className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm shadow-md cursor-pointer inline-flex items-center gap-2"
                 >
                   <span>
                     {isTeacher
@@ -869,13 +894,14 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION 3 — CLASS STREAM (Announcements, Posts & Updates)                  */}
         {/* ========================================================================= */}
-        <section className="space-y-3">
+        <section className="space-y-3.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-slate-900 tracking-wider uppercase">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#026fc3] ring-4 ring-sky-100" />
+              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
                 Class Stream
               </h2>
-              <span className="text-[11px] font-bold text-slate-500 bg-stone-100 px-2.5 py-0.5 rounded-full">
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-100/90 border border-slate-200/60 px-3 py-0.5 rounded-full">
                 Announcements & Updates
               </span>
             </div>
@@ -890,29 +916,35 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 4 — CLASSROOM ACTIVITIES & LEARNING (5 Action Cards)               */}
+        {/* SECTION 4 — ASSIGN YOUR STUDENTS / LEARNING TOOLS (5 Action Cards)        */}
         {/* ========================================================================= */}
         <section className="space-y-4">
           {/* Header */}
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-black text-slate-900 tracking-wider uppercase">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-indigo-100" />
+            <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
               {isTeacher ? 'Assign Your Students' : 'Classroom Activities & Learning'}
             </h2>
+            <span className="text-[11px] font-bold text-slate-500 bg-slate-100/90 border border-slate-200/60 px-3 py-0.5 rounded-full">
+              Learning Tools
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
             
-            {/* Card 1: Assign Your Students / My Tasks */}
-            <div className="bg-white rounded-[24px] p-5 border border-stone-200/70 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+            {/* Card 1: Assign Your Students / My Tasks (Blue identity) */}
+            <div className="bg-gradient-to-b from-sky-50/80 via-white to-blue-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-sky-200/80 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
-                  <AssignStudentsIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-sky-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                    <AssignStudentsIllustration className="w-20 h-16" />
+                  </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm font-black text-slate-900">
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-[#025ca5] transition-colors">
                     {isTeacher ? 'Assign Your Students' : 'My Tasks'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
                       ? 'Assign tasks, lessons or activities to selected students.'
                       : 'Complete lessons and submit homework assignments.'}
@@ -924,14 +956,14 @@ export const ClassroomDetailPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActivityHubOpen(true)}
-                    className="flex-1 py-2 px-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                    className="btn-liquid-primary flex-1 py-2.5 px-3 text-xs font-bold"
                   >
                     Create Task
                   </button>
                   <button
                     type="button"
                     onClick={() => setTaskDashboardOpen(true)}
-                    className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-[11px] font-black transition-all cursor-pointer"
+                    className="btn-liquid-secondary py-2.5 px-3 text-xs font-bold"
                   >
                     Tasks
                   </button>
@@ -940,40 +972,44 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTaskDashboardOpen(true)}
-                  className="w-full py-2.5 px-4 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                  className="btn-liquid-primary w-full py-2.5 px-4 text-xs font-bold"
                 >
                   Open Tasks
                 </button>
               )}
             </div>
 
-            {/* Card 2: Live Quiz */}
-            <div className={`bg-white rounded-[24px] p-5 border shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group relative overflow-hidden ${
+            {/* Card 2: Live Quiz (Purple/Indigo identity) */}
+            <div className={`bg-gradient-to-b from-purple-50/80 via-white to-indigo-50/40 rounded-2xl sm:rounded-[26px] p-5 border shadow-[0_4px_16px_-2px_rgba(124,58,237,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(124,58,237,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden ${
               effectiveLiveQuizState === 'live'
-                ? 'border-emerald-400/80 ring-2 ring-emerald-400/20'
+                ? 'border-emerald-400 ring-2 ring-emerald-400/20'
                 : effectiveLiveQuizState === 'scheduled'
-                ? 'border-amber-400/80 ring-2 ring-amber-400/20'
-                : 'border-stone-200/70'
+                ? 'border-amber-400 ring-2 ring-amber-400/20'
+                : 'border-purple-200/80'
             }`}>
               {effectiveLiveQuizState === 'live' && (
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse">
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse shadow-xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                   Live Now
                 </div>
               )}
               {effectiveLiveQuizState === 'scheduled' && (
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider">
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
                   <Clock className="w-3 h-3 animate-pulse" />
                   <span>{scheduledCountdownText ? `Starts ${scheduledCountdownText}` : 'Starting Soon'}</span>
                 </div>
               )}
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
-                  <LiveQuizIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-purple-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                    <LiveQuizIllustration className="w-20 h-16" />
+                  </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm font-black text-slate-900">Live Quiz</h3>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-purple-900 transition-colors">
+                    Live Quiz
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
                       ? effectiveLiveQuizState === 'live'
                         ? 'A live quiz session is currently running.'
@@ -1006,12 +1042,12 @@ export const ClassroomDetailPage: React.FC = () => {
                     handleStudentJoinLiveQuiz();
                   }
                 }}
-                className={`w-full py-2.5 px-4 text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer ${
+                className={`w-full py-2.5 px-4 text-xs font-bold ${
                   effectiveLiveQuizState === 'live'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-500/25 animate-pulse'
+                    ? 'btn-liquid-emerald animate-pulse'
                     : effectiveLiveQuizState === 'scheduled'
-                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 shadow-amber-500/25'
-                    : 'bg-[#026fc3] hover:bg-[#03589e]'
+                    ? 'btn-liquid-amber'
+                    : 'btn-liquid-purple'
                 }`}
               >
                 {isTeacher
@@ -1028,17 +1064,19 @@ export const ClassroomDetailPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Card 3: Exam */}
-            <div className="bg-white rounded-[24px] p-5 border border-stone-200/70 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+            {/* Card 3: Assessment & Survey (Emerald identity) */}
+            <div className="bg-gradient-to-b from-emerald-50/80 via-white to-teal-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-emerald-200/80 shadow-[0_4px_16px_-2px_rgba(5,150,105,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(5,150,105,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
-                  <ExamIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-emerald-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                    <ExamIllustration className="w-20 h-16" />
+                  </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm font-black text-slate-900">
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-emerald-900 transition-colors">
                     {isTeacher ? 'Assessment & Survey' : 'Exams'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
                       ? 'Visual Canva-style builder, question bank & AI generator.'
                       : 'Take scheduled timed assessments and review results.'}
@@ -1054,23 +1092,25 @@ export const ClassroomDetailPage: React.FC = () => {
                     handleSelectTab('exams');
                   }
                 }}
-                className="w-full py-2.5 px-4 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                className="btn-liquid-emerald w-full py-2.5 px-4 text-xs font-bold"
               >
                 {isTeacher ? 'Create Assessment' : 'View Exams'}
               </button>
             </div>
 
-            {/* Card 4: OCR Assessment */}
-            <div className="bg-white rounded-[24px] p-5 border border-stone-200/70 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+            {/* Card 4: OCR Assessment (Violet identity) */}
+            <div className="bg-gradient-to-b from-violet-50/80 via-white to-fuchsia-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-violet-200/80 shadow-[0_4px_16px_-2px_rgba(139,92,246,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(139,92,246,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
-                  <OCRIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-violet-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                    <OCRIllustration className="w-20 h-16" />
+                  </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm font-black text-slate-900">
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-violet-900 transition-colors">
                     {isTeacher ? 'OCR Assessment' : 'My Assessments'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
                       ? 'Upload handwritten papers & get AI evaluation.'
                       : 'View your graded worksheet AI evaluation reports.'}
@@ -1086,23 +1126,25 @@ export const ClassroomDetailPage: React.FC = () => {
                     setStudentAssessmentHistoryOpen(true);
                   }
                 }}
-                className="w-full py-2.5 px-4 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                className="btn-liquid-purple w-full py-2.5 px-4 text-xs font-bold"
               >
                 {isTeacher ? 'Grade Worksheets' : 'View Evaluations'}
               </button>
             </div>
 
-            {/* Card 5: Competition */}
-            <div className="bg-white rounded-[24px] p-5 border border-stone-200/70 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
+            {/* Card 5: Competition (Warm gold / amber identity) */}
+            <div className="bg-gradient-to-b from-amber-50/80 via-white to-orange-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-amber-200/80 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(217,119,6,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
-                  <CompetitionIllustration className="w-24 h-20 transition-transform group-hover:scale-105" />
+                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-amber-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
+                    <CompetitionIllustration className="w-20 h-16" />
+                  </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm font-black text-slate-900">
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-amber-950 transition-colors">
                     {isTeacher ? 'Competition' : 'Challenges'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
                       ? 'Create challenges, let AI evaluate student work.'
                       : 'Participate in creative problem-solving challenges.'}
@@ -1112,7 +1154,7 @@ export const ClassroomDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setChallengeListModalOpen(true)}
-                className="w-full py-2.5 px-4 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-2xs active:scale-95 transition-all cursor-pointer"
+                className="btn-liquid-amber w-full py-2.5 px-4 text-xs font-bold"
               >
                 {isTeacher ? 'Challenge Dashboard' : 'Open Challenges'}
               </button>
@@ -1123,21 +1165,24 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 4 — STUDENT PERFORMANCE & AI TEACHING INTELLIGENCE                */}
+        {/* SECTION 5 — STUDENT PERFORMANCE & AI TEACHING INTELLIGENCE                */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-[32px] p-6 sm:p-8 border border-stone-200/80 shadow-md relative overflow-hidden">
+        <section className="bg-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 border border-slate-200/85 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] relative overflow-hidden">
           
           {/* Section Header with Blue Indicator Line */}
-          <div className="space-y-1 pb-5 border-b border-stone-100">
-            <h2 className="text-sm sm:text-base font-black text-[#0f233a] tracking-wider uppercase">
-              Student Performance
-            </h2>
-            <div className="w-8 h-0.5 bg-[#026fc3] rounded-full" />
+          <div className="space-y-1.5 pb-5 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#026fc3] ring-4 ring-sky-100" />
+              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
+                Student Performance
+              </h2>
+            </div>
+            <div className="w-10 h-1 bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full" />
           </div>
 
-          <div className="pt-5 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+          <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
             
-            {/* LEFT: Classroom Leaderboard (3D Podium + Top Students) (7 Cols) */}
+            {/* LEFT: Classroom Leaderboard (Podium + Top Students) (7-8 Cols) */}
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
               <ClassroomLeaderboard
                 entries={leaderboard}
@@ -1145,29 +1190,31 @@ export const ClassroomDetailPage: React.FC = () => {
               />
             </div>
 
-            {/* RIGHT: AI Teaching Intelligence Card (5 Cols) */}
-            <div className="lg:col-span-5 xl:col-span-4 rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-4 border border-indigo-950/60 min-h-[300px]">
+            {/* RIGHT: AI Teaching Intelligence Feature Panel (4-5 Cols) */}
+            <div className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5 border border-purple-900/50 min-h-[320px] bg-gradient-to-br from-[#121033] via-[#1a1848] to-[#0a0e24] group hover:shadow-2xl transition-all duration-300">
               
-              {/* Background Paper-Cut Artwork Image */}
+              {/* Background Artwork Image with Hover Zoom */}
               <img
                 src="/assets/92697e31-f3ea-46a7-b531-ca18d5725169.png"
                 alt="AI Teaching Intelligence Artwork"
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none group-hover:scale-105 transition-transform duration-500"
               />
 
-              {/* Soft Contrast Gradient Overlay for Crystal Clear Text Legibility */}
-              <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/90 via-indigo-950/30 to-indigo-950/40 pointer-events-none" />
+              {/* Contrast Gradient Overlay for Crystal Clear Text Legibility */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0e0c29] via-[#0e0c29]/75 to-indigo-950/40 pointer-events-none" />
 
-              <div className="space-y-2 relative z-10">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-300" />
-                  <span className="text-sm sm:text-base font-black text-white">
-                    AI Teaching Intelligence
-                  </span>
+              <div className="space-y-3 relative z-10">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/25 border border-purple-400/35 backdrop-blur-xs text-xs font-black text-purple-200 shadow-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                  <span>AI Teaching Intelligence</span>
                 </div>
 
-                <p className="text-xs sm:text-sm text-indigo-100 font-medium leading-relaxed max-w-[240px] drop-shadow-xs">
+                <h3 className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug">
                   Understand your classroom. Know what to teach next.
+                </h3>
+
+                <p className="text-xs sm:text-sm text-purple-200/90 font-medium leading-relaxed max-w-xs drop-shadow-xs">
+                  Real-time student mastery radar, learning gaps analysis, and tailored pedagogical recommendations.
                 </p>
               </div>
 
@@ -1175,7 +1222,7 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAiReportModalOpen(true)}
-                  className="w-full py-3 px-5 bg-[#f9f7f1] hover:bg-white text-[#1e1b4b] rounded-full text-xs sm:text-sm font-black shadow-md active:scale-95 transition-all text-center cursor-pointer"
+                  className="btn-liquid-secondary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center"
                 >
                   Open Teaching Intelligence
                 </button>
@@ -1188,9 +1235,9 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 5 — CREATE A COURSE                                               */}
+        {/* SECTION 6 — CREATE A COURSE (Wide Liquid Surface)                          */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-[24px] p-5 sm:p-7 border border-stone-200/70 shadow-xs relative overflow-hidden group hover:shadow-md transition-all">
+        <section className="bg-gradient-to-r from-sky-50/80 via-white to-indigo-50/50 rounded-2xl sm:rounded-[28px] p-5 sm:p-7 border border-sky-200/80 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.06)] relative overflow-hidden group hover:shadow-[0_8px_30px_-4px_rgba(2,111,195,0.12)] transition-all duration-200">
           
           {/* Decorative Corner Leaves on Right Edge */}
           <CourseCardLeaves />
@@ -1198,14 +1245,14 @@ export const ClassroomDetailPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
             
             <div className="flex items-center gap-4">
-              <div className="shrink-0">
-                <CreateCourseIllustration className="w-16 h-14" />
+              <div className="w-14 h-14 rounded-2xl bg-white/90 border border-sky-100 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform duration-200">
+                <CreateCourseIllustration className="w-11 h-10" />
               </div>
               <div className="space-y-1 max-w-xl">
-                <h3 className="text-base font-black text-slate-900">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
                   Create a Course
                 </h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
                   Build structured learning experiences with modules, lessons, quizzes and resources for your students.
                 </p>
               </div>
@@ -1215,9 +1262,9 @@ export const ClassroomDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActivityHubOpen(true)}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-full text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md cursor-pointer inline-flex items-center gap-2"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>Create Course</span>
               </button>
             </div>
@@ -1285,20 +1332,26 @@ export const ClassroomDetailPage: React.FC = () => {
                       <input
                         type="text"
                         required
+                        data-color-scheme="light"
+                        data-light-surface="true"
                         value={taskTitle}
                         onChange={(e) => setTaskTitle(e.target.value)}
                         placeholder="Assignment Title (e.g. Chapter 4 Chemistry Review)"
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900"
+                        style={{ color: '#0a1a33', backgroundColor: '#ffffff', caretColor: '#026fc3' }}
+                        className="w-full px-4 py-3 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm font-bold text-[#0a1a33] placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#026fc3]"
                       />
                     </div>
 
                     <div>
                       <textarea
                         rows={3}
+                        data-color-scheme="light"
+                        data-light-surface="true"
                         value={taskInstructions}
                         onChange={(e) => setTaskInstructions(e.target.value)}
                         placeholder="Instructions and requirements for students..."
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 resize-none"
+                        style={{ color: '#0a1a33', backgroundColor: '#ffffff', caretColor: '#026fc3' }}
+                        className="edtechra-liquid-textarea w-full px-4 py-3 bg-white border border-slate-200/90 rounded-2xl text-xs sm:text-sm font-medium text-[#0a1a33] placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#026fc3] resize-none"
                       />
                     </div>
 
@@ -1310,27 +1363,33 @@ export const ClassroomDetailPage: React.FC = () => {
                           min={10}
                           max={500}
                           required
+                          data-color-scheme="light"
+                          data-light-surface="true"
                           value={taskPoints}
                           onChange={(e) => setTaskPoints(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          style={{ color: '#0a1a33', backgroundColor: '#ffffff' }}
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-[#0a1a33]"
                         />
                       </div>
                       <div>
                         <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Due Date</label>
                         <input
                           type="date"
+                          data-color-scheme="light"
+                          data-light-surface="true"
                           value={taskDueDate}
                           onChange={(e) => setTaskDueDate(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                          style={{ color: '#0a1a33', backgroundColor: '#ffffff' }}
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs font-bold text-[#0a1a33]"
                         />
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-1">
+                    <div className="flex justify-end gap-2.5 pt-1">
                       <button
                         type="submit"
                         disabled={isCreatingTask}
-                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm active:scale-95 transition-all cursor-pointer"
+                        className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm font-bold shadow-sm active:scale-95 transition-all cursor-pointer"
                       >
                         {isCreatingTask ? 'Publishing...' : 'Publish Task'}
                       </button>
