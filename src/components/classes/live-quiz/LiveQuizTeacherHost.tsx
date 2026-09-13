@@ -197,6 +197,13 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     setAnsweredCount(0);
     setAnswerDistribution({ 0: 0, 1: 0, 2: 0, 3: 0 });
 
+    // Play start fanfare on Q0, or transition chime on subsequent questions
+    if (currentQIndex === 0) {
+      quizAudioService.playQuizStart();
+    } else {
+      quizAudioService.playQuestionTransition();
+    }
+
     const broadcastPayload = {
       type: 'broadcast',
       event: 'question_started',
@@ -349,6 +356,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     if (isFinishing) return;
     setIsFinishing(true);
     quizAudioService.stopBackgroundMusic();
+    quizAudioService.playQuizComplete();
 
     try {
       const res = await liveQuizService.finishQuiz(session.id);

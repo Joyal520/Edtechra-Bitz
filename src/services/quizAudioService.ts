@@ -363,6 +363,131 @@ class QuizAudioService {
       console.warn('[QuizAudioService] playIncorrect notice:', err);
     }
   }
+
+  /**
+   * Play Quiz Start Fanfare
+   * 3-note ascending fanfare (G4 -> C5 -> G5) announcing the start of Question 1
+   */
+  public playQuizStart(): void {
+    if (!this.isSoundEnabled()) return;
+
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 392.00, time: now + 0.00, dur: 0.14, gain: 0.24 }, // G4
+        { freq: 523.25, time: now + 0.12, dur: 0.14, gain: 0.28 }, // C5
+        { freq: 783.99, time: now + 0.24, dur: 0.38, gain: 0.34 }  // G5
+      ];
+
+      notes.forEach((n) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.freq, n.time);
+
+        gainNode.gain.setValueAtTime(0.001, n.time);
+        gainNode.gain.exponentialRampToValueAtTime(n.gain, n.time + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, n.time + n.dur);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(n.time);
+        osc.stop(n.time + n.dur);
+      });
+    } catch (err) {
+      console.warn('[QuizAudioService] playQuizStart notice:', err);
+    }
+  }
+
+  /**
+   * Play Question Transition Sound
+   * Ascending chime/whoosh (D5 -> F#5 -> A5 -> D6) when transitioning between questions
+   */
+  public playQuestionTransition(): void {
+    if (!this.isSoundEnabled()) return;
+
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 587.33, time: now + 0.00, dur: 0.08, gain: 0.18 }, // D5
+        { freq: 739.99, time: now + 0.07, dur: 0.08, gain: 0.20 }, // F#5
+        { freq: 880.00, time: now + 0.14, dur: 0.09, gain: 0.22 }, // A5
+        { freq: 1174.66, time: now + 0.21, dur: 0.28, gain: 0.26 } // D6
+      ];
+
+      notes.forEach((n) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.freq, n.time);
+
+        gainNode.gain.setValueAtTime(0.001, n.time);
+        gainNode.gain.exponentialRampToValueAtTime(n.gain, n.time + 0.015);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, n.time + n.dur);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(n.time);
+        osc.stop(n.time + n.dur);
+      });
+    } catch (err) {
+      console.warn('[QuizAudioService] playQuestionTransition notice:', err);
+    }
+  }
+
+  /**
+   * Play Quiz Complete Victory Fanfare
+   * Celebratory melody (C5 -> E5 -> G5 -> C6 -> A5 -> B5 -> C6) for podium / leaderboard
+   */
+  public playQuizComplete(): void {
+    if (!this.isSoundEnabled()) return;
+
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 523.25, time: now + 0.00, dur: 0.14, gain: 0.22 }, // C5
+        { freq: 659.25, time: now + 0.12, dur: 0.14, gain: 0.24 }, // E5
+        { freq: 783.99, time: now + 0.24, dur: 0.16, gain: 0.26 }, // G5
+        { freq: 1046.50, time: now + 0.38, dur: 0.30, gain: 0.30 }, // C6
+        { freq: 880.00, time: now + 0.62, dur: 0.12, gain: 0.24 }, // A5
+        { freq: 987.77, time: now + 0.72, dur: 0.14, gain: 0.26 }, // B5
+        { freq: 1046.50, time: now + 0.84, dur: 0.50, gain: 0.32 }  // C6 (Triumphant hold)
+      ];
+
+      notes.forEach((n) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.freq, n.time);
+
+        gainNode.gain.setValueAtTime(0.001, n.time);
+        gainNode.gain.exponentialRampToValueAtTime(n.gain, n.time + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, n.time + n.dur);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        osc.start(n.time);
+        osc.stop(n.time + n.dur);
+      });
+    } catch (err) {
+      console.warn('[QuizAudioService] playQuizComplete notice:', err);
+    }
+  }
 }
 
 export const quizAudioService = new QuizAudioService();

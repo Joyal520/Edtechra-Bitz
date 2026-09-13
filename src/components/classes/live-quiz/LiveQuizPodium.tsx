@@ -83,7 +83,7 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   useEffect(() => {
     // Strictly ensure no background music is playing on results/podium
     quizAudioService.stopBackgroundMusic();
-    quizAudioService.playCorrect();
+    quizAudioService.playQuizComplete();
   }, []);
 
   const handleReturn = () => {
