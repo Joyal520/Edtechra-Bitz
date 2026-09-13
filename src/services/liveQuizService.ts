@@ -645,6 +645,7 @@ class LiveQuizService {
         current_question_index: 0,
         question_duration_sec: firstQDuration,
         started_at: startedAt,
+        scheduled_start_at: scheduledStartAt,
         expires_at: expiresAt
       };
 
@@ -1142,8 +1143,10 @@ class LiveQuizService {
       }
 
       // If scheduled time has arrived, trigger auto-reconciliation
-      const scheduledTime = data.scheduled_start_at || (data.status === 'scheduled' ? data.started_at : null);
-      if (scheduledTime && new Date(scheduledTime).getTime() <= Date.now() && data.status === 'scheduled') {
+      // Note: scheduled sessions are stored with status = 'lobby' and started_at = future time
+      const scheduledTime = data.scheduled_start_at || data.started_at;
+      if (scheduledTime && new Date(scheduledTime).getTime() <= Date.now()
+          && (data.status === 'scheduled' || data.status === 'lobby')) {
         const reconciled = await this.reconcileScheduledSession(data.id, classroomId);
         if (reconciled) return reconciled;
       }

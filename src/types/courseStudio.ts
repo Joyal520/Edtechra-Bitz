@@ -238,6 +238,8 @@ export interface CourseQuestion {
   question_type: QuestionType;
   options: string[] | Array<{ text: string; id?: string }> | Record<string, any>;
   correct_answer: string;
+  items?: string[] | any[];
+  correct_order?: string[] | any[];
   explanation?: string;
   skill?: string;
   concept?: string;

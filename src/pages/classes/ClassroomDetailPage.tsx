@@ -145,19 +145,59 @@ export const ClassroomDetailPage: React.FC = () => {
   const effectiveLiveQuizState = liveQuizService.getEffectiveSessionState(activeLiveQuizSession);
   const scheduledTimeStr = activeLiveQuizSession?.scheduled_start_at || activeLiveQuizSession?.started_at;
 
+  const isTeacher = Boolean(
+    classroom?.teacher_id === user?.id ||
+    classroom?.user_role === 'teacher' ||
+    authIsTeacher
+  );
+
+  // Ref to prevent duplicate auto-join navigations
+  const scheduledAutoJoinRef = useRef(false);
+
   // Live countdown ticker for scheduled session banner
   useEffect(() => {
     if (effectiveLiveQuizState !== 'scheduled' || !scheduledTimeStr) {
       setScheduledCountdownText('');
+      scheduledAutoJoinRef.current = false;
       return;
     }
 
-    const updateCountdown = () => {
+    const updateCountdown = async () => {
       const diffMs = new Date(scheduledTimeStr).getTime() - Date.now();
       if (diffMs <= 0) {
         setScheduledCountdownText('00:00');
-        if (id) {
-          liveQuizService.getActiveSessionForClassroom(id).then(setActiveLiveQuizSession);
+
+        // Re-fetch active session — GET /active-session now auto-transitions the session server-side
+        if (id && !scheduledAutoJoinRef.current) {
+          scheduledAutoJoinRef.current = true;
+          try {
+            const freshSession = await liveQuizService.getActiveSessionForClassroom(id);
+            if (freshSession) {
+              setActiveLiveQuizSession(freshSession);
+
+              // Auto-navigate STUDENTS directly into the quiz when it becomes live
+              if (!isTeacher && (freshSession.status === 'in_progress' || freshSession.status === 'reveal')) {
+                const studentName = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
+                await liveQuizService.joinSession({
+                  session_id: freshSession.id,
+                  display_name: studentName,
+                  avatar_url: profile?.avatar_url || profile?.avatarUrl || undefined
+                });
+                navigate(`/classes/${id}/live-quiz/play/${freshSession.id}`, {
+                  state: {
+                    initialSession: {
+                      ...freshSession,
+                      status: 'in_progress',
+                      current_question_index: freshSession.current_question_index ?? 0
+                    }
+                  }
+                });
+                return;
+              }
+            }
+          } catch {
+            // Network error — student will see the updated banner on next 5s poll
+          }
         }
         return;
       }
@@ -175,7 +215,7 @@ export const ClassroomDetailPage: React.FC = () => {
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [effectiveLiveQuizState, scheduledTimeStr, id]);
+  }, [effectiveLiveQuizState, scheduledTimeStr, id, isTeacher, profile, user, navigate]);
 
   const handleOpenLaunchDecision = (quiz: LiveQuiz) => {
     setLiveQuizBankOpen(false);
@@ -312,6 +352,40 @@ export const ClassroomDetailPage: React.FC = () => {
               ) {
                 // Immediately remove panel
                 if (isMounted) setActiveLiveQuizSession(null);
+              } else if (
+                row?.status === 'in_progress' &&
+                payload.eventType === 'UPDATE' &&
+                !scheduledAutoJoinRef.current
+              ) {
+                // Server ticker or GET /active-session just transitioned a scheduled quiz
+                // Auto-navigate students directly into the quiz
+                scheduledAutoJoinRef.current = true;
+                refreshActiveQuiz().then(async () => {
+                  if (!isMounted) return;
+                  // Determine if current user is a student (not the teacher of this classroom)
+                  const userIsTeacher = row.teacher_id === user?.id || authIsTeacher;
+                  if (!userIsTeacher && row.id) {
+                    try {
+                      const studentName = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
+                      await liveQuizService.joinSession({
+                        session_id: row.id,
+                        display_name: studentName,
+                        avatar_url: profile?.avatar_url || (profile as any)?.avatarUrl || undefined
+                      });
+                      navigate(`/classes/${id}/live-quiz/play/${row.id}`, {
+                        state: {
+                          initialSession: {
+                            ...row,
+                            status: 'in_progress',
+                            current_question_index: row.current_question_index ?? 0
+                          }
+                        }
+                      });
+                    } catch {
+                      // Fallback: student sees updated banner and can click Join
+                    }
+                  }
+                });
               } else {
                 refreshActiveQuiz();
               }
@@ -385,12 +459,6 @@ export const ClassroomDetailPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const isTeacher = Boolean(
-    classroom?.teacher_id === user?.id ||
-    classroom?.user_role === 'teacher' ||
-    authIsTeacher
-  );
 
   const myMemberRecord = members.find((m) => m.profile_id === user?.id) || null;
 

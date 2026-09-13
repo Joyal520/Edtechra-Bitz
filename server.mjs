@@ -219,7 +219,7 @@ if (serverSupabase && process.env.VERCEL !== '1') {
 // ============================================================================
 
 export function computeLiveQuizTimeline(session, questions, nowMs = Date.now()) {
-  const startedAt = session.started_at;
+  const startedAt = session.started_at || session.scheduled_start_at;
   if (!startedAt) {
     return {
       status: session.status || 'lobby',
@@ -456,7 +456,7 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
     const { data: activeSessions, error } = await supabaseClient
       .from('live_quiz_sessions')
       .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
-      .in('status', ['lobby', 'in_progress', 'reveal'])
+      .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -482,14 +482,15 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
       }
 
       // 1. Scheduled Quiz Autonomous Start:
-      // If status === 'lobby' and started_at is a future timestamp that has now elapsed:
-      if (session.status === 'lobby') {
-        if (!session.started_at) {
+      // If status is 'lobby' or 'scheduled' and scheduled_start_at / started_at is a future timestamp that has now elapsed:
+      if (session.status === 'lobby' || session.status === 'scheduled') {
+        const scheduledTime = session.scheduled_start_at || session.started_at;
+        if (!scheduledTime) {
           // Launch Now waiting lobby: do NOT auto-start, wait for teacher to press Start Quiz
           continue;
         }
 
-        const scheduledMs = new Date(session.started_at).getTime();
+        const scheduledMs = new Date(scheduledTime).getTime();
         if (now < scheduledMs) {
           // Scheduled start time has not yet arrived
           continue;
@@ -499,7 +500,7 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
         const q0 = questions[0];
         const q0Dur = q0?.duration_sec || q0?.durationSec || session.question_duration_sec || 20;
 
-        await supabaseClient
+        const { data: transitioned, error: transErr } = await supabaseClient
           .from('live_quiz_sessions')
           .update({
             status: 'in_progress',
@@ -509,7 +510,17 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
             question_duration_sec: q0Dur,
             correct_answer_index: null
           })
-          .eq('id', session.id);
+          .eq('id', session.id)
+          .in('status', ['lobby', 'scheduled'])
+          .select()
+          .maybeSingle();
+
+        if (transErr || !transitioned) {
+          // Another process/worker already transitioned it
+          continue;
+        }
+
+        console.log(`[LiveQuiz Server] SCHEDULED QUIZ STARTED | quiz_id=${session.quiz_id} | session_id=${session.id} | scheduled_start_at=${scheduledTime} | server_time=${new Date().toISOString()} | trigger_source=server_ticker`);
 
         session.status = 'in_progress';
         session.started_at = new Date(scheduledMs).toISOString();
@@ -3225,10 +3236,11 @@ app.get('/api/classes/:classroomId/live-quiz/active-session', async (req, res) =
       return res.json({ success: true, session: null, state: 'draft' });
     }
 
-    // Determine effective state
-    const scheduledTime = session.started_at;
+    // Determine effective state — and AUTHORITATIVELY TRANSITION if scheduled time has elapsed
+    const scheduledTime = session.scheduled_start_at || session.started_at;
     const nowMs = Date.now();
     let effectiveState = 'draft';
+    let effectiveSession = session;
 
     if (session.status === 'lobby') {
       if (scheduledTime) {
@@ -3236,7 +3248,82 @@ app.get('/api/classes/:classroomId/live-quiz/active-session', async (req, res) =
         if (scheduledMs > nowMs + 1000) {
           effectiveState = 'scheduled';
         } else {
+          // ============================================================
+          // SCHEDULED TIME HAS ELAPSED — AUTO-TRANSITION lobby → in_progress
+          // This is the authoritative server-side auto-start mechanism.
+          // No teacher browser, panel, or click is required.
+          // ============================================================
           effectiveState = 'live';
+
+          // Fetch questions for Q1 broadcast
+          let questions = [];
+          if (session.quiz_id) {
+            try {
+              const { data: qRows } = await serverSupabase
+                .from('live_quiz_questions')
+                .select('*')
+                .eq('quiz_id', session.quiz_id)
+                .order('order_index', { ascending: true });
+              if (qRows && qRows.length > 0) questions = qRows;
+            } catch {}
+          }
+          // Fallback: try the joined quiz data
+          if (questions.length === 0 && session.quiz?.questions) {
+            questions = Array.isArray(session.quiz.questions) ? session.quiz.questions : [];
+          }
+
+          const q0 = questions[0];
+          const q0Dur = q0?.duration_sec || q0?.durationSec || session.question_duration_sec || 20;
+          const startMs = Math.max(scheduledMs, nowMs);
+
+          // Atomic idempotent transition: WHERE status = 'lobby' ensures only one caller succeeds
+          const { data: transitioned, error: transErr } = await serverSupabase
+            .from('live_quiz_sessions')
+            .update({
+              status: 'in_progress',
+              started_at: new Date(startMs).toISOString(),
+              current_question_index: 0,
+              question_start_ms: startMs,
+              question_duration_sec: q0Dur,
+              correct_answer_index: null
+            })
+            .eq('id', session.id)
+            .eq('status', 'lobby')  // Idempotent guard: only transitions if still 'lobby'
+            .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+            .maybeSingle();
+
+          if (transitioned && !transErr) {
+            effectiveSession = transitioned;
+
+            console.log(`[LiveQuiz Server] SCHEDULED QUIZ STARTED | quiz_id=${session.quiz_id} | session_id=${session.id} | scheduled_start_at=${scheduledTime} | server_time=${new Date().toISOString()} | trigger_source=GET_active-session`);
+
+            // Broadcast Question 1 to all connected students via Realtime
+            if (session.pin && q0) {
+              let opts = [];
+              if (Array.isArray(q0.options)) opts = q0.options;
+              else if (typeof q0.options === 'string') {
+                try { opts = JSON.parse(q0.options); } catch { opts = []; }
+              }
+
+              await broadcastQuizEvent(serverSupabase, session.pin, 'question_started', {
+                qIndex: 0,
+                questionIndex: 0,
+                question: q0.question_text || q0.question || 'Question 1',
+                options: opts,
+                durationSec: q0Dur,
+                questionStartMs: startMs,
+                totalQuestions: questions.length
+              });
+            }
+          } else {
+            // Another caller already transitioned — re-fetch current state
+            const { data: currentSession } = await serverSupabase
+              .from('live_quiz_sessions')
+              .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+              .eq('id', session.id)
+              .maybeSingle();
+            if (currentSession) effectiveSession = currentSession;
+          }
         }
       } else {
         effectiveState = 'lobby';
@@ -3247,7 +3334,7 @@ app.get('/api/classes/:classroomId/live-quiz/active-session', async (req, res) =
 
     return res.json({
       success: true,
-      session,
+      session: effectiveSession,
       state: effectiveState
     });
   } catch (error) {

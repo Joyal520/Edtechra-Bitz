@@ -116,6 +116,16 @@ export function getRawCorrectAnswer(question: any): any {
   if (!question) return '';
   if (question.correct_answer !== undefined && question.correct_answer !== null) return question.correct_answer;
   if (question.correctAnswer !== undefined && question.correctAnswer !== null) return question.correctAnswer;
+  if (question.correct_order !== undefined && question.correct_order !== null) {
+    return Array.isArray(question.correct_order)
+      ? question.correct_order.map((it: any) => typeof it === 'string' ? it : it?.text || String(it || '')).join(' ')
+      : question.correct_order;
+  }
+  if (question.correctOrder !== undefined && question.correctOrder !== null) {
+    return Array.isArray(question.correctOrder)
+      ? question.correctOrder.map((it: any) => typeof it === 'string' ? it : it?.text || String(it || '')).join(' ')
+      : question.correctOrder;
+  }
   if (question.correct_option !== undefined && question.correct_option !== null) return question.correct_option;
   if (question.correctOption !== undefined && question.correctOption !== null) return question.correctOption;
   if (question.expected_answer !== undefined && question.expected_answer !== null) return question.expected_answer;
@@ -598,12 +608,26 @@ export function evaluateQuestionAnswer(
 
   // 5. SENTENCE REORDERING / WORD ORDERING
   if (qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') {
-    const cleanStudent = cleanTextForComparison(
-      Array.isArray(studentAnswer) ? studentAnswer.join(' ') : String(studentAnswer || '')
-    );
-    const cleanExpected = cleanTextForComparison(rawCorrect);
+    const studentTokens: string[] = Array.isArray(studentAnswer)
+      ? studentAnswer.map((w: any) => typeof w === 'string' ? w : w?.text || String(w || ''))
+      : String(studentAnswer || '').trim().split(/\s+/);
+    const cleanStudent = cleanTextForComparison(studentTokens.join(' '));
 
-    const isCorrect = Boolean(cleanStudent) && cleanStudent === cleanExpected;
+    const expectedTokens: string[] = Array.isArray(question.correct_order)
+      ? question.correct_order.map((w: any) => typeof w === 'string' ? w : w?.text || String(w || ''))
+      : Array.isArray((question as any).correctOrder)
+      ? (question as any).correctOrder.map((w: any) => typeof w === 'string' ? w : w?.text || String(w || ''))
+      : String(rawCorrect || '').trim().split(/\s+/);
+
+    const isArrayMatch = expectedTokens.length > 0 &&
+      studentTokens.length === expectedTokens.length &&
+      studentTokens.every((word, i) => cleanTextForComparison(word) === cleanTextForComparison(expectedTokens[i]));
+
+    const cleanExpected = cleanTextForComparison(rawCorrect || expectedTokens.join(' '));
+    const isStringMatch = Boolean(cleanStudent) && cleanStudent === cleanExpected;
+
+    const isCorrect = isArrayMatch || isStringMatch;
+    const expectedDisplay = rawCorrect || expectedTokens.join(' ');
 
     return {
       isCorrect,
@@ -611,7 +635,7 @@ export function evaluateQuestionAnswer(
       maxScore,
       feedback: isCorrect
         ? (explanation ? `Perfect! ${explanation}` : 'Perfect sentence sequence!')
-        : `Correct order: "${rawCorrect}". ${explanation}`.trim()
+        : `Correct order: "${expectedDisplay}". ${explanation || ''}`.trim()
     };
   }
 

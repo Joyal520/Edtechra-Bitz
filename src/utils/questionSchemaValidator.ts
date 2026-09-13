@@ -845,10 +845,11 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         if (!Array.isArray(q.pairs) && !Array.isArray(q.options)) {
           errors.push(`${qNum}: Matching question requires "pairs" array with left/right items.`);
         }
-      } else if (typeKey === 'ordering') {
-        if (!q.question) q.question = 'Arrange the story events in the correct order';
-        if (!Array.isArray(q.items) || q.items.length < 2) {
-          errors.push(`${qNum}: Ordering question requires "items" array with at least 2 sentence blocks.`);
+      } else if (typeKey === 'ordering' || typeKey === 'sentence_reordering' || typeKey === 'sentence_builder' || typeKey === 'word_ordering') {
+        if (!q.question) q.question = 'Put the words in the correct order.';
+        const itemsCandidate = q.items || q.options || q.correct_order;
+        if (!Array.isArray(itemsCandidate) || itemsCandidate.length < 2) {
+          errors.push(`${qNum}: Requires "items" or "correct_order" array with at least 2 words/phrases.`);
         }
       } else if (typeKey === 'short_answer') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
@@ -1083,8 +1084,16 @@ export function convertValidatedJsonToCourseQuestions(
         if (Array.isArray(q.pairs)) {
           optionsList = q.pairs.map((p: any) => `${p.left || ''} -> ${p.right || ''}`);
         }
-      } else if (qType === 'ordering') {
-        optionsList = Array.isArray(q.items) ? q.items : [];
+      } else if (qType === 'ordering' || qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'word_ordering') {
+        const rawItems = q.items || q.options || q.words || q.correct_order || [];
+        optionsList = Array.isArray(rawItems)
+          ? rawItems.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || ''))
+          : [];
+        const rawCorrect = q.correct_order || q.correctOrder || q.items || [];
+        const correctList = Array.isArray(rawCorrect)
+          ? rawCorrect.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || ''))
+          : [];
+        correctAnswerStr = q.correct_answer || correctList.join(' ') || (optionsList.length > 0 ? optionsList.join(' ') : '');
       } else if (qType === 'short_answer') {
         if (Array.isArray(q.acceptable_answers)) {
           optionsList = q.acceptable_answers;
@@ -1121,6 +1130,8 @@ export function convertValidatedJsonToCourseQuestions(
         question_type: qType,
         options: optionsList,
         correct_answer: correctAnswerStr,
+        items: optionsList,
+        correct_order: (Array.isArray(q.correct_order) ? q.correct_order : Array.isArray(q.correctOrder) ? q.correctOrder : optionsList),
         explanation: q.explanation || '',
         skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : 'Comprehension'),
         concept: q.concept || 'General',

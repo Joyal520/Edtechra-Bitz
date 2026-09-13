@@ -100,6 +100,10 @@ class CourseSoundSystem {
     }
   }
 
+  public playClick() {
+    this.playSelectSound();
+  }
+
   /**
    * 2. Soft, pleasant educational correct chime (C5 -> E5 -> G5 arpeggio, 250ms)
    */

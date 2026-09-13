@@ -27,8 +27,57 @@ import {
   normalizeQuestionOptions,
   resolveCorrectOption,
   isOptionMatchingStudentAnswer,
-  evaluateQuestionAnswer
+  evaluateQuestionAnswer,
+  cleanTextForComparison
 } from '@/utils/questionGrading';
+
+interface SentenceToken {
+  id: string;
+  text: string;
+}
+
+// Normalizes items/options/correct_order into a clean array of string tokens
+function extractSentenceTokens(q: any): string[] {
+  const rawItems = q.items || q.options || q.words || q.correct_order || q.correctOrder;
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    return rawItems
+      .map((item: any) => {
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object' && item !== null) {
+          return String(item.text ?? item.label ?? item.value ?? item.word ?? '').trim();
+        }
+        return String(item ?? '').trim();
+      })
+      .filter(Boolean);
+  }
+
+  if (q.correct_answer && typeof q.correct_answer === 'string') {
+    return q.correct_answer.trim().split(/\s+/).filter(Boolean);
+  }
+
+  return [];
+}
+
+function extractSentenceCorrectOrder(q: any): string[] {
+  const rawCorrect = q.correct_order || q.correctOrder || q.items;
+  if (Array.isArray(rawCorrect) && rawCorrect.length > 0) {
+    return rawCorrect
+      .map((item: any) => {
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object' && item !== null) {
+          return String(item.text ?? item.label ?? item.value ?? item.word ?? '').trim();
+        }
+        return String(item ?? '').trim();
+      })
+      .filter(Boolean);
+  }
+
+  if (q.correct_answer && typeof q.correct_answer === 'string') {
+    return q.correct_answer.trim().split(/\s+/).filter(Boolean);
+  }
+
+  return [];
+}
 
 interface ComprehensiveQuestionRendererProps {
   question: CourseQuestion;
@@ -47,10 +96,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 }) => {
   // Guarantee unique immutable question ID
   const qId = question.id || `q_fallback_${index}`;
-  const qType = question.question_type || 'multiple_choice';
+  const qType = question.question_type || (question as any).type || 'multiple_choice';
 
   // Normalize options array with stable identifiers
-  const normalizedOptions = normalizeQuestionOptions(question.options);
+  const rawOptionsSource = question.options || (question as any).items || (question as any).correct_order;
+  const normalizedOptions = normalizeQuestionOptions(rawOptionsSource);
   const resolvedCorrect = resolveCorrectOption(question);
   const optionsList: string[] = normalizedOptions.map(opt => opt.text);
 
@@ -69,23 +119,51 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   // Local interaction states strictly keyed to this instance
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [fillInput, setFillInput] = useState<string>('');
-  const [sentenceTokens, setSentenceTokens] = useState<string[]>([]);
-  const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
+  const [sentenceTokens, setSentenceTokens] = useState<SentenceToken[]>([]);
+  const [selectedTokens, setSelectedTokens] = useState<SentenceToken[]>([]);
   const [openEndedText, setOpenEndedText] = useState<string>('');
   const [isEvaluatingAi, setIsEvaluatingAi] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Initialize Sentence Reordering tokens from question options or prompt
+  // Initialize Sentence Reordering tokens from question items / options / correct_order
   useEffect(() => {
     if (qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') {
-      const tokens = optionsList.length > 0
-        ? [...optionsList]
-        : (question.correct_answer || '').split(/\s+/);
-      // Deterministic pseudo-shuffle for display
-      setSentenceTokens([...tokens].sort(() => 0.5 - Math.random()));
+      if (response && response.status !== 'unanswered' && response.answer) {
+        let prevWords: string[] = [];
+        if (Array.isArray(response.answer)) {
+          prevWords = response.answer.map(String);
+        } else if (typeof response.answer === 'string') {
+          prevWords = response.answer.trim().split(/\s+/);
+        }
+        setSelectedTokens(prevWords.map((w, i) => ({ id: `prev_${qId}_${i}`, text: w })));
+        setSentenceTokens([]);
+        return;
+      }
+
+      const itemsList = extractSentenceTokens(question);
+      const tokenObjects: SentenceToken[] = itemsList.map((text, idx) => ({
+        id: `tok_${qId}_${idx}_${text.substring(0, 12).replace(/\s+/g, '_')}`,
+        text
+      }));
+
+      // Deterministic Fisher-Yates shuffle for display (ensuring order changes if > 1 item)
+      if (tokenObjects.length > 1) {
+        const shuffled = [...tokenObjects];
+        for (let attempt = 0; attempt < 5; attempt++) {
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+          const isIdentical = shuffled.every((t, i) => t.id === tokenObjects[i].id);
+          if (!isIdentical) break;
+        }
+        setSentenceTokens(shuffled);
+      } else {
+        setSentenceTokens(tokenObjects);
+      }
       setSelectedTokens([]);
     }
-  }, [qId, qType]);
+  }, [qId, qType, question, response]);
 
   const isAnswered = Boolean(response && response.status !== 'unanswered');
   const isCorrect = response?.status === 'correct';
@@ -509,75 +587,153 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* TYPE 6: SENTENCE & WORD REORDERING                                  */}
       {/* ------------------------------------------------------------------- */}
       {(qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') && (
-        <div className="space-y-3 pt-1">
-          <p className="text-xs text-theme-secondary font-medium">
-            Click words to assemble the sentence in correct order:
+        <div className="space-y-4 pt-1">
+          <p className="text-xs sm:text-sm text-theme-secondary font-medium">
+            Click the word chips below to assemble the sentence in the correct order:
           </p>
 
-          {/* Constructed Sentence Box */}
-          <div className="min-h-[52px] p-3 rounded-xl border-2 border-dashed border-[#026fc3]/40 bg-[var(--theme-surface-subtle)] flex flex-wrap gap-2 items-center">
-            {selectedTokens.length === 0 ? (
-              <span className="text-xs text-slate-400 italic">Select chips below in order...</span>
-            ) : (
-              selectedTokens.map((tok, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={isAnswered}
-                  onClick={() => {
-                    setSelectedTokens(prev => prev.filter((_, i) => i !== idx));
-                    setSentenceTokens(prev => [...prev, tok]);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-[#026fc3] text-white text-xs font-bold shadow-2xs hover:bg-rose-600 transition-colors cursor-pointer"
-                  title="Click to remove"
-                >
-                  {tok}
-                </button>
-              ))
-            )}
+          {/* Constructed Sentence Box (Answer Area) */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider block">
+              Your Ordered Sentence:
+            </span>
+            <div
+              className="min-h-[64px] p-3 sm:p-4 rounded-2xl border-2 border-dashed border-[#026fc3]/60 bg-[var(--theme-surface-subtle)] flex flex-wrap items-center transition-all duration-200"
+              style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minHeight: '64px' }}
+            >
+              {selectedTokens.length === 0 ? (
+                <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1">
+                  Click the chips below in order to assemble the sentence...
+                </span>
+              ) : (
+                selectedTokens.map((token) => (
+                  <button
+                    key={token.id}
+                    type="button"
+                    disabled={isAnswered}
+                    onClick={() => {
+                      if (isAnswered) return;
+                      courseAudio.playClick();
+                      setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
+                      setSentenceTokens(prev => [...prev, token]);
+                    }}
+                    className="min-h-[40px] px-4 py-2 rounded-xl bg-[#026fc3] hover:bg-rose-600 text-white font-bold text-sm sm:text-base shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer inline-flex items-center justify-center gap-2 w-auto select-none group"
+                    style={{ minHeight: '40px', width: 'auto' }}
+                    title={isAnswered ? undefined : "Click to remove"}
+                  >
+                    <span>{token.text}</span>
+                    {!isAnswered && (
+                      <span className="w-4 h-4 rounded-full bg-white/20 group-hover:bg-white/40 flex items-center justify-center text-[10px] leading-none transition-colors">
+                        ✕
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
-          {/* Available Word Chips */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {sentenceTokens.map((tok, idx) => (
-              <button
-                key={idx}
-                type="button"
-                disabled={isAnswered}
-                onClick={() => {
-                  setSelectedTokens(prev => [...prev, tok]);
-                  setSentenceTokens(prev => prev.filter((_, i) => i !== idx));
-                }}
-                className="px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-theme-primary text-xs font-bold hover:border-[#026fc3] shadow-2xs cursor-pointer"
-              >
-                {tok}
-              </button>
-            ))}
+          {/* Available Word Chips Area */}
+          <div className="space-y-1.5 pt-1">
+            <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider block">
+              Available Words & Phrases:
+            </span>
+            <div
+              className="flex flex-wrap items-center p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] min-h-[64px]"
+              style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}
+            >
+              {sentenceTokens.length === 0 ? (
+                <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <span>All words placed! Click "Submit Sentence" below.</span>
+                </div>
+              ) : (
+                sentenceTokens.map((token) => (
+                  <button
+                    key={token.id}
+                    type="button"
+                    disabled={isAnswered}
+                    onClick={() => {
+                      if (isAnswered) return;
+                      courseAudio.playClick();
+                      setSelectedTokens(prev => [...prev, token]);
+                      setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
+                    }}
+                    className="min-h-[40px] px-4 py-2 rounded-xl border-2 border-sky-300 dark:border-sky-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-sky-100 font-bold text-sm sm:text-base shadow-xs hover:border-[#026fc3] hover:bg-sky-50 dark:hover:bg-slate-700 active:scale-95 transition-all cursor-pointer inline-flex items-center justify-center text-center w-auto select-none"
+                    style={{ minHeight: '40px', width: 'auto' }}
+                  >
+                    {token.text}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
           {!isAnswered && (
-            <button
-              type="button"
-              disabled={selectedTokens.length === 0}
-              onClick={() => {
-                const built = selectedTokens.join(' ').trim();
-                const expected = (question.correct_answer || '').trim();
-                const cleanBuilt = built.replace(/[.,!?]/g, '').toLowerCase();
-                const cleanExpected = expected.replace(/[.,!?]/g, '').toLowerCase();
-                const isMatch = cleanBuilt === cleanExpected;
+            <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {sentenceTokens.length > 0 ? (
+                  <span>{sentenceTokens.length} word{sentenceTokens.length > 1 ? 's' : ''} remaining to place</span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Ready to submit!
+                  </span>
+                )}
+              </div>
 
-                commitAnswer(
-                  built,
-                  isMatch,
-                  isMatch
-                    ? question.explanation || 'Perfect sentence sequence!'
-                    : `Correct order: "${question.correct_answer}". ${question.explanation || ''}`
-                );
-              }}
-              className="px-5 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs font-black shadow-xs cursor-pointer disabled:opacity-40"
-            >
-              Submit Sentence
-            </button>
+              <div className="flex items-center gap-2">
+                {selectedTokens.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      courseAudio.playClick();
+                      const all = [...selectedTokens, ...sentenceTokens];
+                      const shuffled = [...all].sort(() => 0.5 - Math.random());
+                      setSentenceTokens(shuffled);
+                      setSelectedTokens([]);
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={selectedTokens.length === 0}
+                  onClick={() => {
+                    const studentOrderList = selectedTokens.map(t => t.text.trim());
+                    const builtSentence = studentOrderList.join(' ').trim();
+
+                    const expectedOrderList = extractSentenceCorrectOrder(question);
+                    const expectedFullSentence = expectedOrderList.length > 0
+                      ? expectedOrderList.join(' ').trim()
+                      : String(question.correct_answer || '').trim();
+
+                    // 1. Array comparison against correct_order
+                    const isArrayMatch = expectedOrderList.length > 0 &&
+                      studentOrderList.length === expectedOrderList.length &&
+                      studentOrderList.every((word, i) => word.toLowerCase() === expectedOrderList[i].toLowerCase());
+
+                    // 2. Normalized text match
+                    const cleanBuilt = cleanTextForComparison(builtSentence);
+                    const cleanExpected = cleanTextForComparison(expectedFullSentence);
+                    const isStringMatch = Boolean(cleanBuilt) && cleanBuilt === cleanExpected;
+
+                    const isMatch = isArrayMatch || isStringMatch;
+
+                    const feedbackText = isMatch
+                      ? (question.explanation || 'Perfect sentence sequence!')
+                      : `The correct sentence is: ${expectedFullSentence}. ${question.explanation || ''}`.trim();
+
+                    commitAnswer(builtSentence, isMatch, feedbackText);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs sm:text-sm font-black shadow-xs cursor-pointer disabled:opacity-40 transition-all"
+                >
+                  Submit Sentence
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}
