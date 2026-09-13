@@ -636,6 +636,8 @@ class LiveQuizService {
       const firstQDuration = quiz?.questions?.[0]?.durationSec || 20;
 
       // Clean insertion row matching live_quiz_sessions table schema & check constraints
+      // Note: started_at stores the future scheduled time for scheduled sessions
+      // We do not include scheduled_start_at in the DB insert to maintain 100% compatibility with production tables
       const insertRow: any = {
         classroom_id: payload.classroom_id,
         teacher_id: userId,
@@ -645,7 +647,6 @@ class LiveQuizService {
         current_question_index: 0,
         question_duration_sec: firstQDuration,
         started_at: startedAt,
-        scheduled_start_at: scheduledStartAt,
         expires_at: expiresAt
       };
 
@@ -664,6 +665,7 @@ class LiveQuizService {
       return {
         data: {
           ...data,
+          scheduled_start_at: scheduledStartAt || data.started_at,
           quiz
         }
       };
