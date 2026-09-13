@@ -124,44 +124,44 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
   ).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div
         data-theme-mode="light"
         data-light-surface="true"
         style={{ colorScheme: 'light' }}
-        className="bg-white text-slate-900 light edtechra-light-surface rounded-3xl max-w-4xl w-full h-[88vh] p-6 shadow-2xl border border-slate-100 flex flex-col relative overflow-hidden animate-in zoom-in-95 duration-200 [color-scheme:light]"
+        className="bg-white text-slate-900 light edtechra-light-surface rounded-none sm:rounded-3xl w-full h-full sm:w-[94vw] sm:h-[92vh] max-w-[1550px] p-3 sm:p-6 shadow-2xl border-0 sm:border border-slate-100 flex flex-col relative overflow-hidden animate-in zoom-in-95 duration-200 [color-scheme:light]"
       >
         
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
+        <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-slate-100 shrink-0 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
               <Zap className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900">Quiz Library & Bank</h2>
-              <p className="text-xs text-slate-500 font-semibold">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 truncate">Quiz Library & Bank</h2>
+              <p className="text-xs text-slate-500 font-semibold hidden sm:block truncate">
                 Manage your created quizzes or explore shared common quizzes
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => {
                 onClose();
                 onCreateCustomQuiz();
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Custom Quiz</span>
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Create Custom Quiz</span>
             </button>
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -169,18 +169,18 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
         </div>
 
         {/* QUIZ LIBRARY OWNERSHIP TABS */}
-        <div className="pt-3 pb-2 border-b border-slate-100 shrink-0">
+        <div className="pt-2.5 pb-2 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('your')}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'your'
                   ? 'bg-purple-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Lock className="w-3.5 h-3.5" />
+              <Lock className="w-3.5 h-3.5 shrink-0" />
               <span>Your Quizzes</span>
               <span
                 className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
@@ -194,13 +194,13 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('common')}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs font-black transition-all cursor-pointer ${
                 activeTab === 'common'
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
+              <Globe className="w-3.5 h-3.5 shrink-0" />
               <span>Common Quizzes</span>
               <span
                 className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
@@ -214,14 +214,14 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
         </div>
 
         {/* Academic Category Filters & Search Bar */}
-        <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+        <div className="py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3.5 py-1 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                className={`px-3 sm:px-3.5 py-1 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   activeCategory === cat
                     ? 'bg-slate-900 text-white font-extrabold shadow-2xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -232,7 +232,7 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
             ))}
           </div>
 
-          <div className="relative max-w-xs w-full">
+          <div className="relative w-full sm:max-w-xs shrink-0">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="search"
@@ -245,7 +245,7 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
         </div>
 
         {/* Grid List of Quizzes */}
-        <div className="flex-1 overflow-y-auto pt-2 pr-1">
+        <div className="flex-1 overflow-y-auto pt-2 pr-0 sm:pr-1">
           {loading ? (
             <div className="text-center py-16 flex flex-col items-center justify-center space-y-2 text-xs font-bold text-slate-400 animate-pulse">
               <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
@@ -281,7 +281,7 @@ export const LiveQuizBankModal: React.FC<LiveQuizBankModalProps> = ({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 pb-6">
               {filteredQuizzes.map((quiz) => {
                 const timerSec = quiz.timer_seconds;
                 const isTimed = quiz.timer_enabled && timerSec && timerSec > 0;

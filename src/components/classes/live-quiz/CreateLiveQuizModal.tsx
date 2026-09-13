@@ -250,13 +250,27 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     }
 
     const { parsedQuiz } = validationResult;
+    const rawTitle = (parsedQuiz.title || topic || 'AI Custom Quiz').trim();
+    const normalizedCandidate = rawTitle.replace(/\s+/g, ' ').toLowerCase();
+
     setIsSaving(true);
     setError(null);
 
     try {
+      // Upfront client check against existing user quizzes
+      const existingQuizzes = await liveQuizService.getAllQuizzes(classroomId);
+      const isDuplicate = existingQuizzes.some(
+        (q) => q.is_owner && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
+      );
+      if (isDuplicate) {
+        setError('A quiz with this title already exists. Please choose a different title.');
+        setIsSaving(false);
+        return;
+      }
+
       const res = await liveQuizService.createCustomQuiz({
         classroom_id: classroomId,
-        title: parsedQuiz.title || topic || 'AI Custom Quiz',
+        title: rawTitle,
         description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
         category: parsedQuiz.category || category,
         difficulty: parsedQuiz.difficulty || difficulty,
@@ -278,7 +292,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to save quiz to Cloudflare R2 storage');
+      setError(err.message || 'Failed to save quiz');
     } finally {
       setIsSaving(false);
     }
@@ -310,10 +324,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!manualTitle.trim()) {
+    const rawTitle = manualTitle.trim();
+    if (!rawTitle) {
       setError('Please provide a quiz title.');
       return;
     }
+
+    const normalizedCandidate = rawTitle.replace(/\s+/g, ' ').toLowerCase();
 
     const isValid = manualQuestions.every(
       (q) => q.question.trim() && q.options.every((opt) => opt.trim())
@@ -325,9 +342,20 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
     setIsSaving(true);
     try {
+      // Upfront client check against existing user quizzes
+      const existingQuizzes = await liveQuizService.getAllQuizzes(classroomId);
+      const isDuplicate = existingQuizzes.some(
+        (q) => q.is_owner && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
+      );
+      if (isDuplicate) {
+        setError('A quiz with this title already exists. Please choose a different title.');
+        setIsSaving(false);
+        return;
+      }
+
       const res = await liveQuizService.createCustomQuiz({
         classroom_id: classroomId,
-        title: manualTitle.trim(),
+        title: rawTitle,
         description: manualDescription.trim(),
         category: manualCategory,
         difficulty: manualDifficulty,

@@ -235,6 +235,34 @@ class LiveQuizService {
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
     const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
 
+    // Title Duplicate Protection: Normalize title (trim, collapse spaces, lowercase)
+    const normalizedNewTitle = payload.title.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!normalizedNewTitle) {
+      return { error: 'Please provide a valid quiz title.' };
+    }
+
+    if (userId) {
+      try {
+        const { data: userQuizzes, error: checkErr } = await supabase
+          .from('live_quizzes')
+          .select('id, title')
+          .eq('created_by', userId);
+
+        if (!checkErr && userQuizzes) {
+          const isDuplicate = userQuizzes.some((q) => {
+            const existingNorm = (q.title || '').trim().replace(/\s+/g, ' ').toLowerCase();
+            return existingNorm === normalizedNewTitle;
+          });
+
+          if (isDuplicate) {
+            return { error: 'A quiz with this title already exists. Please choose a different title.' };
+          }
+        }
+      } catch (checkErr) {
+        console.warn('[LiveQuizService] Duplicate title check notice:', checkErr);
+      }
+    }
+
     try {
       // 1. Insert quiz header (with fallback if cover_image column not yet migrated)
       const baseInsertPayload = {
@@ -283,21 +311,22 @@ class LiveQuizService {
       const questionRows = payload.questions.map((q, idx) => ({
         quiz_id: quizData.id,
         question_index: idx,
-        question_text: q.question.trim(),
+        question_text: q.question,
         options: q.options,
-        correct_index: q.correctIndex ?? 0,
+        correct_index: q.correctIndex,
         duration_sec: q.durationSec || 20,
-        explanation: (q.explanation || '').trim()
+        explanation: q.explanation || null
       }));
 
-      const { error: qError } = await supabase
+      const { error: questionsError } = await supabase
         .from('live_quiz_questions')
         .insert(questionRows);
 
-      if (qError) {
-        console.warn('[LiveQuizService] live_quiz_questions insert notice:', qError);
+      if (questionsError) {
+        console.warn('live_quiz_questions batch insert error:', questionsError.message);
       }
 
+      // 3. Persist to Cloudflare R2 backup
       // 3. Persist full Quiz Object to Cloudflare R2 storage
       try {
         await fetch('/api/live-quiz/save-r2', {
@@ -334,6 +363,14 @@ class LiveQuizService {
       };
     } catch (err: any) {
       console.error('[LiveQuizService] createCustomQuiz error:', err);
+      if (
+        err?.code === '23505' ||
+        err?.message?.includes('duplicate key') ||
+        err?.message?.includes('idx_live_quizzes_owner_norm_title') ||
+        err?.message?.includes('already exists')
+      ) {
+        return { error: 'A quiz with this title already exists. Please choose a different title.' };
+      }
       return { error: err.message || 'Failed to save quiz' };
     }
   }
@@ -431,10 +468,12 @@ class LiveQuizService {
         return { data: existing };
       }
 
-      let targetQuizId = payload.quiz_id;
+      // Target Quiz Reference:
+      // If quiz_id is provided or custom_quiz already has an ID, reference it directly (NEVER CLONE)
+      let targetQuizId = payload.quiz_id || payload.custom_quiz?.id;
 
-      // If a custom quiz or ready-made quiz needs to be persisted in DB
-      if (payload.custom_quiz) {
+      // Only persist if custom_quiz was passed WITHOUT any ID (i.e. brand new unsaved quiz)
+      if (!targetQuizId && payload.custom_quiz) {
         const savedQuiz = await this.createCustomQuiz({
           classroom_id: payload.classroom_id,
           title: payload.custom_quiz.title,
@@ -448,23 +487,36 @@ class LiveQuizService {
           timer_seconds: payload.custom_quiz.timer_seconds,
           is_public: payload.custom_quiz.visibility === 'common'
         });
+        if (savedQuiz.error) {
+          return { error: savedQuiz.error };
+        }
         targetQuizId = savedQuiz.data?.id;
       } else if (targetQuizId && !targetQuizId.includes('-')) {
-        // Ready-made ID without UUID: persist into DB if not present
+        // Ready-made ID without UUID: check if already persisted first to prevent duplicates
         const readyMade = READY_MADE_QUIZZES.find((q) => q.id === targetQuizId);
         if (readyMade) {
-          const savedQuiz = await this.createCustomQuiz({
-            classroom_id: payload.classroom_id,
-            title: readyMade.title,
-            description: readyMade.description,
-            category: readyMade.category,
-            difficulty: readyMade.difficulty,
-            accent_color: readyMade.accent_color,
-            questions: readyMade.questions,
-            visibility: 'common',
-            is_public: true
-          });
-          targetQuizId = savedQuiz.data?.id;
+          const { data: existingReady } = await supabase
+            .from('live_quizzes')
+            .select('id')
+            .eq('title', readyMade.title)
+            .limit(1);
+
+          if (existingReady && existingReady.length > 0) {
+            targetQuizId = existingReady[0].id;
+          } else {
+            const savedQuiz = await this.createCustomQuiz({
+              classroom_id: payload.classroom_id,
+              title: readyMade.title,
+              description: readyMade.description,
+              category: readyMade.category,
+              difficulty: readyMade.difficulty,
+              accent_color: readyMade.accent_color,
+              questions: readyMade.questions,
+              visibility: 'common',
+              is_public: true
+            });
+            targetQuizId = savedQuiz.data?.id;
+          }
         }
       }
 
@@ -789,7 +841,89 @@ class LiveQuizService {
   }
 
   /**
-   * Retrieves active session by ID
+   * Computes the deterministic timeline state of a Live Quiz session based on start timestamp
+   * and question durations (with 3.5s reveal per question).
+   */
+  computeSessionTimeline(
+    session: LiveQuizSession,
+    questions: LiveQuizQuestion[],
+    nowMs: number = Date.now()
+  ): {
+    status: 'scheduled' | 'in_progress' | 'reveal' | 'finished';
+    current_question_index: number;
+    question_start_ms: number;
+    question_duration_sec: number;
+    correct_answer_index: number | null;
+    ended_at?: string;
+  } {
+    const startedAt = session.started_at || session.scheduled_start_at;
+    const startMs = startedAt ? new Date(startedAt).getTime() : nowMs;
+
+    if (nowMs < startMs) {
+      return {
+        status: 'scheduled',
+        current_question_index: 0,
+        question_start_ms: startMs,
+        question_duration_sec: session.question_duration_sec || 20,
+        correct_answer_index: null
+      };
+    }
+
+    const sortedQuestions = Array.isArray(questions) ? questions : [];
+    if (sortedQuestions.length === 0) {
+      return {
+        status: (session.status as any) || 'in_progress',
+        current_question_index: session.current_question_index ?? 0,
+        question_start_ms: session.question_start_ms || startMs,
+        question_duration_sec: session.question_duration_sec || 20,
+        correct_answer_index: session.correct_answer_index ?? null
+      };
+    }
+
+    const REVEAL_DURATION_MS = 3500;
+    let cumulativeMs = 0;
+
+    for (let i = 0; i < sortedQuestions.length; i++) {
+      const q = sortedQuestions[i];
+      const durSec = q.durationSec || session.question_duration_sec || 20;
+      const durMs = durSec * 1000;
+      const qStartMs = startMs + cumulativeMs;
+      const qEndMs = qStartMs + durMs;
+      const revealEndMs = qEndMs + REVEAL_DURATION_MS;
+
+      if (nowMs < qEndMs) {
+        return {
+          status: 'in_progress',
+          current_question_index: i,
+          question_start_ms: qStartMs,
+          question_duration_sec: durSec,
+          correct_answer_index: null
+        };
+      } else if (nowMs < revealEndMs) {
+        return {
+          status: 'reveal',
+          current_question_index: i,
+          question_start_ms: qStartMs,
+          question_duration_sec: durSec,
+          correct_answer_index: typeof q.correctIndex === 'number' ? q.correctIndex : 0
+        };
+      }
+
+      cumulativeMs += durMs + REVEAL_DURATION_MS;
+    }
+
+    return {
+      status: 'finished',
+      current_question_index: sortedQuestions.length,
+      question_start_ms: startMs + cumulativeMs,
+      question_duration_sec: 20,
+      correct_answer_index: null,
+      ended_at: new Date(startMs + cumulativeMs).toISOString()
+    };
+  }
+
+  /**
+   * Retrieves active session by ID, reconciling with authoritative timeline
    */
   async getSessionById(sessionId: string): Promise<LiveQuizSession | null> {
     if (!supabase || !sessionId) return null;
@@ -808,10 +942,60 @@ class LiveQuizService {
       if (error || !data) return null;
 
       const quiz = data.quiz_id ? await this.getQuizById(data.quiz_id) : null;
-      return {
+      let sessionObj: LiveQuizSession = {
         ...data,
         quiz
       };
+
+      // Compute authoritative state if scheduled or active
+      const scheduledTime = sessionObj.scheduled_start_at || sessionObj.started_at;
+      const scheduledMs = scheduledTime ? new Date(scheduledTime).getTime() : 0;
+      const now = Date.now();
+
+      if (
+        scheduledMs > 0 &&
+        now >= scheduledMs &&
+        (sessionObj.status === 'scheduled' ||
+          sessionObj.status === 'lobby' ||
+          sessionObj.status === 'in_progress' ||
+          sessionObj.status === 'reveal')
+      ) {
+        const computed = this.computeSessionTimeline(sessionObj, quiz?.questions || [], now);
+        const hasDiverged =
+          computed.status !== sessionObj.status ||
+          computed.current_question_index !== sessionObj.current_question_index;
+
+        sessionObj = {
+          ...sessionObj,
+          status: computed.status,
+          current_question_index: computed.current_question_index,
+          question_start_ms: computed.question_start_ms,
+          question_duration_sec: computed.question_duration_sec,
+          correct_answer_index: computed.correct_answer_index
+        };
+
+        // Asynchronously update divergence to database
+        if (hasDiverged) {
+          const updatePayload: any = {
+            status: computed.status,
+            current_question_index: computed.current_question_index,
+            question_start_ms: computed.question_start_ms,
+            question_duration_sec: computed.question_duration_sec,
+            correct_answer_index: computed.correct_answer_index
+          };
+          if (computed.status === 'finished') {
+            updatePayload.ended_at = computed.ended_at || new Date().toISOString();
+          }
+          Promise.resolve(
+            supabase
+              .from('live_quiz_sessions')
+              .update(updatePayload)
+              .eq('id', sessionId)
+          ).catch(() => {});
+        }
+      }
+
+      return sessionObj;
     } catch (err) {
       console.error('[LiveQuizService] getSessionById error:', err);
       return null;

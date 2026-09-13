@@ -206,6 +206,231 @@ if (serverSupabase && process.env.VERCEL !== '1') {
   setInterval(() => {
     cleanStaleLiveQuizSessions(serverSupabase).catch(() => {});
   }, 15 * 60 * 1000);
+
+  // Authoritative scheduled Live Quiz progress ticker: ticks every 1000ms
+  syncActiveLiveQuizSessions(serverSupabase).catch(() => {});
+  setInterval(() => {
+    syncActiveLiveQuizSessions(serverSupabase).catch(() => {});
+  }, 1000);
+}
+
+// ============================================================================
+// AUTHORITATIVE LIVE QUIZ ENGINE (Zero Host Browser Required)
+// ============================================================================
+
+export function computeLiveQuizTimeline(session, questions, nowMs = Date.now()) {
+  const startedAt = session.started_at || session.scheduled_start_at;
+  if (!startedAt) {
+    return {
+      status: session.status || 'lobby',
+      current_question_index: session.current_question_index ?? 0,
+      question_start_ms: session.question_start_ms || nowMs,
+      question_duration_sec: session.question_duration_sec || 20,
+      correct_answer_index: session.correct_answer_index ?? null
+    };
+  }
+
+  const startMs = new Date(startedAt).getTime();
+  if (nowMs < startMs) {
+    return {
+      status: 'scheduled',
+      current_question_index: 0,
+      startsInSec: Math.ceil((startMs - nowMs) / 1000),
+      question_start_ms: startMs,
+      question_duration_sec: session.question_duration_sec || 20,
+      correct_answer_index: null
+    };
+  }
+
+  const sortedQuestions = Array.isArray(questions)
+    ? [...questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
+    : [];
+
+  if (sortedQuestions.length === 0) {
+    return {
+      status: session.status || 'in_progress',
+      current_question_index: session.current_question_index ?? 0,
+      question_start_ms: session.question_start_ms || startMs,
+      question_duration_sec: session.question_duration_sec || 20,
+      correct_answer_index: session.correct_answer_index ?? null
+    };
+  }
+
+  const REVEAL_DURATION_MS = 3500;
+  let cumulativeMs = 0;
+
+  for (let i = 0; i < sortedQuestions.length; i++) {
+    const q = sortedQuestions[i];
+    const durSec = q.duration_sec || q.durationSec || session.question_duration_sec || 20;
+    const durMs = durSec * 1000;
+    const qStartMs = startMs + cumulativeMs;
+    const qEndMs = qStartMs + durMs;
+    const revealEndMs = qEndMs + REVEAL_DURATION_MS;
+
+    if (nowMs < qEndMs) {
+      // Question answering phase
+      return {
+        status: 'in_progress',
+        current_question_index: i,
+        question_start_ms: qStartMs,
+        question_duration_sec: durSec,
+        question_time_left_sec: Math.max(0, Math.ceil((qEndMs - nowMs) / 1000)),
+        correct_answer_index: null,
+        active_question: q
+      };
+    } else if (nowMs < revealEndMs) {
+      // Answer reveal phase
+      const correctIdx = typeof q.correct_index === 'number'
+        ? q.correct_index
+        : (typeof q.correctIndex === 'number' ? q.correctIndex : 0);
+
+      return {
+        status: 'reveal',
+        current_question_index: i,
+        question_start_ms: qStartMs,
+        question_duration_sec: durSec,
+        reveal_time_left_ms: Math.max(0, revealEndMs - nowMs),
+        correct_answer_index: correctIdx,
+        active_question: q
+      };
+    }
+
+    cumulativeMs += durMs + REVEAL_DURATION_MS;
+  }
+
+  return {
+    status: 'finished',
+    current_question_index: sortedQuestions.length,
+    question_start_ms: startMs + cumulativeMs,
+    question_duration_sec: 20,
+    correct_answer_index: null,
+    ended_at: new Date(startMs + cumulativeMs).toISOString()
+  };
+}
+
+let isSyncingLiveQuiz = false;
+
+async function syncActiveLiveQuizSessions(supabaseClient) {
+  if (!supabaseClient || isSyncingLiveQuiz) return;
+  isSyncingLiveQuiz = true;
+  try {
+    const now = Date.now();
+    const { data: activeSessions, error } = await supabaseClient
+      .from('live_quiz_sessions')
+      .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+      .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error || !activeSessions || activeSessions.length === 0) {
+      return;
+    }
+
+    for (const session of activeSessions) {
+      const questions = session.quiz?.questions || [];
+      const scheduledTime = session.scheduled_start_at || session.started_at;
+      const scheduledMs = scheduledTime ? new Date(scheduledTime).getTime() : 0;
+
+      // When scheduled countdown reaches zero, ensure started_at is stamped
+      if ((session.status === 'scheduled' || session.status === 'lobby') && scheduledMs > 0 && now >= scheduledMs) {
+        if (!session.started_at) {
+          await supabaseClient
+            .from('live_quiz_sessions')
+            .update({ started_at: new Date(scheduledMs).toISOString() })
+            .eq('id', session.id);
+          session.started_at = new Date(scheduledMs).toISOString();
+        }
+      }
+
+      // If scheduled time has not yet arrived, keep waiting
+      if ((session.status === 'scheduled' || session.status === 'lobby') && scheduledMs > now) {
+        continue;
+      }
+
+      if (session.started_at) {
+        const computed = computeLiveQuizTimeline(session, questions, now);
+
+        const statusChanged = session.status !== computed.status;
+        const indexChanged = session.current_question_index !== computed.current_question_index;
+        const phaseChanged = statusChanged || indexChanged;
+
+        if (phaseChanged) {
+          const updatePayload = {
+            status: computed.status,
+            current_question_index: computed.current_question_index,
+            question_start_ms: computed.question_start_ms,
+            question_duration_sec: computed.question_duration_sec,
+            correct_answer_index: computed.correct_answer_index
+          };
+          if (computed.status === 'finished') {
+            updatePayload.ended_at = computed.ended_at || new Date().toISOString();
+          }
+
+          await supabaseClient
+            .from('live_quiz_sessions')
+            .update(updatePayload)
+            .eq('id', session.id);
+
+          // Broadcast Realtime Event
+          if (session.pin) {
+            try {
+              const channel = supabaseClient.channel(`live_quiz:${session.pin}`);
+              channel.subscribe(async (subStatus) => {
+                if (subStatus === 'SUBSCRIBED') {
+                  if (computed.status === 'in_progress') {
+                    const q = computed.active_question;
+                    let opts = [];
+                    if (Array.isArray(q?.options)) opts = q.options;
+                    else if (typeof q?.options === 'string') {
+                      try { opts = JSON.parse(q.options); } catch { opts = []; }
+                    }
+
+                    await channel.send({
+                      type: 'broadcast',
+                      event: 'question_started',
+                      payload: {
+                        qIndex: computed.current_question_index,
+                        questionIndex: computed.current_question_index,
+                        question: q?.question_text || q?.question || `Question ${computed.current_question_index + 1}`,
+                        options: opts,
+                        durationSec: computed.question_duration_sec,
+                        questionStartMs: computed.question_start_ms,
+                        totalQuestions: questions.length
+                      }
+                    });
+                  } else if (computed.status === 'reveal') {
+                    const q = computed.active_question;
+                    await channel.send({
+                      type: 'broadcast',
+                      event: 'question_reveal',
+                      payload: {
+                        qIndex: computed.current_question_index,
+                        correctIndex: computed.correct_answer_index,
+                        explanation: q?.explanation || ''
+                      }
+                    });
+                  } else if (computed.status === 'finished') {
+                    await channel.send({
+                      type: 'broadcast',
+                      event: 'quiz_finished',
+                      payload: { sessionId: session.id, results: [] }
+                    });
+                  }
+                  supabaseClient.removeChannel(channel);
+                }
+              });
+            } catch (broadErr) {
+              console.warn('[LiveQuiz Server] Broadcast notice:', broadErr.message);
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[LiveQuiz Server] syncActiveLiveQuizSessions notice:', err.message);
+  } finally {
+    isSyncingLiveQuiz = false;
+  }
 }
 
 // Initialize AI Challenge Competition Queue Worker
@@ -2631,24 +2856,28 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
       }
     }
 
-    // If session is already in_progress or reveal, return current session directly
-    if (session.status === 'in_progress' || session.status === 'reveal') {
-      return res.json({
-        success: true,
-        reconciled: true,
-        session
-      });
+    // Compute authoritative state using deterministic timeline
+    const questions = Array.isArray(session.quiz?.questions)
+      ? [...session.quiz.questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
+      : [];
+
+    const computed = computeLiveQuizTimeline(session, questions, now);
+
+    const updatePayload = {
+      status: computed.status,
+      current_question_index: computed.current_question_index,
+      question_start_ms: computed.question_start_ms,
+      question_duration_sec: computed.question_duration_sec,
+      correct_answer_index: computed.correct_answer_index
+    };
+
+    if (computed.status === 'finished') {
+      updatePayload.ended_at = computed.ended_at || new Date().toISOString();
     }
 
-    // Transition session: start Question 0
-    const startMs = Date.now();
-    const duration = session.question_duration_sec || 20;
-    const updatePayload = {
-      status: 'in_progress',
-      current_question_index: 0,
-      question_start_ms: startMs,
-      question_duration_sec: duration
-    };
+    if (!session.started_at && scheduledMs > 0 && now >= scheduledMs) {
+      updatePayload.started_at = new Date(scheduledMs).toISOString();
+    }
 
     const { data: updatedSession, error: updateErr } = await serverSupabase
       .from('live_quiz_sessions')
@@ -2658,48 +2887,61 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
       .single();
 
     if (updateErr) {
-      console.warn('Reconcile update retry with lobby status:', updateErr);
-      await serverSupabase
-        .from('live_quiz_sessions')
-        .update({ status: 'lobby' })
-        .eq('id', sessionId);
+      console.warn('[LiveQuiz Server] Reconcile update notice:', updateErr);
     }
 
     const effectiveSession = updatedSession || { ...session, ...updatePayload };
 
-    // Broadcast Realtime question_started event if pin exists
-    if (session.pin) {
+    // Broadcast Realtime Event if phase changed or session just transitioned
+    if (session.pin && (session.status !== computed.status || session.current_question_index !== computed.current_question_index)) {
       try {
-        const questions = Array.isArray(session.quiz?.questions)
-          ? [...session.quiz.questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
-          : [];
-        const q0 = questions[0];
-        let q0Options = [];
-        if (Array.isArray(q0?.options)) {
-          q0Options = q0.options;
-        } else if (typeof q0?.options === 'string') {
-          try { q0Options = JSON.parse(q0.options); } catch { q0Options = []; }
-        }
-
         const channel = serverSupabase.channel(`live_quiz:${session.pin}`);
         channel.subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             try {
-              await channel.send({
-                type: 'broadcast',
-                event: 'question_started',
-                payload: {
-                  qIndex: 0,
-                  questionIndex: 0,
-                  question: q0?.question_text || q0?.question || 'Question 1',
-                  options: q0Options,
-                  durationSec: q0?.duration_sec || duration,
-                  questionStartMs: startMs,
-                  totalQuestions: questions.length || 1
+              if (computed.status === 'in_progress') {
+                const q = computed.active_question || questions[computed.current_question_index];
+                let opts = [];
+                if (Array.isArray(q?.options)) opts = q.options;
+                else if (typeof q?.options === 'string') {
+                  try { opts = JSON.parse(q.options); } catch { opts = []; }
                 }
-              });
+
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'question_started',
+                  payload: {
+                    qIndex: computed.current_question_index,
+                    questionIndex: computed.current_question_index,
+                    question: q?.question_text || q?.question || `Question ${computed.current_question_index + 1}`,
+                    options: opts,
+                    durationSec: computed.question_duration_sec,
+                    questionStartMs: computed.question_start_ms,
+                    totalQuestions: questions.length || 1
+                  }
+                });
+              } else if (computed.status === 'reveal') {
+                const q = computed.active_question || questions[computed.current_question_index];
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'question_reveal',
+                  payload: {
+                    qIndex: computed.current_question_index,
+                    correctIndex: computed.correct_answer_index,
+                    explanation: q?.explanation || ''
+                  }
+                });
+              } else if (computed.status === 'finished') {
+                await channel.send({
+                  type: 'broadcast',
+                  event: 'quiz_finished',
+                  payload: { sessionId: session.id, results: [] }
+                });
+              }
             } catch (broadcastErr) {
               console.warn('Realtime broadcast send warning:', broadcastErr);
+            } finally {
+              serverSupabase.removeChannel(channel);
             }
           }
         });
@@ -2723,6 +2965,14 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
 app.post('/api/live-quiz/sessions/:sessionId/reconcile-scheduled', async (req, res) => {
   req.params.classroomId = 'all';
   return app._router.handle(req, res, () => {});
+});
+
+// POST & GET /api/classes/:classroomId/live-quiz/sessions/:sessionId/sync
+// Authoritative instantaneous session state synchronization
+app.all(['/api/classes/:classroomId/live-quiz/sessions/:sessionId/sync', '/api/live-quiz/sessions/:sessionId/sync'], async (req, res) => {
+  if (!req.params.classroomId) req.params.classroomId = 'all';
+  // Delegate to reconcile-scheduled which computes the exact timeline
+  return app._router.handle({ ...req, method: 'POST', url: `/api/classes/${req.params.classroomId}/live-quiz/sessions/${req.params.sessionId}/reconcile-scheduled` }, res, () => {});
 });
 
 // POST /api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel

@@ -595,6 +595,8 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           questionStartMs: Date.now(),
           totalQuestions: questions.length
         });
+        // Trigger server sync to keep database updated authoritatively
+        fetch(`/api/live-quiz/sessions/${session.id}/sync`, { method: 'POST' }).catch(() => {});
       } else {
         // Quiz is finished! Finalize and display podium
         quizAudioService.stopBackgroundMusic();
@@ -602,6 +604,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           onQuizFinishedRef.current([]);
         }
         liveQuizService.finishQuiz(session.id).catch(() => {});
+        fetch(`/api/live-quiz/sessions/${session.id}/sync`, { method: 'POST' }).catch(() => {});
       }
     }, 3500);
 

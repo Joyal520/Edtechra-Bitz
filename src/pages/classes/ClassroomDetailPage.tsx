@@ -190,7 +190,6 @@ export const ClassroomDetailPage: React.FC = () => {
       const res = await liveQuizService.createSession({
         classroom_id: id,
         quiz_id: selectedQuiz.id,
-        custom_quiz: selectedQuiz,
         is_scheduled: false
       });
 
@@ -212,7 +211,6 @@ export const ClassroomDetailPage: React.FC = () => {
       const res = await liveQuizService.scheduleSession({
         classroom_id: id,
         quiz_id: selectedQuiz.id,
-        custom_quiz: selectedQuiz,
         scheduled_start_at: scheduledStartAt
       });
 
