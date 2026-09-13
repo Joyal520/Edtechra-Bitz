@@ -222,8 +222,8 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
         Object.values(state).forEach((presences: any) => {
           presences.forEach((p: any) => {
-            // Exclude teacher role from participants list
-            if (p.student_id && p.display_name && p.role !== 'teacher') {
+            // Exclude teacher role or session host from participants list
+            if (p.student_id && p.display_name && p.role !== 'teacher' && p.student_id !== session.teacher_id) {
               liveUsers.push({
                 id: p.student_id,
                 session_id: session.id,
@@ -241,14 +241,14 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         if (liveUsers.length > 0) {
           setParticipants((prev) => {
             const map = new Map<string, LiveQuizParticipant>();
-            prev.forEach((item) => map.set(item.student_id, item));
+            prev.filter((item) => item.student_id !== session.teacher_id).forEach((item) => map.set(item.student_id, item));
             liveUsers.forEach((item) => map.set(item.student_id, item));
             return Array.from(map.values());
           });
         }
       })
       .on('broadcast', { event: 'quiz_started' }, (payload: any) => {
-        if (!isTeacher) {
+        if (!isTeacher && session.teacher_id !== user?.id) {
           navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
             state: {
               initialSession: { ...session, status: 'in_progress', current_question_index: 0 },
@@ -258,10 +258,11 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         }
       })
       .on('broadcast', { event: 'question_started' }, () => {
-        if (!isTeacher) {
+        if (!isTeacher && session.teacher_id !== user?.id) {
           navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
             state: {
-              initialSession: { ...session, status: 'in_progress', current_question_index: 0 }
+              initialSession: { ...session, status: 'in_progress', current_question_index: 0 },
+              totalQuestions: questionsCount
             }
           });
         }
@@ -279,7 +280,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           filter: `id=eq.${session.id}`
         },
         (payload: any) => {
-          if (!isTeacher && (payload.new?.status === 'in_progress' || payload.new?.status === 'reveal')) {
+          if (!isTeacher && session.teacher_id !== user?.id && (payload.new?.status === 'in_progress' || payload.new?.status === 'reveal')) {
             navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
               state: { initialSession: { ...session, ...payload.new } }
             });
@@ -292,12 +293,13 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
       )
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' && user) {
-          const name = profile?.full_name || profile?.name || user.email?.split('@')[0] || 'Student';
+          const isCurrentHost = isTeacher || session.teacher_id === user.id;
+          const name = profile?.full_name || profile?.name || user.email?.split('@')[0] || (isCurrentHost ? 'Host' : 'Student');
           await channel.track({
             student_id: user.id,
             display_name: name,
             avatar_url: profile?.avatar_url || profile?.avatarUrl || null,
-            role: isTeacher ? 'teacher' : 'student',
+            role: isCurrentHost ? 'teacher' : 'student',
             score: 0
           });
         }

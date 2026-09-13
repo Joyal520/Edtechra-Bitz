@@ -317,16 +317,36 @@ async function finalizeLiveQuizSessionOnServer(supabaseClient, session, question
   if (!supabaseClient || !session?.id) return [];
   try {
     const totalQuestions = (questions && questions.length > 0) ? questions.length : 1;
+    let partsQuery = supabaseClient
+      .from('live_quiz_participants')
+      .select('*')
+      .eq('session_id', session.id);
+    let ansQuery = supabaseClient
+      .from('live_quiz_answers')
+      .select('*')
+      .eq('session_id', session.id);
+
+    // Strictly exclude host teacher from participants and answers
+    if (session.teacher_id) {
+      partsQuery = partsQuery.neq('student_id', session.teacher_id);
+      ansQuery = ansQuery.neq('student_id', session.teacher_id);
+
+      // Clean up any historical host records from DB if they exist
+      try {
+        await supabaseClient.from('live_quiz_results').delete().eq('session_id', session.id).eq('student_id', session.teacher_id);
+        await supabaseClient.from('live_quiz_participants').delete().eq('session_id', session.id).eq('student_id', session.teacher_id);
+        await supabaseClient.from('live_quiz_answers').delete().eq('session_id', session.id).eq('student_id', session.teacher_id);
+        if (session.classroom_id) {
+          await supabaseClient.from('classroom_points').delete().eq('classroom_id', session.classroom_id).eq('student_id', session.teacher_id).eq('source_type', 'live_quiz');
+        }
+      } catch (cleanErr) {
+        // ignore cleanup notice
+      }
+    }
+
     const [participantsRes, answersRes] = await Promise.all([
-      supabaseClient
-        .from('live_quiz_participants')
-        .select('*')
-        .eq('session_id', session.id)
-        .order('score', { ascending: false }),
-      supabaseClient
-        .from('live_quiz_answers')
-        .select('*')
-        .eq('session_id', session.id)
+      partsQuery.order('score', { ascending: false }),
+      ansQuery
     ]);
 
     const participants = participantsRes.data || [];
@@ -3387,18 +3407,33 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
           .eq('id', sessionId)
           .maybeSingle();
 
-        if (fullSession) {
-          const totalQuestions = fullSession.quiz?.questions?.length || 1;
+          let partsQuery = serverSupabase
+            .from('live_quiz_participants')
+            .select('*')
+            .eq('session_id', sessionId);
+          let ansQuery = serverSupabase
+            .from('live_quiz_answers')
+            .select('*')
+            .eq('session_id', sessionId);
+
+          if (fullSession.teacher_id) {
+            partsQuery = partsQuery.neq('student_id', fullSession.teacher_id);
+            ansQuery = ansQuery.neq('student_id', fullSession.teacher_id);
+
+            // Clean up any historical host records
+            try {
+              await serverSupabase.from('live_quiz_results').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
+              await serverSupabase.from('live_quiz_participants').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
+              await serverSupabase.from('live_quiz_answers').delete().eq('session_id', sessionId).eq('student_id', fullSession.teacher_id);
+              if (fullSession.classroom_id) {
+                await serverSupabase.from('classroom_points').delete().eq('classroom_id', fullSession.classroom_id).eq('student_id', fullSession.teacher_id).eq('source_type', 'live_quiz');
+              }
+            } catch (cErr) {}
+          }
+
           const [partsRes, ansRes] = await Promise.all([
-            serverSupabase
-              .from('live_quiz_participants')
-              .select('*')
-              .eq('session_id', sessionId)
-              .order('score', { ascending: false }),
-            serverSupabase
-              .from('live_quiz_answers')
-              .select('*')
-              .eq('session_id', sessionId)
+            partsQuery.order('score', { ascending: false }),
+            ansQuery
           ]);
 
           const participants = partsRes.data || [];

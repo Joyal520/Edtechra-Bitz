@@ -67,14 +67,20 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   const navigate = useNavigate();
   const [showConfetti, setShowConfetti] = useState(true);
 
-  const safeResults = Array.isArray(results) ? results : [];
+  // Strictly filter out any host teacher records so ONLY actual students appear on podium and leaderboard
+  const safeResults = (Array.isArray(results) ? results : []).filter((r) => {
+    if (r.teacher_id && r.student_id && r.student_id === r.teacher_id) return false;
+    if (r.teacher_id && r.student?.id && r.student.id === r.teacher_id) return false;
+    return true;
+  });
+
   const sorted = [...safeResults].sort((a, b) => (b.score || 0) - (a.score || 0));
   const first = sorted[0];
   const second = sorted[1];
   const third = sorted[2];
   const lowerRanks = sorted.slice(3, 8); // Ranks 4 to 8
 
-  // Dynamic statistics
+  // Dynamic statistics: computed purely from real students
   const totalParticipants = sorted.length;
   const avgAccuracy = totalParticipants > 0
     ? Math.round(sorted.reduce((acc, r) => acc + (r.accuracy_percentage || 0), 0) / totalParticipants)

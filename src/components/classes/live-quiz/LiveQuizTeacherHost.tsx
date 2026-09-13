@@ -141,8 +141,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         const state = channel.presenceState();
         let studentCount = 0;
         Object.values(state).forEach((presences: any) => {
-          // Strictly count students only (exclude teacher)
-          studentCount += presences.filter((p: any) => p.role !== 'teacher').length;
+          // Strictly count students only (exclude teacher / host)
+          studentCount += presences.filter((p: any) => p.role !== 'teacher' && p.student_id !== session.teacher_id).length;
         });
         setTotalStudents((prev) => Math.max(prev, studentCount));
       })
@@ -150,7 +150,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         const studentId = payload.payload?.student_id;
         const optIndex = payload.payload?.selected_option_index;
 
-        if (studentId) {
+        // Strictly ignore if broadcast comes from host teacher
+        if (studentId && studentId !== session.teacher_id) {
           if (answeredStudentIdsRef.current.has(studentId)) {
             return; // Ignore duplicate broadcast from same student
           }

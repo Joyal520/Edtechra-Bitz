@@ -175,8 +175,9 @@ export const ClassroomDetailPage: React.FC = () => {
             if (freshSession) {
               setActiveLiveQuizSession(freshSession);
 
-              // Auto-navigate STUDENTS directly into the quiz when it becomes live
-              if (!isTeacher && (freshSession.status === 'in_progress' || freshSession.status === 'reveal')) {
+              // Auto-navigate STUDENTS directly into the quiz when it becomes live (never auto-join the host teacher)
+              const isHostUser = freshSession.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
+              if (!isHostUser && (freshSession.status === 'in_progress' || freshSession.status === 'reveal')) {
                 const studentName = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
                 await liveQuizService.joinSession({
                   session_id: freshSession.id,
@@ -275,6 +276,17 @@ export const ClassroomDetailPage: React.FC = () => {
         return;
       }
 
+      // Strict Host Guard: If the user is the host teacher of this session, route to host controls!
+      const isHostUser = session.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
+      if (isHostUser) {
+        if (session.status === 'in_progress' || session.status === 'reveal') {
+          navigate(`/classes/${id}/live-quiz/host/${session.id}`);
+        } else {
+          navigate(`/classes/${id}/live-quiz/lobby/${session.pin}`);
+        }
+        return;
+      }
+
       // Automatically enroll student into the session
       const studentName = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
       await liveQuizService.joinSession({
@@ -362,8 +374,8 @@ export const ClassroomDetailPage: React.FC = () => {
                 scheduledAutoJoinRef.current = true;
                 refreshActiveQuiz().then(async () => {
                   if (!isMounted) return;
-                  // Determine if current user is a student (not the teacher of this classroom)
-                  const userIsTeacher = row.teacher_id === user?.id || authIsTeacher;
+                  // Determine if current user is a student (not the teacher of this classroom or session)
+                  const userIsTeacher = row.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher || authIsTeacher;
                   if (!userIsTeacher && row.id) {
                     try {
                       const studentName = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
@@ -927,7 +939,8 @@ export const ClassroomDetailPage: React.FC = () => {
                   type="button"
                   disabled={isJoiningLiveQuiz}
                   onClick={() => {
-                    if (isTeacher) {
+                    const isHostUser = activeLiveQuizSession.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
+                    if (isHostUser) {
                       if (activeLiveQuizSession.status === 'in_progress' || activeLiveQuizSession.status === 'reveal') {
                         navigate(`/classes/${id}/live-quiz/host/${activeLiveQuizSession.id}`);
                       } else {
@@ -940,7 +953,7 @@ export const ClassroomDetailPage: React.FC = () => {
                   className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm shadow-md cursor-pointer inline-flex items-center gap-2"
                 >
                   <span>
-                    {isTeacher
+                    {(activeLiveQuizSession.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher)
                       ? 'Host Controls →'
                       : isJoiningLiveQuiz
                       ? 'Connecting...'
@@ -1096,7 +1109,8 @@ export const ClassroomDetailPage: React.FC = () => {
                 type="button"
                 disabled={isJoiningLiveQuiz}
                 onClick={() => {
-                  if (isTeacher) {
+                  const isHostUser = activeLiveQuizSession?.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
+                  if (isHostUser) {
                     if (activeLiveQuizSession?.pin && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled')) {
                       if (activeLiveQuizSession.status === 'in_progress' || activeLiveQuizSession.status === 'reveal') {
                         navigate(`/classes/${id}/live-quiz/host/${activeLiveQuizSession.id}`);
@@ -1118,7 +1132,7 @@ export const ClassroomDetailPage: React.FC = () => {
                     : 'btn-liquid-purple'
                 }`}
               >
-                {isTeacher
+                {(activeLiveQuizSession?.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher)
                   ? effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled'
                     ? 'Host Controls →'
                     : 'Host Live Quiz'

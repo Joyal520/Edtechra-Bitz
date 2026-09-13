@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { LiveQuizSession, LiveQuizResult } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
+import { useAuth } from '@/context/AuthContext';
 import { LiveQuizStudentPlay } from '@/components/classes/live-quiz/LiveQuizStudentPlay';
 import { LiveQuizPodium } from '@/components/classes/live-quiz/LiveQuizPodium';
 
@@ -9,6 +10,7 @@ export const LiveQuizPlayPage: React.FC = () => {
   const { classroomId, sessionId } = useParams<{ classroomId: string; sessionId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isTeacher } = useAuth();
   const initialSession = (location.state as any)?.initialSession as LiveQuizSession | undefined;
 
   const [session, setSession] = useState<LiveQuizSession | null>(initialSession || null);
@@ -29,6 +31,15 @@ export const LiveQuizPlayPage: React.FC = () => {
     try {
       const s = await liveQuizService.getSessionById(sessionId || '');
       if (s) {
+        // Strict Host Guard: If current user is the host teacher, redirect to host controls!
+        const isHost = (s.teacher_id && user?.id && s.teacher_id === user.id) || isTeacher;
+        if (isHost) {
+          navigate(`/classes/${classroomId || s.classroom_id}/live-quiz/host/${s.id}`, {
+            state: { initialSession: s },
+            replace: true
+          });
+          return;
+        }
         const scheduledTimeStr = s.scheduled_start_at || s.started_at;
         const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
 

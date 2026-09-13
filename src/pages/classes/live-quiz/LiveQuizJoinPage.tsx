@@ -46,6 +46,16 @@ export const LiveQuizJoinPage: React.FC = () => {
         return;
       }
 
+      // Strict Host Guard: Host teacher must never join as a student participant
+      if (session.teacher_id && user?.id && session.teacher_id === user.id) {
+        if (session.status === 'in_progress' || session.status === 'reveal') {
+          navigate(`/classes/${session.classroom_id}/live-quiz/host/${session.id}`);
+        } else {
+          navigate(`/classes/${session.classroom_id}/live-quiz/lobby/${cleanPin}`);
+        }
+        return;
+      }
+
       // 2. Join session as participant
       const name = profile?.full_name || profile?.name || user?.email?.split('@')[0] || 'Student';
       await liveQuizService.joinSession({

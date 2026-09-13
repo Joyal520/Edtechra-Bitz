@@ -1166,6 +1166,7 @@ class LiveQuizService {
 
   /**
    * Student joins a session and creates/updates participant record
+   * Strictly prevents the host teacher from registering as a student participant.
    */
   async joinSession(payload: {
     session_id: string;
@@ -1177,6 +1178,17 @@ class LiveQuizService {
     if (!userId) return { error: 'Please log in to join the quiz.' };
 
     try {
+      // 1. Authoritative Host Check: Host teacher must NEVER become a participant
+      const { data: session } = await supabase
+        .from('live_quiz_sessions')
+        .select('teacher_id')
+        .eq('id', payload.session_id)
+        .maybeSingle();
+
+      if (session?.teacher_id && session.teacher_id === userId) {
+        return { error: 'Host teacher cannot join as a student participant.' };
+      }
+
       const { data, error } = await supabase
         .from('live_quiz_participants')
         .upsert(
@@ -1202,22 +1214,32 @@ class LiveQuizService {
   }
 
   /**
-   * Retrieves participants in a session
+   * Retrieves participants in a session (strictly excludes the host teacher)
    */
   async getParticipants(sessionId: string): Promise<LiveQuizParticipant[]> {
     if (!supabase || !sessionId) return [];
 
     try {
-      const { data, error } = await supabase
+      const { data: session } = await supabase
+        .from('live_quiz_sessions')
+        .select('teacher_id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      let query = supabase
         .from('live_quiz_participants')
         .select('*')
-        .eq('session_id', sessionId)
-        .order('score', { ascending: false });
+        .eq('session_id', sessionId);
 
+      if (session?.teacher_id) {
+        query = query.neq('student_id', session.teacher_id);
+      }
+
+      const { data, error } = await query.order('score', { ascending: false });
       if (error) throw error;
       return data || [];
     } catch (err) {
-      console.error('[LiveQuizService] getParticipants error:', err);
+      console.warn('[LiveQuizService] getParticipants notice:', err);
       return [];
     }
   }
@@ -1272,6 +1294,17 @@ class LiveQuizService {
     if (!userId) return { error: 'Authentication required' };
 
     try {
+      // 0. Strict Host Check: Host teacher cannot submit student answers
+      const { data: session } = await supabase
+        .from('live_quiz_sessions')
+        .select('teacher_id')
+        .eq('id', payload.session_id)
+        .maybeSingle();
+
+      if (session?.teacher_id && session.teacher_id === userId) {
+        return { error: 'Host teacher cannot submit student answers' };
+      }
+
       // 1. Primary: Secure Server-Side Stored Procedure
       const { data: rpcData, error: rpcError } = await supabase.rpc('submit_live_quiz_answer', {
         p_session_id: payload.session_id,
@@ -1353,15 +1386,32 @@ class LiveQuizService {
       });
 
       if (!rpcError && Array.isArray(rpcResults)) {
-        // Fetch full results with student profiles for presentation
-        const { data: fullResults } = await supabase
+        // Fetch full results with student profiles for presentation (strictly excluding host teacher)
+        const { data: sessionRow } = await supabase
+          .from('live_quiz_sessions')
+          .select('teacher_id')
+          .eq('id', sessionId)
+          .maybeSingle();
+
+        let query = supabase
           .from('live_quiz_results')
           .select(`
             *,
             student:profiles!student_id (id, full_name, avatar_url, email)
           `)
-          .eq('session_id', sessionId)
-          .order('final_rank', { ascending: true });
+          .eq('session_id', sessionId);
+
+        if (sessionRow?.teacher_id) {
+          query = query.neq('student_id', sessionRow.teacher_id);
+        }
+
+        const { data: fullResults } = await query.order('final_rank', { ascending: true });
+
+        // Clean up any historical host records from DB if they exist
+        if (sessionRow?.teacher_id) {
+          supabase.from('live_quiz_results').delete().eq('session_id', sessionId).eq('student_id', sessionRow.teacher_id).then();
+          supabase.from('live_quiz_participants').delete().eq('session_id', sessionId).eq('student_id', sessionRow.teacher_id).then();
+        }
 
         return { data: fullResults || [] };
       }
@@ -1372,16 +1422,23 @@ class LiveQuizService {
 
       const totalQuestions = session.quiz?.questions.length || 1;
 
+      let partsQuery = supabase
+        .from('live_quiz_participants')
+        .select('*')
+        .eq('session_id', sessionId);
+      let ansQuery = supabase
+        .from('live_quiz_answers')
+        .select('*')
+        .eq('session_id', sessionId);
+
+      if (session.teacher_id) {
+        partsQuery = partsQuery.neq('student_id', session.teacher_id);
+        ansQuery = ansQuery.neq('student_id', session.teacher_id);
+      }
+
       const [participantsRes, answersRes] = await Promise.all([
-        supabase
-          .from('live_quiz_participants')
-          .select('*')
-          .eq('session_id', sessionId)
-          .order('score', { ascending: false }),
-        supabase
-          .from('live_quiz_answers')
-          .select('*')
-          .eq('session_id', sessionId)
+        partsQuery.order('score', { ascending: false }),
+        ansQuery
       ]);
 
       const participants = participantsRes.data || [];
@@ -1522,19 +1579,30 @@ class LiveQuizService {
   }
 
   /**
-   * Retrieves final results for a completed live quiz session
+   * Retrieves final results for a completed live quiz session (strictly excluding host teacher)
    */
   async getResults(sessionId: string): Promise<{ data?: LiveQuizResult[]; error?: string }> {
     if (!supabase || !sessionId) return { data: [] };
     try {
-      const { data, error } = await supabase
+      const { data: session } = await supabase
+        .from('live_quiz_sessions')
+        .select('teacher_id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      let query = supabase
         .from('live_quiz_results')
         .select(`
           *,
           student:profiles!student_id (id, full_name, avatar_url, email)
         `)
-        .eq('session_id', sessionId)
-        .order('final_rank', { ascending: true });
+        .eq('session_id', sessionId);
+
+      if (session?.teacher_id) {
+        query = query.neq('student_id', session.teacher_id);
+      }
+
+      const { data, error } = await query.order('final_rank', { ascending: true });
 
       if (error) throw error;
       return { data: data || [] };
