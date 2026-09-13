@@ -203,24 +203,28 @@ export const ClassesPage: React.FC = () => {
                 </p>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-1 flex items-center gap-2.5 sm:gap-3 flex-wrap">
+              {/* Action Buttons — Liquid Soft-Pill Design (Mobile-First Responsive) */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3.5 w-full max-w-xs sm:max-w-none">
+                {/* Primary CTA: Create Classroom */}
                 <button
                   type="button"
                   onClick={handleOpenCreate}
-                  className="inline-flex items-center justify-center gap-2 px-4.5 py-2.5 sm:px-5 sm:py-2.5 bg-[#026fc3] hover:bg-[#025ca5] text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
+                  aria-label="Create a new classroom"
+                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[48px] sm:min-h-[50px] rounded-full text-sm sm:text-[15px] font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
                 >
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Create Classroom</span>
+                  <Plus className="w-4.5 h-4.5 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
+                  <span className="tracking-wide">Create Classroom</span>
                 </button>
 
+                {/* Secondary CTA: Join Class */}
                 <button
                   type="button"
                   onClick={handleOpenJoin}
-                  className="inline-flex items-center justify-center gap-2 px-4.5 py-2.5 sm:px-5 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs sm:text-sm font-bold border border-slate-200/90 shadow-2xs active:scale-95 transition-all cursor-pointer shrink-0"
+                  aria-label="Join an existing classroom"
+                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[48px] sm:min-h-[50px] rounded-full text-sm sm:text-[15px] font-bold text-slate-800 hover:text-slate-950 bg-gradient-to-b from-white via-white to-slate-50/90 hover:bg-gradient-to-b hover:from-white hover:to-sky-50/40 border border-slate-200/90 hover:border-sky-300 shadow-[0_2px_8px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_4px_16px_rgba(2,111,195,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 w-full sm:w-auto"
                 >
-                  <Users className="w-4 h-4 text-slate-500 stroke-[2.2]" />
-                  <span>Join Class</span>
+                  <Users className="w-4.5 h-4.5 text-[#026fc3] group-hover:scale-110 transition-transform duration-200 stroke-[2.2]" />
+                  <span className="tracking-wide">Join Class</span>
                 </button>
               </div>
 
@@ -532,22 +536,24 @@ export const ClassesPage: React.FC = () => {
                       : 'Join a classroom with your teacher’s code to start completing assignments and practicing quizzes.'}
                 </p>
               </div>
-              <div className="flex items-center justify-center gap-2.5 pt-2 flex-wrap">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-3 w-full max-w-xs sm:max-w-none mx-auto">
                 <button
                   type="button"
                   onClick={handleOpenCreate}
-                  className="px-5 py-2.5 bg-[#026fc3] hover:bg-[#025ca5] text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-2"
+                  aria-label="Create a new classroom"
+                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[46px] rounded-full text-sm font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Classroom</span>
+                  <Plus className="w-4 h-4 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
+                  <span className="tracking-wide">Create Classroom</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenJoin}
-                  className="px-4.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold active:scale-95 transition-all cursor-pointer flex items-center gap-2 border border-slate-200/80"
+                  aria-label="Join an existing classroom with code"
+                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[46px] rounded-full text-sm font-bold text-slate-800 hover:text-slate-950 bg-gradient-to-b from-white via-white to-slate-50/90 hover:bg-gradient-to-b hover:from-white hover:to-sky-50/40 border border-slate-200/90 hover:border-sky-300 shadow-[0_2px_8px_rgba(15,23,42,0.06),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_4px_16px_rgba(2,111,195,0.14),inset_0_1px_1px_rgba(255,255,255,0.95)] active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 w-full sm:w-auto"
                 >
-                  <Users className="w-4 h-4 text-slate-500" />
-                  <span>Join Class with Code</span>
+                  <Users className="w-4 h-4 text-[#026fc3] group-hover:scale-110 transition-transform duration-200 stroke-[2.2]" />
+                  <span className="tracking-wide">Join Class with Code</span>
                 </button>
               </div>
             </div>
@@ -598,7 +604,7 @@ export const ClassesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleOpenJoin}
-                    className="mt-2 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                    className="mt-2.5 px-4.5 py-2 bg-white hover:bg-sky-50/60 text-slate-700 hover:text-[#026fc3] rounded-full text-xs font-bold border border-slate-200/90 hover:border-sky-300 shadow-2xs transition-all active:scale-95 cursor-pointer"
                   >
                     Join with Code
                   </button>
