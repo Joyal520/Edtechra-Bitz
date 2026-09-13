@@ -13,7 +13,7 @@
 const STORAGE_KEY_SOUND_ENABLED = 'edtechra_quiz_sound_enabled';
 const STORAGE_KEY_MUSIC_MUTED = 'edtechra_quiz_music_muted';
 
-const BGM_PATH = encodeURI('/EdTechra Biz - Quiz Loop (Take 1).wav');
+const BGM_PATH = encodeURI('/EdTechra Biz - Quiz Loop (Take 1).mp3');
 const CLICK_PATH = encodeURI('/universfield-click-button-140881.mp3');
 
 class QuizAudioService {

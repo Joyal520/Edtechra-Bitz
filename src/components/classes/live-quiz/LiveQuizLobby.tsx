@@ -43,7 +43,9 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const channelRef = useRef<any>(null);
 
   const effectiveState = liveQuizService.getEffectiveSessionState(session);
-  const scheduledTimeStr = effectiveState === 'scheduled' ? session.started_at : null;
+  // A session is scheduled if it has session.started_at set and is still in lobby
+  const isScheduledSession = Boolean(session.started_at && (session.status === 'lobby' || effectiveState === 'scheduled'));
+  const scheduledTimeStr = isScheduledSession ? session.started_at : null;
   const targetStartMs = useMemo(() => {
     return scheduledTimeStr ? new Date(scheduledTimeStr).getTime() : null;
   }, [scheduledTimeStr]);
@@ -53,7 +55,7 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
     return Math.max(0, Math.ceil((targetStartMs - Date.now()) / 1000));
   });
 
-  const isScheduled = effectiveState === 'scheduled' && remainingSec > 0;
+  const isScheduled = isScheduledSession && remainingSec > 0;
   const isReady = !isScheduled;
 
   const pin = session.pin;
@@ -62,7 +64,32 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const quizTitle = session.quiz?.title || 'Classroom Live Quiz';
   const category = session.quiz?.category || 'General';
   const badgeStyle = getQuizCategoryBadgeStyle(category);
-  const questionsCount = session.quiz?.questions?.length || 0;
+
+  // Proactively fetch question count if missing from session
+  const [realQuestionsCount, setRealQuestionsCount] = useState<number>(() => session.quiz?.questions?.length || 0);
+
+  useEffect(() => {
+    if (session.quiz?.questions?.length) {
+      setRealQuestionsCount(session.quiz.questions.length);
+      return;
+    }
+    const quizId = session.quiz_id || session.quiz?.id;
+    if (session.id) {
+      liveQuizService.getStudentQuestions(session.id).then((qs) => {
+        if (qs && qs.length > 0) {
+          setRealQuestionsCount(qs.length);
+        } else if (quizId) {
+          liveQuizService.getQuizById(quizId).then((q) => {
+            if (q?.questions?.length) {
+              setRealQuestionsCount(q.questions.length);
+            }
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [session.id, session.quiz_id, session.quiz]);
+
+  const questionsCount = realQuestionsCount || session.quiz?.questions?.length || 0;
 
   // 1. Stale-state / Reconnection Guard: If quiz is already active, navigate immediately
   useEffect(() => {
@@ -412,10 +439,12 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
         {/* Right Controls: Compact Game PIN & Audio */}
         <div className="flex items-center gap-2.5">
-          {/* Compact Game PIN Pill — Only shown to teacher to display to class */}
+          {/* Game PIN Pill — Only shown to teacher to display to class */}
           {isTeacher && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-sm">
-              <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">Game PIN:</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">
+                {session.classroom_id ? 'Guest PIN:' : 'Game PIN:'}
+              </span>
               <span className="font-mono font-black text-amber-300 tracking-wider text-sm">{pin}</span>
               <button
                 type="button"
@@ -610,7 +639,11 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           <div className="py-8 text-center text-xs font-bold text-slate-300 animate-pulse flex items-center justify-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-400" />
             <span>
-              Waiting for students to connect using Game PIN <strong className="text-white font-mono text-sm">{pin}</strong>...
+              {session.classroom_id ? (
+                <>Waiting for classroom students to join...</>
+              ) : (
+                <>Waiting for students to connect using Game PIN <strong className="text-white font-mono text-sm">{pin}</strong>...</>
+              )}
             </span>
           </div>
         ) : (

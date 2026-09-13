@@ -73,14 +73,15 @@ CRITICAL QUESTION REQUIREMENTS
 1. Generate EXACTLY ${questionCount} questions.
 2. Every question must be multiple choice.
 3. Every question must have EXACTLY 4 options in an array.
-4. Only ONE option can be correct.
-5. All 4 options must be plausible, distinct, and non-empty.
-6. Do NOT create duplicate options within any question.
-7. Do NOT create two options that could reasonably both be considered correct.
-8. Questions must be strictly based on the supplied topic/learning material.
-9. Do not use "All of the above" or "None of the above".
-10. Include a short educational explanation for why the correct answer is right.
-11. The "correct_answer" field MUST EXACTLY match one of the 4 strings in the "options" array character-for-character.
+4. OPTION LENGTH RULE: Every option MUST contain between 1 and 3 words (minimum 1 word, maximum 3 words). NEVER write sentences or options exceeding 3 words.
+5. All 4 options must be short, clear, plausible, distinct, and from the same category.
+6. Only ONE option can be correct.
+7. Do NOT create duplicate options within any question.
+8. Do NOT create two options that could reasonably both be considered correct.
+9. Questions must be strictly based on the supplied topic/learning material.
+10. NEVER use "All of the above" or "None of the above".
+11. Include a short educational explanation for why the correct answer is right.
+12. The "correct_answer" field MUST EXACTLY match one of the 4 strings in the "options" array character-for-character.
 
 =============================================================================
 STRICT MACHINE-READABLE OUTPUT FORMAT
@@ -274,6 +275,24 @@ export function validateAndParseAiQuiz(
     if (cleanOptions.some((opt) => opt.length === 0)) {
       errors.push(`Question ${qNum} has empty option fields.`);
     }
+
+    // Enforce 1-3 word option length rule & forbid 'All/None of the above'
+    cleanOptions.forEach((opt, optIdx) => {
+      const words = opt.trim().split(/\s+/).filter(Boolean);
+      if (words.length < 1) {
+        errors.push(`Question ${qNum}, Option ${optIdx + 1} is empty.`);
+      } else if (words.length > 3) {
+        errors.push(
+          `Question ${qNum}, Option "${opt}" has ${words.length} words. Every option must contain between 1 and 3 words.`
+        );
+      }
+
+      if (/^(all|none)\s+of\s+the\s+above$/i.test(opt.trim())) {
+        errors.push(
+          `Question ${qNum}, Option "${opt}" is forbidden. Never use "All of the above" or "None of the above".`
+        );
+      }
+    });
 
     // Check for duplicate options
     const uniqueOptions = new Set(cleanOptions.map((o) => o.toLowerCase()));

@@ -76,6 +76,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const [phase, setPhase] = useState<'question' | 'reveal'>('question');
   const [answeredCount, setAnsweredCount] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
+  const [registeredCount, setRegisteredCount] = useState(0);
   const [answerDistribution, setAnswerDistribution] = useState<Record<number, number>>({ 0: 0, 1: 0, 2: 0, 3: 0 });
   const [timeLeft, setTimeLeft] = useState(20);
   const [questionStartMs, setQuestionStartMs] = useState(Date.now());
@@ -126,6 +127,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     // Initial fetch of participants from DB to seed student count accurately
     liveQuizService.getParticipants(session.id).then((parts) => {
       if (parts && parts.length > 0) {
+        setRegisteredCount(parts.length);
         setTotalStudents((prev) => Math.max(prev, parts.length));
       }
     }).catch(() => {});
@@ -231,8 +233,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     });
   }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast]);
 
-  // Active players count considers both presence and actual answers received
-  const activePlayers = Math.max(totalStudents, answeredCount, 1);
+  // Active players count considers registered participants, presence, and actual answers received
+  const activePlayers = Math.max(registeredCount, totalStudents, answeredCount);
 
   // 3. Synchronized countdown timer with authoritative fallback
   useEffect(() => {
@@ -253,15 +255,25 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     return () => clearInterval(timer);
   }, [phase, questionStartMs, durationSec, isPaused]);
 
-  // 4. Condition A check: When all active students have answered -> Automatically advance!
+  // 4. Condition A check: When all active students have answered -> Automatically advance with grace period!
   useEffect(() => {
     if (phase !== 'question' || isAdvancingRef.current) return;
 
-    // Trigger auto-advance if at least 1 student answered and all connected have submitted
-    if (answeredCount > 0 && answeredCount >= activePlayers) {
-      triggerAutomaticRevealAndAdvance();
+    // Trigger auto-advance if at least 1 student answered and all expected have submitted
+    if (activePlayers > 0 && answeredCount >= activePlayers) {
+      const elapsedMs = Date.now() - questionStartMs;
+      const minElapsedMs = Math.min(4000, durationSec * 400); // at least 4s or 40% of duration
+      const remainingWaitMs = Math.max(0, minElapsedMs - elapsedMs);
+
+      const timer = setTimeout(() => {
+        if (!isAdvancingRef.current) {
+          triggerAutomaticRevealAndAdvance();
+        }
+      }, remainingWaitMs);
+
+      return () => clearTimeout(timer);
     }
-  }, [answeredCount, activePlayers, phase]);
+  }, [answeredCount, activePlayers, phase, questionStartMs, durationSec]);
 
   // 5. Automatic reveal & seamless progression to next question (Idempotent)
   const triggerAutomaticRevealAndAdvance = async () => {

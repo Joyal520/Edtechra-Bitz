@@ -32,10 +32,9 @@ export const LiveQuizLobbyPage: React.FC = () => {
       }
 
       const isHostTeacher = isTeacher || s.teacher_id === user?.id;
-      const scheduledTimeStr = s.started_at;
-      const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
 
-      if (s.status === 'in_progress' || s.status === 'reveal' || (scheduledTimeStr && isScheduledTimeReached)) {
+      // Only navigate to host/play if session is actively in progress or reveal
+      if (s.status === 'in_progress' || s.status === 'reveal') {
         const activeSession = {
           ...s,
           status: 'in_progress' as const,
@@ -64,8 +63,13 @@ export const LiveQuizLobbyPage: React.FC = () => {
     }
   };
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = async () => {
     if (!session) return;
+    try {
+      await liveQuizService.startSession(session.id, classroomId || session.classroom_id);
+    } catch (e) {
+      console.warn('[LiveQuizLobbyPage] startSession notice:', e);
+    }
     navigate(`/classes/${classroomId || session.classroom_id}/live-quiz/host/${session.id}`);
   };
 

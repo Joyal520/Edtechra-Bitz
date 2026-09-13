@@ -340,6 +340,31 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       return;
     }
 
+    // Enforce 1-3 word rule on manual options
+    for (let i = 0; i < manualQuestions.length; i++) {
+      const q = manualQuestions[i];
+      if (q.options.length !== 4) {
+        setError(`Question ${i + 1} must have exactly 4 choices.`);
+        return;
+      }
+      for (let j = 0; j < q.options.length; j++) {
+        const optText = (q.options[j] || '').trim();
+        const words = optText.split(/\s+/).filter(Boolean);
+        if (words.length < 1) {
+          setError(`Question ${i + 1}, choice ${j + 1} is empty.`);
+          return;
+        }
+        if (words.length > 3) {
+          setError(`Question ${i + 1}, choice "${optText}" has ${words.length} words. Every choice must contain 1 to 3 words.`);
+          return;
+        }
+        if (/^(all|none)\s+of\s+the\s+above$/i.test(optText)) {
+          setError(`Question ${i + 1}, choice "${optText}" is forbidden. Never use "All of the above" or "None of the above".`);
+          return;
+        }
+      }
+    }
+
     setIsSaving(true);
     try {
       // Upfront client check against existing user quizzes

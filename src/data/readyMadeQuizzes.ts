@@ -4,7 +4,7 @@
 
 import { LiveQuiz, LiveQuizQuestion } from '@/types/liveQuiz';
 
-function buildClientSafeQuestions(title: string, category: string): LiveQuizQuestion[] {
+function buildClientSafeQuestions(title: string, _category: string): LiveQuizQuestion[] {
   const templates: Record<string, Array<{ q: string; opts: [string, string, string, string] }>> = {
     'Basic Grammar': [
       { q: 'Which of the following is a noun?', opts: ['Quickly', 'Elephant', 'Blue', 'Run'] },
@@ -14,7 +14,7 @@ function buildClientSafeQuestions(title: string, category: string): LiveQuizQues
       { q: 'What is the plural of "child"?', opts: ['Childs', 'Children', 'Childrens', 'Childes'] }
     ],
     'Tenses Quiz': [
-      { q: 'Which sentence is in the past continuous tense?', opts: ['I was reading a book.', 'I read a book.', 'I will read a book.', 'I have read a book.'] },
+      { q: 'Which sentence is in the past continuous tense?', opts: ['Was reading', 'Read regularly', 'Will read', 'Have read'] },
       { q: '"She has lived in London for five years." Which tense is this?', opts: ['Simple Past', 'Present Perfect', 'Past Perfect', 'Future Perfect'] },
       { q: 'Choose the correct future form: "By tomorrow, we ___ the project."', opts: ['will finish', 'will have finished', 'finished', 'finishing'] },
       { q: 'Yesterday, they ___ to the museum.', opts: ['go', 'gone', 'went', 'going'] }
@@ -28,8 +28,8 @@ function buildClientSafeQuestions(title: string, category: string): LiveQuizQues
     'AI Basics': [
       { q: 'What does "AI" stand for?', opts: ['Automated Internet', 'Artificial Intelligence', 'Algorithmic Input', 'Advanced Integration'] },
       { q: 'Which field of AI allows computers to learn from data patterns without explicit programming?', opts: ['Quantum Computing', 'Machine Learning', 'Computer Graphics', 'Database Management'] },
-      { q: 'What is a neural network in AI inspired by?', opts: ['Computer motherboards', 'The human brain & neurons', 'Internet cables', 'Telephone switches'] },
-      { q: 'Which of the following is a conversational AI model?', opts: ['Large Language Model (LLM)', 'Relational Database', 'Video Decoder', 'Rasterizer'] }
+      { q: 'What is a neural network in AI inspired by?', opts: ['Computer motherboards', 'Human Brain', 'Internet cables', 'Telephone switches'] },
+      { q: 'Which of the following is a conversational AI model?', opts: ['Large Language Model', 'Relational Database', 'Video Decoder', 'Rasterizer'] }
     ],
     'Solar System': [
       { q: 'Which is the largest planet in our solar system?', opts: ['Mars', 'Saturn', 'Jupiter', 'Neptune'] },
@@ -48,15 +48,15 @@ function buildClientSafeQuestions(title: string, category: string): LiveQuizQues
     }));
   }
 
-  // Fallback generation for other topics
+  // Fallback generation for other topics (strictly 1-3 words per option)
   return Array.from({ length: 6 }, (_, index) => ({
     id: `q_${title.toLowerCase().replace(/\s+/g, '_')}_${index + 1}`,
     question: `${title}: Question ${index + 1} on core concepts`,
     options: [
-      `Key concept A in ${category}`,
-      `Primary principle B in ${category}`,
-      `Essential application C in ${category}`,
-      `Advanced method D in ${category}`
+      `Concept A`,
+      `Principle B`,
+      `Application C`,
+      `Method D`
     ],
     durationSec: 20
   }));

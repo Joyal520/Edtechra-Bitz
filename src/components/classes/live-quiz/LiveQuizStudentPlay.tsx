@@ -107,6 +107,18 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return [];
   };
 
+  // Fisher-Yates shuffle generator to randomize option display order per question/session
+  const generatePermutation = (length: number): number[] => {
+    const arr = Array.from({ length }, (_, i) => i);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = temp;
+    }
+    return arr;
+  };
+
   // Determine if quiz should be active (in_progress, reveal, OR scheduled time reached)
   const scheduledTimeStr = session.scheduled_start_at || session.started_at;
   const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
@@ -117,6 +129,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     qIndex: number;
     question: string;
     options: string[];
+    permutation: number[];
     durationSec: number;
     questionStartMs: number;
     totalQuestions: number;
@@ -134,6 +147,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           qIndex: idx,
           question: q.question || `Question ${idx + 1}`,
           options: opts,
+          permutation: generatePermutation(opts.length),
           durationSec: session.question_duration_sec || q.durationSec || 20,
           questionStartMs: Number(session.question_start_ms) || Date.now(),
           totalQuestions: questions.length || 0
@@ -144,6 +158,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   });
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedDisplayIndex, setSelectedDisplayIndex] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
 
   // Rehydrate initial reveal data if session is already in reveal
@@ -180,13 +195,33 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const [showConfetti, setShowConfetti] = useState(false);
   const hasTriggeredFeedbackRef = useRef<number | null>(null);
 
-  // Background music lifecycle: start on mount, stop on unmount
+  // Proactively fetch student questions if not provided in session
+  const [studentQuestions, setStudentQuestions] = useState<any[]>(() => session.quiz?.questions || []);
+
   useEffect(() => {
-    quizAudioService.startBackgroundMusic();
+    if (session.quiz?.questions && session.quiz.questions.length > 0) {
+      setStudentQuestions(session.quiz.questions);
+      return;
+    }
+    const quizId = session.quiz_id || session.quiz?.id;
+    if (quizId) {
+      liveQuizService.getStudentQuestions(quizId).then((fetched) => {
+        if (fetched && fetched.length > 0) {
+          setStudentQuestions(fetched);
+        }
+      }).catch((err) => console.warn('[LiveQuizStudentPlay] Error fetching student questions:', err));
+    }
+  }, [session.quiz_id, session.quiz?.id, session.quiz?.questions]);
+
+  // Background music lifecycle: start ONLY when active gameplay is loaded with questions, stop on unmount
+  useEffect(() => {
+    if (isPlayingStatus && questionData) {
+      quizAudioService.startBackgroundMusic();
+    }
     return () => {
       quizAudioService.stopBackgroundMusic();
     };
-  }, []);
+  }, [isPlayingStatus, Boolean(questionData)]);
 
   // Stable ref for callbacks & active question index
   const onQuizFinishedRef = useRef(onQuizFinished);
@@ -217,7 +252,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const applyQuestionStarted = useCallback((raw: any) => {
     if (!raw) return;
 
-    const questions = session.quiz?.questions || [];
+    const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
     const totalCount = questions.length || raw.totalQuestions || raw.total_questions || 1;
     const rawIdx = typeof raw.qIndex === 'number'
       ? raw.qIndex
@@ -248,11 +283,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       qIndex: rawIdx,
       question: resolvedQuestion,
       options: resolvedOptions,
+      permutation: generatePermutation(resolvedOptions.length),
       durationSec: duration,
       questionStartMs: startMs,
       totalQuestions: totalCount
     });
     setSelectedIndex(null);
+    setSelectedDisplayIndex(null);
     setIsLocked(false);
     setRevealData(null);
     setShowConfetti(false);
@@ -276,10 +313,11 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   // Ensure Question 1 / current question rehydrates immediately if session prop updates or loads fresh
   useEffect(() => {
     const isPlaying = session.status === 'in_progress' || session.status === 'reveal' || isScheduledTimeReached;
-    if (!questionData && isPlaying) {
+    const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
+
+    if (!questionData && isPlaying && questions.length > 0) {
       const idx = session.current_question_index ?? 0;
-      const questions = session.quiz?.questions || [];
-      if (questions.length > 0 && idx >= questions.length) {
+      if (idx >= questions.length) {
         if (onQuizFinishedRef.current) {
           onQuizFinishedRef.current([]);
         }
@@ -297,7 +335,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
         });
       }
     }
-  }, [session, questionData, isScheduledTimeReached, applyQuestionStarted]);
+  }, [session, questionData, isScheduledTimeReached, studentQuestions, applyQuestionStarted]);
 
   // Sync with database helper
   const syncWithDatabase = useCallback(async () => {
@@ -332,13 +370,30 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
       if (isFreshPlaying) {
         const idx = fresh.current_question_index ?? 0;
-        const questions = fresh.quiz?.questions || session.quiz?.questions || [];
+        const questions = studentQuestions.length > 0 ? studentQuestions : (fresh.quiz?.questions || session.quiz?.questions || []);
         if (questions.length > 0 && idx >= questions.length) {
           if (onQuizFinishedRef.current) {
             onQuizFinishedRef.current([]);
           }
           return;
         }
+
+        // Abandoned session protection: if on last question and time elapsed exceeds duration + 15s
+        if (questions.length > 0 && idx === questions.length - 1 && fresh.question_start_ms) {
+          const qDuration = fresh.question_duration_sec || questions[idx]?.durationSec || 20;
+          const elapsedSec = (Date.now() - Number(fresh.question_start_ms)) / 1000;
+          if (elapsedSec > qDuration + 15) {
+            quizAudioService.stopBackgroundMusic();
+            if (session.classroom_id) {
+              fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`, { method: 'POST' }).catch(() => {});
+            }
+            if (onQuizFinishedRef.current) {
+              onQuizFinishedRef.current([]);
+            }
+            return;
+          }
+        }
+
         if (activeQIndexRef.current !== idx || !questionData) {
           const q = questions[idx] || questions[0];
           if (q) {
@@ -611,20 +666,24 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return () => clearInterval(interval);
   }, [isTotalTimed, session.expires_at]);
 
-  const handleSelectOption = async (index: number) => {
+  const handleSelectOption = async (displayIndex: number) => {
     if (isLocked || revealData || !questionData || isTotalTimeExpired || questionTimeLeft <= 0) return;
 
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
 
-    setSelectedIndex(index);
+    // Map display button index back to canonical question option index for 100% stable server scoring
+    const canonicalIndex = questionData.permutation?.[displayIndex] ?? displayIndex;
+
+    setSelectedDisplayIndex(displayIndex);
+    setSelectedIndex(canonicalIndex);
     setIsLocked(true);
 
     try {
       const res = await liveQuizService.submitAnswer({
         session_id: session.id,
         question_index: questionData.qIndex,
-        selected_option_index: index
+        selected_option_index: canonicalIndex
       });
 
       const pts = res.data?.points_awarded || 0;
@@ -644,7 +703,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           payload: {
             student_id: user?.id,
             qIndex: questionData.qIndex,
-            selected_option_index: index
+            selected_option_index: canonicalIndex
           }
         }).catch(() => {});
       }
@@ -817,13 +876,14 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
         </div>
       )}
 
-      {/* 4 Interactive Option Cards */}
+      {/* 4 Interactive Option Cards (Randomized display order per question/session) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-4xl mx-auto w-full">
-        {(Array.isArray(questionData.options) ? questionData.options : []).map((opt, idx) => {
-          const theme = OPTION_THEMES[idx] || OPTION_THEMES[0];
-          const isSelected = selectedIndex === idx;
+        {(questionData.permutation || Array.from({ length: questionData.options?.length || 0 }, (_, i) => i)).map((canonicalIdx, displayIdx) => {
+          const opt = questionData.options[canonicalIdx];
+          const theme = OPTION_THEMES[displayIdx] || OPTION_THEMES[0];
+          const isSelected = selectedDisplayIndex === displayIdx;
           const isRevealed = Boolean(revealData);
-          const isThisOptionCorrect = revealData && idx === revealData.correctIndex;
+          const isThisOptionCorrect = revealData && canonicalIdx === revealData.correctIndex;
           const isThisOptionIncorrectSelection = isRevealed && isSelected && !isThisOptionCorrect;
 
           let cardStyling = `${theme.bg}`;
@@ -844,10 +904,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
           return (
             <button
-              key={idx}
+              key={displayIdx}
               type="button"
               disabled={isLocked || isRevealed || isTotalTimeExpired || questionTimeLeft <= 0}
-              onClick={() => handleSelectOption(idx)}
+              onClick={() => handleSelectOption(displayIdx)}
               className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
             >
               <div className="flex items-center gap-3.5">

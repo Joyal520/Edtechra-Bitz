@@ -465,7 +465,21 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
     }
 
     for (const session of activeSessions) {
-      const questions = session.quiz?.questions || [];
+      let questions = session.quiz?.questions || [];
+      if ((!questions || questions.length === 0) && session.quiz_id) {
+        try {
+          const { data: qRows } = await supabaseClient
+            .from('live_quiz_questions')
+            .select('*')
+            .eq('quiz_id', session.quiz_id)
+            .order('order_index', { ascending: true });
+          if (qRows && qRows.length > 0) {
+            questions = qRows;
+          }
+        } catch (qErr) {
+          // ignore question query error
+        }
+      }
 
       // 1. Scheduled Quiz Autonomous Start:
       // If status === 'lobby' and started_at is a future timestamp that has now elapsed:
@@ -3269,6 +3283,103 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
         .eq('id', sessionId)
         .maybeSingle();
       session = data;
+    }
+
+    // 1. Idempotently calculate results and award classroom points if not already finalized
+    try {
+      const { data: existingResults } = await serverSupabase
+        .from('live_quiz_results')
+        .select('id')
+        .eq('session_id', sessionId)
+        .limit(1);
+
+      if (!existingResults || existingResults.length === 0) {
+        const { data: fullSession } = await serverSupabase
+          .from('live_quiz_sessions')
+          .select('*, quiz:live_quizzes(*, questions:live_quiz_questions(*))')
+          .eq('id', sessionId)
+          .maybeSingle();
+
+        if (fullSession) {
+          const totalQuestions = fullSession.quiz?.questions?.length || 1;
+          const [partsRes, ansRes] = await Promise.all([
+            serverSupabase
+              .from('live_quiz_participants')
+              .select('*')
+              .eq('session_id', sessionId)
+              .order('score', { ascending: false }),
+            serverSupabase
+              .from('live_quiz_answers')
+              .select('*')
+              .eq('session_id', sessionId)
+          ]);
+
+          const participants = partsRes.data || [];
+          const answers = ansRes.data || [];
+
+          const answersByStudent = {};
+          answers.forEach((a) => {
+            if (!answersByStudent[a.student_id]) {
+              answersByStudent[a.student_id] = { correct: 0, wrong: 0 };
+            }
+            if (a.is_correct) {
+              answersByStudent[a.student_id].correct += 1;
+            } else {
+              answersByStudent[a.student_id].wrong += 1;
+            }
+          });
+
+          for (let i = 0; i < participants.length; i++) {
+            const p = participants[i];
+            const rank = i + 1;
+            const studentStats = answersByStudent[p.student_id] || { correct: 0, wrong: 0 };
+            const accuracy = Math.round((studentStats.correct / totalQuestions) * 100);
+
+            const { data: resRow } = await serverSupabase
+              .from('live_quiz_results')
+              .upsert(
+                {
+                  session_id: sessionId,
+                  classroom_id: fullSession.classroom_id,
+                  teacher_id: fullSession.teacher_id,
+                  student_id: p.student_id,
+                  quiz_id: fullSession.quiz_id,
+                  score: p.score,
+                  points_awarded: p.score,
+                  correct_count: studentStats.correct,
+                  wrong_count: Math.max(0, totalQuestions - studentStats.correct),
+                  total_questions: totalQuestions,
+                  accuracy_percentage: accuracy,
+                  final_rank: rank
+                },
+                { onConflict: 'session_id,student_id' }
+              )
+              .select()
+              .single();
+
+            if (p.score > 0 && fullSession.classroom_id) {
+              try {
+                await serverSupabase
+                  .from('classroom_points')
+                  .insert({
+                    classroom_id: fullSession.classroom_id,
+                    student_id: p.student_id,
+                    points: p.score,
+                    reason: `Live Quiz (Rank #${rank})`,
+                    source_type: 'live_quiz',
+                    source_id: resRow?.id || null,
+                    awarded_by: fullSession.teacher_id,
+                    created_at: new Date().toISOString()
+                  });
+              } catch (ptsErr) {
+                // Ignore conflict duplicates
+              }
+            }
+          }
+        }
+      }
+    } catch (calcErr) {
+      console.warn('[LiveQuiz complete endpoint] Error computing stats:', calcErr);
     }
 
     await serverSupabase

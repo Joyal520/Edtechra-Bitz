@@ -176,6 +176,36 @@ class LiveQuizService {
         ? 'Created by Teacher'
         : 'Created by EdTechra';
 
+      let questionsList = (data.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
+        id: item.id,
+        question: item.question_text,
+        options: item.options,
+        correctIndex: item.correct_index,
+        durationSec: item.duration_sec,
+        explanation: item.explanation
+      }));
+
+      // RLS Fallback for students: if direct query returned no questions, fetch via security definer RPC
+      if (questionsList.length === 0) {
+        try {
+          const { data: studentQuestions, error: rpcErr } = await supabase.rpc('get_live_quiz_questions_for_student', {
+            p_quiz_id: quizId
+          });
+          if (!rpcErr && Array.isArray(studentQuestions) && studentQuestions.length > 0) {
+            questionsList = studentQuestions.sort((a: any, b: any) => (a.question_index ?? 0) - (b.question_index ?? 0)).map((item: any) => ({
+              id: item.id,
+              question: item.question_text,
+              options: item.options,
+              correctIndex: -1, // hidden from students
+              durationSec: item.duration_sec || 20,
+              explanation: ''
+            }));
+          }
+        } catch (rpcEx) {
+          console.warn('[LiveQuizService] Student RPC questions fallback notice:', rpcEx);
+        }
+      }
+
       return {
         ...data,
         visibility: data.visibility || 'private',
@@ -183,18 +213,40 @@ class LiveQuizService {
         timer_seconds: data.timer_seconds ?? null,
         is_owner: isOwner,
         creator_name: creatorName,
-        questions: (data.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
-          id: item.id,
-          question: item.question_text,
-          options: item.options,
-          correctIndex: item.correct_index,
-          durationSec: item.duration_sec,
-          explanation: item.explanation
-        }))
+        questions: questionsList
       };
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Specifically loads sanitized questions for students via RPC or bank
+   */
+  async getStudentQuestions(quizId: string): Promise<LiveQuizStudentQuestion[]> {
+    const readyMade = READY_MADE_QUIZZES.find((q) => q.id === quizId);
+    if (readyMade) {
+      return readyMade.questions.map((q) => this.sanitizeForStudent(q));
+    }
+    if (!supabase || !quizId) return [];
+    try {
+      const { data, error } = await supabase.rpc('get_live_quiz_questions_for_student', {
+        p_quiz_id: quizId
+      });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.sort((a: any, b: any) => (a.question_index ?? 0) - (b.question_index ?? 0)).map((item: any) => ({
+          id: item.id,
+          question: item.question_text,
+          options: item.options,
+          durationSec: item.duration_sec || 20
+        }));
+      }
+    } catch (err) {
+      console.warn('[LiveQuizService] getStudentQuestions error:', err);
+    }
+    // Fallback: try getQuizById and sanitize
+    const quiz = await this.getQuizById(quizId);
+    return (quiz?.questions || []).map((q) => this.sanitizeForStudent(q));
   }
 
   /**
@@ -260,6 +312,44 @@ class LiveQuizService {
         }
       } catch (checkErr) {
         console.warn('[LiveQuizService] Duplicate title check notice:', checkErr);
+      }
+    }
+
+    // Option length validation (1-3 words per choice, exactly 4 choices, no "all/none of above")
+    if (!Array.isArray(payload.questions) || payload.questions.length === 0) {
+      return { error: 'Please provide at least 1 question for the quiz.' };
+    }
+
+    for (let i = 0; i < payload.questions.length; i++) {
+      const q = payload.questions[i];
+      const qNum = i + 1;
+      let opts: string[] = [];
+      if (Array.isArray(q.options)) {
+        opts = q.options.map(String);
+      } else if (typeof q.options === 'string') {
+        try { opts = JSON.parse(q.options); } catch { opts = []; }
+      }
+
+      if (opts.length !== 4) {
+        return { error: `Question ${qNum} must have exactly 4 choices (found ${opts.length}).` };
+      }
+
+      for (let j = 0; j < opts.length; j++) {
+        const optText = (opts[j] || '').trim();
+        const words = optText.split(/\s+/).filter(Boolean);
+        if (words.length < 1) {
+          return { error: `Question ${qNum}, choice ${j + 1} cannot be empty.` };
+        }
+        if (words.length > 3) {
+          return {
+            error: `Question ${qNum}, choice "${optText}" has ${words.length} words. Every choice must contain between 1 and 3 words.`
+          };
+        }
+        if (/^(all|none)\s+of\s+the\s+above$/i.test(optText)) {
+          return {
+            error: `Question ${qNum}, choice "${optText}" is forbidden. Never use "All of the above" or "None of the above".`
+          };
+        }
       }
     }
 
@@ -421,14 +511,9 @@ class LiveQuizService {
       }
     }
 
-    const nowMs = Date.now();
-
     if (session.status === 'lobby') {
       if (session.started_at) {
-        const scheduledMs = new Date(session.started_at).getTime();
-        if (scheduledMs > nowMs + 1000) {
-          return 'scheduled';
-        }
+        return 'scheduled';
       }
       return 'lobby';
     }
@@ -455,16 +540,36 @@ class LiveQuizService {
     if (!userId) return { error: 'Teacher authentication required' };
 
     try {
-      // Double-click protection / idempotency guard:
-      // If an active session already exists for this classroom, return it
+      // Stale session cleanup & idempotency guard:
       const existing = await this.getActiveSessionForClassroom(payload.classroom_id);
       if (existing) {
-        return { data: existing };
+        const isSameQuiz = (payload.quiz_id && existing.quiz_id === payload.quiz_id) ||
+          (payload.custom_quiz?.id && existing.quiz_id === payload.custom_quiz.id);
+        const ageMs = existing.created_at ? Date.now() - new Date(existing.created_at).getTime() : 0;
+
+        // Double-click protection: if an identical fresh lobby session was just created (< 3 minutes ago), reuse it
+        if (existing.status === 'lobby' && isSameQuiz && ageMs < 3 * 60 * 1000 && !payload.is_scheduled) {
+          return { data: existing };
+        }
+
+        // Otherwise (stale session, different quiz, or abandoned in-progress session), supersede and cancel the old session
+        try {
+          await supabase
+            .from('live_quiz_sessions')
+            .update({ status: 'cancelled', ended_at: new Date().toISOString() })
+            .eq('id', existing.id);
+        } catch (cleanErr) {
+          console.warn('[LiveQuizService] Notice cleaning up stale session:', cleanErr);
+        }
       }
 
       // Target Quiz Reference:
       // If quiz_id is provided or custom_quiz already has an ID, reference it directly (NEVER CLONE)
       let targetQuizId = payload.quiz_id || payload.custom_quiz?.id;
+      const searchId = targetQuizId?.toLowerCase();
+      const readyMade = searchId
+        ? READY_MADE_QUIZZES.find((q) => q.id === searchId || q.title.toLowerCase() === searchId)
+        : null;
 
       // Only persist if custom_quiz was passed WITHOUT any ID (i.e. brand new unsaved quiz)
       if (!targetQuizId && payload.custom_quiz) {
@@ -485,36 +590,35 @@ class LiveQuizService {
           return { error: savedQuiz.error };
         }
         targetQuizId = savedQuiz.data?.id;
-      } else if (targetQuizId && !targetQuizId.includes('-')) {
-        // Ready-made ID without UUID: check if already persisted first to prevent duplicates
-        const readyMade = READY_MADE_QUIZZES.find((q) => q.id === targetQuizId);
-        if (readyMade) {
-          const { data: existingReady } = await supabase
-            .from('live_quizzes')
-            .select('id')
-            .eq('title', readyMade.title)
-            .limit(1);
+      } else if (readyMade) {
+        // Ready-made ID: find existing persisted row in live_quizzes with questions to prevent duplicates
+        const { data: existingReady } = await supabase
+          .from('live_quizzes')
+          .select('id, live_quiz_questions(id)')
+          .eq('title', readyMade.title)
+          .limit(1);
 
-          if (existingReady && existingReady.length > 0) {
-            targetQuizId = existingReady[0].id;
-          } else {
-            const savedQuiz = await this.createCustomQuiz({
-              classroom_id: payload.classroom_id,
-              title: readyMade.title,
-              description: readyMade.description,
-              category: readyMade.category,
-              difficulty: readyMade.difficulty,
-              accent_color: readyMade.accent_color,
-              questions: readyMade.questions,
-              visibility: 'common',
-              is_public: true
-            });
-            targetQuizId = savedQuiz.data?.id;
+        if (existingReady && existingReady.length > 0 && (existingReady[0] as any).live_quiz_questions?.length > 0) {
+          targetQuizId = existingReady[0].id;
+        } else {
+          const savedQuiz = await this.createCustomQuiz({
+            classroom_id: payload.classroom_id,
+            title: readyMade.title,
+            description: readyMade.description,
+            category: readyMade.category,
+            difficulty: readyMade.difficulty,
+            accent_color: readyMade.accent_color,
+            questions: readyMade.questions,
+            visibility: 'common',
+            is_public: true
+          });
+          if (savedQuiz.data?.id) {
+            targetQuizId = savedQuiz.data.id;
           }
         }
       }
 
-      const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null);
+      const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null) || (readyMade ? { ...readyMade, id: targetQuizId || readyMade.id } : null);
       const totalTimerEnabled = Boolean(quiz?.timer_enabled);
       const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
       const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
@@ -529,6 +633,8 @@ class LiveQuizService {
       // Generate unique PIN
       const pin = this.generatePin();
 
+      const firstQDuration = quiz?.questions?.[0]?.durationSec || 20;
+
       // Clean insertion row matching live_quiz_sessions table schema & check constraints
       const insertRow: any = {
         classroom_id: payload.classroom_id,
@@ -537,7 +643,7 @@ class LiveQuizService {
         pin,
         status: 'lobby',
         current_question_index: 0,
-        question_duration_sec: 20,
+        question_duration_sec: firstQDuration,
         started_at: startedAt,
         expires_at: expiresAt
       };
@@ -643,6 +749,13 @@ class LiveQuizService {
 
     const startMs = Date.now();
     let updatedSession: LiveQuizSession | null = null;
+    let initialDurationSec = 20;
+    try {
+      const existingSession = await this.getSessionById(sessionId);
+      if (existingSession?.quiz?.questions?.[0]?.durationSec) {
+        initialDurationSec = existingSession.quiz.questions[0].durationSec;
+      }
+    } catch {}
 
     // 1. Direct Supabase update (Immediate for teacher / session owner)
     if (supabase) {
@@ -654,7 +767,7 @@ class LiveQuizService {
             started_at: new Date(startMs).toISOString(),
             current_question_index: 0,
             question_start_ms: startMs,
-            question_duration_sec: 20,
+            question_duration_sec: initialDurationSec,
             correct_answer_index: null
           })
           .eq('id', sessionId)
