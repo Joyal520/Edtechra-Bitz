@@ -38,6 +38,14 @@ export interface ValidationResult {
     totalMarks: number;
     durationMinutes: number;
   };
+  blueprintDiff?: {
+    expectedTotalQuestions: number;
+    actualTotalQuestions: number;
+    expectedTotalMarks: number;
+    actualTotalMarks: number;
+    expectedBreakdown: Record<string, number>;
+    actualBreakdown: Record<string, number>;
+  };
 }
 
 const VALID_TYPES = new Set<string>(ALL_QUESTION_TYPES.map(q => q.type));
@@ -648,20 +656,174 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
   };
 }
 
+export interface BlueprintItemValidationSpec {
+  id?: string;
+  type: SupportedQuestionType | string;
+  name?: string;
+  count: number;
+  marksPerItem?: number;
+  enabled?: boolean;
+}
+
+export interface BlueprintValidationOptions {
+  totalQuestions?: number;
+  totalMarks?: number;
+  blueprintItems?: BlueprintItemValidationSpec[];
+}
+
+/**
+ * Validates exam JSON against an assessment blueprint.
+ * Enforces total question counts, question types, and individual question counts.
+ */
+export function validateExamAgainstBlueprint(
+  input: string | Record<string, any>,
+  options: BlueprintValidationOptions
+): ValidationResult {
+  const baseResult = validateExamJSON(input);
+  const errors: ValidationError[] = [...baseResult.errors];
+  const warnings: ValidationWarning[] = [...baseResult.warnings];
+
+  const parsedExam = baseResult.parsedExam;
+  let actualTotalQuestions = 0;
+  let actualTotalMarks = 0;
+  const actualBreakdown: Record<string, number> = {};
+
+  if (parsedExam && Array.isArray(parsedExam.sections)) {
+    parsedExam.sections.forEach((sec) => {
+      (sec.questions || []).forEach((q) => {
+        actualTotalQuestions++;
+        actualTotalMarks += Number(q.marks) || 1;
+        const norm = normalizeQuestionType(q.type) || 'multiple_choice';
+        actualBreakdown[norm] = (actualBreakdown[norm] || 0) + 1;
+      });
+
+      (sec.activities || []).forEach((act) => {
+        if (Array.isArray(act.questions) && act.questions.length > 0) {
+          act.questions.forEach((q) => {
+            actualTotalQuestions++;
+            actualTotalMarks += Number(q.marks) || 1;
+            const norm = normalizeQuestionType(q.type) || 'multiple_choice';
+            actualBreakdown[norm] = (actualBreakdown[norm] || 0) + 1;
+          });
+        } else {
+          actualTotalQuestions++;
+          actualTotalMarks += Number(act.marks) || 10;
+          const norm = normalizeQuestionType(act.activityType) || 'reading_comprehension';
+          actualBreakdown[norm] = (actualBreakdown[norm] || 0) + 1;
+        }
+      });
+    });
+  }
+
+  const expectedBreakdown: Record<string, number> = {};
+  let expectedTotalQuestions = options.totalQuestions || 0;
+  let expectedTotalMarks = options.totalMarks || 0;
+
+  const activeItems = (options.blueprintItems || []).filter((i) => i.enabled !== false);
+  if (activeItems.length > 0) {
+    let calcQ = 0;
+    let calcM = 0;
+    activeItems.forEach((item) => {
+      const norm = normalizeQuestionType(item.type) || normalizeQuestionType(item.id || '') || 'multiple_choice';
+      expectedBreakdown[norm] = (expectedBreakdown[norm] || 0) + Number(item.count || 0);
+      calcQ += Number(item.count || 0);
+      calcM += Number(item.count || 0) * Number(item.marksPerItem || 1);
+    });
+    if (!expectedTotalQuestions) expectedTotalQuestions = calcQ;
+    if (!expectedTotalMarks) expectedTotalMarks = calcM;
+  }
+
+  const blueprintDiff = {
+    expectedTotalQuestions,
+    actualTotalQuestions,
+    expectedTotalMarks,
+    actualTotalMarks,
+    expectedBreakdown,
+    actualBreakdown
+  };
+
+  // Check total questions count
+  if (expectedTotalQuestions > 0 && actualTotalQuestions !== expectedTotalQuestions) {
+    errors.push({
+      id: 'blueprint_total_questions_mismatch',
+      field: 'sections.questions',
+      message: `Blueprint Question Count Mismatch: The blueprint requires exactly ${expectedTotalQuestions} questions, but the generated exam contains ${actualTotalQuestions} questions.`
+    });
+  }
+
+  // Check per-type counts
+  Object.entries(expectedBreakdown).forEach(([type, expCount]) => {
+    const actCount = actualBreakdown[type] || 0;
+    if (actCount !== expCount) {
+      const meta = ALL_QUESTION_TYPES.find((t) => t.type === type);
+      const label = meta?.title || type;
+      if (actCount === 0) {
+        errors.push({
+          id: `blueprint_missing_type_${type}`,
+          field: 'sections.questions',
+          message: `Blueprint Question Type Missing: Expected ${expCount} question(s) of type "${label}" (${type}), but 0 were generated.`
+        });
+      } else {
+        errors.push({
+          id: `blueprint_type_count_mismatch_${type}`,
+          field: 'sections.questions',
+          message: `Blueprint Count Mismatch for "${label}": Expected ${expCount}, but found ${actCount}.`
+        });
+      }
+    }
+  });
+
+  // Check total marks
+  if (expectedTotalMarks > 0 && Math.abs(actualTotalMarks - expectedTotalMarks) > 0.01) {
+    errors.push({
+      id: 'blueprint_total_marks_mismatch',
+      field: 'exam.totalMarks',
+      message: `Blueprint Total Marks Mismatch: The blueprint specifies ${expectedTotalMarks} total marks, but generated questions total ${actualTotalMarks} marks.`
+    });
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    parsedExam,
+    stats: baseResult.stats,
+    blueprintDiff
+  };
+}
+
 /**
  * Generates an actionable, teacher-friendly correction prompt to send back to AI when JSON validation encounters issues.
  */
 export function generateCorrectionPrompt(
   errors: ValidationError[],
   warnings: ValidationWarning[] = [],
-  originalInput: string = ''
+  originalInput: string = '',
+  blueprintDiff?: ValidationResult['blueprintDiff']
 ): string {
   const errorLines = errors.map((e, idx) => `• Issue ${idx + 1}: ${e.message}`).join('\n');
   const warningLines = warnings.length > 0
     ? '\n\nRecommendations to refine:\n' + warnings.map((w, idx) => `• Tip ${idx + 1}: ${w.message}`).join('\n')
     : '';
+
+  let blueprintRequirementText = '';
+  if (blueprintDiff && blueprintDiff.expectedTotalQuestions > 0) {
+    const breakdownLines = Object.entries(blueprintDiff.expectedBreakdown)
+      .map(([type, count]) => `  - ${type}: exactly ${count} question(s)`)
+      .join('\n');
+
+    blueprintRequirementText = `\n================================================================================
+MANDATORY BLUEPRINT TO ENFORCE
+================================================================================
+Total Questions Required: ${blueprintDiff.expectedTotalQuestions} (Found: ${blueprintDiff.actualTotalQuestions})
+Total Marks Required: ${blueprintDiff.expectedTotalMarks} (Found: ${blueprintDiff.actualTotalMarks})
+Required Breakdown:
+${breakdownLines}
+`;
+  }
+
   const inputSnippet = originalInput && originalInput.trim().length > 0
-    ? `\n\nPREVIOUS JSON PROVIDED:\n${originalInput.trim().slice(0, 1000)}\n`
+    ? `\n\nPREVIOUS JSON PROVIDED:\n${originalInput.trim().slice(0, 1200)}\n`
     : '';
 
   return `CRITICAL FIX REQUIRED: The examination JSON you provided has ${errors.length} issue${errors.length === 1 ? '' : 's'} that must be corrected:
@@ -669,18 +831,22 @@ export function generateCorrectionPrompt(
 ================================================================================
 ISSUES DETECTED
 ================================================================================
-${errorLines}${warningLines}${inputSnippet}
+${errorLines}${warningLines}${blueprintRequirementText}${inputSnippet}
 
 ================================================================================
 CORRECTION INSTRUCTIONS
 ================================================================================
 1. Fix every specific issue listed above.
-2. Verify all multiple choice questions have at least 2 options and a valid correctAnswer.
-3. Verify all reorder questions have at least 2 sequence items.
-4. Verify all cloze passages include the passage text with numbered blanks and a valid correctAnswer for each blank.
-5. Strictly adhere to the requested question counts, question types, and marks.
-6. Ground all content strictly in the provided teaching material.
-7. Return ONLY valid JSON matching the EdTechra Assessment Schema.
-8. DO NOT include markdown code fences (\`\`\`json), comments, explanations, or conversational text.`;
+2. The blueprint is the SINGLE SOURCE OF TRUTH. You MUST NOT simplify this exam to only Multiple Choice questions.
+3. Generate EVERY required question type with its exact count and marks.
+4. Verify all multiple choice questions have at least 2 options and a valid correctAnswer.
+5. Verify all true_false questions have true/false answers.
+6. Verify all reorder questions have at least 2 sequence items.
+7. Verify all cloze passages include the passage text with numbered blanks and valid correctAnswers.
+8. Strictly adhere to the requested question counts, question types, and marks.
+9. Ground all content strictly in the provided teaching material.
+10. Return ONLY valid JSON matching the EdTechra Assessment Schema.
+11. DO NOT include markdown code fences (\`\`\`json), comments, explanations, or conversational text.`;
 }
+
 

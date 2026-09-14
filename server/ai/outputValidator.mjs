@@ -249,3 +249,290 @@ export function validateTeachingPlan(plan) {
     errors
   };
 }
+
+/**
+ * Normalizes question type names to standard canonical identifiers.
+ */
+export function normalizeCanonicalQuestionType(typeStr) {
+  if (!typeStr) return 'multiple_choice';
+  const raw = String(typeStr).trim().toLowerCase();
+
+  if (raw === 'multiple_choice' || raw === 'mcq' || raw.includes('multiple choice')) return 'multiple_choice';
+  if (raw === 'multiple_select' || raw === 'checkboxes' || raw.includes('multi-select') || raw.includes('multiple select')) return 'multiple_select';
+  if (raw === 'true_false' || raw === 'tf' || raw.includes('true') && raw.includes('false')) return 'true_false';
+  if (raw === 'fill_in_blank' || raw === 'fill_blank' || raw.includes('fill in') || raw.includes('blank')) return 'fill_in_blank';
+  if (raw === 'matching' || raw.includes('matching')) return 'matching';
+  if (raw === 'reorder' || raw.includes('reorder') || raw.includes('sequence')) return 'reorder';
+  if (raw === 'cloze_passage' || raw === 'cloze' || raw.includes('cloze')) return 'cloze_passage';
+  if (raw === 'reading_comprehension' || raw === 'reading' || raw.includes('reading')) return 'reading_comprehension';
+  if (raw === 'error_correction' || raw === 'error_corr' || raw.includes('error')) return 'error_correction';
+  if (raw === 'sentence_transformation' || raw === 'sent_trans' || raw.includes('transformation')) return 'sentence_transformation';
+  if (raw === 'sentence_builder' || raw.includes('sentence builder')) return 'sentence_builder';
+  if (raw === 'short_answer' || raw === 'short_ans' || raw.includes('short answer')) return 'short_answer';
+  if (raw === 'essay' || raw === 'paragraph' || raw.includes('essay') || raw.includes('long form')) return 'essay';
+  if (raw === 'picture_description' || raw === 'picture_description_activity' || raw === 'picture_q' || raw.includes('picture')) return 'picture_description';
+  if (raw === 'audio_question' || raw === 'listening_activity' || raw === 'audio_q' || raw.includes('audio') || raw.includes('listening')) return 'audio_question';
+  if (raw === 'video_question' || raw === 'video_activity' || raw === 'video_q' || raw.includes('video')) return 'video_question';
+
+  return raw.replace(/[^a-z0-9_]/g, '_');
+}
+
+/**
+ * Validates generated exam JSON against an assessment blueprint.
+ * Ensures question counts, question types, marks, and individual question schemas match strictly.
+ *
+ * @param {object} examData - Generated exam object (with sections, metadata)
+ * @param {object} blueprint - Authoritative assessment blueprint
+ * @returns {{ isValid: boolean, errors: string[], warnings: string[], diff: object }}
+ */
+export function validateExamAgainstBlueprint(examData, blueprint = {}) {
+  const errors = [];
+  const warnings = [];
+
+  if (!examData || typeof examData !== 'object') {
+    return {
+      isValid: false,
+      errors: ['Exam data must be a valid non-empty object.'],
+      warnings: [],
+      diff: {}
+    };
+  }
+
+  // Normalize sections from examData
+  const sections = Array.isArray(examData.sections) ? examData.sections : [];
+  if (sections.length === 0) {
+    errors.push('Exam contains no sections.');
+  }
+
+  // Extract all questions across sections and activities
+  const allQuestions = [];
+  sections.forEach((sec, sIdx) => {
+    const secQuestions = Array.isArray(sec.questions) ? sec.questions : [];
+    secQuestions.forEach((q, qIdx) => {
+      allQuestions.push({
+        ...q,
+        _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
+        _sectionType: sec.questionType || sec.type,
+        _index: allQuestions.length + 1
+      });
+    });
+
+    const secActivities = Array.isArray(sec.activities) ? sec.activities : [];
+    secActivities.forEach((act) => {
+      if (Array.isArray(act.questions) && act.questions.length > 0) {
+        act.questions.forEach((q) => {
+          allQuestions.push({
+            ...q,
+            _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
+            _sectionType: act.activityType || sec.questionType || sec.type,
+            _activityId: act.id,
+            _index: allQuestions.length + 1
+          });
+        });
+      } else {
+        // Activity without subquestions counts as 1 activity item (e.g. reading or writing)
+        allQuestions.push({
+          id: act.id,
+          type: act.activityType || 'reading_comprehension',
+          question: act.title || act.passage || 'Activity',
+          marks: act.marks || 10,
+          _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
+          _isActivity: true,
+          _index: allQuestions.length + 1
+        });
+      }
+    });
+  });
+
+  // Count occurrences by normalized type
+  const actualTypeCounts = {};
+  let actualTotalMarks = 0;
+
+  for (const q of allQuestions) {
+    const rawType = q.type || q.questionType || q._sectionType;
+    const normType = normalizeCanonicalQuestionType(rawType);
+    actualTypeCounts[normType] = (actualTypeCounts[normType] || 0) + 1;
+    actualTotalMarks += Number(q.marks) || 1;
+  }
+
+  const actualTotalQuestions = allQuestions.length;
+
+  // Build expected type map from blueprint
+  const expectedTypeCounts = {};
+  let expectedTotalQuestions = Number(blueprint.totalQuestions || 0);
+  let expectedTotalMarks = Number(blueprint.totalMarks || blueprint.requiredTotal || 0);
+
+  // Parse blueprint specs from various potential shapes
+  const blueprintSections = Array.isArray(blueprint.sections)
+    ? blueprint.sections
+    : Array.isArray(blueprint.blueprintItems)
+    ? blueprint.blueprintItems
+    : [];
+
+  if (blueprintSections.length > 0) {
+    let calculatedQuestions = 0;
+    let calculatedMarks = 0;
+
+    for (const bSec of blueprintSections) {
+      if (bSec.enabled === false) continue;
+      const count = Number(bSec.count || bSec.numQuestions || 0);
+      const marksPerItem = Number(bSec.marks || bSec.marksPerItem || 1);
+      const normType = normalizeCanonicalQuestionType(bSec.type || bSec.questionType || bSec.name || bSec.id);
+
+      expectedTypeCounts[normType] = (expectedTypeCounts[normType] || 0) + count;
+      calculatedQuestions += count;
+      calculatedMarks += count * marksPerItem;
+    }
+
+    if (!expectedTotalQuestions) expectedTotalQuestions = calculatedQuestions;
+    if (!expectedTotalMarks) expectedTotalMarks = calculatedMarks;
+  } else if (blueprint.questionDistribution && typeof blueprint.questionDistribution === 'object') {
+    for (const [key, cnt] of Object.entries(blueprint.questionDistribution)) {
+      const count = Number(cnt || 0);
+      if (count > 0) {
+        const normType = normalizeCanonicalQuestionType(key);
+        expectedTypeCounts[normType] = (expectedTypeCounts[normType] || 0) + count;
+      }
+    }
+  }
+
+  const diff = {
+    expectedTotalQuestions,
+    actualTotalQuestions,
+    expectedTotalMarks,
+    actualTotalMarks,
+    expectedTypeCounts,
+    actualTypeCounts
+  };
+
+  // 1. Total Question Count check
+  if (expectedTotalQuestions > 0 && actualTotalQuestions !== expectedTotalQuestions) {
+    errors.push(`Total question count mismatch: expected ${expectedTotalQuestions}, but generated ${actualTotalQuestions}.`);
+  }
+
+  // 2. Question Types and Counts check
+  const allExpectedTypes = Object.keys(expectedTypeCounts);
+  if (allExpectedTypes.length > 0) {
+    for (const type of allExpectedTypes) {
+      const expCount = expectedTypeCounts[type];
+      const actCount = actualTypeCounts[type] || 0;
+      if (actCount !== expCount) {
+        errors.push(`Question type "${type}" count mismatch: expected ${expCount}, but generated ${actCount}.`);
+      }
+    }
+
+    for (const type of Object.keys(actualTypeCounts)) {
+      if (!expectedTypeCounts[type] && expectedTypeCounts[type] !== 0) {
+        warnings.push(`Generated unexpected question type "${type}" (${actualTypeCounts[type]} item(s)) not present in blueprint.`);
+      }
+    }
+  }
+
+  // 3. Total Marks check
+  if (expectedTotalMarks > 0 && Math.abs(actualTotalMarks - expectedTotalMarks) > 0.01) {
+    errors.push(`Total marks mismatch: expected ${expectedTotalMarks} marks, but generated ${actualTotalMarks} marks.`);
+  }
+
+  // 4. Per-Question Structural Validation
+  allQuestions.forEach((q, idx) => {
+    const qNum = idx + 1;
+    const rawType = q.type || q.questionType || q._sectionType;
+    const normType = normalizeCanonicalQuestionType(rawType);
+
+    const questionText = String(q.question || q.questionText || '').trim();
+    if (!questionText && !q._isActivity) {
+      errors.push(`Question #${qNum} (${normType}): Missing question text.`);
+    }
+
+    if (normType === 'multiple_choice' || normType === 'multiple_select') {
+      const options = Array.isArray(q.options) ? q.options : [];
+      if (options.length < 2) {
+        errors.push(`Question #${qNum} (${normType}): Requires at least 2 answer options, found ${options.length}.`);
+      }
+      const hasAnswer = q.correctAnswer !== undefined || q.correct_answer !== undefined;
+      if (!hasAnswer) {
+        errors.push(`Question #${qNum} (${normType}): Missing correctAnswer.`);
+      }
+    } else if (normType === 'true_false') {
+      const hasAnswer = q.correctAnswer !== undefined || q.correct_answer !== undefined;
+      if (!hasAnswer) {
+        errors.push(`Question #${qNum} (true_false): Missing correctAnswer (must be true or false).`);
+      }
+    } else if (normType === 'fill_in_blank') {
+      const hasAccepted = (Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length > 0) ||
+        (typeof q.correctAnswer === 'string' && q.correctAnswer.trim()) ||
+        (typeof q.correct_answer === 'string' && q.correct_answer.trim());
+      if (!hasAccepted) {
+        errors.push(`Question #${qNum} (fill_in_blank): Missing accepted answers or correctAnswer.`);
+      }
+    } else if (normType === 'cloze_passage') {
+      const blanks = Array.isArray(q.blanks) ? q.blanks : [];
+      if (blanks.length === 0 && !q.correctAnswer) {
+        errors.push(`Question #${qNum} (cloze_passage): Requires a passage with blanks metadata.`);
+      }
+    } else if (normType === 'matching') {
+      const pairs = Array.isArray(q.pairs) ? q.pairs : [];
+      const hasSimplePair = q.questionText && q.correctAnswer;
+      if (pairs.length === 0 && !hasSimplePair) {
+        errors.push(`Question #${qNum} (matching): Missing matching pairs or answer mapping.`);
+      }
+    } else if (normType === 'reorder') {
+      const items = Array.isArray(q.items) ? q.items : [];
+      const hasOrderText = typeof q.correctAnswer === 'string' || Array.isArray(q.correctOrder);
+      if (items.length < 2 && !hasOrderText) {
+        errors.push(`Question #${qNum} (reorder): Requires at least 2 sequence items to reorder.`);
+      }
+    }
+  });
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    diff
+  };
+}
+
+/**
+ * Builds an actionable correction prompt to pass back into the AI repair loop
+ * when generated JSON violates the assessment blueprint.
+ */
+export function generateBlueprintCorrectionPrompt(errors, diff, originalJson, blueprint) {
+  const errorLines = errors.map((e, idx) => `  ${idx + 1}. ${e}`).join('\n');
+  const expectedBreakdown = diff.expectedTypeCounts
+    ? Object.entries(diff.expectedTypeCounts).map(([t, c]) => `  - ${t}: exactly ${c} question(s)`).join('\n')
+    : '  - Follow the blueprint section specifications exactly.';
+
+  const snippet = typeof originalJson === 'string'
+    ? originalJson.slice(0, 1200)
+    : JSON.stringify(originalJson, null, 2).slice(0, 1200);
+
+  return `CRITICAL ARCHITECTURE FIX REQUIRED: The exam JSON you generated does not match the EdTechra Assessment Blueprint.
+
+================================================================================
+ISSUES DETECTED (${errors.length})
+================================================================================
+${errorLines}
+
+================================================================================
+MANDATORY BLUEPRINT TO ENFORCE
+================================================================================
+- Total Questions: ${diff.expectedTotalQuestions || blueprint.totalQuestions}
+- Total Marks: ${diff.expectedTotalMarks || blueprint.totalMarks || blueprint.requiredTotal}
+- Required Question Breakdown:
+${expectedBreakdown}
+
+GROUNDING RULES:
+1. Do NOT simplify this exam to only Multiple Choice questions.
+2. Generate EVERY required question type with its exact count and marks.
+3. Keep the exact section structures.
+4. Ensure all multiple-choice questions have >= 2 options and valid correctAnswer.
+5. Ensure all true_false questions have true/false answers.
+6. Ensure fill_in_blank and short_answer questions have clear prompts and answers.
+7. Return ONLY the raw valid JSON object without markdown fences, explanation, or conversational text.
+
+PREVIOUS INCORRECT OUTPUT (EXCERPT):
+${snippet}
+
+Regenerate the complete, corrected JSON examination strictly matching the blueprint now:`;
+}

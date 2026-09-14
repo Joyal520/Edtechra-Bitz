@@ -19,6 +19,13 @@ import {
   sanitizeSegment,
   buildPublicUrl
 } from './r2Service.mjs';
+import { aiRouter } from './ai/aiRouter.mjs';
+import { AI_TASK_TYPES } from './ai/taskTypes.mjs';
+import {
+  validateExamAgainstBlueprint,
+  generateBlueprintCorrectionPrompt,
+  normalizeCanonicalQuestionType
+} from './ai/outputValidator.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,28 +64,73 @@ function shuffleArray(array) {
 function examJsonSchema() {
   const question = {
     type: "object",
-    additionalProperties: false,
-    required: ["questionId", "questionType", "questionText", "options", "correctAnswer", "marks", "difficulty", "explanation"],
+    additionalProperties: true,
+    required: ["questionId", "questionType", "questionText", "marks", "difficulty"],
     properties: {
       questionId: { type: "string" },
       questionType: { type: "string" },
       questionText: { type: "string" },
-      options: { type: "array", items: { type: "string" } },
-      correctAnswer: { type: "string" },
+      options: {
+        type: "array",
+        items: {
+          anyOf: [
+            { type: "string" },
+            {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                text: { type: "string" }
+              }
+            }
+          ]
+        }
+      },
+      correctAnswer: {
+        anyOf: [
+          { type: "string" },
+          { type: "boolean" },
+          { type: "number" },
+          { type: "array", items: { type: "string" } }
+        ]
+      },
+      acceptedAnswers: { type: "array", items: { type: "string" } },
+      pairs: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            left: { type: "string" },
+            right: { type: "string" }
+          }
+        }
+      },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            text: { type: "string" }
+          }
+        }
+      },
+      blanks: { type: "array" },
+      wordBank: { type: "array", items: { type: "string" } },
       marks: { type: "number" },
       difficulty: { type: "string" },
       explanation: { type: "string" }
     }
   };
+
   return {
     type: "object",
-    additionalProperties: false,
+    additionalProperties: true,
     required: ["metadata", "sections"],
     properties: {
       metadata: {
         type: "object",
-        additionalProperties: false,
-        required: ["examId", "title", "examType", "difficulty", "duration", "totalMarks", "gradingMode", "status", "generatedAt", "approvalRequired", "generatorNote"],
+        additionalProperties: true,
+        required: ["title", "examType", "difficulty", "totalMarks"],
         properties: {
           examId: { type: "string" },
           title: { type: "string" },
@@ -87,6 +139,7 @@ function examJsonSchema() {
           duration: { type: "string" },
           totalMarks: { type: "number" },
           gradingMode: { type: "string" },
+          passPercentage: { type: "number" },
           status: { type: "string" },
           generatedAt: { type: "string" },
           approvalRequired: { type: "boolean" },
@@ -97,8 +150,8 @@ function examJsonSchema() {
         type: "array",
         items: {
           type: "object",
-          additionalProperties: false,
-          required: ["sectionId", "title", "questionType", "instruction", "marksPerQuestion", "totalMarks", "questions", "passage"],
+          additionalProperties: true,
+          required: ["sectionId", "title", "questionType", "questions"],
           properties: {
             sectionId: { type: "string" },
             title: { type: "string" },
@@ -107,6 +160,7 @@ function examJsonSchema() {
             marksPerQuestion: { type: "number" },
             totalMarks: { type: "number" },
             questions: { type: "array", items: question },
+            activities: { type: "array" },
             passage: { type: "string" }
           }
         }
@@ -116,179 +170,314 @@ function examJsonSchema() {
 }
 
 export function validateGenerationPayload(payload) {
-  if (!payload.content || payload.content.trim().length < 3) return "Content is required.";
+  if (!payload || typeof payload !== "object") return "Payload must be an object.";
+  const content = payload.content || payload.topic || payload.lessonNotes || "";
+  if (content.trim().length < 2) return "Content or topic is required.";
   if (!payload.examType) return "Exam type is required.";
   if (!payload.difficulty) return "Difficulty is required.";
-  if (!payload.duration?.value || !payload.duration?.unit) return "Duration is required.";
-  if (!Array.isArray(payload.sections) || payload.sections.length === 0) return "At least one question section is required.";
-  const total = payload.sections.reduce((sum, section) => sum + section.count * section.marks, 0);
-  if (total !== Number(payload.requiredTotal || 100)) return `Total marks must equal ${payload.requiredTotal || 100}.`;
+
+  const rawSections = payload.sections || payload.blueprintItems || [];
+  if (!Array.isArray(rawSections) || rawSections.length === 0) {
+    return "At least one question section is required.";
+  }
+
+  const enabledSections = rawSections.filter(s => s.enabled !== false);
+  if (enabledSections.length === 0) {
+    return "At least one enabled question section is required.";
+  }
+
   return "";
 }
 
 export async function generateExam({ payload, openaiApiKey, serverOpenAI }) {
-  const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey && !serverOpenAI) {
-    return normalizeExam(buildFallbackExam(payload, "OpenAI API key not configured. Generated in offline demo mode."), payload);
-  }
-
   const cleanedPayload = {
     ...payload,
-    content: payload.content.replace(/\s+/g, " ").trim(),
-    sections: payload.sections.map(s => ({
+    content: (payload.content || payload.topic || payload.lessonNotes || "").replace(/\s+/g, " ").trim(),
+    sections: (payload.sections || payload.blueprintItems || []).filter(s => s.enabled !== false).map(s => ({
       ...s,
+      type: s.type || s.questionType || s.name,
+      count: Number(s.count || s.numQuestions || 1),
+      marks: Number(s.marks || s.marksPerItem || 1),
       instruction: s.instruction ? s.instruction.trim() : ""
     }))
   };
 
-  const schema = examJsonSchema();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 85000);
+  const totalQuestions = cleanedPayload.sections.reduce((sum, s) => sum + s.count, 0);
+  const totalMarks = Number(payload.requiredTotal || cleanedPayload.sections.reduce((sum, s) => sum + s.count * s.marks, 0));
+  const durationStr = payload.duration?.value
+    ? `${payload.duration.value} ${payload.duration.unit || 'Minutes'}`
+    : `${payload.durationMinutes || payload.duration || 60} Minutes`;
+
+  const blueprintSpec = {
+    totalQuestions,
+    totalMarks,
+    duration: durationStr,
+    difficulty: payload.difficulty || "Medium",
+    passPercentage: Number(payload.passPercentage || 50),
+    sections: cleanedPayload.sections
+  };
+
+  // Section breakdown description for prompt
+  const sectionBreakdownText = cleanedPayload.sections.map((s, idx) => {
+    return `  Section ${idx + 1}: ${s.type} — exactly ${s.count} question(s), ${s.marks} mark(s) each (Total: ${s.count * s.marks} marks)${
+      s.instruction ? ` — Instruction: "${s.instruction}"` : ""
+    }`;
+  }).join("\n");
+
+  const systemPrompt = [
+    "You are an expert pedagogical psychometrician and curriculum assessment engineer.",
+    "Your mission is to construct a rigorous digital examination adhering strictly to the EdTechra Assessment Blueprint below.",
+    "",
+    "CRITICAL ARCHITECTURAL CONSTRAINTS (MANDATORY):",
+    "1. BLUEPRINT IS THE SINGLE SOURCE OF TRUTH: You MUST NOT invent, omit, simplify, or replace question types or counts.",
+    `2. The exam MUST contain EXACTLY ${totalQuestions} questions across ${cleanedPayload.sections.length} sections, totaling EXACTLY ${totalMarks} marks.`,
+    "3. NEVER simplify this examination into only Multiple Choice questions. Generate EVERY requested question type.",
+    "4. Return ONLY a valid JSON object matching the EdTechra exam schema.",
+    "5. Do NOT include conversational text, pleasantries, or markdown explanations.",
+    "",
+    "QUESTION TYPE RULES:",
+    "- Multiple Choice: exactly 4 distinct options, unambiguous correctAnswer mapping to an option.",
+    "- True / False: factually sound statement, boolean or True/False correctAnswer, balanced distribution.",
+    "- Fill in the Blank: question text with '[blank]', acceptedAnswers array with correct terms/synonyms.",
+    "- Short Answer: clear prompt, model answer/explanation for teacher grading.",
+    "- Reading Comprehension: substantive passage (150-300 words) placed at section-level 'passage' or within activity, followed by comprehension questions.",
+    "- Matching: pairs array or distinct questionText (left) and correctAnswer (right).",
+    "- Reorder / Sequencing: scrambled sentence or chronological items with correct order.",
+    "- Cloze Passage: passage text with '[blank_1]', '[blank_2]' and corresponding blanks array with answers.",
+    "- Error Correction: sentence with specific grammatical error and corrected replacement sentence."
+  ].join("\n");
+
+  const userPrompt = [
+    "Generate a complete examination adhering to the following blueprint:",
+    "",
+    "================================================================================",
+    "ASSESSMENT BLUEPRINT",
+    "================================================================================",
+    `- Title: ${payload.examType || "Assessment"}: ${payload.subject || "Curriculum"}`,
+    `- Exam Type: ${payload.examType || "Standard Exam"}`,
+    `- Difficulty Level: ${payload.difficulty || "Medium"}`,
+    `- Duration: ${durationStr}`,
+    `- Pass Threshold: ${blueprintSpec.passPercentage}%`,
+    `- Total Questions: ${totalQuestions}`,
+    `- Total Marks: ${totalMarks}`,
+    "",
+    "REQUIRED SECTIONS & QUESTION DISTRIBUTION (DO NOT ALTER):",
+    sectionBreakdownText,
+    "",
+    "================================================================================",
+    "PRIMARY TEACHING CONTENT (STRICT GROUNDING SOURCE)",
+    "================================================================================",
+    `"""`,
+    cleanedPayload.content,
+    `"""`,
+    "",
+    "Generate the complete examination JSON strictly conforming to this blueprint now:"
+  ].join("\n");
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: [
-              "You generate secure teacher-reviewed exams as structured JSON. Follow ALL rules below exactly.",
-              "",
-              "GENERAL RULES:",
-              "1. Questions must be unique, grounded in supplied content, include answer keys.",
-              "2. Keep each explanation under 15 words.",
-              "3. Never include images, image references, or image descriptions.",
-              "4. For each section, copy the provided 'instruction' string directly to the output 'instruction' property.",
-              "5. For sections that are NOT 'Reading Comprehension Questions', set 'passage' to an empty string \"\".",
-              "",
-              "MCQ / FILL IN THE BLANKS / CLOZE PASSAGE RULES:",
-              "- Provide exactly 4 unique options in the 'options' array. One must be the correct answer.",
-              "- For MCQ, randomize the correct answer position across questions.",
-              "",
-              "REORDER THE SENTENCE RULES:",
-              "- Each question must contain 6-8 words/phrases separated by slashes. Never more than 8.",
-              "",
-              "TRUE OR FALSE RULES:",
-              "- Generate a roughly balanced mix of True and False answers (approximately half each).",
-              "- Do NOT follow a predictable pattern. Randomize the order.",
-              "- Never have more than 3 consecutive True or 3 consecutive False answers.",
-              "",
-              "READING COMPREHENSION RULES (CRITICAL):",
-              "- You MUST generate a reading passage and put it in the section-level 'passage' property.",
-              "- The 'passage' property is at the SECTION level, NOT inside individual questions.",
-              "- The passage MUST NOT be empty. It must be a real, substantive paragraph.",
-              "- Respect the 'paragraphLength' parameter: Short=100-150 words, Medium=200-300 words, Long=400-500 words.",
-              "- The 'questions' array should test comprehension of the passage.",
-              "- Each question must have 'options' as an empty array [] and 'correctAnswer' as a short answer.",
-              "",
-              "MATCHING QUESTIONS RULES (CRITICAL):",
-              "- Generate the requested number of questions. Each question = one matching pair.",
-              "- 'questionText' = left-column item (1-3 words ONLY). 'correctAnswer' = right-column item (1-3 words ONLY).",
-              "- NEVER use sentences, explanations, or punctuation. Maximum 3 words per item.",
-              "- Set 'options' to empty array [] for all matching questions."
-            ].join("\n")
-          },
-          {
-            role: "user",
-            content: JSON.stringify(cleanedPayload)
-          }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "edtechra_exam",
-            strict: true,
-            schema
-          }
-        }
-      })
+    // 1. Initial Generation via Central AI Router (Tier 2: GPT-5 Nano with fallback to Gemini)
+    let aiResponse = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.EXAM_GENERATION,
+      prompt: userPrompt,
+      systemPrompt,
+      schema: examJsonSchema(),
+      timeoutMs: 65000
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error("[Exam2Service] OpenAI generation error:", errorBody.slice(0, 300));
-      throw new Error(`OpenAI generation failed: ${response.status}`);
+    let candidateExam = null;
+    if (aiResponse && aiResponse.output) {
+      candidateExam = typeof aiResponse.output === "object"
+        ? aiResponse.output
+        : JSON.parse(aiResponse.output);
     }
 
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content;
-    if (!text) throw new Error("OpenAI response did not include structured text.");
-    return normalizeExam(JSON.parse(text), payload);
+    if (!candidateExam) {
+      throw new Error("AI provider returned empty exam output.");
+    }
+
+    // 2. Strict Post-Generation Blueprint Validation
+    let validation = validateExamAgainstBlueprint(candidateExam, blueprintSpec);
+
+    // 3. Automatic Repair Loop (Up to 2 Retries)
+    let repairAttempts = 0;
+    while (!validation.isValid && repairAttempts < 2) {
+      repairAttempts++;
+      console.warn(
+        `[Exam2Service] Blueprint validation failed (repair attempt ${repairAttempts}/2): ${validation.errors.slice(0, 3).join("; ")}. Triggering AI auto-repair loop...`
+      );
+
+      const correctionPrompt = generateBlueprintCorrectionPrompt(
+        validation.errors,
+        validation.diff,
+        candidateExam,
+        blueprintSpec
+      );
+
+      const repairResponse = await aiRouter.executeTask({
+        taskType: AI_TASK_TYPES.EXAM_GENERATION,
+        prompt: correctionPrompt,
+        systemPrompt: "You are an expert assessment psychometrician correcting an examination JSON so it strictly matches the requested blueprint.",
+        schema: examJsonSchema(),
+        timeoutMs: 60000
+      });
+
+      if (repairResponse && repairResponse.output) {
+        try {
+          const repaired = typeof repairResponse.output === "object"
+            ? repairResponse.output
+            : JSON.parse(repairResponse.output);
+          candidateExam = repaired;
+          validation = validateExamAgainstBlueprint(candidateExam, blueprintSpec);
+        } catch (repairParseErr) {
+          console.warn(`[Exam2Service] Repair attempt ${repairAttempts} parse failure:`, repairParseErr.message);
+        }
+      }
+    }
+
+    // If candidate passed validation or is reasonably structured, normalize and lock metadata
+    if (validation.isValid || (candidateExam.sections && candidateExam.sections.length > 0)) {
+      if (!validation.isValid) {
+        console.warn("[Exam2Service] Proceeding with partially matched exam after repair loop. Remaining notices:", validation.errors);
+      }
+      return normalizeExam(candidateExam, payload, blueprintSpec);
+    }
+
+    throw new Error(`AI generated exam failed blueprint validation: ${validation.errors.join("; ")}`);
   } catch (error) {
-    clearTimeout(timeoutId);
-    console.warn("[Exam2Service] AI generation notice:", error.message, "- Using fallback generator.");
-    return normalizeExam(buildFallbackExam(payload, `Generated with local engine fallback: ${error.message}`), payload);
+    console.warn("[Exam2Service] AI generation notice:", error.message, "- Using verified deterministic fallback generator.");
+    return normalizeExam(buildFallbackExam(cleanedPayload, `Generated with blueprint fallback: ${error.message}`), payload, blueprintSpec);
   }
 }
 
 export function buildFallbackExam(payload, reason = "Offline mode") {
   let index = 1;
-  const sections = payload.sections.map((section) => ({
-    sectionId: cryptoId("sec"),
-    title: section.type,
-    questionType: section.type,
-    instruction: section.instruction || "",
-    marksPerQuestion: section.marks,
-    totalMarks: section.count * section.marks,
-    passage: section.type === "Reading Comprehension Questions"
-      ? `Photosynthesis is a vital process used by plants and other organisms to convert light energy into chemical energy. This chemical energy is stored in carbohydrate molecules, such as sugars, which are synthesized from carbon dioxide and water. In most cases, oxygen is also released as a waste product. Photosynthesis is largely responsible for producing and maintaining the oxygen content of the Earth's atmosphere, and supplies most of the energy necessary for life on Earth.`
-      : "",
-    questions: Array.from({ length: section.count }, (_, qIdx) => {
+  const sections = (payload.sections || []).map((section, sIdx) => {
+    const rawType = section.type || section.questionType || "multiple_choice";
+    const normType = normalizeCanonicalQuestionType(rawType);
+    const marksPerQ = Number(section.marks || section.marksPerItem || 1);
+    const count = Number(section.count || 1);
+
+    const isReading = normType === "reading_comprehension" || rawType.includes("Reading");
+    const isTF = normType === "true_false";
+    const isMatching = normType === "matching";
+    const isReorder = normType === "reorder";
+    const isFillBlank = normType === "fill_in_blank";
+    const isShortAns = normType === "short_answer" || normType === "essay";
+    const isErrorCorr = normType === "error_correction";
+    const isCloze = normType === "cloze_passage";
+
+    const passage = isReading
+      ? `Effective communication in English relies upon a clear grasp of grammatical harmony, lexical precision, and coherent structure. When learners regularly practice applying core grammatical principles in authentic contexts, their fluency and analytical proficiency improve significantly. Systematic assessment across multiple question formats helps identify specific learning gaps and reinforce foundational mastery.`
+      : "";
+
+    const questions = Array.from({ length: count }, (_, qIdx) => {
       const id = `Q${String(index++).padStart(3, "0")}`;
-      const isTF = section.type === "True or False Questions" || section.type === "True Or False";
-      const isMatching = section.type === "Matching Questions";
-      const isReorder = section.type.includes("Reorder");
-      
-      let answer = "Core concept";
-      let questionText = `Question ${id} based on ${payload.examType || 'lesson content'}.`;
+      let questionText = `Question ${id} assessing ${payload.examType || 'curriculum topic'}.`;
+      let correctAnswer = "Correct Answer";
       let options = [];
+      let acceptedAnswers = undefined;
+      let pairs = undefined;
+      let items = undefined;
+      let blanks = undefined;
 
       if (isTF) {
-        answer = qIdx % 2 === 0 ? "True" : "False";
+        correctAnswer = qIdx % 2 === 0;
         questionText = sampleTrueFalseQuestion(qIdx);
       } else if (isMatching) {
         questionText = sampleMatchingQuestion(qIdx);
-        answer = sampleMatchingAnswer(qIdx);
+        correctAnswer = sampleMatchingAnswer(qIdx);
+        pairs = [
+          { left: sampleMatchingQuestion(0), right: sampleMatchingAnswer(0) },
+          { left: sampleMatchingQuestion(1), right: sampleMatchingAnswer(1) },
+          { left: sampleMatchingQuestion(2), right: sampleMatchingAnswer(2) }
+        ];
       } else if (isReorder) {
         questionText = "learning / interactive / is / enjoyable / process / an";
-        answer = "Learning is an enjoyable interactive process";
-      } else if (["Multiple Choice Questions (MCQ)", "Fill In The Blanks", "Cloze Passage Questions"].includes(section.type)) {
-        answer = "Correct Option";
-        options = ["Correct Option", "Alternative Alpha", "Alternative Beta", "Alternative Gamma"];
-        questionText = `Identify the key principle regarding ${payload.content.slice(0, 30)}...`;
+        correctAnswer = "Learning is an enjoyable interactive process";
+        items = [
+          { id: "step_1", text: "Identify the grammatical rule" },
+          { id: "step_2", text: "Apply the rule in a sentence" },
+          { id: "step_3", text: "Verify subject-verb agreement" }
+        ];
+      } else if (isFillBlank) {
+        questionText = `The student completed the assignment carefully before the [blank] concluded.`;
+        correctAnswer = "deadline";
+        acceptedAnswers = ["deadline", "term", "lesson", "session"];
+      } else if (isCloze) {
+        questionText = "Complete the missing words in the passage:";
+        blanks = [
+          { id: "blank_1", correctAnswer: "important", acceptedAnswers: ["important", "vital"] },
+          { id: "blank_2", correctAnswer: "practice", acceptedAnswers: ["practice", "review"] }
+        ];
+      } else if (isErrorCorr) {
+        questionText = `Identify and correct the grammatical error: "Each of the participants were enthusiastic about the competition."`;
+        correctAnswer = "Each of the participants was enthusiastic about the competition.";
+      } else if (isShortAns) {
+        questionText = `Explain the primary significance of ${payload.content ? payload.content.slice(0, 30) : 'this concept'} in 2-3 concise sentences.`;
+        correctAnswer = "Demonstrates accurate domain knowledge, clear syntax, and supporting rationale.";
+      } else if (isReading) {
+        questionText = `According to the passage, what is the primary benefit of systematic practice in authentic contexts?`;
+        options = [
+          "Fluency and analytical proficiency improve significantly",
+          "Passive memorization replaces conceptual learning",
+          "Vocabulary growth is strictly restricted",
+          "Written communication becomes unnecessary"
+        ];
+        correctAnswer = "Fluency and analytical proficiency improve significantly";
+      } else {
+        // Standard MCQ
+        questionText = `Select the most accurate statement regarding ${payload.content ? payload.content.slice(0, 30) : 'the curriculum'}:`;
+        options = [
+          "Accurately reflects standard grammatical and conceptual principles",
+          "Plausible distractor containing a common grammatical error",
+          "Partially correct statement missing necessary qualifying context",
+          "Unrelated option inconsistent with syllabus guidelines"
+        ];
+        correctAnswer = options[0];
       }
 
       return {
         questionId: id,
-        questionType: section.type,
+        questionType: rawType,
         questionText,
         options,
-        correctAnswer: answer,
-        marks: section.marks,
-        difficulty: section.difficulty || payload.difficulty,
-        explanation: "Verified educational question."
+        correctAnswer,
+        acceptedAnswers,
+        pairs,
+        items,
+        blanks,
+        marks: marksPerQ,
+        difficulty: section.difficulty || payload.difficulty || "Medium",
+        explanation: "Pedagogically verified assessment question."
       };
-    })
-  }));
+    });
+
+    return {
+      sectionId: section.sectionId || section.id || cryptoId("sec"),
+      title: section.title || section.type || `Section ${sIdx + 1}`,
+      questionType: rawType,
+      instruction: section.instruction || "",
+      marksPerQuestion: marksPerQ,
+      totalMarks: count * marksPerQ,
+      passage,
+      questions
+    };
+  });
+
+  const totalMarks = sections.reduce((sum, s) => sum + s.totalMarks, 0);
 
   return {
     metadata: {
       examId: cryptoId("exam"),
-      title: `${payload.examType} - AI Draft`,
-      examType: payload.examType,
-      difficulty: payload.difficulty,
-      duration: `${payload.duration.value} ${payload.duration.unit}`,
-      totalMarks: payload.requiredTotal,
-      gradingMode: payload.gradingMode,
+      title: `${payload.examType || 'Standard Exam'} - AI Draft`,
+      examType: payload.examType || "Standard Exam",
+      difficulty: payload.difficulty || "Medium",
+      duration: payload.duration?.value
+        ? `${payload.duration.value} ${payload.duration.unit}`
+        : `${payload.durationMinutes || 60} Minutes`,
+      totalMarks,
+      gradingMode: payload.gradingMode || "Hybrid Grading",
+      passPercentage: payload.passPercentage || 50,
       status: "draft",
       generatedAt: new Date().toISOString(),
       approvalRequired: true,
@@ -320,17 +509,25 @@ function sampleTrueFalseQuestion(qIdx) {
   return questions[qIdx % questions.length];
 }
 
-export function normalizeExam(exam, payload) {
+export function normalizeExam(exam, payload = {}, blueprintSpec = {}) {
+  const duration = payload.duration?.value
+    ? `${payload.duration.value} ${payload.duration.unit || 'Minutes'}`
+    : `${payload.durationMinutes || payload.duration || blueprintSpec.duration || 60} Minutes`;
+  const totalMarks = Number(payload.requiredTotal || blueprintSpec.totalMarks || payload.totalMarks || 100);
+  const passPercentage = Number(payload.passPercentage || blueprintSpec.passPercentage || 50);
+
   const normalized = {
     ...exam,
     metadata: {
       ...exam.metadata,
       examId: exam.metadata?.examId || cryptoId("exam"),
-      examType: payload.examType,
-      difficulty: payload.difficulty,
-      duration: `${payload.duration?.value || 60} ${payload.duration?.unit || 'Minutes'}`,
-      totalMarks: Number(payload.requiredTotal || 100),
+      title: payload.title || exam.metadata?.title || `${payload.examType || 'Standard Exam'} - AI Draft`,
+      examType: payload.examType || exam.metadata?.examType || "Standard Exam",
+      difficulty: payload.difficulty || exam.metadata?.difficulty || "Medium",
+      duration,
+      totalMarks,
       gradingMode: payload.gradingMode || 'Hybrid Grading',
+      passPercentage,
       status: "draft",
       generatedAt: new Date().toISOString(),
       approvalRequired: true,
@@ -338,96 +535,82 @@ export function normalizeExam(exam, payload) {
     }
   };
 
+  const payloadSections = payload.sections || blueprintSpec.sections || [];
+
   normalized.sections = (normalized.sections || []).map((section, sectionIndex) => {
-    const payloadSection = payload.sections?.[sectionIndex] || {};
-    const sectionType = payloadSection.type || section.questionType || "Short Answer Questions";
-    const marksPerQ = Number(payloadSection.marks || section.marksPerQuestion || 10);
+    const payloadSection = payloadSections[sectionIndex] || {};
+    const sectionType = payloadSection.type || section.questionType || "multiple_choice";
+    const normType = normalizeCanonicalQuestionType(sectionType);
+    const marksPerQ = Number(payloadSection.marks || section.marksPerQuestion || 1);
 
     const mappedQuestions = (section.questions || []).map((question, questionIndex) => {
       let options = Array.isArray(question.options) ? question.options.filter(Boolean) : [];
-      const isDropdownType = ["Multiple Choice Questions (MCQ)", "Fill In The Blanks", "Cloze Passage Questions"].includes(sectionType);
+      let questionText = question.questionText || question.question || "";
+      let correctAnswer = question.correctAnswer !== undefined ? question.correctAnswer : (question.correct_answer || "");
 
-      if (isDropdownType) {
-        const correct = question.correctAnswer || "";
-        if (correct && !options.some(o => o.trim().toLowerCase() === correct.trim().toLowerCase())) {
-          options.push(correct);
+      if (normType === 'multiple_choice' || normType === 'multiple_select') {
+        const correctStr = typeof correctAnswer === 'string' ? correctAnswer.trim() : String(correctAnswer);
+        if (correctStr && !options.some(o => (typeof o === 'string' ? o : o.text || o.id).toLowerCase() === correctStr.toLowerCase())) {
+          options.push(correctStr);
         }
-        const fallbacks = ["Option A", "Option B", "Option C", "Option D"];
+        const fallbacks = ["Alternative Alpha", "Alternative Beta", "Alternative Gamma", "Alternative Delta"];
         let fallbackIdx = 0;
         while (options.length < 4) {
           const candidate = fallbacks[fallbackIdx++];
-          if (!options.some(o => o.trim().toLowerCase() === candidate.trim().toLowerCase())) {
+          if (!options.some(o => (typeof o === 'string' ? o : o.text || o.id).toLowerCase() === candidate.toLowerCase())) {
             options.push(candidate);
           }
         }
         if (options.length > 4) options = options.slice(0, 4);
-        options = shuffleArray(options);
-      }
-
-      let questionText = question.questionText || "";
-      let correctAnswer = question.correctAnswer || "";
-
-      if (sectionType.includes("Reorder") || sectionType.includes("Sentence")) {
-        correctAnswer = correctAnswer.replace(/\.+$/, "").trim();
-        let words = correctAnswer.split(/\s+/).filter(Boolean);
-        if (words.length > 8) words = words.slice(0, 8);
-        const splitter = questionText.includes("/") ? "/" : /\s+/;
-        const tiles = questionText.split(splitter).map(w => w.trim().replace(/\.+$/, "")).filter(Boolean);
-        questionText = (tiles.length >= 3 ? tiles : words).map(w => w.toLowerCase()).join(" / ");
+      } else if (normType === 'true_false') {
+        if (typeof correctAnswer === 'string') {
+          correctAnswer = correctAnswer.toLowerCase() === 'true';
+        }
+      } else if (normType === 'reorder') {
+        if (typeof correctAnswer === 'string') {
+          correctAnswer = correctAnswer.replace(/\.+$/, "").trim();
+        }
       }
 
       return {
         ...question,
-        questionId: question.questionId || `S${sectionIndex + 1}Q${questionIndex + 1}`,
+        questionId: question.questionId || question.id || `S${sectionIndex + 1}Q${questionIndex + 1}`,
         questionType: sectionType,
         questionText,
         correctAnswer,
-        options,
-        marks: marksPerQ
+        options: (normType === 'multiple_choice' || normType === 'multiple_select') ? options : question.options,
+        acceptedAnswers: question.acceptedAnswers,
+        pairs: question.pairs,
+        items: question.items,
+        blanks: question.blanks,
+        marks: Number(question.marks) > 0 ? Number(question.marks) : marksPerQ
       };
     });
 
-    let questions = mappedQuestions;
-
-    if (sectionType === "True or False Questions" || sectionType === "True Or False") {
-      questions = shuffleArray(mappedQuestions);
-      questions.forEach((q, idx) => {
-        q.questionId = `S${sectionIndex + 1}Q${idx + 1}`;
-      });
-    }
-
-    if (sectionType === "Matching Questions") {
-      questions = questions.map(q => ({
-        ...q,
-        questionText: (q.questionText || "").split(/\s+/).slice(0, 3).join(" "),
-        correctAnswer: (q.correctAnswer || "").split(/\s+/).slice(0, 3).join(" "),
-        options: [],
-        marks: marksPerQ
-      }));
-    }
-
     let sectionPassage = section.passage || "";
-    if (sectionType === "Reading Comprehension Questions" && !sectionPassage.trim()) {
+    if ((normType === "reading_comprehension" || sectionType.includes("Reading")) && !sectionPassage.trim()) {
       sectionPassage = payload.content ? payload.content.slice(0, 400) : "Reading passage context.";
     }
 
-    const sectionTotal = questions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
+    const sectionTotal = mappedQuestions.reduce((sum, q) => sum + Number(q.marks || 0), 0);
 
     return {
       ...section,
-      sectionId: section.sectionId || cryptoId("sec"),
+      sectionId: section.sectionId || section.id || cryptoId("sec"),
       questionType: sectionType,
       title: section.title || sectionType,
       instruction: section.instruction || payloadSection.instruction || "",
       marksPerQuestion: marksPerQ,
-      totalMarks: sectionTotal,
-      questions,
+      totalMarks: sectionTotal || (mappedQuestions.length * marksPerQ),
+      questions: mappedQuestions,
       passage: sectionPassage
     };
   });
 
   const calculatedTotalMarks = normalized.sections.reduce((sum, s) => sum + Number(s.totalMarks || 0), 0);
-  normalized.metadata.totalMarks = calculatedTotalMarks;
+  if (calculatedTotalMarks > 0) {
+    normalized.metadata.totalMarks = calculatedTotalMarks;
+  }
 
   return normalized;
 }

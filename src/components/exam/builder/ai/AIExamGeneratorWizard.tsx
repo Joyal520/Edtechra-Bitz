@@ -36,6 +36,7 @@ import {
 import { THEME_PRESETS } from '../../shared/themePresets';
 import {
   validateExamJSON,
+  validateExamAgainstBlueprint,
   generateCorrectionPrompt,
   ValidationResult
 } from '../../teacher/JSONValidator';
@@ -498,36 +499,118 @@ CRITICAL ASSESSMENT & RENDERING RULES:
 - Correct answers are metadata for grading only, stored exclusively in the 'correctAnswer' field.
 ${blueprintItems.some((i) => i.enabled && i.id === 'cloze') ? `- Cloze Passage MUST contain a contextual passage with numbered '[blank_1]', '[blank_2]', etc., accompanied by a 'blanks' array where each blank has an 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array.\n` : ''}${requiresVideo && videoTranscript ? `- Video Questions MUST be strictly derived from this Video Transcript:\n"""\n${videoTranscript}\n"""\n` : ''}${requiresAudio && audioTranscript ? `- Audio Questions MUST be strictly derived from this Audio Transcript:\n"""\n${audioTranscript}\n"""\n` : ''}
 ================================================================================
+REQUIRED SECTIONS & PER-TYPE SCHEMA OUTLINE (MANDATORY)
+================================================================================
+You MUST construct all ${activeBlueprint.length} distinct sections matching the exact question counts and marks below:
+
+${activeBlueprint.map((b, idx) => {
+  let sampleQ = '';
+  if (b.type === 'multiple_choice' || b.type === 'multiple_select') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "multiple_choice",
+          "question": "Question text here?",
+          "options": [
+            { "id": "a", "text": "Correct answer" },
+            { "id": "b", "text": "Plausible distractor" },
+            { "id": "c", "text": "Alternative distractor" },
+            { "id": "d", "text": "Misconception distractor" }
+          ],
+          "correctAnswer": ["a"],
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "Rationale for the correct answer."
+        }`;
+  } else if (b.type === 'true_false') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "true_false",
+          "question": "Factual statement to evaluate as True or False.",
+          "correctAnswer": true,
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "Why this statement is factually true."
+        }`;
+  } else if (b.type === 'fill_in_blank') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "fill_in_blank",
+          "question": "Complete the sentence with the appropriate term: 'The rule requires [blank] in all formal contexts.'",
+          "acceptedAnswers": ["precision", "accuracy"],
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "Accepted key term."
+        }`;
+  } else if (b.type === 'short_answer') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "short_answer",
+          "question": "Briefly describe the key distinction between these two rules.",
+          "correctAnswer": "Model answer explaining distinction concisely.",
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "Rubric criteria for teacher evaluation."
+        }`;
+  } else if (b.type === 'reading_comprehension') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "multiple_choice",
+          "question": "According to the passage, what is the primary conclusion?",
+          "options": [
+            { "id": "a", "text": "Correct inference from text" },
+            { "id": "b", "text": "Contradictory statement" },
+            { "id": "c", "text": "Unsubstantiated claim" },
+            { "id": "d", "text": "Opposite assertion" }
+          ],
+          "correctAnswer": ["a"],
+          "marks": 5,
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "Evidenced in the reading passage."
+        }`;
+  } else if (b.type === 'error_correction') {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "short_answer",
+          "question": "Identify and correct the grammatical error: 'Each of the students have finished their work.'",
+          "correctAnswer": "Each of the students has finished their work.",
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}",
+          "explanation": "'Each' takes a singular verb ('has')."
+        }`;
+  } else {
+    sampleQ = `        {
+          "id": "q${idx + 1}_1",
+          "type": "${b.type}",
+          "question": "Question text assessing ${b.name}?",
+          "correctAnswer": "Correct answer",
+          "marks": ${b.marksPerItem},
+          "difficulty": "${difficulty.toLowerCase()}"
+        }`;
+  }
+
+  return `  {
+    "id": "sec_${idx + 1}",
+    "title": "Section ${String.fromCharCode(65 + idx)} — ${b.name}",
+    "description": "Answer all ${b.count} question(s) testing ${b.name}.",
+    ${b.type === 'reading_comprehension' ? `"passage": "Substantive 150-250 word contextual passage grounded in the topic...",\n    ` : ''}"questions": [
+${sampleQ}
+      // Populate exactly ${b.count} questions of type '${b.type}' in this section
+    ]
+  }`;
+}).join(',\n')}
+
+================================================================================
 OUTPUT FORMAT REQUIREMENTS (CRITICAL)
 ================================================================================
 You MUST return ONLY valid JSON matching the EdTechra Assessment Schema.
 DO NOT wrap your output in conversational markdown, explanations, introductory notes, or trailing comments.
 Output ONLY the raw JSON object starting with { and ending with }.
 
-Schema structure:
-{
-  "schemaVersion": "2.0",
-  "assessmentType": "exam",
-  "exam": {
-    "title": "${subject}: ${contentTitle || 'Assessment'}",
-    "subject": "${subject}",
-    "grade": "${grade}",
-    "examType": "${activePreset.toUpperCase()} EXAM",
-    "difficulty": "${difficulty}",
-    "durationMinutes": ${durationMinutes},
-    "passPercentage": ${passPercentage}
-  },
-  "sections": [
-    {
-      "id": "sec_1",
-      "title": "Section A — Core Assessment",
-      "description": "Answer all questions in this section.",
-      "questions": [
-        // Populate questions matching exact types and counts
-      ]
-    }
-  ]
-}
+CRITICAL BLUEPRINT CONSTRAINTS:
+1. Total Questions MUST equal EXACTLY ${totalQuestions}.
+2. Total Marks MUST equal EXACTLY ${totalMarks}.
+3. DO NOT simplify this exam to only Multiple Choice questions.
+4. Populate ALL ${activeBlueprint.length} sections above with their EXACT question counts.
 
 Generate the complete examination JSON now:`;
   }, [
@@ -566,7 +649,8 @@ Generate the complete examination JSON now:`;
     const correctionPrompt = generateCorrectionPrompt(
       validationResult.errors,
       validationResult.warnings,
-      pastedJson
+      pastedJson,
+      validationResult.blueprintDiff
     );
     try {
       await navigator.clipboard.writeText(correctionPrompt);
@@ -584,11 +668,16 @@ Generate the complete examination JSON now:`;
     setIsProcessingJson(true);
 
     try {
-      const result = validateExamJSON(pastedJson);
+      const activeBlueprint = blueprintItems.filter((i) => i.enabled);
+      const result = validateExamAgainstBlueprint(pastedJson, {
+        totalQuestions,
+        totalMarks,
+        blueprintItems: activeBlueprint
+      });
       setValidationResult(result);
 
       if (result.isValid && result.parsedExam) {
-        // Construct canonical assessment object
+        // Construct canonical assessment object with authoritatively locked blueprint metadata
         const finalAssessment: CanonicalAssessmentV2 = {
           schemaVersion: '2.0',
           assessmentType: 'exam',
@@ -598,8 +687,8 @@ Generate the complete examination JSON now:`;
             grade: result.parsedExam.exam.grade || grade,
             examType: selectedTemplate === 'simple' ? 'Simple Exam' : selectedTemplate === 'advanced' ? 'Advanced Exam' : result.parsedExam.exam.examType || 'Standard Exam',
             difficulty: difficulty,
-            durationMinutes: result.parsedExam.exam.durationMinutes || durationMinutes,
-            passPercentage: result.parsedExam.exam.passPercentage || passPercentage,
+            durationMinutes: durationMinutes,
+            passPercentage: passPercentage,
             randomizeQuestions: questionOrder === 'shuffle',
             showMarksImmediately: showResults === 'immediately',
             showCorrectAnswers: answerFeedback === 'after_submission'

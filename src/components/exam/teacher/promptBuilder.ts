@@ -197,6 +197,7 @@ ${sourceMaterial.trim()}
 ================================================================================
 QUALITY & ASSESSMENT RULES
 ================================================================================
+0. BLUEPRINT ENFORCEMENT (MANDATORY): The question type breakdown above is strictly binding. You MUST NOT simplify this exam into multiple choice questions only. Generate the exact question count for every question type requested.
 1. Accuracy: Every question, option, answer key, and explanation must be 100% factually and grammatically correct.
 2. Clarity: Avoid trick questions, negative phrasing ("Which of the following is NOT..."), double negatives, or vague prompts unless intentionally testing analytical critique.
 3. Multiple Choice: Provide 4 plausible options for each MCQ. Do NOT use "All of the above" or "None of the above". Distractors must be believable common misconceptions.
