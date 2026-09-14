@@ -43,16 +43,16 @@ export const ActionCard: React.FC<ActionCardProps> = ({
   const getTypeIcon = () => {
     switch (action.action_type) {
       case 'create_diagnostic_exam':
-        return <FileQuestion className="w-5 h-5 text-indigo-500" />;
+        return <FileQuestion className="w-4 h-4 text-[#087477]" />;
       case 'create_learning_resource':
-        return <BookOpen className="w-5 h-5 text-emerald-500" />;
+        return <BookOpen className="w-4 h-4 text-[#159A75]" />;
       case 'post_announcement':
-        return <Megaphone className="w-5 h-5 text-blue-500" />;
+        return <Megaphone className="w-4 h-4 text-[#159A9C]" />;
       case 'create_live_quiz':
       case 'schedule_live_quiz':
-        return <Gamepad2 className="w-5 h-5 text-amber-500" />;
+        return <Gamepad2 className="w-4 h-4 text-[#D99500]" />;
       default:
-        return <Sparkles className="w-5 h-5 text-indigo-500" />;
+        return <Sparkles className="w-4 h-4 text-[#087477]" />;
     }
   };
 
@@ -77,42 +77,42 @@ export const ActionCard: React.FC<ActionCardProps> = ({
     switch (action.status) {
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-[#D99500] border border-amber-200">
             <Clock className="w-3 h-3" />
             Pending Approval
           </span>
         );
       case 'approved':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2]">
             <CheckCircle2 className="w-3 h-3" />
             Approved
           </span>
         );
       case 'running':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 animate-pulse">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-[#159A9C] border border-[#159A9C]/40 animate-pulse">
             <Loader2 className="w-3 h-3 animate-spin" />
             Executing...
           </span>
         );
       case 'completed':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-[#159A75] border border-emerald-200">
             <CheckCircle2 className="w-3 h-3" />
             Completed
           </span>
         );
       case 'failed':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-[#C94B4B] border border-rose-200">
             <AlertTriangle className="w-3 h-3" />
             Failed
           </span>
         );
       case 'cancelled':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-50 text-[#36565A] border border-slate-200">
             <XCircle className="w-3 h-3" />
             Cancelled
           </span>
@@ -152,26 +152,26 @@ export const ActionCard: React.FC<ActionCardProps> = ({
     <>
       <div
         onClick={() => setIsPreviewOpen(true)}
-        className="group relative bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+        className="group relative bg-white border border-[#C9E5E2] hover:border-[#159A9C] rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
       >
         <div>
           {/* Top Bar: Type, Priority, Status */}
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700/60 flex items-center justify-center border border-slate-200/60 dark:border-slate-600/60">
+              <div className="w-8 h-8 rounded-xl bg-[#E8F7F5] flex items-center justify-center border border-[#C9E5E2]">
                 {getTypeIcon()}
               </div>
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <span className="text-xs font-bold text-[#36565A]">
                 {getTypeLabel()}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase ${
                 action.priority === 'high'
-                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900'
+                  ? 'bg-rose-50 text-[#C94B4B] border border-rose-200'
                   : action.priority === 'medium'
-                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900'
-                  : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  ? 'bg-amber-50 text-[#D99500] border border-amber-200'
+                  : 'bg-slate-50 text-[#36565A] border border-slate-200'
               }`}>
                 {action.priority}
               </span>
@@ -180,21 +180,21 @@ export const ActionCard: React.FC<ActionCardProps> = ({
           </div>
 
           {/* Title & Description */}
-          <h4 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
+          <h4 className="text-base font-black text-[#173B3F] group-hover:text-[#087477] transition-colors line-clamp-1">
             {action.title}
           </h4>
-          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-[#36565A] mt-1.5 line-clamp-2 leading-relaxed font-medium">
             {action.description || 'No additional details provided.'}
           </p>
 
-          {/* Pedagogical Reason */}
+          {/* Pedagogical Grounding Box */}
           {action.reason && (
-            <div className="mt-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
-                <Sparkles className="w-3 h-3" />
+            <div className="mt-3.5 p-3 bg-[#E8F7F5] border border-[#C9E5E2] rounded-xl">
+              <div className="flex items-center gap-1.5 text-[10px] font-black text-[#087477] uppercase tracking-wider">
+                <Sparkles className="w-3 h-3 text-[#087477]" />
                 Pedagogical Grounding
               </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2 mt-0.5">
+              <p className="text-xs text-[#173B3F] font-semibold line-clamp-2 mt-1 leading-relaxed">
                 {action.reason}
               </p>
             </div>
@@ -202,7 +202,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({
 
           {/* Failure reason if failed */}
           {action.status === 'failed' && action.last_error && (
-            <div className="mt-2.5 p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-lg text-rose-700 dark:text-rose-300 text-xs flex items-start gap-1.5">
+            <div className="mt-2.5 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[#C94B4B] text-xs flex items-start gap-1.5 font-medium">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span className="line-clamp-2">{action.last_error}</span>
             </div>
@@ -210,16 +210,16 @@ export const ActionCard: React.FC<ActionCardProps> = ({
         </div>
 
         {/* Card Footer: Metadata & Actions */}
-        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="mt-4 pt-3 border-t border-[#C9E5E2] flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs text-[#36565A] font-semibold">
             {action.scheduled_for ? (
               <>
-                <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                <Calendar className="w-3.5 h-3.5 text-[#D99500]" />
                 <span>{new Date(action.scheduled_for).toLocaleDateString()}</span>
               </>
             ) : action.executed_at ? (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#159A75]" />
                 <span>Executed {new Date(action.executed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </>
             ) : (
@@ -230,11 +230,12 @@ export const ActionCard: React.FC<ActionCardProps> = ({
           <div className="flex items-center gap-1.5">
             {action.status === 'pending' && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPreviewOpen(true);
                 }}
-                className="px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3.5 py-1.5 text-xs font-bold text-[#087477] bg-[#E8F7F5] hover:bg-[#D4EFEC] border border-[#C9E5E2] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
               >
                 <Eye className="w-3.5 h-3.5" />
                 Inspect
@@ -243,9 +244,10 @@ export const ActionCard: React.FC<ActionCardProps> = ({
 
             {action.status === 'approved' && (
               <button
+                type="button"
                 onClick={handleQuickExecute}
                 disabled={isExecuting}
-                className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
+                className="px-4 py-1.5 text-xs font-bold text-white bg-[#087477] hover:bg-[#065e60] rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
               >
                 {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
                 Execute
@@ -254,9 +256,10 @@ export const ActionCard: React.FC<ActionCardProps> = ({
 
             {action.status === 'failed' && (
               <button
+                type="button"
                 onClick={handleRetry}
                 disabled={isExecuting}
-                className="px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-all flex items-center gap-1 disabled:opacity-50"
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-[#C94B4B] hover:bg-rose-700 rounded-xl shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
               >
                 {isExecuting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                 Retry
@@ -265,13 +268,14 @@ export const ActionCard: React.FC<ActionCardProps> = ({
 
             {action.status === 'completed' && (
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsPreviewOpen(true);
                 }}
-                className="px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 rounded-lg transition-colors flex items-center gap-1"
+                className="px-3.5 py-1.5 text-xs font-bold text-[#159A75] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#159A75]" />
                 View Result
               </button>
             )}

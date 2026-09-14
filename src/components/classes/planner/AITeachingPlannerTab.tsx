@@ -183,23 +183,23 @@ export const AITeachingPlannerTab: React.FC<AITeachingPlannerTabProps> = ({
     <div className="space-y-6">
       {/* Toast Notification */}
       {successToast && (
-        <div className="fixed top-20 right-8 z-50 bg-emerald-900 text-white px-5 py-3 rounded-2xl shadow-xl border border-emerald-400/40 text-xs font-black flex items-center gap-2.5 animate-slideDown">
-          <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+        <div className="fixed top-20 right-8 z-50 bg-[#087477] text-white px-5 py-3 rounded-2xl shadow-xl border border-[#D4EFEC]/40 text-xs font-black flex items-center gap-2.5 animate-slideDown">
+          <CheckCircle2 className="w-4 h-4 text-[#D4EFEC] shrink-0" />
           <span>{successToast}</span>
         </div>
       )}
 
       {/* Error Banner */}
       {errorMsg && (
-        <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl text-xs font-bold text-rose-800 flex items-center justify-between gap-3">
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-[#C94B4B] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-[#C94B4B] shrink-0" />
             <span>{errorMsg}</span>
           </div>
           <button
             type="button"
             onClick={() => setErrorMsg(null)}
-            className="text-rose-600 hover:text-rose-800 text-xs underline cursor-pointer"
+            className="text-[#C94B4B] hover:text-rose-800 text-xs font-bold underline cursor-pointer"
           >
             Dismiss
           </button>

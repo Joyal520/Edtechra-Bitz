@@ -56,16 +56,16 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
   const getActionIcon = () => {
     switch (action.action_type) {
       case 'create_diagnostic_exam':
-        return <FileQuestion className="w-6 h-6 text-indigo-500" />;
+        return <FileQuestion className="w-5 h-5 text-[#087477]" />;
       case 'create_learning_resource':
-        return <BookOpen className="w-6 h-6 text-emerald-500" />;
+        return <BookOpen className="w-5 h-5 text-[#159A75]" />;
       case 'post_announcement':
-        return <Megaphone className="w-6 h-6 text-blue-500" />;
+        return <Megaphone className="w-5 h-5 text-[#159A9C]" />;
       case 'create_live_quiz':
       case 'schedule_live_quiz':
-        return <Gamepad2 className="w-6 h-6 text-amber-500" />;
+        return <Gamepad2 className="w-5 h-5 text-[#D99500]" />;
       default:
-        return <Sparkles className="w-6 h-6 text-indigo-500" />;
+        return <Sparkles className="w-5 h-5 text-[#087477]" />;
     }
   };
 
@@ -153,37 +153,38 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
+      <div className="relative w-full max-w-2xl bg-white border-2 border-[#C9E5E2] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#C9E5E2] bg-[#E8F7F5]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+            <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center border border-[#C9E5E2] shadow-2xs">
               {getActionIcon()}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#36565A]">
                   {getActionTypeLabel()}
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase ${
                   action.priority === 'high'
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                    ? 'bg-rose-50 text-[#C94B4B] border border-rose-200'
                     : action.priority === 'medium'
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                    ? 'bg-amber-50 text-[#D99500] border border-amber-200'
+                    : 'bg-slate-50 text-[#36565A] border border-slate-200'
                 }`}>
                   {action.priority} priority
                 </span>
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
+              <h3 className="text-lg font-black text-[#173B3F] mt-0.5">
                 Action Execution Preview
               </h3>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 text-[#36565A] hover:text-[#173B3F] hover:bg-white/80 rounded-xl transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -192,73 +193,74 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {error && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-rose-700 dark:text-rose-300 text-sm">
+            <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-[#C94B4B] text-xs font-bold">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* 1. WHY — Pedagogical Rationale */}
-          <div className="bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider mb-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              WHY THIS ACTION WAS GENERATED
+          <div className="bg-[#E8F7F5] border border-[#C9E5E2] rounded-2xl p-4 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-black text-[#087477] uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5 text-[#087477]" />
+              <span>WHY THIS ACTION WAS GENERATED</span>
             </div>
-            <p className="text-sm text-indigo-950 dark:text-indigo-200 leading-relaxed font-medium">
+            <p className="text-xs sm:text-sm text-[#173B3F] leading-relaxed font-semibold">
               {action.reason || 'Recommended based on classroom metrics and unit curriculum goals.'}
             </p>
           </div>
 
           {/* 2. WHAT — Action Specifications */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              <span className="text-xs font-black text-[#36565A] uppercase tracking-wider">
                 WHAT WILL BE CREATED
               </span>
               {!isEditing && action.status === 'pending' && (
                 <button
+                  type="button"
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                  className="flex items-center gap-1.5 text-xs text-[#087477] hover:text-[#065e60] font-bold cursor-pointer hover:underline"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
-                  Edit Details
+                  <span>Edit Details</span>
                 </button>
               )}
             </div>
 
             {isEditing ? (
-              <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl">
+              <div className="space-y-3 p-4 bg-[#E8F7F5]/40 border border-[#C9E5E2] rounded-2xl">
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                  <label className="text-xs font-bold text-[#173B3F] block mb-1">
                     Action Title
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 text-[#173B3F]"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                  <label className="text-xs font-bold text-[#173B3F] block mb-1">
                     Description / Instructions
                   </label>
                   <textarea
                     rows={3}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 text-[#173B3F]"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                    <label className="text-xs font-bold text-[#173B3F] block mb-1">
                       Priority
                     </label>
                     <select
                       value={priority}
                       onChange={(e) => setPriority(e.target.value as any)}
-                      className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full text-xs font-semibold px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 text-[#173B3F]"
                     >
                       <option value="high">High</option>
                       <option value="medium">Medium</option>
@@ -266,28 +268,30 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300 block mb-1">
+                    <label className="text-xs font-bold text-[#173B3F] block mb-1">
                       Schedule For (Optional)
                     </label>
                     <input
                       type="datetime-local"
                       value={scheduledFor}
                       onChange={(e) => setScheduledFor(e.target.value)}
-                      className="w-full text-sm px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full text-xs font-semibold px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 text-[#173B3F]"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
+                    type="button"
                     onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-medium"
+                    className="px-3 py-1.5 text-xs text-[#36565A] hover:bg-white rounded-xl font-bold border border-transparent hover:border-[#C9E5E2]"
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleSaveEdit}
                     disabled={isSubmitting}
-                    className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-1.5"
+                    className="px-4 py-1.5 text-xs bg-[#087477] hover:bg-[#065e60] text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs"
                   >
                     <Check className="w-3.5 h-3.5" />
                     Save Changes
@@ -295,30 +299,30 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+              <div className="p-4 bg-white border border-[#C9E5E2] rounded-2xl space-y-2 shadow-2xs">
+                <h4 className="text-sm font-black text-[#173B3F]">
                   {action.title}
                 </h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                <p className="text-xs text-[#36565A] leading-relaxed font-medium">
                   {action.description || 'No detailed description provided.'}
                 </p>
 
                 {/* Specific payload details preview */}
                 {action.payload && Object.keys(action.payload).length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/60 flex flex-wrap gap-2 text-xs">
+                  <div className="mt-3 pt-3 border-t border-[#C9E5E2] flex flex-wrap gap-2 text-xs">
                     {action.payload.topic && (
-                      <span className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300">
-                        <strong>Topic:</strong> {action.payload.topic}
+                      <span className="px-2.5 py-1 bg-[#E8F7F5] border border-[#C9E5E2] rounded-lg text-[#173B3F] font-bold">
+                        Topic: {action.payload.topic}
                       </span>
                     )}
                     {action.payload.question_count && (
-                      <span className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300">
-                        <strong>Questions:</strong> {action.payload.question_count}
+                      <span className="px-2.5 py-1 bg-[#E8F7F5] border border-[#C9E5E2] rounded-lg text-[#173B3F] font-bold">
+                        Questions: {action.payload.question_count}
                       </span>
                     )}
                     {action.payload.target_students && (
-                      <span className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-700 dark:text-slate-300">
-                        <strong>Target:</strong> {action.payload.target_students}
+                      <span className="px-2.5 py-1 bg-[#E8F7F5] border border-[#C9E5E2] rounded-lg text-[#173B3F] font-bold">
+                        Target: {action.payload.target_students}
                       </span>
                     )}
                   </div>
@@ -329,38 +333,38 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
 
           {/* 3. TARGET & 4. WHEN */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                <Target className="w-3.5 h-3.5 text-blue-500" />
+            <div className="p-4 bg-white border border-[#C9E5E2] rounded-2xl space-y-1 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#36565A] uppercase tracking-wider">
+                <Target className="w-3.5 h-3.5 text-[#087477]" />
                 TARGET AUDIENCE
               </div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              <p className="text-sm font-black text-[#173B3F]">
                 {classroomTitle}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-[#36565A] font-medium">
                 Audience: {action.payload?.target_students === 'needs_attention' ? 'Students Needing Extra Help' : 'Entire Classroom'}
               </p>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                TIMING & EXECUTION
+            <div className="p-4 bg-white border border-[#C9E5E2] rounded-2xl space-y-1 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#36565A] uppercase tracking-wider">
+                <Clock className="w-3.5 h-3.5 text-[#D99500]" />
+                TIMING &amp; EXECUTION
               </div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <p className="text-sm font-black text-[#173B3F] flex items-center gap-1.5">
                 {action.scheduled_for ? (
                   <>
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    {new Date(action.scheduled_for).toLocaleString()}
+                    <Calendar className="w-4 h-4 text-[#D99500]" />
+                    <span>{new Date(action.scheduled_for).toLocaleString()}</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    Immediately upon approval
+                    <CheckCircle2 className="w-4 h-4 text-[#159A75]" />
+                    <span>Immediately upon approval</span>
                   </>
                 )}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-[#36565A] font-medium">
                 {action.requires_approval ? 'Requires teacher confirmation' : 'Safe automated execution'}
               </p>
             </div>
@@ -368,12 +372,12 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
 
           {/* Result preview if already completed */}
           {action.status === 'completed' && action.result_payload && (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-xl space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-xs font-black text-[#159A75] uppercase tracking-wider">
+                <CheckCircle2 className="w-4 h-4 text-[#159A75]" />
                 ACTION EXECUTION COMPLETED
               </div>
-              <div className="text-xs font-mono text-emerald-900 dark:text-emerald-200 bg-white/75 dark:bg-slate-900/60 p-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900/40 overflow-x-auto">
+              <div className="text-xs font-mono text-[#173B3F] bg-white p-3 rounded-xl border border-emerald-200 overflow-x-auto">
                 {JSON.stringify(action.result_payload, null, 2)}
               </div>
             </div>
@@ -381,24 +385,26 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
         </div>
 
         {/* Action Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#C9E5E2] bg-[#E8F7F5]/50 flex-wrap gap-3">
           <div>
             {action.status === 'pending' && (
               <button
+                type="button"
                 onClick={handleReject}
                 disabled={isSubmitting}
-                className="px-3 py-2 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 text-xs font-bold text-[#C94B4B] hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Reject Action
+                <span>Reject Action</span>
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="px-4 py-2 text-xs font-bold text-[#36565A] hover:text-[#173B3F] hover:bg-white border border-transparent hover:border-[#C9E5E2] rounded-xl transition-all cursor-pointer"
             >
               Close
             </button>
@@ -406,32 +412,35 @@ export const ActionPreviewModal: React.FC<ActionPreviewModalProps> = ({
             {action.status === 'pending' && (
               <>
                 <button
+                  type="button"
                   onClick={handleApproveOnly}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-bold text-[#087477] bg-white hover:bg-[#E8F7F5] border border-[#087477] rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  Approve (Schedule)
+                  <Check className="w-4 h-4 text-[#087477]" />
+                  <span>Approve (Schedule)</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleApproveAndExecute}
                   disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-black text-white bg-[#087477] hover:bg-[#065e60] rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  Approve & Execute Now
+                  <span>Approve &amp; Execute Now</span>
                 </button>
               </>
             )}
 
             {action.status === 'approved' && (
               <button
+                type="button"
                 onClick={handleApproveAndExecute}
                 disabled={isSubmitting}
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                className="px-4.5 py-2 text-xs font-black text-white bg-[#087477] hover:bg-[#065e60] rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <Play className="w-4 h-4 fill-white" />
-                Execute Immediately
+                <span>Execute Immediately</span>
               </button>
             )}
           </div>

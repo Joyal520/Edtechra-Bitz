@@ -74,17 +74,17 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Banner / Header */}
-      <div className="bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 rounded-3xl p-6 sm:p-8 border border-sky-100 shadow-xs relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#E8F7F5] via-[#E8F7F5]/90 to-[#D4EFEC] rounded-3xl p-6 sm:p-8 border border-[#C9E5E2] shadow-xs relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-100 text-[#026fc3] text-xs font-black uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Phase 2A &bull; AI Teaching Planner</span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/90 border border-[#C9E5E2] text-[#087477] text-xs font-black uppercase tracking-wider shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-[#087477]" />
+              <span>AI Teaching Planner</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-black text-[#173B3F] tracking-tight">
               What would you like to teach today?
             </h2>
-            <p className="text-sm text-slate-600 font-medium leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#36565A] font-medium leading-relaxed">
               Tell AI your teaching goal. The planner inspects your students&apos; real performance, assessments, and learning gaps to build a personalized, evidence-grounded curriculum.
             </p>
           </div>
@@ -93,9 +93,9 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
             <button
               type="button"
               onClick={onOpenSavedPlans}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 text-xs font-black shadow-xs hover:shadow-sm transition-all self-start sm:self-center cursor-pointer active:scale-95"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2] text-xs font-bold shadow-xs hover:shadow-sm transition-all self-start sm:self-center cursor-pointer active:scale-95"
             >
-              <FolderOpen className="w-4 h-4 text-sky-600" />
+              <FolderOpen className="w-4 h-4 text-[#087477]" />
               <span>Saved Plans ({savedPlansCount})</span>
             </button>
           )}
@@ -103,40 +103,40 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
       </div>
 
       {/* Main Input Form Card */}
-      <form onSubmit={handleSubmit} className="bg-white rounded-3xl border-2 border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-[#C9E5E2] p-6 sm:p-8 shadow-xs space-y-6">
         {validationError && (
-          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-rose-800">
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-[#C94B4B]">
             {validationError}
           </div>
         )}
 
         {/* 1. Classroom & Level Context Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] text-xs">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-white text-[#087477] border border-[#C9E5E2] flex items-center justify-center shrink-0 shadow-2xs">
               <GraduationCap className="w-4 h-4" />
             </div>
             <div>
-              <span className="block text-slate-500 font-bold uppercase tracking-wider text-[10px]">Classroom</span>
-              <strong className="text-slate-900 font-black text-sm">{classroom.title}</strong>
+              <span className="block text-[#36565A] font-bold uppercase tracking-wider text-[10px]">Classroom</span>
+              <strong className="text-[#173B3F] font-black text-sm">{classroom.title}</strong>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-white text-[#159A75] border border-[#C9E5E2] flex items-center justify-center shrink-0 shadow-2xs">
               <BookOpen className="w-4 h-4" />
             </div>
             <div className="flex-1">
-              <span className="block text-slate-500 font-bold uppercase tracking-wider text-[10px]">Subject & Level</span>
+              <span className="block text-[#36565A] font-bold uppercase tracking-wider text-[10px]">Subject & Level</span>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-800">{classroom.subject || 'General'}</span>
-                <span className="text-slate-400">&bull;</span>
+                <span className="font-bold text-[#173B3F]">{classroom.subject || 'General'}</span>
+                <span className="text-[#36565A]">&bull;</span>
                 <input
                   type="text"
                   value={level}
                   onChange={e => setLevel(e.target.value)}
                   placeholder="e.g. Grade 8 / Intermediate"
-                  className="px-2 py-0.5 bg-white rounded-lg border border-slate-300 text-xs font-bold text-slate-800 focus:outline-hidden focus:border-sky-500"
+                  className="px-2.5 py-1 bg-white rounded-lg border border-[#C9E5E2] text-xs font-bold text-[#173B3F] focus:outline-hidden focus:border-[#159A9C]"
                 />
               </div>
             </div>
@@ -145,8 +145,8 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
 
         {/* 2. Topic Input */}
         <div className="space-y-2">
-          <label className="block text-sm font-black text-slate-900">
-            Topic or Subject Focus <span className="text-rose-500">*</span>
+          <label className="block text-xs font-black uppercase text-[#173B3F] tracking-wider">
+            Topic or Subject Focus <span className="text-[#C94B4B]">*</span>
           </label>
           <div className="relative">
             <input
@@ -155,35 +155,35 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
               value={topic}
               onChange={e => setTopic(e.target.value)}
               placeholder="e.g. Present Perfect Tense, Photosynthesis, Quadratic Equations..."
-              className="w-full px-4.5 py-3.5 rounded-2xl bg-white border-2 border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 text-slate-900 font-bold text-base placeholder:text-slate-400 placeholder:font-normal transition-all"
+              className="w-full px-4.5 py-3.5 rounded-2xl bg-white border-2 border-[#C9E5E2] focus:border-[#159A9C] focus:ring-4 focus:ring-[#159A9C]/15 text-[#173B3F] font-bold text-base placeholder:text-[#36565A]/50 transition-all"
             />
           </div>
-          <p className="text-xs text-slate-500 font-medium">
+          <p className="text-xs text-[#36565A] font-medium">
             Be as specific or general as you like (e.g. &ldquo;Present Perfect vs. Past Simple with irregular verbs&rdquo;).
           </p>
         </div>
 
         {/* 3. Desired Learning Goal / Outcome */}
         <div className="space-y-2">
-          <label className="block text-sm font-black text-slate-900">
-            Desired Learning Goal <span className="text-slate-400 text-xs font-normal">(What should students be able to do?)</span>
+          <label className="block text-xs font-black uppercase text-[#173B3F] tracking-wider">
+            Desired Learning Goal <span className="text-[#36565A] font-normal lowercase">(What should students be able to do?)</span>
           </label>
           <textarea
             rows={2}
             value={learningGoal}
             onChange={e => setLearningGoal(e.target.value)}
             placeholder="e.g. Students will correctly identify when to use present perfect, conjugate irregular verbs with 85% accuracy, and apply them in short written dialogues."
-            className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 text-slate-900 font-semibold text-sm placeholder:text-slate-400 placeholder:font-normal transition-all resize-none leading-relaxed"
+            className="w-full p-4 rounded-2xl bg-white border-2 border-[#C9E5E2] focus:border-[#159A9C] focus:ring-4 focus:ring-[#159A9C]/15 text-[#173B3F] font-semibold text-sm placeholder:text-[#36565A]/50 transition-all resize-none leading-relaxed"
           />
         </div>
 
         {/* 4. Duration Selector */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="block text-sm font-black text-slate-900">
+            <label className="block text-xs font-black uppercase text-[#173B3F] tracking-wider">
               Teaching Duration
             </label>
-            <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-200">
+            <span className="text-xs font-black text-[#087477] bg-[#E8F7F5] px-3 py-1 rounded-full border border-[#C9E5E2]">
               {durationDays} {durationDays === 1 ? 'Day' : 'Days'} Plan
             </span>
           </div>
@@ -196,12 +196,12 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 onClick={() => setDurationDays(opt.days)}
                 className={`p-3 rounded-2xl border-2 text-center transition-all cursor-pointer select-none active:scale-95 ${
                   durationDays === opt.days
-                    ? 'border-sky-500 bg-gradient-to-b from-sky-50 to-white text-[#026fc3] ring-2 ring-sky-200 shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                    ? 'border-[#087477] bg-gradient-to-b from-[#E8F7F5] to-white text-[#087477] ring-2 ring-[#159A9C]/30 shadow-xs'
+                    : 'border-[#C9E5E2] hover:border-[#159A9C]/60 bg-white text-[#36565A]'
                 }`}
               >
                 <span className="block text-sm font-black">{opt.label}</span>
-                <span className="block text-[10px] text-slate-500 font-medium truncate mt-0.5">{opt.desc}</span>
+                <span className="block text-[10px] text-[#36565A] font-medium truncate mt-0.5">{opt.desc}</span>
               </button>
             ))}
           </div>
@@ -209,7 +209,7 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
 
         {/* 5. Lesson Minutes Per Session */}
         <div className="space-y-3">
-          <label className="block text-sm font-black text-slate-900">
+          <label className="block text-xs font-black uppercase text-[#173B3F] tracking-wider">
             Teaching Time per Lesson
           </label>
           <div className="flex items-center gap-2 flex-wrap">
@@ -220,8 +220,8 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 onClick={() => setLessonMinutes(mins)}
                 className={`px-4 py-2 rounded-xl border-2 text-xs font-black transition-all cursor-pointer active:scale-95 ${
                   lessonMinutes === mins
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200 shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                    ? 'border-[#087477] bg-[#E8F7F5] text-[#087477] ring-2 ring-[#159A9C]/30 shadow-xs'
+                    : 'border-[#C9E5E2] hover:border-[#159A9C]/60 bg-white text-[#36565A]'
                 }`}
               >
                 <Clock className="w-3.5 h-3.5 inline mr-1.5" />
@@ -232,12 +232,12 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
         </div>
 
         {/* 6. Optional Learning Material / Text */}
-        <div className="pt-2 border-t border-slate-100 space-y-3">
+        <div className="pt-2 border-t border-[#C9E5E2] space-y-3">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setShowContentField(prev => !prev)}
-              className="text-xs font-bold text-sky-700 hover:text-sky-800 flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-bold text-[#087477] hover:text-[#065e60] flex items-center gap-1.5 cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5" />
               <span>{showContentField ? 'Hide Learning Material Text' : '+ Add Optional Reference Text / Material'}</span>
@@ -251,7 +251,7 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 value={content}
                 onChange={e => setContent(e.target.value)}
                 placeholder="Paste reference text, textbook excerpt, vocabulary list, or notes the AI should incorporate into the activities and lesson plans..."
-                className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 text-slate-900 font-medium text-xs placeholder:text-slate-400 transition-all resize-none leading-relaxed"
+                className="w-full p-4 rounded-2xl bg-white border-2 border-[#C9E5E2] focus:border-[#159A9C] focus:ring-4 focus:ring-[#159A9C]/15 text-[#173B3F] font-medium text-xs placeholder:text-[#36565A]/50 transition-all resize-none leading-relaxed"
               />
             </div>
           )}
@@ -263,7 +263,7 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
             <button
               type="button"
               onClick={() => setShowNotesField(prev => !prev)}
-              className="text-xs font-bold text-slate-600 hover:text-slate-800 flex items-center gap-1.5 cursor-pointer"
+              className="text-xs font-bold text-[#36565A] hover:text-[#173B3F] flex items-center gap-1.5 cursor-pointer"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>{showNotesField ? 'Hide Teacher Instructions' : '+ Add Optional Teacher Instructions'}</span>
@@ -277,7 +277,7 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 value={teacherNotes}
                 onChange={e => setTeacherNotes(e.target.value)}
                 placeholder="e.g. Include paired speaking games on Day 2; emphasize formative exit tickets; keep homework under 15 minutes."
-                className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100 text-slate-900 font-medium text-xs placeholder:text-slate-400 transition-all resize-none leading-relaxed"
+                className="w-full p-4 rounded-2xl bg-white border-2 border-[#C9E5E2] focus:border-[#159A9C] focus:ring-4 focus:ring-[#159A9C]/15 text-[#173B3F] font-medium text-xs placeholder:text-[#36565A]/50 transition-all resize-none leading-relaxed"
               />
             </div>
           )}
@@ -288,7 +288,7 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
           <button
             type="submit"
             disabled={isGenerating}
-            className="btn-liquid-primary w-full py-4 px-6 text-base font-black shadow-lg shadow-sky-500/25 hover:shadow-xl hover:shadow-sky-500/30 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-4 px-6 text-base font-black bg-[#087477] hover:bg-[#065e60] text-white rounded-2xl shadow-lg shadow-[#087477]/20 hover:shadow-xl hover:shadow-[#087477]/30 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed active:scale-98"
           >
             {isGenerating ? (
               <>
@@ -297,14 +297,14 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
               </>
             ) : (
               <>
-                <Sparkles className="w-5 h-5 text-cyan-200" />
+                <Sparkles className="w-5 h-5 text-[#D4EFEC]" />
                 <span>Create AI Teaching Plan</span>
                 <ArrowRight className="w-5 h-5 ml-1" />
               </>
             )}
           </button>
 
-          <p className="text-center text-xs text-slate-500 font-medium flex items-center justify-center gap-1.5">
+          <p className="text-center text-xs text-[#36565A] font-medium flex items-center justify-center gap-1.5">
             <span>&bull;</span>
             <span>Real classroom records &bull; Gemini pedagogical reasoning &bull; Teacher review &amp; approval</span>
             <span>&bull;</span>
