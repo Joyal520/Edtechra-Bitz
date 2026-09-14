@@ -19,7 +19,8 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronRight,
-  Settings
+  Settings,
+  CalendarDays
 } from 'lucide-react';
 import {
   Classroom,
@@ -66,7 +67,7 @@ import { OCRGradingModal } from '@/components/classes/OCRGradingModal';
 import { ExamPlatformModal } from '@/components/exam/ExamPlatformModal';
 import { AssessmentTypeSelectionModal } from '@/components/exam/entry/AssessmentTypeSelectionModal';
 import { ExamLibraryModal } from '@/components/exam/library/ExamLibraryModal';
-import { AITeachingIntelligenceModal } from '@/components/classes/AITeachingIntelligenceModal';
+import { AITeachingIntelligenceModal, ModalTab } from '@/components/classes/AITeachingIntelligenceModal';
 import { LiveQuizBankModal } from '@/components/classes/live-quiz/LiveQuizBankModal';
 import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQuizModal';
 import { LiveQuizLaunchDecisionModal } from '@/components/classes/live-quiz/LiveQuizLaunchDecisionModal';
@@ -123,6 +124,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [examLibraryOpen, setExamLibraryOpen] = useState(false);
   const [copiedExamCardId, setCopiedExamCardId] = useState<string | null>(null);
   const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
+  const [aiReportInitialTab, setAiReportInitialTab] = useState<ModalTab>('intelligence');
   const [studentAssessmentHistoryOpen, setStudentAssessmentHistoryOpen] = useState(false);
 
   // Live Quiz State
@@ -1412,11 +1414,25 @@ export const ClassroomDetailPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="pt-4 relative z-10">
+              <div className="pt-4 relative z-10 space-y-2">
                 <button
                   type="button"
-                  onClick={() => setAiReportModalOpen(true)}
-                  className="btn-liquid-secondary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center"
+                  onClick={() => {
+                    setAiReportInitialTab('planner');
+                    setAiReportModalOpen(true);
+                  }}
+                  className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  <span>AI Teaching Planner</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiReportInitialTab('intelligence');
+                    setAiReportModalOpen(true);
+                  }}
+                  className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center"
                 >
                   Open Teaching Intelligence
                 </button>
@@ -1984,6 +2000,7 @@ export const ClassroomDetailPage: React.FC = () => {
       <AITeachingIntelligenceModal
         isOpen={aiReportModalOpen}
         classroom={classroom}
+        initialTab={aiReportInitialTab}
         onClose={() => setAiReportModalOpen(false)}
       />
 

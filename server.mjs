@@ -63,6 +63,14 @@ import {
   getStudentTeachingIntelligence,
   handleTeacherChat
 } from './server/teachingIntelligenceService.mjs';
+import {
+  generateTeachingPlan,
+  regenerateTeachingPlanDay,
+  saveTeachingPlan,
+  getClassroomTeachingPlans,
+  getTeachingPlanById,
+  deleteTeachingPlan
+} from './server/teachingPlannerService.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
   buildLessonFromMaterial,
@@ -3108,6 +3116,205 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/ai-feedback:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom report' });
+  }
+});
+
+// ============================================================================
+// AI TEACHING PLANNER API ROUTES (PHASE 2A)
+// ============================================================================
+
+// Helper to verify teacher authorization
+async function verifyTeacherPlannerAccess(supabaseClient, classroomId, authUser) {
+  if (!supabaseClient) return true;
+  if (authUser.profile?.role === 'admin') return true;
+  try {
+    const { data: classroom } = await supabaseClient
+      .from('classrooms')
+      .select('teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle();
+    if (classroom?.teacher_id === authUser.user.id) return true;
+
+    const { data: membership } = await supabaseClient
+      .from('classroom_members')
+      .select('role')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', authUser.user.id)
+      .maybeSingle();
+    return membership?.role === 'teacher';
+  } catch (_) {
+    return false;
+  }
+}
+
+// POST /api/classes/:id/teaching-planner/generate - Create an evidence-grounded AI Teaching Plan
+app.post('/api/classes/:id/teaching-planner/generate', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required to create teaching plans.' });
+    }
+
+    const result = await generateTeachingPlan({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      input: req.body,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-planner/generate:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate teaching plan' });
+  }
+});
+
+// POST /api/classes/:id/teaching-planner/regenerate-day - Refine a specific single day
+app.post('/api/classes/:id/teaching-planner/regenerate-day', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const { currentPlan, dayNumber, teacherInstructions } = req.body;
+    const updatedPlan = await regenerateTeachingPlanDay({
+      currentPlan,
+      dayNumber,
+      teacherInstructions,
+      serverOpenAI
+    });
+
+    res.json({ success: true, plan: updatedPlan });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-planner/regenerate-day:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to regenerate day plan' });
+  }
+});
+
+// POST /api/classes/:id/teaching-planner/save - Save or update teaching plan (draft or approved)
+app.post('/api/classes/:id/teaching-planner/save', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await saveTeachingPlan({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      planData: req.body
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-planner/save:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to save teaching plan' });
+  }
+});
+
+// GET /api/classes/:id/teaching-planner/plans - Retrieve saved teaching plans for classroom
+app.get('/api/classes/:id/teaching-planner/plans', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await getClassroomTeachingPlans({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-planner/plans:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve teaching plans' });
+  }
+});
+
+// GET /api/classes/:id/teaching-planner/plans/:planId - Retrieve individual plan
+app.get('/api/classes/:id/teaching-planner/plans/:planId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const plan = await getTeachingPlanById({
+      serverSupabase,
+      planId: req.params.planId,
+      teacherId: authData.user.id
+    });
+
+    if (!plan) {
+      return res.status(404).json({ success: false, error: 'Teaching plan not found.' });
+    }
+
+    res.json({ success: true, plan });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-planner/plans/:planId:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve teaching plan' });
+  }
+});
+
+// DELETE /api/classes/:id/teaching-planner/plans/:planId - Delete/Archive teaching plan
+app.delete('/api/classes/:id/teaching-planner/plans/:planId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherPlannerAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await deleteTeachingPlan({
+      serverSupabase,
+      planId: req.params.planId,
+      teacherId: authData.user.id
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in DELETE /api/classes/:id/teaching-planner/plans/:planId:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete teaching plan' });
   }
 });
 

@@ -23,7 +23,8 @@ import {
   TrendingUp,
   TrendingDown,
   Zap,
-  Bot
+  Bot,
+  CalendarDays
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import {
@@ -37,25 +38,34 @@ import {
   TeacherChatMessage
 } from '@/services/teachingIntelligenceService';
 import { StructuredAIReportRenderer, InlineMarkdown } from './StructuredAIReportRenderer';
+import { AITeachingPlannerTab } from './planner/AITeachingPlannerTab';
+
+export type ModalTab = 'intelligence' | 'planner' | 'students' | 'chat' | 'recent-exams' | '30day-report';
 
 interface AITeachingIntelligenceModalProps {
   isOpen: boolean;
   classroom: Classroom | null;
   onClose: () => void;
+  initialTab?: ModalTab;
 }
-
-type ModalTab = 'intelligence' | 'students' | 'chat' | 'recent-exams' | '30day-report';
 
 export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalProps> = ({
   isOpen,
   classroom,
-  onClose
+  onClose,
+  initialTab
 }) => {
-  const [activeTab, setActiveTab] = useState<ModalTab>('intelligence');
+  const [activeTab, setActiveTab] = useState<ModalTab>(initialTab || 'intelligence');
   const [data, setData] = useState<TeachingIntelligenceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   const sanitizeErrorMessage = (msg: any, fallback: string): string => {
     if (!msg || typeof msg !== 'string') return fallback;
@@ -439,7 +449,30 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               <span>Teaching Intelligence</span>
             </button>
 
-            {/* Tab 2: Student Intelligence */}
+            {/* Tab 2: AI Teaching Planner (Phase 2A) */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('planner');
+                setSelectedStudentId(null);
+                setSelectedExamId(null);
+              }}
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
+                activeTab === 'planner'
+                  ? 'bg-gradient-to-r from-[#026fc3] to-sky-500 text-white shadow-sm shadow-sky-500/20 border border-sky-400/30'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+              <span>Teaching Planner</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                activeTab === 'planner' ? 'bg-white/25 text-white' : 'bg-sky-100 text-[#026fc3]'
+              }`}>
+                2A
+              </span>
+            </button>
+
+            {/* Tab 3: Student Intelligence */}
             <button
               type="button"
               onClick={() => {
@@ -1252,6 +1285,11 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
           )}
 
             </div>
+          ) : activeTab === 'planner' && classroom ? (
+            /* ============================================================= */
+            /* TAB 2: AI TEACHING PLANNER (PHASE 2A)                         */
+            /* ============================================================= */
+            <AITeachingPlannerTab classroom={classroom} />
           ) : activeTab === 'students' ? (
             /* ============================================================= */
             /* TAB 2: STUDENT INTELLIGENCE                                   */
