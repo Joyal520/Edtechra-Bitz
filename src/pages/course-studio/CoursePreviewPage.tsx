@@ -36,6 +36,7 @@ import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
+import { LiquidButton } from '@/components/course-studio/liquid';
 
 export const CoursePreviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -378,36 +379,32 @@ export const CoursePreviewPage: React.FC = () => {
           </div>
 
           {/* Toggle between Reading & Roadmap */}
-          <button
-            type="button"
+          <LiquidButton
+            variant={viewMode === 'roadmap' ? 'primary' : 'secondary'}
+            size="sm"
             onClick={() => setViewMode(viewMode === 'lesson' ? 'roadmap' : 'lesson')}
-            className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-black ${
-              viewMode === 'roadmap'
-                ? 'btn-theme-primary shadow-2xs'
-                : 'hover:bg-current/10 text-theme-primary'
-            }`}
+            icon={<Map className="w-4 h-4" />}
             title="Toggle Course Roadmap"
           >
-            <Map className="w-4 h-4" />
             <span>{viewMode === 'roadmap' ? 'Read Lesson' : 'Roadmap'}</span>
-          </button>
+          </LiquidButton>
 
-          <button
-            type="button"
+          <LiquidButton
+            variant="secondary"
+            size="sm"
             onClick={() => setShowDrawer(true)}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            icon={<Menu className="w-4 h-4" />}
             title="Table of Contents"
           >
-            <Menu className="w-4 h-4" />
             <span className="hidden md:inline">Contents</span>
-          </button>
+          </LiquidButton>
         </div>
 
         {/* Center: Autosave Status & AI Assistant (In Edit Mode) or Chapter Info */}
         <div className="flex items-center gap-2">
           {isEditMode ? (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-600 dark:text-slate-300 border border-stone-200/60 flex items-center gap-1">
+              <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-slate-300 border border-stone-200/60 flex items-center gap-1.5 shadow-2xs">
                 <span
                   className={`w-2 h-2 rounded-full ${
                     savingStatus === 'saving'
@@ -420,14 +417,15 @@ export const CoursePreviewPage: React.FC = () => {
                 <span className="capitalize">{savingStatus}</span>
               </span>
 
-              <button
-                type="button"
+              <LiquidButton
+                variant="primary"
+                size="sm"
                 onClick={() => setAiAssistantOpen(true)}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-xs font-black shadow-xs cursor-pointer border border-sky-300/30"
+                icon={<Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />}
+                className="hidden sm:inline-flex"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-                <span>✨ AI Designer</span>
-              </button>
+                ✨ AI Designer
+              </LiquidButton>
             </div>
           ) : (
             <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
@@ -443,15 +441,15 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Right: Publish Button (Edit Mode), Progress %, Font Size, Theme Popover */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {isEditMode && (
-            <button
-              type="button"
+            <LiquidButton
+              variant="emerald"
+              size="sm"
               onClick={() => setPublishModalOpen(true)}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs font-black shadow-xs cursor-pointer"
+              icon={<Send className="w-3.5 h-3.5" />}
               title="Publish course & assign to classrooms"
             >
-              <Send className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Publish</span>
-            </button>
+            </LiquidButton>
           )}
 
           {/* Reading % Badge */}
@@ -461,25 +459,25 @@ export const CoursePreviewPage: React.FC = () => {
 
           {/* Font Size A- / A+ */}
           {viewMode === 'lesson' && (
-            <div className="flex items-center rounded-xl bg-[var(--theme-surface-subtle)] p-0.5 border border-[var(--theme-border-subtle)]">
-              <button
-                type="button"
+            <div className="flex items-center gap-1">
+              <LiquidButton
+                variant="tertiary"
+                size="sm"
                 onClick={handleScaleDown}
                 disabled={textScale === 'sm'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer text-theme-primary"
                 title="Decrease Font Size"
               >
                 A−
-              </button>
-              <button
-                type="button"
+              </LiquidButton>
+              <LiquidButton
+                variant="tertiary"
+                size="sm"
                 onClick={handleScaleUp}
                 disabled={textScale === 'xxl'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer text-theme-primary"
                 title="Increase Font Size"
               >
                 A+
-              </button>
+              </LiquidButton>
             </div>
           )}
 

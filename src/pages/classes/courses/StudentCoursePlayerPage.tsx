@@ -32,6 +32,7 @@ import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
+import { LiquidButton } from '@/components/course-studio/liquid';
 
 export const StudentCoursePlayerPage: React.FC = () => {
   const { classroomId, courseId } = useParams<{ classroomId: string; courseId: string }>();
@@ -376,40 +377,36 @@ export const StudentCoursePlayerPage: React.FC = () => {
         
         {/* Left: ← Class & Roadmap Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <button
-            type="button"
+          <LiquidButton
+            variant="tertiary"
+            size="sm"
             onClick={() => navigate(`/classes/${classroomId}`)}
-            className="p-1.5 sm:p-2 rounded-xl hover:bg-current/10 text-theme-primary transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            icon={<ArrowLeft className="w-3.5 h-3.5 text-[#026fc3]" />}
             title="Back to Class"
           >
-            <ArrowLeft className="w-4 h-4 text-theme-accent" />
             <span className="hidden sm:inline">Class</span>
-          </button>
+          </LiquidButton>
 
           {/* Toggle between Reading & Roadmap */}
-          <button
-            type="button"
+          <LiquidButton
+            variant={viewMode === 'roadmap' ? 'primary' : 'secondary'}
+            size="sm"
             onClick={() => setViewMode(viewMode === 'lesson' ? 'roadmap' : 'lesson')}
-            className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-black ${
-              viewMode === 'roadmap'
-                ? 'btn-theme-primary shadow-2xs'
-                : 'hover:bg-current/10 text-theme-primary'
-            }`}
+            icon={<Map className="w-3.5 h-3.5" />}
             title="Toggle Course Roadmap"
           >
-            <Map className="w-4 h-4" />
             <span>{viewMode === 'roadmap' ? 'Read Lesson' : 'Roadmap'}</span>
-          </button>
+          </LiquidButton>
 
-          <button
-            type="button"
+          <LiquidButton
+            variant="secondary"
+            size="sm"
             onClick={() => setShowDrawer(true)}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl hover:bg-current/10 text-current transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+            icon={<Menu className="w-3.5 h-3.5" />}
             title="Table of Contents"
           >
-            <Menu className="w-4 h-4" />
             <span className="hidden md:inline">Contents</span>
-          </button>
+          </LiquidButton>
         </div>
 
         {/* Center: Chapter Info */}
@@ -436,25 +433,25 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
           {/* Font Size A- / A+ */}
           {viewMode === 'lesson' && (
-            <div className="flex items-center rounded-xl bg-current/5 p-0.5 border border-current/10">
-              <button
-                type="button"
+            <div className="flex items-center gap-1">
+              <LiquidButton
+                variant="tertiary"
+                size="sm"
                 onClick={handleScaleDown}
                 disabled={textScale === 'sm'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer"
                 title="Decrease Font Size"
               >
                 A−
-              </button>
-              <button
-                type="button"
+              </LiquidButton>
+              <LiquidButton
+                variant="tertiary"
+                size="sm"
                 onClick={handleScaleUp}
                 disabled={textScale === 'xxl'}
-                className="px-1.5 py-0.5 sm:px-2 sm:py-1 text-xs font-bold rounded-lg hover:bg-current/10 disabled:opacity-30 cursor-pointer"
                 title="Increase Font Size"
               >
                 A+
-              </button>
+              </LiquidButton>
             </div>
           )}
 
@@ -465,14 +462,13 @@ export const StudentCoursePlayerPage: React.FC = () => {
           />
 
           {/* Bookmark Toggle */}
-          <button
-            type="button"
+          <LiquidButton
+            variant="tertiary"
+            size="sm"
             onClick={() => setIsBookmarked(!isBookmarked)}
-            className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer ${isBookmarked ? 'text-[#026fc3]' : 'text-current/60 hover:text-current'}`}
             title="Bookmark this page"
-          >
-            <Bookmark className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-          </button>
+            icon={<Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current text-[#026fc3]' : ''}`} />}
+          />
         </div>
       </header>
 
@@ -563,29 +559,32 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
                 {prevItem && (
-                  <button
-                    type="button"
+                  <LiquidButton
+                    variant="secondary"
+                    size="md"
                     onClick={() => {
                       setSelectedEpisode(prevItem.episode);
                       mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-current/5 hover:bg-current/10 border border-current/15 text-inherit text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    icon={<ArrowLeft className="w-4 h-4" />}
+                    className="flex-1 sm:flex-initial"
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Previous</span>
-                  </button>
+                    Previous
+                  </LiquidButton>
                 )}
 
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="emerald"
+                  size="md"
                   onClick={handleCompleteEpisode}
                   disabled={completingEpisode}
-                  className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs sm:text-sm font-bold shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  loading={completingEpisode}
+                  icon={<Check className="w-4 h-4 stroke-[3]" />}
+                  iconRight={nextItem ? <ArrowRight className="w-4 h-4" /> : undefined}
+                  className="flex-1 sm:flex-initial shadow-md"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>{completingEpisode ? 'Saving...' : nextItem ? 'Complete Lesson' : 'Complete Course! 🎉'}</span>
-                  {nextItem && <ArrowRight className="w-4 h-4" />}
-                </button>
+                  {nextItem ? 'Complete Lesson' : 'Complete Course! 🎉'}
+                </LiquidButton>
               </div>
             </footer>
 

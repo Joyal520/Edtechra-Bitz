@@ -25,6 +25,7 @@ import { CreateCourseModal } from '@/components/course-studio/CreateCourseModal'
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 import { AICourseDesignerModal } from '@/components/course-studio/AICourseDesignerModal';
 import { BotanicalPaperCutFrame } from '@/components/classes/ClassroomIllustrations';
+import { LiquidButton, LiquidTab } from '@/components/course-studio/liquid';
 
 export const CourseStudioDashboardPage: React.FC = () => {
   const { isAuthenticated, openAuthModal } = useAuth();
@@ -129,8 +130,9 @@ export const CourseStudioDashboardPage: React.FC = () => {
               </p>
 
               <div className="pt-2 flex items-center gap-3 flex-wrap">
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="primary"
+                  size="lg"
                   onClick={() => {
                     if (!isAuthenticated) {
                       openAuthModal('login', { type: 'action', action: 'create_course' });
@@ -138,14 +140,15 @@ export const CourseStudioDashboardPage: React.FC = () => {
                     }
                     setAiModalOpen(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black shadow-lg border border-sky-300/30 active:scale-95 transition-all cursor-pointer ring-2 ring-sky-400/30"
+                  icon={<Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />}
+                  className="shadow-xl"
                 >
-                  <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-                  <span>✨ Create with AI</span>
-                </button>
+                  ✨ Create with AI
+                </LiquidButton>
 
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="emerald"
+                  size="lg"
                   onClick={() => {
                     if (!isAuthenticated) {
                       openAuthModal('login', { type: 'action', action: 'create_course' });
@@ -153,38 +156,39 @@ export const CourseStudioDashboardPage: React.FC = () => {
                     }
                     setCreateModalOpen(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#10b981] hover:bg-[#059669] text-white rounded-2xl text-xs font-black shadow-lg border border-emerald-400/30 active:scale-95 transition-all cursor-pointer"
+                  icon={<Plus className="w-4 h-4 stroke-[3]" />}
+                  className="shadow-xl"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>+ Create Manually</span>
-                </button>
+                  + Create Manually
+                </LiquidButton>
 
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="secondary"
+                  size="lg"
                   onClick={() => navigate('/classes')}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#0a3a6b] hover:bg-[#082e56] text-sky-100 rounded-2xl text-xs font-black border border-sky-400/30 active:scale-95 transition-all cursor-pointer"
+                  icon={<GraduationCap className="w-4 h-4 text-[#026fc3]" />}
+                  className="shadow-xl"
                 >
-                  <GraduationCap className="w-4 h-4 text-sky-300" />
-                  <span>My Classrooms</span>
-                </button>
+                  My Classrooms
+                </LiquidButton>
               </div>
             </div>
 
             {/* Quick Stats Pill Panel */}
             <div className="lg:col-span-4 grid grid-cols-2 gap-3.5">
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1 shadow-inner">
                 <p className="text-2xl font-black text-white">{courses.length}</p>
                 <p className="text-[11px] font-bold text-sky-200 uppercase tracking-wider">Total Courses</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1 shadow-inner">
                 <p className="text-2xl font-black text-emerald-400">{totalPublished}</p>
                 <p className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider">Published</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1 shadow-inner">
                 <p className="text-2xl font-black text-[#fbbf24]">{totalAssignedClassrooms}</p>
                 <p className="text-[11px] font-bold text-amber-200 uppercase tracking-wider">Classroom Links</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-center space-y-1 shadow-inner">
                 <p className="text-2xl font-black text-sky-300">100%</p>
                 <p className="text-[11px] font-bold text-sky-200 uppercase tracking-wider">AI Studio Ready</p>
               </div>
@@ -196,44 +200,29 @@ export const CourseStudioDashboardPage: React.FC = () => {
         {/* FILTER & SEARCH BAR                                                   */}
         {/* ===================================================================== */}
         <section className="space-y-6">
-          <div className="bg-[#f4efe6] rounded-[24px] p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-stone-200/70 shadow-xs">
+          <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-md rounded-[28px] p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-sky-200/60 dark:border-slate-800 shadow-sm">
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1.5 p-1 text-xs font-extrabold text-slate-600 flex-wrap">
-              <button
-                type="button"
+            <div className="flex items-center gap-1.5 p-1 flex-wrap">
+              <LiquidTab
+                label="All Courses"
+                count={courses.length}
+                isActive={filterTab === 'all'}
                 onClick={() => setFilterTab('all')}
-                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                  filterTab === 'all'
-                    ? 'bg-[#dbeafe] text-[#026fc3] font-black border border-sky-200 shadow-2xs'
-                    : 'hover:text-slate-900'
-                }`}
-              >
-                All Courses ({courses.length})
-              </button>
+              />
 
-              <button
-                type="button"
+              <LiquidTab
+                label="Published"
+                count={totalPublished}
+                isActive={filterTab === 'published'}
                 onClick={() => setFilterTab('published')}
-                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                  filterTab === 'published'
-                    ? 'bg-[#dbeafe] text-[#026fc3] font-black border border-sky-200 shadow-2xs'
-                    : 'hover:text-slate-900'
-                }`}
-              >
-                Published ({totalPublished})
-              </button>
+              />
 
-              <button
-                type="button"
+              <LiquidTab
+                label="Drafts"
+                count={courses.length - totalPublished}
+                isActive={filterTab === 'draft'}
                 onClick={() => setFilterTab('draft')}
-                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                  filterTab === 'draft'
-                    ? 'bg-[#dbeafe] text-[#026fc3] font-black border border-sky-200 shadow-2xs'
-                    : 'hover:text-slate-900'
-                }`}
-              >
-                Drafts ({courses.length - totalPublished})
-              </button>
+              />
             </div>
 
             {/* Search Input */}

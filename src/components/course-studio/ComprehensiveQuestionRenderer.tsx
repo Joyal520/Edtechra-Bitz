@@ -11,7 +11,6 @@ import {
   XCircle,
   Sparkles,
   Check,
-  X,
   BookOpen,
   AlertCircle
 } from 'lucide-react';
@@ -30,6 +29,7 @@ import {
   evaluateQuestionAnswer,
   cleanTextForComparison
 } from '@/utils/questionGrading';
+import { LiquidButton, LiquidChip, LiquidOption } from '@/components/course-studio/liquid';
 
 interface SentenceToken {
   id: string;
@@ -385,31 +385,23 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       </h4>
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 1: MULTIPLE CHOICE (ROBUST SINGLE-SOURCE-OF-TRUTH GRADING)     */}
+      {/* TYPE 1: MULTIPLE CHOICE (4-OPTION SINGLE SELECT)                    */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'multiple_choice' && (
-        <div className="space-y-2 pt-1">
+        <div className="space-y-2.5 pt-1">
           {normalizedOptions.map((opt, oIdx) => {
             const isSelected = isOptionMatchingStudentAnswer(opt, response?.answer);
             const isThisTheCorrectAnswer = resolvedCorrect ? resolvedCorrect.id === opt.id : false;
 
-            let btnStyle = 'surface-answer-option text-theme-primary hover:border-[var(--theme-accent)]';
-            if (isAnswered) {
-              if (isSelected) {
-                btnStyle = isCorrect
-                  ? 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-400'
-                  : 'bg-rose-600 text-white font-bold ring-2 ring-rose-400';
-              } else if (!isCorrect && isThisTheCorrectAnswer) {
-                btnStyle = 'border-2 border-emerald-500 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 font-bold';
-              } else {
-                btnStyle = 'opacity-40 bg-[var(--theme-surface-subtle)] text-theme-muted';
-              }
-            }
-
             return (
-              <button
+              <LiquidOption
                 key={opt.id || oIdx}
-                type="button"
+                badge={opt.id}
+                text={opt.text}
+                isSelected={isSelected}
+                isAnswered={isAnswered}
+                isCorrect={isCorrect}
+                isCorrectOption={isThisTheCorrectAnswer}
                 disabled={isAnswered}
                 onClick={() => {
                   const evalResult = evaluateQuestionAnswer(question, opt.id);
@@ -421,13 +413,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                     evalResult.languageFeedback
                   );
                 }}
-                className={`w-full p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all box-border cursor-pointer disabled:cursor-not-allowed ${btnStyle}`}
-              >
-                <span className="w-7 h-7 rounded-lg bg-black/10 dark:bg-white/10 flex items-center justify-center text-xs font-black shrink-0">
-                  {isSelected ? (isCorrect ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />) : opt.id}
-                </span>
-                <span className="flex-1 font-medium">{opt.text}</span>
-              </button>
+              />
             );
           })}
         </div>
@@ -441,7 +427,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           <p className="text-xs text-theme-secondary font-medium italic">
             Select all correct options that apply:
           </p>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {optionsList.map((opt, oIdx) => {
               const isChecked = selectedMulti.includes(opt);
               return (
@@ -454,28 +440,25 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]
                     );
                   }}
-                  className={`w-full p-3 rounded-xl border text-left flex items-center gap-3 cursor-pointer transition-all ${
-                    isChecked
-                      ? 'border-[#026fc3] bg-sky-50 dark:bg-sky-950/30 text-theme-primary'
-                      : 'surface-answer-option text-theme-primary'
-                  }`}
+                  className={`liquid-option ${isChecked ? 'is-selected' : ''}`}
                 >
                   <div
-                    className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                      isChecked ? 'bg-[#026fc3] border-[#026fc3] text-white' : 'border-stone-400'
+                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${
+                      isChecked ? 'bg-[#026fc3] border-[#026fc3] text-white shadow-xs' : 'border-slate-300 bg-white'
                     }`}
                   >
-                    {isChecked && <Check className="w-3.5 h-3.5" />}
+                    {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                   </div>
-                  <span className="flex-1 text-sm font-medium">{opt}</span>
+                  <span className="flex-1 text-sm font-semibold">{opt}</span>
                 </button>
               );
             })}
           </div>
 
           {!isAnswered && (
-            <button
-              type="button"
+            <LiquidButton
+              variant="primary"
+              size="md"
               disabled={selectedMulti.length === 0}
               onClick={() => {
                 const correctList = (question.correct_answer || '')
@@ -494,10 +477,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                     : `Correct options: ${question.correct_answer}. ${question.explanation || ''}`
                 );
               }}
-              className="px-5 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs font-black shadow-xs cursor-pointer disabled:opacity-40"
             >
               Submit Choices
-            </button>
+            </LiquidButton>
           )}
         </div>
       )}
@@ -511,21 +493,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             const isSelected = response?.answer === val;
             const isCorrectOption = val.toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
 
-            let btnStyle = 'surface-answer-option text-theme-primary hover:border-[var(--theme-accent)]';
-            if (isAnswered) {
-              if (isSelected) {
-                btnStyle = isCorrect ? 'bg-emerald-600 text-white font-bold' : 'bg-rose-600 text-white font-bold';
-              } else if (!isCorrect && isCorrectOption) {
-                btnStyle = 'border-2 border-emerald-500 bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 font-bold';
-              } else {
-                btnStyle = 'opacity-40 bg-[var(--theme-surface-subtle)] text-theme-muted';
-              }
-            }
-
             return (
-              <button
+              <LiquidOption
                 key={val}
-                type="button"
+                badge={val === 'True' || val === 'Yes' ? '✓' : '✕'}
+                text={val}
+                isSelected={isSelected}
+                isAnswered={isAnswered}
+                isCorrect={isCorrect}
+                isCorrectOption={isCorrectOption}
                 disabled={isAnswered}
                 onClick={() =>
                   commitAnswer(
@@ -536,10 +512,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
                   )
                 }
-                className={`py-3.5 px-4 rounded-xl border text-center font-bold text-sm transition-all cursor-pointer disabled:cursor-not-allowed ${btnStyle}`}
-              >
-                {val}
-              </button>
+              />
             );
           })}
         </div>
@@ -550,18 +523,19 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* ------------------------------------------------------------------- */}
       {qType === 'fill_blank' && (
         <div className="space-y-3 pt-1">
-          <div className="flex gap-2">
+          <div className="flex gap-2.5">
             <input
               type="text"
               disabled={isAnswered}
               value={fillInput}
               onChange={e => setFillInput(e.target.value)}
               placeholder="Type your answer here..."
-              className="flex-1 p-3 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-theme-primary text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#026fc3]"
+              className="flex-1 p-3.5 liquid-input text-sm font-bold placeholder:text-slate-400 placeholder:font-normal"
             />
             {!isAnswered && (
-              <button
-                type="button"
+              <LiquidButton
+                variant="primary"
+                size="md"
                 disabled={!fillInput.trim()}
                 onClick={() => {
                   const isMatch =
@@ -574,10 +548,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       : `Expected: "${question.correct_answer}". ${question.explanation || ''}`
                   );
                 }}
-                className="px-5 py-3 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs font-black shadow-xs cursor-pointer disabled:opacity-40"
               >
                 Check
-              </button>
+              </LiquidButton>
             )}
           </div>
         </div>
@@ -593,23 +566,29 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           </p>
 
           {/* Constructed Sentence Box (Answer Area) */}
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider block">
-              Your Ordered Sentence:
-            </span>
-            <div
-              className="min-h-[64px] p-3 sm:p-4 rounded-2xl border-2 border-dashed border-[#026fc3]/60 bg-[var(--theme-surface-subtle)] flex flex-wrap items-center transition-all duration-200"
-              style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minHeight: '64px' }}
-            >
+          {/* Constructed Sentence Box (Answer Area - Liquid Glass Workspace) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-sky-800 dark:text-sky-300 uppercase tracking-wider block">
+                Your Ordered Sentence:
+              </span>
+              {selectedTokens.length > 0 && !isAnswered && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  Tap any word to remove it
+                </span>
+              )}
+            </div>
+            <div className="liquid-answer-workspace" style={{ minHeight: '68px' }}>
               {selectedTokens.length === 0 ? (
-                <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1">
+                <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1.5 px-2">
                   Click the chips below in order to assemble the sentence...
                 </span>
               ) : (
                 selectedTokens.map((token) => (
-                  <button
+                  <LiquidChip
                     key={token.id}
-                    type="button"
+                    text={token.text}
+                    isPlaced
                     disabled={isAnswered}
                     onClick={() => {
                       if (isAnswered) return;
@@ -617,41 +596,28 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
                       setSentenceTokens(prev => [...prev, token]);
                     }}
-                    className="min-h-[40px] px-4 py-2 rounded-xl bg-[#026fc3] hover:bg-rose-600 text-white font-bold text-sm sm:text-base shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer inline-flex items-center justify-center gap-2 w-auto select-none group"
-                    style={{ minHeight: '40px', width: 'auto' }}
-                    title={isAnswered ? undefined : "Click to remove"}
-                  >
-                    <span>{token.text}</span>
-                    {!isAnswered && (
-                      <span className="w-4 h-4 rounded-full bg-white/20 group-hover:bg-white/40 flex items-center justify-center text-[10px] leading-none transition-colors">
-                        ✕
-                      </span>
-                    )}
-                  </button>
+                  />
                 ))
               )}
             </div>
           </div>
 
-          {/* Available Word Chips Area */}
-          <div className="space-y-1.5 pt-1">
-            <span className="text-[11px] font-bold text-theme-muted uppercase tracking-wider block">
+          {/* Available Word Chips Area (Liquid Tray) */}
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
               Available Words & Phrases:
             </span>
-            <div
-              className="flex flex-wrap items-center p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] min-h-[64px]"
-              style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}
-            >
+            <div className="liquid-tray-workspace" style={{ minHeight: '68px' }}>
               {sentenceTokens.length === 0 ? (
-                <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1">
+                <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1 px-1">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>All words placed! Click "Submit Sentence" below.</span>
                 </div>
               ) : (
                 sentenceTokens.map((token) => (
-                  <button
+                  <LiquidChip
                     key={token.id}
-                    type="button"
+                    text={token.text}
                     disabled={isAnswered}
                     onClick={() => {
                       if (isAnswered) return;
@@ -659,11 +625,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       setSelectedTokens(prev => [...prev, token]);
                       setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
                     }}
-                    className="min-h-[40px] px-4 py-2 rounded-xl border-2 border-sky-300 dark:border-sky-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-sky-100 font-bold text-sm sm:text-base shadow-xs hover:border-[#026fc3] hover:bg-sky-50 dark:hover:bg-slate-700 active:scale-95 transition-all cursor-pointer inline-flex items-center justify-center text-center w-auto select-none"
-                    style={{ minHeight: '40px', width: 'auto' }}
-                  >
-                    {token.text}
-                  </button>
+                  />
                 ))
               )}
             </div>
@@ -683,8 +645,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
               <div className="flex items-center gap-2">
                 {selectedTokens.length > 0 && (
-                  <button
-                    type="button"
+                  <LiquidButton
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       courseAudio.playClick();
                       const all = [...selectedTokens, ...sentenceTokens];
@@ -692,14 +655,14 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       setSentenceTokens(shuffled);
                       setSelectedTokens([]);
                     }}
-                    className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                   >
                     Reset
-                  </button>
+                  </LiquidButton>
                 )}
 
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="primary"
+                  size="md"
                   disabled={selectedTokens.length === 0}
                   onClick={() => {
                     const studentOrderList = selectedTokens.map(t => t.text.trim());
@@ -728,10 +691,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
                     commitAnswer(builtSentence, isMatch, feedbackText);
                   }}
-                  className="px-5 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] text-white text-xs sm:text-sm font-black shadow-xs cursor-pointer disabled:opacity-40 transition-all"
                 >
                   Submit Sentence
-                </button>
+                </LiquidButton>
               </div>
             </div>
           )}
@@ -746,27 +708,20 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           <p className="text-xs text-theme-secondary font-medium">
             Identify the item that does not belong:
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {optionsList.map((opt, oIdx) => {
               const isSelected = response?.answer === opt;
               const isCorrectAnswer =
                 opt.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
 
-              let btnStyle = 'surface-answer-option text-theme-primary hover:border-amber-400';
-              if (isAnswered) {
-                if (isSelected) {
-                  btnStyle = isCorrect ? 'bg-emerald-600 text-white font-bold' : 'bg-rose-600 text-white font-bold';
-                } else if (!isCorrect && isCorrectAnswer) {
-                  btnStyle = 'border-2 border-emerald-500 bg-emerald-500/20 text-emerald-800 font-bold';
-                } else {
-                  btnStyle = 'opacity-40 text-theme-muted';
-                }
-              }
-
               return (
-                <button
+                <LiquidOption
                   key={oIdx}
-                  type="button"
+                  text={opt}
+                  isSelected={isSelected}
+                  isAnswered={isAnswered}
+                  isCorrect={isCorrect}
+                  isCorrectOption={isCorrectAnswer}
                   disabled={isAnswered}
                   onClick={() =>
                     commitAnswer(
@@ -777,10 +732,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                         : `The odd one out is: ${question.correct_answer}. ${question.explanation || ''}`
                     )
                   }
-                  className={`p-3 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed ${btnStyle}`}
-                >
-                  {opt}
-                </button>
+                />
               );
             })}
           </div>
@@ -803,14 +755,14 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <textarea
               rows={2}
               disabled={isAnswered || isEvaluatingAi}
               value={fillInput}
               onChange={e => setFillInput(e.target.value)}
               placeholder="Type your complete answer here..."
-              className="w-full p-3 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-theme-primary text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#026fc3] leading-relaxed"
+              className="w-full p-3.5 liquid-textarea text-sm font-medium leading-relaxed placeholder:text-slate-400"
             />
 
             {aiError && (
@@ -822,15 +774,16 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
             {!isAnswered && (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
+                <LiquidButton
+                  variant="primary"
+                  size="md"
                   disabled={!fillInput.trim() || isEvaluatingAi}
+                  loading={isEvaluatingAi}
                   onClick={handleEvaluateWhQuestion}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-40 transition-all"
+                  icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>{isEvaluatingAi ? 'Evaluating Answer...' : 'Submit Answer'}</span>
-                </button>
+                  {isEvaluatingAi ? 'Evaluating Answer...' : 'Submit Answer'}
+                </LiquidButton>
               </div>
             )}
           </div>
@@ -848,7 +801,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             value={openEndedText}
             onChange={e => setOpenEndedText(e.target.value)}
             placeholder="Write your explanation or response here..."
-            className="w-full p-3 rounded-xl border border-[var(--theme-border-primary)] bg-[var(--theme-surface-input)] text-theme-primary text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#026fc3] leading-relaxed"
+            className="w-full p-3.5 liquid-textarea text-sm font-sans leading-relaxed placeholder:text-slate-400"
           />
 
           {aiError && (
@@ -859,15 +812,16 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           )}
 
           {!isAnswered && (
-            <button
-              type="button"
+            <LiquidButton
+              variant="primary"
+              size="md"
               disabled={!openEndedText.trim() || isEvaluatingAi}
+              loading={isEvaluatingAi}
               onClick={handleEvaluateOpenEnded}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-xs font-black shadow-md cursor-pointer disabled:opacity-40"
+              icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>{isEvaluatingAi ? 'AI Evaluating response...' : 'Submit for AI Evaluation'}</span>
-            </button>
+              {isEvaluatingAi ? 'AI Evaluating response...' : 'Submit for AI Evaluation'}
+            </LiquidButton>
           )}
         </div>
       )}
