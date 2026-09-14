@@ -87,7 +87,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
             {/* Form */}
             <form onSubmit={handlePost} className="space-y-4 relative z-10">
               <div className="space-y-2">
-                <div className="relative rounded-2xl border-2 border-slate-300 bg-white focus-within:border-sky-500 focus-within:ring-4 focus-within:ring-sky-100 transition-all shadow-xs overflow-hidden">
+                <div className="relative rounded-2xl border-2 border-sky-200/90 bg-white focus-within:border-sky-500 focus-within:ring-4 focus-within:ring-sky-100 transition-all shadow-xs overflow-hidden">
                   <textarea
                     rows={5}
                     value={newMessage}
@@ -96,13 +96,16 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
                     style={{
                       color: '#0f172a',
                       backgroundColor: '#ffffff',
-                      caretColor: '#026fc3'
+                      caretColor: '#026fc3',
+                      padding: '20px',
+                      lineHeight: '1.6',
+                      boxSizing: 'border-box'
                     }}
-                    className="classroom-announcement-textarea w-full px-4.5 py-4 bg-white border-0 text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-hidden resize-none min-h-[135px] leading-relaxed selection:bg-sky-200 selection:text-slate-900"
+                    className="classroom-announcement-textarea w-full p-5 sm:p-6 bg-white border-0 text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-hidden resize-none min-h-[140px] leading-relaxed selection:bg-sky-200 selection:text-slate-900 block"
                   />
                   
                   {/* Textarea bottom toolbar */}
-                  <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 bg-slate-50/90 text-xs text-slate-600 font-semibold">
+                  <div className="flex items-center justify-between px-5 py-2.5 border-t border-slate-200/80 bg-slate-50/90 text-xs text-slate-600 font-semibold">
                     <span className="text-[11px] text-slate-500">Press Shift + Enter for new line</span>
                     <span className={`font-black ${newMessage.length > 500 ? 'text-amber-700' : 'text-slate-600'}`}>
                       {newMessage.length} characters
@@ -174,14 +177,16 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
           {/* Messages Feed */}
           {messages.length === 0 ? (
-            <div className="text-center py-12 px-4 space-y-3 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-              <div className="w-14 h-14 rounded-2xl bg-sky-100 text-[#026fc3] border border-sky-200 mx-auto flex items-center justify-center shadow-xs">
-                <Megaphone className="w-7 h-7" />
+            <div className="text-center py-14 sm:py-16 px-6 space-y-4 bg-gradient-to-b from-sky-50/40 via-white to-sky-50/20 rounded-2xl sm:rounded-3xl border-2 border-dashed border-sky-200/80 shadow-2xs">
+              <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-100 via-sky-50 to-cyan-100 text-[#026fc3] border border-sky-200/90 mx-auto flex items-center justify-center shadow-sm shadow-sky-500/10">
+                <Megaphone className="w-8 h-8 stroke-[2.2]" />
               </div>
-              <div className="space-y-1">
-                <p className="text-sm font-black text-slate-800">No announcements yet</p>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
-                  Important homework notes, reminders, and class news from your teacher will be posted right here.
+              <div className="space-y-1.5 max-w-sm mx-auto">
+                <h4 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  No announcements yet
+                </h4>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed">
+                  Important homework notes, reminders and class news will appear here.
                 </p>
               </div>
             </div>

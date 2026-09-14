@@ -69,17 +69,17 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
   };
 
   return (
-    <div className="relative bg-gradient-to-br from-[#0a192f] via-[#0d223f] to-[#071322] text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 lg:p-7 shadow-[0_12px_36px_-6px_rgba(2,111,195,0.25)] overflow-hidden border border-sky-500/25 transition-all">
+    <div className="relative bg-gradient-to-r from-white/95 via-sky-50/80 to-indigo-50/70 backdrop-blur-xl text-slate-900 rounded-3xl sm:rounded-[32px] p-6 sm:p-7 lg:p-8 shadow-[0_12px_36px_-6px_rgba(2,111,195,0.12),0_2px_8px_rgba(15,23,42,0.04)] overflow-hidden border border-sky-200/80 transition-all">
       {/* Subtle Organic Background Glow Waves */}
-      <div className="absolute -top-20 -left-20 w-64 h-64 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 -right-16 w-64 h-64 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-16 left-1/3 w-60 h-60 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-20 -left-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 -right-16 w-64 h-64 bg-sky-400/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-16 left-1/3 w-60 h-60 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top back & tag navigation */}
       <div className="flex items-center justify-between gap-3 mb-3.5 sm:mb-4 relative z-10 flex-wrap">
         <Link
           to="/classes"
-          className="group inline-flex items-center gap-2 text-xs font-bold text-sky-200 hover:text-white bg-white/10 hover:bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-full transition-all duration-200 border border-sky-400/20 shadow-xs active:scale-95 cursor-pointer"
+          className="group inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/80 hover:bg-white backdrop-blur-md px-3.5 py-1.5 rounded-full transition-all duration-200 border border-slate-200/90 shadow-2xs active:scale-95 cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
           <span>All Classes</span>
@@ -89,15 +89,15 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
           {onOpenAIFeedback && (
             <button
               onClick={onOpenAIFeedback}
-              className="inline-flex items-center gap-1.5 text-xs font-black text-purple-200 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 px-3 py-1 rounded-full transition-all shadow-xs active:scale-95 cursor-pointer backdrop-blur-md"
+              className="inline-flex items-center gap-1.5 text-xs font-black text-purple-700 bg-purple-100 hover:bg-purple-200 border border-purple-200 px-3 py-1 rounded-full transition-all shadow-2xs active:scale-95 cursor-pointer backdrop-blur-md"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
               <span>Teaching Intelligence</span>
             </button>
           )}
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/30 text-sky-300 text-[10px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
-            <Sparkles className="w-3 h-3 text-cyan-400" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100/90 border border-sky-200/90 text-[#026fc3] text-[10px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
+            <Sparkles className="w-3 h-3 text-[#026fc3]" />
             <span>CLASSROOM</span>
           </div>
         </div>
@@ -117,14 +117,14 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
                 const lastWord = words.pop();
                 const firstPart = words.join(' ');
                 return (
-                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-white drop-shadow-xs">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-slate-900 drop-shadow-xs">
                     <span>{firstPart} </span>
-                    <span className="text-cyan-400">{lastWord}</span>
+                    <span className="text-[#026fc3]">{lastWord}</span>
                   </h1>
                 );
               }
               return (
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-white drop-shadow-xs">
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-slate-900 drop-shadow-xs">
                   {classroom.title}
                 </h1>
               );
@@ -132,19 +132,19 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
 
             {/* Metadata Pills */}
             <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold text-sky-100 border border-white/10 shadow-xs">
-                <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
+                <BookOpen className="w-3.5 h-3.5 text-[#026fc3]" />
                 <span>{classroom.subject || 'General'}</span>
               </span>
 
               {classroom.grade && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold text-sky-100 border border-white/10 shadow-xs">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
                   <span>{classroom.grade}</span>
                 </span>
               )}
 
               {classroom.user_role === 'teacher' && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/25 backdrop-blur-md text-xs font-bold text-purple-200 border border-purple-400/30 shadow-xs">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-50 backdrop-blur-md text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
                   <span>Teacher Workspace</span>
                 </span>
               )}
@@ -152,7 +152,7 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
           </div>
 
           {/* Tagline */}
-          <blockquote className="text-xs sm:text-sm text-sky-200/80 font-medium italic border-l-2 border-cyan-400/60 pl-3 py-0.5 max-w-xl">
+          <blockquote className="text-xs sm:text-sm text-slate-600 font-medium italic border-l-2 border-sky-400 pl-3 py-0.5 max-w-xl">
             &ldquo;Empower your classroom, inspire your students.&rdquo;
           </blockquote>
 
@@ -174,10 +174,10 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setOptionsMenuOpen(prev => !prev)}
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border transition-all duration-200 shadow-xs cursor-pointer active:scale-95 shrink-0 ${
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
                   optionsMenuOpen
-                    ? 'bg-cyan-500/30 border-cyan-400 text-cyan-300'
-                    : 'bg-white/10 hover:bg-white/20 border-white/15 text-sky-200 hover:text-white'
+                    ? 'bg-sky-100 border-sky-300 text-[#026fc3]'
+                    : 'bg-white/90 hover:bg-white border-slate-200/90 text-slate-600 hover:text-slate-900'
                 }`}
                 title="Classroom Options"
                 aria-label="Classroom Options"
@@ -273,12 +273,12 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
 
         {/* Right Compact 3D Illustration (4 cols) */}
         <div className="lg:col-span-4 flex justify-center lg:justify-end relative">
-          <div className="relative w-full max-w-[140px] sm:max-w-[170px] lg:max-w-[200px] aspect-square flex items-center justify-center">
-            <div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl pointer-events-none transform scale-90" />
+          <div className="relative w-full max-w-[170px] sm:max-w-[210px] lg:max-w-[250px] aspect-square flex items-center justify-center p-2 rounded-3xl sm:rounded-[32px] bg-gradient-to-tr from-sky-100/90 via-white to-cyan-100/70 shadow-[0_12px_32px_-6px_rgba(2,111,195,0.18)] border border-sky-200/80 group">
+            <div className="absolute inset-0 bg-cyan-400/20 rounded-3xl sm:rounded-[32px] blur-xl pointer-events-none transform scale-95" />
             <img
               src="/images/classroom/classroom-hero-student.jpg"
               alt="Classroom Illustration"
-              className="w-full h-full object-contain rounded-2xl relative z-10 transition-transform duration-300 hover:scale-105 select-none pointer-events-none drop-shadow-md"
+              className="w-full h-full object-cover rounded-2xl sm:rounded-[26px] relative z-10 transition-transform duration-300 group-hover:scale-105 select-none pointer-events-none shadow-2xs"
             />
           </div>
         </div>

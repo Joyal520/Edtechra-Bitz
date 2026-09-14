@@ -912,33 +912,62 @@ export async function getClassroomTeachingIntelligence({
   const metricsSummary = await computeClassroomMetrics(serverSupabase, classroomId);
 
   // 2. Level 3: Check DB Cache if not forcing refresh
-  if (!forceRefresh && serverSupabase) {
-    try {
-      const { data: cached } = await serverSupabase
-        .from('ai_classroom_insights')
-        .select('*')
-        .eq('classroom_id', classroomId)
-        .eq('data_hash', metricsSummary.data_hash)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  if (!forceRefresh) {
+    if (serverSupabase) {
+      try {
+        // First check for exact data_hash match
+        let { data: cached } = await serverSupabase
+          .from('ai_classroom_insights')
+          .select('*')
+          .eq('classroom_id', classroomId)
+          .eq('data_hash', metricsSummary.data_hash)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (cached && cached.intelligence_json) {
-        return {
-          success: true,
-          cached: true,
-          metrics: metricsSummary,
-          intelligence: cached.intelligence_json,
-          ai_provider: cached.ai_provider || 'cached',
-          updated_at: cached.updated_at
-        };
+        // If no exact match, fallback to the latest saved analysis for this classroom
+        if (!cached || !cached.intelligence_json) {
+          const { data: latestSaved } = await serverSupabase
+            .from('ai_classroom_insights')
+            .select('*')
+            .eq('classroom_id', classroomId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (latestSaved && latestSaved.intelligence_json) {
+            cached = latestSaved;
+          }
+        }
+
+        if (cached && cached.intelligence_json) {
+          return {
+            success: true,
+            cached: true,
+            has_analysis: true,
+            metrics: metricsSummary,
+            intelligence: cached.intelligence_json,
+            ai_provider: cached.ai_provider || 'cached',
+            updated_at: cached.updated_at
+          };
+        }
+      } catch (cacheErr) {
+        console.warn('[TeachingIntelligence] Cache check notice:', cacheErr.message);
       }
-    } catch (cacheErr) {
-      console.warn('[TeachingIntelligence] Cache check notice:', cacheErr.message);
     }
+
+    // Explicit requirement: Do NOT automatically generate AI analysis on load/mount.
+    // If no analysis exists yet, return clean state with metrics so teacher explicitly triggers generation.
+    return {
+      success: true,
+      cached: false,
+      has_analysis: false,
+      metrics: metricsSummary,
+      intelligence: null,
+      updated_at: new Date().toISOString()
+    };
   }
 
-  // 3. Level 2: Generate Fresh AI Intelligence via Gemini -> OpenAI fallback
+  // 3. Level 2: Generate Fresh AI Intelligence via Gemini -> OpenAI fallback (only on explicit teacher trigger)
   let intelligence;
   try {
     intelligence = await generateTeachingIntelligence({
@@ -976,6 +1005,7 @@ export async function getClassroomTeachingIntelligence({
   return {
     success: true,
     cached: false,
+    has_analysis: true,
     metrics: metricsSummary,
     intelligence,
     ai_provider: intelligence.ai_provider,

@@ -36,6 +36,7 @@ import {
   StructuredRecommendation,
   TeacherChatMessage
 } from '@/services/teachingIntelligenceService';
+import { StructuredAIReportRenderer, InlineMarkdown } from './StructuredAIReportRenderer';
 
 interface AITeachingIntelligenceModalProps {
   isOpen: boolean;
@@ -100,6 +101,25 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const [analysisError, setAnalysisError] = useState('');
   const [studentFilter, setStudentFilter] = useState('');
   const [studentStatusFilter, setStudentStatusFilter] = useState<'all' | 'pass' | 'fail'>('all');
+
+  // Prevent underlying classroom page from scrolling while full-screen modal is open, and handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen && classroom?.id) {
@@ -337,8 +357,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2 md:p-3 lg:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-50 rounded-2xl sm:rounded-3xl w-[98vw] max-w-[1720px] h-[96vh] shadow-2xl border border-slate-200/90 relative overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[9999] w-screen h-screen h-[100dvh] bg-slate-50 flex flex-col overflow-hidden animate-in fade-in duration-150">
+      <div className="w-full h-full flex flex-col bg-slate-50 overflow-hidden">
         
         {/* ================================================================= */}
         {/* TOP COMMAND CENTER HEADER (Harmonized with Classroom Hero)        */}
@@ -719,66 +739,119 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 )}
               </div>
 
-              {/* 2. HERO: WHAT SHOULD I TEACH NEXT? */}
-              <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm">
-                      ★
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black tracking-wide text-amber-300 uppercase">
-                        What Should I Teach Next?
-                      </h3>
-                      <p className="text-xs text-slate-300 font-medium">
-                        Evidence-based pedagogical priority for your next lesson
+              {/* CLEAN EMPTY STATE WHEN NO ANALYSIS GENERATED YET */}
+              {(!intel || data?.has_analysis === false) ? (
+                <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-slate-200/90 shadow-2xs text-center space-y-5 max-w-2xl mx-auto my-6">
+                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-cyan-500 via-sky-500 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-sky-500/25 ring-4 ring-sky-100">
+                    <Sparkles className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      AI Teaching Intelligence
+                    </h3>
+                    <p className="text-sm sm:text-base font-bold text-slate-700">
+                      No analysis generated yet.
+                    </p>
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed max-w-md mx-auto">
+                      Generate an evidence-based classroom analysis using student performance, assessments, assignments and learning activity.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => loadIntelligence(true)}
+                      disabled={refreshing}
+                      className="inline-flex items-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-2xl text-sm font-black shadow-lg shadow-sky-500/25 active:scale-95 transition-all cursor-pointer border border-white/20 disabled:opacity-50 select-none"
+                    >
+                      <Sparkles className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                      <span>{refreshing ? 'Generating AI Analysis...' : 'Generate AI Analysis'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Executive Summary / Class Insight */}
+                  {intel.summary && (
+                    <div className="bg-gradient-to-br from-sky-50/90 via-white to-sky-50/40 rounded-3xl p-5 sm:p-6 md:p-7 border-2 border-sky-200 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between gap-3 pb-3 border-b border-sky-100">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-white shadow-xs flex items-center justify-center shrink-0 border border-sky-200/80">
+                            <Sparkles className="w-4 h-4 text-[#026fc3]" />
+                          </div>
+                          <h4 className="text-base sm:text-lg font-black text-sky-950 tracking-tight">
+                            Class Executive Insight
+                          </h4>
+                        </div>
+                        <span className="px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-black uppercase tracking-wider bg-sky-100 text-sky-900 border border-sky-300 shadow-2xs">
+                          Class Insight
+                        </span>
+                      </div>
+                      <p className="text-base sm:text-[16px] md:text-[17px] text-slate-800 font-medium leading-[1.65] max-w-4xl">
+                        <InlineMarkdown text={intel.summary} />
                       </p>
                     </div>
-                  </div>
+                  )}
 
-                  <span className="px-3 py-1 bg-white/10 rounded-full text-[11px] font-extrabold text-indigo-200 border border-white/10">
-                    Highest Impact Action
-                  </span>
-                </div>
-
-                {intel?.teach_next && intel.teach_next.length > 0 ? (
-                  <div className="space-y-3 pt-1">
-                    {intel.teach_next.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 space-y-2 hover:bg-white/15 transition-all"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black text-[11px]">
-                              {idx + 1}
-                            </span>
-                            <span className="text-sm font-black text-white">{item.topic}</span>
-                          </div>
-                          <span className="text-xs font-black text-rose-300 bg-rose-950/60 px-2.5 py-0.5 rounded-full border border-rose-500/40">
-                            Avg Score: {item.current_performance}%
-                          </span>
+                  {/* 2. HERO: WHAT SHOULD I TEACH NEXT? */}
+                  <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-sm">
+                          ★
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
-                          <div className="bg-black/20 p-2.5 rounded-xl">
-                            <span className="text-[10px] font-black uppercase text-amber-200 block mb-0.5">Why:</span>
-                            <p className="text-slate-200 font-medium leading-relaxed">{item.why}</p>
-                          </div>
-                          <div className="bg-black/20 p-2.5 rounded-xl">
-                            <span className="text-[10px] font-black uppercase text-emerald-300 block mb-0.5">Recommended Action:</span>
-                            <p className="text-slate-100 font-semibold leading-relaxed">{item.recommended_action}</p>
-                          </div>
+                        <div>
+                          <h3 className="text-sm font-black tracking-wide text-amber-300 uppercase">
+                            What Should I Teach Next?
+                          </h3>
+                          <p className="text-xs text-slate-300 font-medium">
+                            Evidence-based pedagogical priority for your next lesson
+                          </p>
                         </div>
                       </div>
-                    ))}
+
+                      <span className="px-3 py-1 bg-white/10 rounded-full text-[11px] font-extrabold text-indigo-200 border border-white/10">
+                        Highest Impact Action
+                      </span>
+                    </div>
+
+                    {intel?.teach_next && intel.teach_next.length > 0 ? (
+                      <div className="space-y-3 pt-1">
+                        {intel.teach_next.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 space-y-2 hover:bg-white/15 transition-all"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-black text-[11px]">
+                                  {idx + 1}
+                                </span>
+                                <span className="text-sm font-black text-white">{item.topic}</span>
+                              </div>
+                              <span className="text-xs font-black text-rose-300 bg-rose-950/60 px-2.5 py-0.5 rounded-full border border-rose-500/40">
+                                Avg Score: {item.current_performance}%
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+                              <div className="bg-black/20 p-2.5 rounded-xl">
+                                <span className="text-[10px] font-black uppercase text-amber-200 block mb-0.5">Why:</span>
+                                <p className="text-slate-200 font-medium leading-relaxed"><InlineMarkdown text={item.why} /></p>
+                              </div>
+                              <div className="bg-black/20 p-2.5 rounded-xl">
+                                <span className="text-[10px] font-black uppercase text-emerald-300 block mb-0.5">Recommended Action:</span>
+                                <p className="text-slate-100 font-semibold leading-relaxed"><InlineMarkdown text={item.recommended_action} /></p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-white/5 rounded-2xl text-center text-xs text-slate-400">
+                        Not enough data yet. Complete more classroom assessments to generate targeted priorities.
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="p-4 bg-white/5 rounded-2xl text-center text-xs text-slate-400">
-                    Not enough data yet. Complete more classroom assessments to generate targeted priorities.
-                  </div>
-                )}
-              </div>
 
               {/* 3. STRENGTHS & AREAS TO IMPROVE GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -792,8 +865,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   <div className="space-y-2.5">
                     {(intel?.class_strengths || []).map((s, idx) => (
                       <div key={idx} className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/60 space-y-1">
-                        <span className="text-xs font-black text-emerald-950 block">{s.title}</span>
-                        <p className="text-[11px] text-emerald-800 font-medium leading-relaxed">{s.detail}</p>
+                        <span className="text-xs font-black text-emerald-950 block"><InlineMarkdown text={s.title} /></span>
+                        <p className="text-[11px] text-emerald-800 font-medium leading-relaxed"><InlineMarkdown text={s.detail} /></p>
                       </div>
                     ))}
                   </div>
@@ -808,8 +881,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   <div className="space-y-2.5">
                     {(intel?.areas_to_improve || []).map((a, idx) => (
                       <div key={idx} className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/60 space-y-1">
-                        <span className="text-xs font-black text-amber-950 block">{a.title}</span>
-                        <p className="text-[11px] text-amber-800 font-medium leading-relaxed">{a.detail}</p>
+                        <span className="text-xs font-black text-amber-950 block"><InlineMarkdown text={a.title} /></span>
+                        <p className="text-[11px] text-amber-800 font-medium leading-relaxed"><InlineMarkdown text={a.detail} /></p>
                       </div>
                     ))}
                   </div>
@@ -1049,18 +1122,18 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                           </div>
 
                           <div className="text-[11px] text-rose-700 font-bold bg-rose-50/70 px-2.5 py-1.5 rounded-xl border border-rose-200/60">
-                            <strong>Weakness:</strong> {st.main_weakness || st.issue}
+                            <strong>Weakness:</strong> <InlineMarkdown text={st.main_weakness || st.issue} />
                           </div>
 
                           {st.recent_evidence && (
                             <p className="text-[11px] text-slate-500 font-medium">
-                              <strong>Evidence:</strong> {st.recent_evidence}
+                              <strong>Evidence:</strong> <InlineMarkdown text={st.recent_evidence} />
                             </p>
                           )}
 
                           {(st.recommended_action || st.suggested_support) && (
                             <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80 font-medium leading-relaxed">
-                              <strong className="text-indigo-900">Recommended Action:</strong> {st.recommended_action || st.suggested_support}
+                              <strong className="text-indigo-900">Recommended Action:</strong> <InlineMarkdown text={st.recommended_action || st.suggested_support || ''} />
                             </div>
                           )}
                         </div>
@@ -1131,7 +1204,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                                 Observation
                               </span>
                               <p className="text-xs font-bold text-slate-900 leading-snug">
-                                {rec.observation}
+                                <InlineMarkdown text={rec.observation} />
                               </p>
                             </div>
 
@@ -1156,7 +1229,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                                 Pedagogical Analysis:
                               </span>
                               <p className="text-slate-700 font-medium leading-relaxed">
-                                {rec.analysis}
+                                <InlineMarkdown text={rec.analysis} />
                               </p>
                             </div>
 
@@ -1165,7 +1238,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                                 Concrete Recommendation:
                               </span>
                               <p className="text-indigo-950 font-semibold leading-relaxed">
-                                {rec.recommendation}
+                                <InlineMarkdown text={rec.recommendation} />
                               </p>
                             </div>
                           </div>
@@ -1175,6 +1248,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   </div>
                 )}
               </div>
+            </>
+          )}
 
             </div>
           ) : activeTab === 'students' ? (
@@ -1540,7 +1615,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                               What They Are Doing Well
                             </span>
                             <p className="text-slate-200 leading-relaxed">
-                              {studentDetail.ai_assessment?.doing_well || 'Demonstrating consistent engagement across completed coursework.'}
+                              <InlineMarkdown text={studentDetail.ai_assessment?.doing_well || 'Demonstrating consistent engagement across completed coursework.'} />
                             </p>
                           </div>
 
@@ -1549,7 +1624,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                               Where They Are Struggling
                             </span>
                             <p className="text-slate-200 leading-relaxed">
-                              {studentDetail.ai_assessment?.where_struggling || 'Requires reinforcement in core topic assessments.'}
+                              <InlineMarkdown text={studentDetail.ai_assessment?.where_struggling || 'Requires reinforcement in core topic assessments.'} />
                             </p>
                           </div>
 
@@ -1558,7 +1633,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                               Grounded Evidence
                             </span>
                             <p className="text-slate-200 leading-relaxed">
-                              {studentDetail.ai_assessment?.evidence || `Based on ${studentDetail.attempts} learning events in this classroom.`}
+                              <InlineMarkdown text={studentDetail.ai_assessment?.evidence || `Based on ${studentDetail.attempts} learning events in this classroom.`} />
                             </p>
                           </div>
 
@@ -1567,7 +1642,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                               Recommended Next Steps
                             </span>
                             <p className="text-slate-100 font-semibold leading-relaxed">
-                              {studentDetail.ai_assessment?.next_steps || 'Assign differentiated review set focusing on identified weak concepts.'}
+                              <InlineMarkdown text={studentDetail.ai_assessment?.next_steps || 'Assign differentiated review set focusing on identified weak concepts.'} />
                             </p>
                           </div>
                         </div>
@@ -1703,14 +1778,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               {/* Chat Message Thread */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#f8fafc]">
                 {chatMessages.length === 0 ? (
-                  <div className="py-24 text-center space-y-3 max-w-md mx-auto">
-                    <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-sky-500 to-cyan-500 text-white flex items-center justify-center mx-auto shadow-md shadow-sky-500/20 ring-4 ring-sky-100">
-                      <MessageSquare className="w-7 h-7" />
+                  <div className="py-20 sm:py-24 text-center space-y-4 max-w-lg mx-auto">
+                    <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-500 to-cyan-500 text-white flex items-center justify-center mx-auto shadow-md shadow-sky-500/25 ring-4 ring-sky-100">
+                      <MessageSquare className="w-8 h-8" />
                     </div>
-                    <div className="space-y-1.5">
-                      <h4 className="text-base font-black text-slate-900">What would you like to know about your class?</h4>
-                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
-                        Ask questions about student learning progress, exam results, or teaching suggestions. The AI answers strictly from this classroom&apos;s real data.
+                    <div className="space-y-2">
+                      <h4 className="text-xl sm:text-2xl font-black text-slate-900">
+                        AI Teacher Assistant
+                      </h4>
+                      <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-medium">
+                        Ask about your students, topics, assessments, or lesson strategies.
                       </p>
                     </div>
                   </div>
@@ -1728,15 +1805,19 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                           </div>
                         )}
                         <div
-                          className={`max-w-xl sm:max-w-2xl p-4 sm:p-5 rounded-2xl text-xs sm:text-sm space-y-1.5 shadow-xs ${
+                          className={`max-w-xl sm:max-w-2xl p-4 sm:p-5 rounded-3xl text-sm space-y-2 shadow-xs ${
                             isTeacher
                               ? 'bg-gradient-to-r from-[#026fc3] to-[#0284c7] text-white rounded-br-xs border border-sky-400/30'
                               : 'bg-white border-2 border-sky-100 text-slate-900 rounded-bl-xs'
                           }`}
                         >
-                          <div className={`whitespace-pre-wrap leading-relaxed ${isTeacher ? 'font-semibold text-white' : 'font-medium text-slate-900'}`}>
-                            {msg.content}
-                          </div>
+                          {isTeacher ? (
+                            <div className="whitespace-pre-wrap leading-relaxed font-semibold text-white">
+                              {msg.content}
+                            </div>
+                          ) : (
+                            <StructuredAIReportRenderer content={msg.content} />
+                          )}
                           <span className={`text-[10px] block font-bold ${isTeacher ? 'text-sky-100 text-right' : 'text-slate-500'}`}>
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                           </span>
@@ -2316,7 +2397,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
                             {/* Executive Summary */}
                             <div className="p-4 bg-white/10 rounded-2xl border border-white/15 text-xs text-slate-100 leading-relaxed font-medium">
-                              {examAnalysis.ai_analysis.class_performance_summary}
+                              <InlineMarkdown text={examAnalysis.ai_analysis.class_performance_summary} />
                             </div>
 
                             {/* Strong vs Weak Topics Grid */}
@@ -2519,7 +2600,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
                       <strong className="block text-slate-900 font-bold mb-1">1. Executive Summary:</strong>
                       <p className="text-slate-700 leading-relaxed font-medium">
-                        {reportResult.report.sections?.executive_summary}
+                        <InlineMarkdown text={reportResult.report.sections?.executive_summary} />
                       </p>
                     </div>
 
@@ -2554,14 +2635,14 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                       <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200/60">
                         <strong className="block text-emerald-950 font-bold mb-1">Positive Feedback:</strong>
                         <p className="text-emerald-900 leading-relaxed font-medium">
-                          {reportResult.report.sections?.positive_feedback}
+                          <InlineMarkdown text={reportResult.report.sections?.positive_feedback} />
                         </p>
                       </div>
 
                       <div className="p-4 bg-rose-50/60 rounded-2xl border border-rose-200/60">
                         <strong className="block text-rose-950 font-bold mb-1">Critical Feedback (Honest Assessment):</strong>
                         <p className="text-rose-900 leading-relaxed font-medium">
-                          {reportResult.report.sections?.critical_feedback}
+                          <InlineMarkdown text={reportResult.report.sections?.critical_feedback} />
                         </p>
                       </div>
                     </div>
@@ -2572,7 +2653,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                         {(reportResult.report.sections?.next_month_strategy || []).map((st: string, idx: number) => (
                           <div key={idx} className="flex items-start gap-2 text-slate-800">
                             <span className="font-bold text-indigo-600">{idx + 1}.</span>
-                            <span>{st}</span>
+                            <span><InlineMarkdown text={st} /></span>
                           </div>
                         ))}
                       </div>

@@ -206,8 +206,9 @@ export interface ClassroomMetricsSummary {
 export interface TeachingIntelligenceResponse {
   success: boolean;
   cached?: boolean;
+  has_analysis?: boolean;
   metrics: ClassroomMetricsSummary;
-  intelligence: TeachingIntelligenceData;
+  intelligence: TeachingIntelligenceData | null;
   ai_provider?: string;
   updated_at: string;
   error?: string;
