@@ -308,18 +308,49 @@ export function validateExamAgainstBlueprint(examData, blueprint = {}) {
   const allQuestions = [];
   sections.forEach((sec, sIdx) => {
     const secQuestions = Array.isArray(sec.questions) ? sec.questions : [];
-    secQuestions.forEach((q, qIdx) => {
+    const secType = normalizeCanonicalQuestionType(sec.questionType || sec.type || sec.title);
+    const isReadingSec = secType === 'reading_comprehension' || (sec.passage && String(sec.passage).length > 20);
+
+    // If section has a reading passage and multiple flat questions without an explicit reading_comprehension type question,
+    // they represent the sub-questions of 1 Reading Comprehension activity
+    if (isReadingSec && secQuestions.length > 1 && !secQuestions.some(q => normalizeCanonicalQuestionType(q.type) === 'reading_comprehension')) {
+      const combinedMarks = secQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
       allQuestions.push({
-        ...q,
+        id: secQuestions[0]?.id || `sec_${sIdx + 1}_reading`,
+        type: 'reading_comprehension',
+        question: sec.passage || 'Reading Comprehension',
+        marks: Number(sec.marks || sec.totalMarks || combinedMarks || 20),
+        subQuestions: secQuestions,
         _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
-        _sectionType: sec.questionType || sec.type,
         _index: allQuestions.length + 1
       });
-    });
+    } else {
+      secQuestions.forEach((q) => {
+        allQuestions.push({
+          ...q,
+          _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
+          _sectionType: sec.questionType || sec.type,
+          _index: allQuestions.length + 1
+        });
+      });
+    }
 
     const secActivities = Array.isArray(sec.activities) ? sec.activities : [];
     secActivities.forEach((act) => {
-      if (Array.isArray(act.questions) && act.questions.length > 0) {
+      const actType = normalizeCanonicalQuestionType(act.activityType || act.type);
+      if (actType === 'reading_comprehension' || actType === 'cloze_passage' || !Array.isArray(act.questions) || act.questions.length === 0) {
+        // Activity counts as exactly 1 top-level question (sub-questions do NOT increment top-level question count)
+        const childMarks = Array.isArray(act.questions) ? act.questions.reduce((sum, q) => sum + (Number(q.marks) || 0), 0) : 0;
+        allQuestions.push({
+          id: act.id,
+          type: actType || 'reading_comprehension',
+          question: act.title || act.passage || 'Reading Comprehension',
+          marks: Number(act.marks) || (childMarks > 0 ? childMarks : 20),
+          _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
+          _isActivity: true,
+          _index: allQuestions.length + 1
+        });
+      } else {
         act.questions.forEach((q) => {
           allQuestions.push({
             ...q,
@@ -328,17 +359,6 @@ export function validateExamAgainstBlueprint(examData, blueprint = {}) {
             _activityId: act.id,
             _index: allQuestions.length + 1
           });
-        });
-      } else {
-        // Activity without subquestions counts as 1 activity item (e.g. reading or writing)
-        allQuestions.push({
-          id: act.id,
-          type: act.activityType || 'reading_comprehension',
-          question: act.title || act.passage || 'Activity',
-          marks: act.marks || 10,
-          _sectionId: sec.sectionId || sec.id || `sec_${sIdx + 1}`,
-          _isActivity: true,
-          _index: allQuestions.length + 1
         });
       }
     });

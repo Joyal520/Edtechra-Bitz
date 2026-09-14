@@ -239,12 +239,11 @@ export async function generateExam({ payload, openaiApiKey, serverOpenAI }) {
     "- Multiple Choice: exactly 4 distinct options, unambiguous correctAnswer mapping to an option.",
     "- True / False: factually sound statement, boolean or True/False correctAnswer, balanced distribution.",
     "- Fill in the Blank: question text with '[blank]', acceptedAnswers array with correct terms/synonyms.",
-    "- Short Answer: clear prompt, model answer/explanation for teacher grading.",
-    "- Reading Comprehension: substantive passage (150-300 words) placed at section-level 'passage' or within activity, followed by comprehension questions.",
+    "- Short Answer: clear prompt, model answer/explanation for teacher grading. Note: Error-correction tasks must be generated as short_answer questions within this section, NOT as a separate question type.",
+    "- Reading Comprehension: substantive passage (150-300 words) with nested subQuestions. The reading passage and its sub-questions count as EXACTLY 1 top-level question/activity (worth 20 marks total). Do NOT count sub-questions as separate top-level questions.",
     "- Matching: pairs array or distinct questionText (left) and correctAnswer (right).",
     "- Reorder / Sequencing: scrambled sentence or chronological items with correct order.",
-    "- Cloze Passage: passage text with '[blank_1]', '[blank_2]' and corresponding blanks array with answers.",
-    "- Error Correction: sentence with specific grammatical error and corrected replacement sentence."
+    "- Cloze Passage: passage text with '[blank_1]', '[blank_2]' and corresponding blanks array with answers."
   ].join("\n");
 
   const userPrompt = [
@@ -413,17 +412,25 @@ export function buildFallbackExam(payload, reason = "Offline mode") {
         questionText = `Identify and correct the grammatical error: "Each of the participants were enthusiastic about the competition."`;
         correctAnswer = "Each of the participants was enthusiastic about the competition.";
       } else if (isShortAns) {
-        questionText = `Explain the primary significance of ${payload.content ? payload.content.slice(0, 30) : 'this concept'} in 2-3 concise sentences.`;
-        correctAnswer = "Demonstrates accurate domain knowledge, clear syntax, and supporting rationale.";
+        if (qIdx % 3 === 0) {
+          questionText = `Identify and correct the grammatical error: "Each of the participants were enthusiastic about the competition."`;
+          correctAnswer = "Each of the participants was enthusiastic about the competition. ('Each' takes singular verb 'was'.)";
+        } else if (qIdx % 3 === 1) {
+          questionText = `Rewrite this sentence by correcting the misplaced modifier: "Walking into the room, the notes were found on the desk."`;
+          correctAnswer = "Walking into the room, the student found the notes on the desk.";
+        } else {
+          questionText = `Explain the primary significance of ${payload.content ? payload.content.slice(0, 30) : 'this concept'} in 2-3 concise sentences.`;
+          correctAnswer = "Demonstrates accurate domain knowledge, clear syntax, and supporting rationale.";
+        }
       } else if (isReading) {
-        questionText = `According to the passage, what is the primary benefit of systematic practice in authentic contexts?`;
+        questionText = `Read the passage carefully and answer the comprehension sub-questions below.`;
         options = [
           "Fluency and analytical proficiency improve significantly",
           "Passive memorization replaces conceptual learning",
           "Vocabulary growth is strictly restricted",
           "Written communication becomes unnecessary"
         ];
-        correctAnswer = "Fluency and analytical proficiency improve significantly";
+        correctAnswer = options[0];
       } else {
         // Standard MCQ
         questionText = `Select the most accurate statement regarding ${payload.content ? payload.content.slice(0, 30) : 'the curriculum'}:`;
@@ -446,6 +453,64 @@ export function buildFallbackExam(payload, reason = "Offline mode") {
         pairs,
         items,
         blanks,
+        subQuestions: isReading ? [
+          {
+            id: `${id}_sub1`,
+            type: "multiple_choice",
+            question: "According to the passage, what is the primary benefit of systematic practice?",
+            options: [
+              "Fluency and analytical proficiency improve significantly",
+              "Passive memorization replaces conceptual learning",
+              "Vocabulary growth is strictly restricted",
+              "Written communication becomes unnecessary"
+            ],
+            correctAnswer: "Fluency and analytical proficiency improve significantly",
+            marks: 5,
+            explanation: "Directly stated in paragraph 1."
+          },
+          {
+            id: `${id}_sub2`,
+            type: "multiple_choice",
+            question: "Why are multiple question formats important in educational assessments?",
+            options: [
+              "They help identify specific learning gaps and reinforce foundational mastery",
+              "They confuse students with arbitrary rules",
+              "They eliminate the need for authentic context",
+              "They make assessments entirely subjective"
+            ],
+            correctAnswer: "They help identify specific learning gaps and reinforce foundational mastery",
+            marks: 5,
+            explanation: "Directly referenced in paragraph 2."
+          },
+          {
+            id: `${id}_sub3`,
+            type: "multiple_choice",
+            question: "In the context of the passage, the phrase 'lexical precision' means:",
+            options: [
+              "Careful and accurate word choice",
+              "Random vocabulary memorization",
+              "Omitting adjectives from sentences",
+              "Using slang in formal contexts"
+            ],
+            correctAnswer: "Careful and accurate word choice",
+            marks: 5,
+            explanation: "Contextual vocabulary definition."
+          },
+          {
+            id: `${id}_sub4`,
+            type: "multiple_choice",
+            question: "What conclusion does the author reach regarding language fluency?",
+            options: [
+              "Regular authentic practice produces measurable improvement",
+              "Only native speakers can master syntax",
+              "Grammar rules should be ignored during practice",
+              "Assessment should be avoided in language learning"
+            ],
+            correctAnswer: "Regular authentic practice produces measurable improvement",
+            marks: 5,
+            explanation: "Synthesized from the concluding summary."
+          }
+        ] : undefined,
         marks: marksPerQ,
         difficulty: section.difficulty || payload.difficulty || "Medium",
         explanation: "Pedagogically verified assessment question."

@@ -83,7 +83,8 @@ test('Normalizes various raw types to canonical identifiers', () => {
 // ----------------------------------------------------------------------------
 // Test Group 2: Standard Exam Template Blueprint Specification
 // ----------------------------------------------------------------------------
-console.log('\nGroup 2: Standard Blueprint Structure (6 types, 41 questions, 100 marks)');
+// ----------------------------------------------------------------------------
+console.log('\nGroup 2: Standard Blueprint Structure (5 types, 41 questions, 100 marks)');
 
 const STANDARD_BLUEPRINT = {
   subject: 'English Language',
@@ -99,25 +100,24 @@ const STANDARD_BLUEPRINT = {
     { type: 'multiple_choice', name: 'Multiple Choice', count: 15, marks: 2 },
     { type: 'true_false', name: 'True / False', count: 5, marks: 2 },
     { type: 'fill_in_blank', name: 'Fill in the Blank', count: 8, marks: 2 },
-    { type: 'short_answer', name: 'Short Answer', count: 7, marks: 2 },
-    { type: 'reading_comprehension', name: 'Reading Comprehension', count: 1, marks: 20 },
-    { type: 'error_correction', name: 'Error Correction', count: 5, marks: 2 }
+    { type: 'short_answer', name: 'Short Answer', count: 12, marks: 2 },
+    { type: 'reading_comprehension', name: 'Reading Comprehension', count: 1, marks: 20 }
   ]
 };
 
-test('Standard blueprint totals exactly 41 questions and 100 marks across 6 types', () => {
+test('Standard blueprint totals exactly 41 questions and 100 marks across 5 types', () => {
   const calculatedQuestions = STANDARD_BLUEPRINT.sections.reduce((sum, s) => sum + s.count, 0);
   const calculatedMarks = STANDARD_BLUEPRINT.sections.reduce((sum, s) => sum + s.count * s.marks, 0);
 
   assert.strictEqual(calculatedQuestions, 41, 'Standard blueprint question count must be 41');
   assert.strictEqual(calculatedMarks, 100, 'Standard blueprint total marks must be 100');
-  assert.strictEqual(STANDARD_BLUEPRINT.sections.length, 6, 'Standard blueprint must have 6 question types');
+  assert.strictEqual(STANDARD_BLUEPRINT.sections.length, 5, 'Standard blueprint must have 5 question types');
 });
 
 // ----------------------------------------------------------------------------
 // Test Group 3: Strict Rejection of MCQ-Only AI Output When Blueprint is Multi-Type
 // ----------------------------------------------------------------------------
-console.log('\nGroup 3: Strict Rejection of Hardcoded MCQ-Only Responses');
+console.log('\nGroup 3: Strict Rejection of Hardcoded MCQ-Only Responses & Extra Category Discrepancies');
 
 test('Server validator rejects MCQ-only JSON (e.g. 25 MCQs) when blueprint requires 41 multi-type questions', () => {
   // Simulating bug where AI generated 25 MCQs only
@@ -163,12 +163,109 @@ test('Server validator rejects MCQ-only JSON (e.g. 25 MCQs) when blueprint requi
   assert.ok(missingShort, 'Must detect missing short_answer question type');
 });
 
+test('Server validator strictly rejects 46 questions, 17 short answers, 110 marks discrepancy (+5 questions bug)', () => {
+  // Simulating the bug where 5 extra error correction questions were generated as short answer
+  const bugExam = {
+    metadata: {
+      title: 'Discrepant Exam',
+      examType: 'Standard Exam',
+      difficulty: 'Medium',
+      totalMarks: 110
+    },
+    sections: [
+      {
+        sectionId: 'sec_1',
+        title: 'MCQ',
+        questionType: 'multiple_choice',
+        questions: Array.from({ length: 15 }, (_, i) => ({
+          questionId: `q1_${i + 1}`,
+          questionType: 'multiple_choice',
+          question: `MCQ ${i + 1}`,
+          options: ['A', 'B', 'C', 'D'],
+          correctAnswer: 'A',
+          marks: 2
+        }))
+      },
+      {
+        sectionId: 'sec_2',
+        title: 'True / False',
+        questionType: 'true_false',
+        questions: Array.from({ length: 5 }, (_, i) => ({
+          questionId: `q2_${i + 1}`,
+          questionType: 'true_false',
+          question: `TF ${i + 1}`,
+          correctAnswer: true,
+          marks: 2
+        }))
+      },
+      {
+        sectionId: 'sec_3',
+        title: 'Fill in Blank',
+        questionType: 'fill_in_blank',
+        questions: Array.from({ length: 8 }, (_, i) => ({
+          questionId: `q3_${i + 1}`,
+          questionType: 'fill_in_blank',
+          question: `Fill [blank] ${i + 1}`,
+          acceptedAnswers: ['answer'],
+          marks: 2
+        }))
+      },
+      {
+        sectionId: 'sec_4',
+        title: 'Short Answer (17 questions instead of 12)',
+        questionType: 'short_answer',
+        questions: Array.from({ length: 17 }, (_, i) => ({
+          questionId: `q4_${i + 1}`,
+          questionType: 'short_answer',
+          question: `Short answer ${i + 1}`,
+          correctAnswer: 'Model answer',
+          marks: 2
+        }))
+      },
+      {
+        sectionId: 'sec_5',
+        title: 'Reading Comprehension',
+        questionType: 'reading_comprehension',
+        questions: [
+          {
+            questionId: 'q5_1',
+            type: 'reading_comprehension',
+            passageTitle: 'Reading Passage',
+            passage: 'Passage context...',
+            question: 'Read and answer',
+            marks: 20,
+            subQuestions: [
+              { id: 'sub1', type: 'multiple_choice', question: 'Sub 1', options: ['A', 'B'], correctAnswer: 'A' },
+              { id: 'sub2', type: 'multiple_choice', question: 'Sub 2', options: ['A', 'B'], correctAnswer: 'A' }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const validation = serverValidateExamAgainstBlueprint(bugExam, STANDARD_BLUEPRINT);
+  assert.strictEqual(validation.isValid, false, 'Must reject 46 questions / 110 marks');
+  assert.ok(
+    validation.errors.some(e => e.includes('Total question count mismatch: expected 41, but generated 46.')),
+    'Must report exact question count mismatch: expected 41, but generated 46.'
+  );
+  assert.ok(
+    validation.errors.some(e => e.includes('Question type "short_answer" count mismatch: expected 12, but generated 17.')),
+    'Must report exact short_answer count mismatch: expected 12, but generated 17.'
+  );
+  assert.ok(
+    validation.errors.some(e => e.includes('Total marks mismatch: expected 100 marks, but generated 110 marks.')),
+    'Must report exact total marks mismatch: expected 100 marks, but generated 110 marks.'
+  );
+});
+
 // ----------------------------------------------------------------------------
 // Test Group 4: Successful Validation When Generated Exam Fully Matches Blueprint
 // ----------------------------------------------------------------------------
 console.log('\nGroup 4: Successful Validation for Fully Compliant Generated Exam');
 
-test('Server validator passes when generated exam matches all 6 types and 41 questions', () => {
+test('Server validator passes when generated exam matches all 5 types and 41 questions (100 marks)', () => {
   const compliantSections = STANDARD_BLUEPRINT.sections.map((sec, sIdx) => ({
     sectionId: `sec_${sIdx + 1}`,
     title: `Section ${sIdx + 1} - ${sec.name}`,
@@ -191,11 +288,17 @@ test('Server validator passes when generated exam matches all 6 types and 41 que
       } else if (sec.type === 'fill_in_blank') {
         q.question = 'Subject and verb must [blank] in number.';
         q.acceptedAnswers = ['agree', 'match'];
-      } else if (sec.type === 'short_answer' || sec.type === 'error_correction') {
+      } else if (sec.type === 'short_answer') {
         q.correctAnswer = 'Correct grammatical response.';
       } else if (sec.type === 'reading_comprehension') {
-        q.options = ['Fact 1', 'Fact 2', 'Fact 3', 'Fact 4'];
-        q.correctAnswer = 'Fact 1';
+        q.passageTitle = 'Reading Passage';
+        q.passage = 'Passage context text...';
+        q.subQuestions = [
+          { id: 'sub_1', type: 'multiple_choice', question: 'Q1', options: ['A', 'B'], correctAnswer: 'A' },
+          { id: 'sub_2', type: 'multiple_choice', question: 'Q2', options: ['A', 'B'], correctAnswer: 'A' },
+          { id: 'sub_3', type: 'multiple_choice', question: 'Q3', options: ['A', 'B'], correctAnswer: 'A' },
+          { id: 'sub_4', type: 'multiple_choice', question: 'Q4', options: ['A', 'B'], correctAnswer: 'A' }
+        ];
       }
 
       return q;
@@ -238,9 +341,8 @@ test('Correction prompt generates exact discrepancy diff for AI repair loop', ()
       multiple_choice: 15,
       true_false: 5,
       fill_in_blank: 8,
-      short_answer: 7,
-      reading_comprehension: 1,
-      error_correction: 5
+      short_answer: 12,
+      reading_comprehension: 1
     }
   };
 
@@ -249,6 +351,7 @@ test('Correction prompt generates exact discrepancy diff for AI repair loop', ()
   assert.ok(repairPrompt.includes('Total question count mismatch: expected 41, but generated 25.'), 'Must cite the count error');
   assert.ok(repairPrompt.includes('true_false: exactly 5 question(s)'), 'Must instruct required true_false count');
   assert.ok(repairPrompt.includes('fill_in_blank: exactly 8 question(s)'), 'Must instruct required fill_in_blank count');
+  assert.ok(repairPrompt.includes('short_answer: exactly 12 question(s)'), 'Must instruct required short_answer count');
   assert.ok(repairPrompt.includes('Do NOT simplify this exam to only Multiple Choice questions'), 'Must warn against MCQ-only collapse');
 });
 
@@ -257,7 +360,7 @@ test('Correction prompt generates exact discrepancy diff for AI repair loop', ()
 // ----------------------------------------------------------------------------
 console.log('\nGroup 6: Deterministic Fallback Generator Adherence');
 
-test('buildFallbackExam generates all 6 sections and 41 questions matching the blueprint', () => {
+test('buildFallbackExam generates all 5 sections and 41 questions matching the blueprint', () => {
   const fallbackExam = buildFallbackExam({
     examType: 'Standard Exam',
     difficulty: 'Medium',
@@ -265,7 +368,7 @@ test('buildFallbackExam generates all 6 sections and 41 questions matching the b
     sections: STANDARD_BLUEPRINT.sections
   });
 
-  assert.strictEqual(fallbackExam.sections.length, 6, 'Fallback must have 6 sections');
+  assert.strictEqual(fallbackExam.sections.length, 5, 'Fallback must have 5 sections');
   const totalQuestions = fallbackExam.sections.reduce((sum, s) => sum + s.questions.length, 0);
   assert.strictEqual(totalQuestions, 41, 'Fallback must have exactly 41 questions');
 

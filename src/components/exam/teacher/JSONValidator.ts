@@ -158,9 +158,28 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
         return;
       }
 
+      const isReadingSec = normalizeQuestionType(sec.questionType || sec.type || sec.title) === 'reading_comprehension' || (sec.passage && String(sec.passage).length > 20);
+      let questionsToProcess = rawSecQuestions;
+
+      // If a section contains a passage and multiple flat questions without an explicit reading_comprehension question,
+      // bundle them into a single canonical reading_comprehension question so sub-questions do not inflate top-level question count
+      if (isReadingSec && rawSecQuestions.length > 1 && !rawSecQuestions.some((q: any) => normalizeQuestionType(q.type) === 'reading_comprehension')) {
+        const combinedMarks = rawSecQuestions.reduce((sum: number, q: any) => sum + (Number(q.marks) || 1), 0);
+        questionsToProcess = [{
+          id: rawSecQuestions[0].id || `${sectionId}_reading_q1`,
+          type: 'reading_comprehension',
+          passageTitle: sec.title || 'Reading Passage',
+          passage: sec.passage || 'Reading passage',
+          question: 'Read the following passage and answer the questions below.',
+          subQuestions: [...rawSecQuestions],
+          marks: combinedMarks > 0 ? combinedMarks : 20,
+          difficulty: 'medium'
+        }];
+      }
+
       const validatedQuestions: CanonicalQuestion[] = [];
 
-      sec.questions.forEach((q: any, qIdx: number) => {
+      questionsToProcess.forEach((q: any, qIdx: number) => {
         totalQuestionsCount++;
         const questionId = String(q.id || q.questionId || `q_${secIdx + 1}_${qIdx + 1}`).trim();
 
@@ -698,18 +717,21 @@ export function validateExamAgainstBlueprint(
       });
 
       (sec.activities || []).forEach((act) => {
-        if (Array.isArray(act.questions) && act.questions.length > 0) {
-          act.questions.forEach((q) => {
+        const normAct = normalizeQuestionType(act.activityType || (act as any).type) || 'reading_comprehension';
+        if (normAct === 'reading_comprehension' || normAct === 'cloze_passage' || !Array.isArray(act.questions) || act.questions.length === 0) {
+          actualTotalQuestions++;
+          const childMarks = Array.isArray(act.questions)
+            ? act.questions.reduce((sum: number, q: any) => sum + (Number(q.marks) || 0), 0)
+            : 0;
+          actualTotalMarks += Number(act.marks) || (childMarks > 0 ? childMarks : 20);
+          actualBreakdown[normAct] = (actualBreakdown[normAct] || 0) + 1;
+        } else {
+          act.questions.forEach((q: any) => {
             actualTotalQuestions++;
             actualTotalMarks += Number(q.marks) || 1;
             const norm = normalizeQuestionType(q.type) || 'multiple_choice';
             actualBreakdown[norm] = (actualBreakdown[norm] || 0) + 1;
           });
-        } else {
-          actualTotalQuestions++;
-          actualTotalMarks += Number(act.marks) || 10;
-          const norm = normalizeQuestionType(act.activityType) || 'reading_comprehension';
-          actualBreakdown[norm] = (actualBreakdown[norm] || 0) + 1;
         }
       });
     });

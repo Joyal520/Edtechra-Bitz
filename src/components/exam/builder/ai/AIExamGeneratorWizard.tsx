@@ -25,7 +25,8 @@ import {
   Award,
   GraduationCap,
   Star,
-  Settings2
+  Settings2,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export type ExamTemplate = 'simple' | 'standard' | 'advanced' | 'custom';
@@ -35,9 +36,9 @@ import {
 } from '../../shared/ExamSchema';
 import { THEME_PRESETS } from '../../shared/themePresets';
 import {
-  validateExamJSON,
   validateExamAgainstBlueprint,
   generateCorrectionPrompt,
+  normalizeQuestionType,
   ValidationResult
 } from '../../teacher/JSONValidator';
 
@@ -141,10 +142,10 @@ const DEFAULT_BLUEPRINT_ITEMS: TeacherBlueprintItem[] = [
     type: 'error_correction',
     name: 'Error Correction',
     category: 'core',
-    description: 'Identify grammatical mistakes and provide corrected sentences',
+    description: 'Identify grammatical mistakes (Note: formatted as Short Answer in standard exams)',
     enabled: false,
-    count: 5,
-    marksPerItem: 1
+    count: 0,
+    marksPerItem: 2
   },
   {
     id: 'sent_trans',
@@ -397,10 +398,9 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
         if (item.id === 'mcq') return { ...item, enabled: true, count: 15, marksPerItem: 2 };
         if (item.id === 'tf') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
         if (item.id === 'fill_blank') return { ...item, enabled: true, count: 8, marksPerItem: 2 };
-        if (item.id === 'short_ans') return { ...item, enabled: true, count: 7, marksPerItem: 2 };
+        if (item.id === 'short_ans') return { ...item, enabled: true, count: 12, marksPerItem: 2 };
         if (item.id === 'reading') return { ...item, enabled: true, count: 1, marksPerItem: 20 };
-        if (item.id === 'error_corr') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
-        return { ...item, enabled: false };
+        return { ...item, enabled: false, count: item.id === 'error_corr' ? 0 : item.count };
       })
     );
   };
@@ -497,6 +497,8 @@ CRITICAL ASSESSMENT & RENDERING RULES:
 - Do not reveal correct answers through option ordering or hints.
 - Do not add answer-key labels such as 'Correct option: A' in option text.
 - Correct answers are metadata for grading only, stored exclusively in the 'correctAnswer' field.
+- READING COMPREHENSION RULE: Reading Comprehension is 1 question/activity (worth 20 marks in standard exam). Its sub-questions must be nested inside the 'subQuestions' array of that 1 question object. Do NOT count sub-questions as separate top-level questions. Total questions in the exam must strictly equal ${totalQuestions}.
+- ERROR CORRECTION RULE: Error Correction is NOT a separate question type or section. Any grammatical error-correction or sentence revision items must be formulated as "type": "short_answer" within the Short Answer section.
 ${blueprintItems.some((i) => i.enabled && i.id === 'cloze') ? `- Cloze Passage MUST contain a contextual passage with numbered '[blank_1]', '[blank_2]', etc., accompanied by a 'blanks' array where each blank has an 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array.\n` : ''}${requiresVideo && videoTranscript ? `- Video Questions MUST be strictly derived from this Video Transcript:\n"""\n${videoTranscript}\n"""\n` : ''}${requiresAudio && audioTranscript ? `- Audio Questions MUST be strictly derived from this Audio Transcript:\n"""\n${audioTranscript}\n"""\n` : ''}
 ================================================================================
 REQUIRED SECTIONS & PER-TYPE SCHEMA OUTLINE (MANDATORY)
@@ -554,18 +556,44 @@ ${activeBlueprint.map((b, idx) => {
   } else if (b.type === 'reading_comprehension') {
     sampleQ = `        {
           "id": "q${idx + 1}_1",
-          "type": "multiple_choice",
-          "question": "According to the passage, what is the primary conclusion?",
-          "options": [
-            { "id": "a", "text": "Correct inference from text" },
-            { "id": "b", "text": "Contradictory statement" },
-            { "id": "c", "text": "Unsubstantiated claim" },
-            { "id": "d", "text": "Opposite assertion" }
-          ],
-          "correctAnswer": ["a"],
-          "marks": 5,
+          "type": "reading_comprehension",
+          "passageTitle": "Grounded Reading Passage",
+          "passage": "A substantive 150-250 word contextual passage grounded strictly in the topic...",
+          "question": "Read the following passage and answer the sub-questions below.",
+          "marks": ${b.marksPerItem},
           "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "Evidenced in the reading passage."
+          "subQuestions": [
+            {
+              "id": "q${idx + 1}_1_sub1",
+              "type": "multiple_choice",
+              "question": "According to the passage, what is the primary conclusion?",
+              "options": [
+                { "id": "a", "text": "Correct inference from text" },
+                { "id": "b", "text": "Contradictory statement" },
+                { "id": "c", "text": "Unsubstantiated claim" },
+                { "id": "d", "text": "Opposite assertion" }
+              ],
+              "correctAnswer": ["a"],
+              "marks": 5,
+              "difficulty": "${difficulty.toLowerCase()}",
+              "explanation": "Evidenced in paragraph 1."
+            },
+            {
+              "id": "q${idx + 1}_1_sub2",
+              "type": "multiple_choice",
+              "question": "Which detail directly supports the primary finding?",
+              "options": [
+                { "id": "a", "text": "Supporting factual detail" },
+                { "id": "b", "text": "Unrelated assertion" },
+                { "id": "c", "text": "Contradictory premise" },
+                { "id": "d", "text": "Irrelevant opinion" }
+              ],
+              "correctAnswer": ["a"],
+              "marks": 5,
+              "difficulty": "${difficulty.toLowerCase()}",
+              "explanation": "Directly stated in paragraph 2."
+            }
+          ]
         }`;
   } else if (b.type === 'error_correction') {
     sampleQ = `        {
@@ -575,7 +603,7 @@ ${activeBlueprint.map((b, idx) => {
           "correctAnswer": "Each of the students has finished their work.",
           "marks": ${b.marksPerItem},
           "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "'Each' takes a singular verb ('has')."
+          "explanation": "'Each' takes a singular verb ('has'). Note: Generate as short_answer."
         }`;
   } else {
     sampleQ = `        {
@@ -662,21 +690,41 @@ Generate the complete examination JSON now:`;
     }
   };
 
+  // Run strict blueprint validation on JSON input
+  const runBlueprintValidation = (jsonStr: string) => {
+    if (!jsonStr.trim()) {
+      setValidationResult(null);
+      return null;
+    }
+    try {
+      const activeBlueprint = blueprintItems.filter((i) => i.enabled);
+      const res = validateExamAgainstBlueprint(jsonStr, {
+        totalQuestions,
+        totalMarks,
+        blueprintItems: activeBlueprint
+      });
+      setValidationResult(res);
+      return res;
+    } catch (e: any) {
+      const errRes: ValidationResult = {
+        isValid: false,
+        errors: [{ id: 'fatal_parse', message: `Parse error: ${e.message}` }],
+        warnings: []
+      };
+      setValidationResult(errRes);
+      return errRes;
+    }
+  };
+
   // Handle JSON validation and Exam creation
   const handleCreateExamFromJSON = () => {
     if (!pastedJson.trim()) return;
     setIsProcessingJson(true);
 
     try {
-      const activeBlueprint = blueprintItems.filter((i) => i.enabled);
-      const result = validateExamAgainstBlueprint(pastedJson, {
-        totalQuestions,
-        totalMarks,
-        blueprintItems: activeBlueprint
-      });
-      setValidationResult(result);
+      const result = runBlueprintValidation(pastedJson);
 
-      if (result.isValid && result.parsedExam) {
+      if (result && result.isValid && result.parsedExam) {
         // Construct canonical assessment object with authoritatively locked blueprint metadata
         const finalAssessment: CanonicalAssessmentV2 = {
           schemaVersion: '2.0',
@@ -1631,8 +1679,7 @@ Generate the complete examination JSON now:`;
                         const text = await navigator.clipboard.readText();
                         if (text) {
                           setPastedJson(text);
-                          const res = validateExamJSON(text);
-                          setValidationResult(res);
+                          runBlueprintValidation(text);
                         }
                       } catch {}
                     }}
@@ -1647,12 +1694,142 @@ Generate the complete examination JSON now:`;
                   rows={8}
                   value={pastedJson}
                   onChange={(e) => {
-                    setPastedJson(e.target.value);
-                    setValidationResult(null);
+                    const text = e.target.value;
+                    setPastedJson(text);
+                    runBlueprintValidation(text);
                   }}
                   placeholder="Paste the JSON response from your AI here (with or without ```json code fences)..."
                   className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xs font-mono text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed resize-y"
                 />
+
+                {/* Blueprint Distribution Debug & Verification Panel */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 animate-fadeIn">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        Blueprint Distribution Verification
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] font-bold">
+                      <span className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 border border-indigo-200">
+                        Target: {totalQuestions} Qs • {totalMarks} Marks
+                      </span>
+                      {validationResult?.blueprintDiff && (
+                        <span
+                          className={`px-2.5 py-1 rounded-lg border font-black ${
+                            validationResult.blueprintDiff.actualTotalQuestions === totalQuestions &&
+                            validationResult.blueprintDiff.actualTotalMarks === totalMarks
+                              ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                              : 'bg-rose-100 border-rose-300 text-rose-800'
+                          }`}
+                        >
+                          Generated: {validationResult.blueprintDiff.actualTotalQuestions} Qs • {validationResult.blueprintDiff.actualTotalMarks} Marks
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 font-semibold text-[11px]">
+                          <th className="py-2.5 px-3">Question Type</th>
+                          <th className="py-2.5 px-2 text-center">Marks / Item</th>
+                          <th className="py-2.5 px-2 text-center">Expected Count</th>
+                          <th className="py-2.5 px-2 text-center">Expected Marks</th>
+                          <th className="py-2.5 px-2 text-center">Generated Count</th>
+                          <th className="py-2.5 px-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {blueprintItems.filter((i) => i.enabled).map((item) => {
+                          const normType = normalizeQuestionType(item.type) || item.id;
+                          const actualCount = validationResult?.blueprintDiff?.actualBreakdown?.[normType];
+                          const hasDiff = validationResult?.blueprintDiff !== undefined;
+                          const isMatch = actualCount === item.count;
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-2 px-3 font-bold text-slate-800 flex items-center gap-2">
+                                <span>{item.name}</span>
+                                {item.id === 'reading' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 font-bold border border-teal-200">1 Activity</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-center text-slate-600 font-medium">{item.marksPerItem}</td>
+                              <td className="py-2 px-2 text-center font-bold text-slate-900">{item.count}</td>
+                              <td className="py-2 px-2 text-center text-slate-600 font-medium">{item.count * item.marksPerItem}</td>
+                              <td className="py-2 px-2 text-center font-bold">
+                                {hasDiff ? (
+                                  <span className={isMatch ? 'text-emerald-600' : 'text-rose-600 font-black'}>
+                                    {actualCount ?? 0}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">—</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                {!hasDiff ? (
+                                  <span className="text-[10px] font-semibold text-slate-400">Waiting for JSON</span>
+                                ) : isMatch ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Match
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-300">
+                                    <AlertCircle className="w-3 h-3" />
+                                    {(actualCount ?? 0) > item.count ? `+${(actualCount ?? 0) - item.count}` : `${(actualCount ?? 0) - item.count}`} Mismatch
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {/* Totals Row */}
+                        <tr className="border-t-2 border-slate-200 font-bold bg-slate-100/90">
+                          <td className="py-2.5 px-3 text-slate-900">Total Exam Target</td>
+                          <td className="py-2.5 px-2 text-center text-slate-500">—</td>
+                          <td className="py-2.5 px-2 text-center text-indigo-700 font-black">{totalQuestions}</td>
+                          <td className="py-2.5 px-2 text-center text-indigo-700 font-black">{totalMarks}</td>
+                          <td className="py-2.5 px-2 text-center">
+                            {validationResult?.blueprintDiff ? (
+                              <span
+                                className={
+                                  validationResult.blueprintDiff.actualTotalQuestions === totalQuestions &&
+                                  validationResult.blueprintDiff.actualTotalMarks === totalMarks
+                                    ? 'text-emerald-700 font-black'
+                                    : 'text-rose-700 font-black'
+                                }
+                              >
+                                {validationResult.blueprintDiff.actualTotalQuestions}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-normal">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            {validationResult?.blueprintDiff ? (
+                              validationResult.blueprintDiff.actualTotalQuestions === totalQuestions &&
+                              validationResult.blueprintDiff.actualTotalMarks === totalMarks ? (
+                                <span className="text-[10px] font-black text-emerald-800 bg-emerald-200 px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-300">
+                                  100% Compliant
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-black text-rose-800 bg-rose-200 px-3 py-1 rounded-full uppercase tracking-wider border border-rose-300">
+                                  Discrepancy: {validationResult.blueprintDiff.actualTotalQuestions - totalQuestions > 0 ? `+${validationResult.blueprintDiff.actualTotalQuestions - totalQuestions} Qs` : `${validationResult.blueprintDiff.actualTotalQuestions - totalQuestions} Qs`}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] font-semibold text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
                 {/* Validation Feedback & Friendly Correction Banner */}
                 {validationResult && (
@@ -1749,7 +1926,7 @@ Generate the complete examination JSON now:`;
             ) : (
               <button
                 type="button"
-                disabled={!pastedJson.trim() || isProcessingJson}
+                disabled={!pastedJson.trim() || isProcessingJson || (validationResult !== null && !validationResult.isValid)}
                 onClick={handleCreateExamFromJSON}
                 className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-emerald-600/20 cursor-pointer transition-all active:scale-95 disabled:opacity-40"
               >
