@@ -134,6 +134,7 @@ function examJsonSchema() {
         properties: {
           examId: { type: "string" },
           title: { type: "string" },
+          subject: { type: "string" },
           examType: { type: "string" },
           difficulty: { type: "string" },
           duration: { type: "string" },
@@ -535,6 +536,7 @@ export function buildFallbackExam(payload, reason = "Offline mode") {
     metadata: {
       examId: cryptoId("exam"),
       title: `${payload.examType || 'Standard Exam'} - AI Draft`,
+      subject: payload.subject || "English Language",
       examType: payload.examType || "Standard Exam",
       difficulty: payload.difficulty || "Medium",
       duration: payload.duration?.value
@@ -587,6 +589,7 @@ export function normalizeExam(exam, payload = {}, blueprintSpec = {}) {
       ...exam.metadata,
       examId: exam.metadata?.examId || cryptoId("exam"),
       title: payload.title || exam.metadata?.title || `${payload.examType || 'Standard Exam'} - AI Draft`,
+      subject: payload.subject || exam.metadata?.subject || "English Language",
       examType: payload.examType || exam.metadata?.examType || "Standard Exam",
       difficulty: payload.difficulty || exam.metadata?.difficulty || "Medium",
       duration,

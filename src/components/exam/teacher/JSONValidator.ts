@@ -112,8 +112,21 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
     };
   }
 
-  // 2. Exam Metadata Validation
-  const exam = data.exam || data.metadata || {};
+  // 2. Exam Metadata Validation — resilient extraction with root-level fallbacks
+  // LLMs may output metadata under "exam", "metadata", or directly at root level.
+  // We merge all possible sources to maximize successful parsing.
+  const rawExamMeta = data.exam || data.metadata || {};
+  const exam = (rawExamMeta && typeof rawExamMeta === 'object') ? { ...rawExamMeta } : {};
+
+  // Fallback: if title/subject are at root level (common LLM output format), pull them in
+  if (!exam.title && data.title) exam.title = data.title;
+  if (!exam.subject && data.subject) exam.subject = data.subject;
+  if (!exam.grade && data.grade) exam.grade = data.grade;
+  if (!exam.difficulty && data.difficulty) exam.difficulty = data.difficulty;
+  if (exam.durationMinutes === undefined && data.durationMinutes !== undefined) exam.durationMinutes = data.durationMinutes;
+  if (exam.passPercentage === undefined && data.passPercentage !== undefined) exam.passPercentage = data.passPercentage;
+  if (!exam.examType && data.examType) exam.examType = data.examType;
+
   if (!exam || typeof exam !== 'object') {
     errors.push({ id: 'missing_exam_object', message: 'Missing required "exam" metadata object.' });
   } else {
@@ -161,20 +174,46 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
       const isReadingSec = normalizeQuestionType(sec.questionType || sec.type || sec.title) === 'reading_comprehension' || (sec.passage && String(sec.passage).length > 20);
       let questionsToProcess = rawSecQuestions;
 
-      // If a section contains a passage and multiple flat questions without an explicit reading_comprehension question,
-      // bundle them into a single canonical reading_comprehension question so sub-questions do not inflate top-level question count
-      if (isReadingSec && rawSecQuestions.length > 1 && !rawSecQuestions.some((q: any) => normalizeQuestionType(q.type) === 'reading_comprehension')) {
-        const combinedMarks = rawSecQuestions.reduce((sum: number, q: any) => sum + (Number(q.marks) || 1), 0);
-        questionsToProcess = [{
-          id: rawSecQuestions[0].id || `${sectionId}_reading_q1`,
-          type: 'reading_comprehension',
-          passageTitle: sec.title || 'Reading Passage',
-          passage: sec.passage || 'Reading passage',
-          question: 'Read the following passage and answer the questions below.',
-          subQuestions: [...rawSecQuestions],
-          marks: combinedMarks > 0 ? combinedMarks : 20,
-          difficulty: 'medium'
-        }];
+      // Reading Comprehension Bundling: Ensure sub-questions are nested under a single top-level question
+      // and do not inflate top-level question count.
+      if (isReadingSec && rawSecQuestions.length > 1) {
+        const readingQIdx = rawSecQuestions.findIndex((q: any) => normalizeQuestionType(q.type) === 'reading_comprehension');
+        if (readingQIdx === -1) {
+          // Case A: Multiple flat questions under a reading passage -> bundle into 1 reading_comprehension question
+          const combinedMarks = rawSecQuestions.reduce((sum: number, q: any) => sum + (Number(q.marks) || 1), 0);
+          questionsToProcess = [{
+            id: rawSecQuestions[0].id || `${sectionId}_reading_q1`,
+            type: 'reading_comprehension',
+            passageTitle: sec.title || 'Reading Passage',
+            passage: sec.passage || 'Reading passage',
+            question: 'Read the following passage and answer the questions below.',
+            subQuestions: [...rawSecQuestions],
+            marks: combinedMarks > 0 ? combinedMarks : 20,
+            difficulty: 'medium'
+          }];
+        } else {
+          // Case B: Explicit reading_comprehension question exists
+          const readingQ = rawSecQuestions[readingQIdx];
+          const existingSubs = readingQ.subQuestions || readingQ.sub_questions || readingQ.subquestions || readingQ.questions || readingQ.items || [];
+          if (!Array.isArray(existingSubs) || existingSubs.length === 0) {
+            // Sibling questions in this section are the intended sub-questions!
+            const siblingSubs = rawSecQuestions.filter((_: any, idx: number) => idx !== readingQIdx);
+            if (siblingSubs.length > 0) {
+              const combinedMarks = Number(readingQ.marks) > 0
+                ? Number(readingQ.marks)
+                : siblingSubs.reduce((sum: number, q: any) => sum + (Number(q.marks) || 1), 0);
+              questionsToProcess = [{
+                ...readingQ,
+                type: 'reading_comprehension',
+                passageTitle: readingQ.passageTitle || sec.title || 'Reading Passage',
+                passage: readingQ.passage || sec.passage || 'Reading passage',
+                question: readingQ.question || 'Read the following passage and answer the questions below.',
+                subQuestions: siblingSubs,
+                marks: combinedMarks > 0 ? combinedMarks : 20
+              }];
+            }
+          }
+        }
       }
 
       const validatedQuestions: CanonicalQuestion[] = [];
@@ -468,7 +507,7 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             });
           }
 
-          const rawSubQ = q.subQuestions || q.questions || [];
+          const rawSubQ = q.subQuestions || q.sub_questions || q.subquestions || q.questions || q.items || [];
           if (!Array.isArray(rawSubQ) || rawSubQ.length === 0) {
             errors.push({
               id: `missing_subquestions_${questionId}`,
@@ -628,7 +667,10 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
   let parsedExam: CanonicalExamV1 | undefined = undefined;
   let stats: ValidationResult['stats'] = undefined;
 
-  if (isValid) {
+  // Construct parsedExam whenever validatedSections exist, even if there are validation warnings/errors.
+  // This prevents cascading validation erasure and ensures that downstream blueprint validation,
+  // question count verification, and UI breakdown can inspect the generated questions rather than falsely reporting 0 questions.
+  if (validatedSections.length > 0 || Object.keys(exam).length > 0) {
     const totalMarks = calculateExamTotalMarks(validatedSections);
     const duration = Number(exam.durationMinutes) || 45;
 

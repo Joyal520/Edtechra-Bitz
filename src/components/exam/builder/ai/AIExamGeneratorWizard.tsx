@@ -498,139 +498,154 @@ CRITICAL ASSESSMENT & RENDERING RULES:
 - Do not add answer-key labels such as 'Correct option: A' in option text.
 - Correct answers are metadata for grading only, stored exclusively in the 'correctAnswer' field.
 - READING COMPREHENSION RULE: Reading Comprehension is 1 question/activity (worth 20 marks in standard exam). Its sub-questions must be nested inside the 'subQuestions' array of that 1 question object. Do NOT count sub-questions as separate top-level questions. Total questions in the exam must strictly equal ${totalQuestions}.
+- READING COMPREHENSION SCHEMA: The reading comprehension question object MUST include the 'subQuestions' property containing all sub-questions (each with 'id', 'type', 'question', 'options', 'correctAnswer', 'marks'). Sub-questions must NOT be placed as sibling items in the section questions array.
 - ERROR CORRECTION RULE: Error Correction is NOT a separate question type or section. Any grammatical error-correction or sentence revision items must be formulated as "type": "short_answer" within the Short Answer section.
 ${blueprintItems.some((i) => i.enabled && i.id === 'cloze') ? `- Cloze Passage MUST contain a contextual passage with numbered '[blank_1]', '[blank_2]', etc., accompanied by a 'blanks' array where each blank has an 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array.\n` : ''}${requiresVideo && videoTranscript ? `- Video Questions MUST be strictly derived from this Video Transcript:\n"""\n${videoTranscript}\n"""\n` : ''}${requiresAudio && audioTranscript ? `- Audio Questions MUST be strictly derived from this Audio Transcript:\n"""\n${audioTranscript}\n"""\n` : ''}
 ================================================================================
-REQUIRED SECTIONS & PER-TYPE SCHEMA OUTLINE (MANDATORY)
+EXACT JSON ROOT STRUCTURE & ENVELOPE (MANDATORY)
+REQUIRED SECTIONS & PER-TYPE SCHEMA OUTLINE
 ================================================================================
-You MUST construct all ${activeBlueprint.length} distinct sections matching the exact question counts and marks below:
+Your entire response MUST be a single, valid JSON object matching this EXACT root envelope with "exam" metadata and "sections" array:
 
+{
+  "exam": {
+    "title": "${subject}: ${contentTitle || 'Assessment'}",
+    "subject": "${subject}",
+    "grade": "${grade}",
+    "difficulty": "${difficulty}",
+    "durationMinutes": ${durationMinutes},
+    "passPercentage": ${passPercentage},
+    "examType": "${selectedTemplate === 'simple' ? 'Simple Exam' : selectedTemplate === 'advanced' ? 'Advanced Exam' : 'Standard Exam'}"
+  },
+  "sections": [
 ${activeBlueprint.map((b, idx) => {
   let sampleQ = '';
   if (b.type === 'multiple_choice' || b.type === 'multiple_select') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "multiple_choice",
-          "question": "Question text here?",
-          "options": [
-            { "id": "a", "text": "Correct answer" },
-            { "id": "b", "text": "Plausible distractor" },
-            { "id": "c", "text": "Alternative distractor" },
-            { "id": "d", "text": "Misconception distractor" }
-          ],
-          "correctAnswer": ["a"],
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "Rationale for the correct answer."
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "multiple_choice",
+            "question": "Question text here?",
+            "options": [
+              { "id": "a", "text": "Correct answer" },
+              { "id": "b", "text": "Plausible distractor" },
+              { "id": "c", "text": "Alternative distractor" },
+              { "id": "d", "text": "Misconception distractor" }
+            ],
+            "correctAnswer": ["a"],
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "explanation": "Rationale for the correct answer."
+          }`;
   } else if (b.type === 'true_false') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "true_false",
-          "question": "Factual statement to evaluate as True or False.",
-          "correctAnswer": true,
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "Why this statement is factually true."
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "true_false",
+            "question": "Factual statement to evaluate as True or False.",
+            "correctAnswer": true,
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "explanation": "Why this statement is factually true."
+          }`;
   } else if (b.type === 'fill_in_blank') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "fill_in_blank",
-          "question": "Complete the sentence with the appropriate term: 'The rule requires [blank] in all formal contexts.'",
-          "acceptedAnswers": ["precision", "accuracy"],
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "Accepted key term."
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "fill_in_blank",
+            "question": "Complete the sentence with the appropriate term: 'The rule requires [blank] in all formal contexts.'",
+            "acceptedAnswers": ["precision", "accuracy"],
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "explanation": "Accepted key term."
+          }`;
   } else if (b.type === 'short_answer') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "short_answer",
-          "question": "Briefly describe the key distinction between these two rules.",
-          "correctAnswer": "Model answer explaining distinction concisely.",
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "Rubric criteria for teacher evaluation."
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "short_answer",
+            "question": "Briefly describe the key distinction between these two rules.",
+            "correctAnswer": "Model answer explaining distinction concisely.",
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "explanation": "Rubric criteria for teacher evaluation."
+          }`;
   } else if (b.type === 'reading_comprehension') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "reading_comprehension",
-          "passageTitle": "Grounded Reading Passage",
-          "passage": "A substantive 150-250 word contextual passage grounded strictly in the topic...",
-          "question": "Read the following passage and answer the sub-questions below.",
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "subQuestions": [
-            {
-              "id": "q${idx + 1}_1_sub1",
-              "type": "multiple_choice",
-              "question": "According to the passage, what is the primary conclusion?",
-              "options": [
-                { "id": "a", "text": "Correct inference from text" },
-                { "id": "b", "text": "Contradictory statement" },
-                { "id": "c", "text": "Unsubstantiated claim" },
-                { "id": "d", "text": "Opposite assertion" }
-              ],
-              "correctAnswer": ["a"],
-              "marks": 5,
-              "difficulty": "${difficulty.toLowerCase()}",
-              "explanation": "Evidenced in paragraph 1."
-            },
-            {
-              "id": "q${idx + 1}_1_sub2",
-              "type": "multiple_choice",
-              "question": "Which detail directly supports the primary finding?",
-              "options": [
-                { "id": "a", "text": "Supporting factual detail" },
-                { "id": "b", "text": "Unrelated assertion" },
-                { "id": "c", "text": "Contradictory premise" },
-                { "id": "d", "text": "Irrelevant opinion" }
-              ],
-              "correctAnswer": ["a"],
-              "marks": 5,
-              "difficulty": "${difficulty.toLowerCase()}",
-              "explanation": "Directly stated in paragraph 2."
-            }
-          ]
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "reading_comprehension",
+            "passageTitle": "Grounded Reading Passage",
+            "passage": "A substantive 150-250 word contextual passage grounded strictly in the topic...",
+            "question": "Read the following passage and answer the sub-questions below.",
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "subQuestions": [
+              {
+                "id": "q${idx + 1}_1_sub1",
+                "type": "multiple_choice",
+                "question": "According to the passage, what is the primary conclusion?",
+                "options": [
+                  { "id": "a", "text": "Correct inference from text" },
+                  { "id": "b", "text": "Contradictory statement" },
+                  { "id": "c", "text": "Unsubstantiated claim" },
+                  { "id": "d", "text": "Opposite assertion" }
+                ],
+                "correctAnswer": ["a"],
+                "marks": 5,
+                "difficulty": "${difficulty.toLowerCase()}",
+                "explanation": "Evidenced in paragraph 1."
+              },
+              {
+                "id": "q${idx + 1}_1_sub2",
+                "type": "multiple_choice",
+                "question": "Which detail directly supports the primary finding?",
+                "options": [
+                  { "id": "a", "text": "Supporting factual detail" },
+                  { "id": "b", "text": "Unrelated assertion" },
+                  { "id": "c", "text": "Contradictory premise" },
+                  { "id": "d", "text": "Irrelevant opinion" }
+                ],
+                "correctAnswer": ["a"],
+                "marks": 5,
+                "difficulty": "${difficulty.toLowerCase()}",
+                "explanation": "Directly stated in paragraph 2."
+              }
+            ]
+          }`;
   } else if (b.type === 'error_correction') {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "short_answer",
-          "question": "Identify and correct the grammatical error: 'Each of the students have finished their work.'",
-          "correctAnswer": "Each of the students has finished their work.",
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}",
-          "explanation": "'Each' takes a singular verb ('has'). Note: Generate as short_answer."
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "short_answer",
+            "question": "Identify and correct the grammatical error: 'Each of the students have finished their work.'",
+            "correctAnswer": "Each of the students has finished their work.",
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}",
+            "explanation": "'Each' takes a singular verb ('has'). Note: Generate as short_answer."
+          }`;
   } else {
-    sampleQ = `        {
-          "id": "q${idx + 1}_1",
-          "type": "${b.type}",
-          "question": "Question text assessing ${b.name}?",
-          "correctAnswer": "Correct answer",
-          "marks": ${b.marksPerItem},
-          "difficulty": "${difficulty.toLowerCase()}"
-        }`;
+    sampleQ = `          {
+            "id": "q${idx + 1}_1",
+            "type": "${b.type}",
+            "question": "Question text assessing ${b.name}?",
+            "correctAnswer": "Correct answer",
+            "marks": ${b.marksPerItem},
+            "difficulty": "${difficulty.toLowerCase()}"
+          }`;
   }
 
-  return `  {
-    "id": "sec_${idx + 1}",
-    "title": "Section ${String.fromCharCode(65 + idx)} — ${b.name}",
-    "description": "Answer all ${b.count} question(s) testing ${b.name}.",
-    ${b.type === 'reading_comprehension' ? `"passage": "Substantive 150-250 word contextual passage grounded in the topic...",\n    ` : ''}"questions": [
+  return `    {
+      "id": "sec_${idx + 1}",
+      "title": "Section ${String.fromCharCode(65 + idx)} — ${b.name}",
+      "description": "Answer all ${b.count} question(s) testing ${b.name}.",
+      ${b.type === 'reading_comprehension' ? `"passage": "Substantive 150-250 word contextual passage grounded in the topic...",\n      ` : ''}"questions": [
 ${sampleQ}
-      // Populate exactly ${b.count} questions of type '${b.type}' in this section
-    ]
-  }`;
+        // Populate exactly ${b.count} questions of type '${b.type}' in this section
+      ]
+    }`;
 }).join(',\n')}
+  ]
+}
 
 ================================================================================
 OUTPUT FORMAT REQUIREMENTS (CRITICAL)
 ================================================================================
-You MUST return ONLY valid JSON matching the EdTechra Assessment Schema.
+You MUST return ONLY valid JSON matching the EdTechra Assessment Schema above.
 DO NOT wrap your output in conversational markdown, explanations, introductory notes, or trailing comments.
 Output ONLY the raw JSON object starting with { and ending with }.
 
@@ -656,7 +671,8 @@ Generate the complete examination JSON now:`;
     videoTranscript,
     requiresAudio,
     audioTranscript,
-    activePreset
+    activePreset,
+    selectedTemplate
   ]);
 
   // Handle Copy AI Prompt
