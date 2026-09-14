@@ -337,33 +337,40 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-5xl w-full h-[92vh] max-h-[880px] shadow-2xl border border-slate-100 relative overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2 md:p-3 lg:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-slate-50 rounded-2xl sm:rounded-3xl w-[98vw] max-w-[1720px] h-[96vh] shadow-2xl border border-slate-200/90 relative overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
         
         {/* ================================================================= */}
-        {/* TOP BAR & NAVIGATION                                              */}
+        {/* TOP COMMAND CENTER HEADER (Harmonized with Classroom Hero)        */}
         {/* ================================================================= */}
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5" />
+        <div className="px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4 bg-gradient-to-r from-[#0a192f] via-[#0d223f] to-[#071322] border-b border-sky-500/25 text-white flex items-center justify-between shrink-0 shadow-md relative overflow-hidden">
+          {/* Ambient header glows */}
+          <div className="absolute -top-12 -left-12 w-40 h-40 bg-cyan-500/20 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-12 right-1/4 w-48 h-48 bg-sky-500/15 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Left: AI Icon + Title + Badges */}
+          <div className="flex items-center gap-3 sm:gap-4 relative z-10 min-w-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600 text-white flex items-center justify-center shadow-md shadow-cyan-500/25 ring-2 ring-cyan-400/40 shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-slate-900">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+                <h2 className="text-base sm:text-lg lg:text-xl font-black text-white tracking-tight truncate">
                   AI Teaching Intelligence
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                  {data?.cached ? 'Cached • 0 AI Tokens' : data?.ai_provider === 'openai_fallback' ? 'OpenAI Fallback' : 'Google Gemini AI'}
-                </span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-xs shrink-0">
+                  <Sparkles className="w-3 h-3 text-cyan-400 animate-pulse" />
+                  <span>{data?.cached ? 'Cached • 0 Tokens' : data?.ai_provider === 'openai_fallback' ? 'OpenAI' : 'Google Gemini AI'}</span>
+                </div>
               </div>
-              <p className="text-xs text-slate-500 font-semibold">
-                Understand your classroom. Know what to teach next.
+              <p className="text-xs text-sky-200/90 font-medium truncate hidden sm:block mt-0.5">
+                Grounded pedagogical analytics & automated diagnostics for {classroom.title}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right Controls: Refresh AI + Close Button */}
+          <div className="flex items-center gap-2 sm:gap-2.5 relative z-10 shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -371,46 +378,48 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 loadRecentExams();
               }}
               disabled={refreshing || loading}
-              className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-gradient-to-r from-sky-500 via-cyan-500 to-sky-600 hover:from-sky-400 hover:to-cyan-400 text-white rounded-xl text-xs font-black shadow-md shadow-sky-500/25 active:scale-95 transition-all cursor-pointer border border-cyan-300/30 disabled:opacity-50 select-none"
               title="Recalculate AI analysis with fresh classroom data"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">{refreshing ? 'Analyzing...' : 'Refresh AI'}</span>
             </button>
 
             <button
               onClick={onClose}
-              className="w-9 h-9 rounded-2xl bg-slate-200/80 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-sky-200 hover:text-white transition-all cursor-pointer active:scale-95 shrink-0"
+              title="Close Teaching Intelligence"
+              aria-label="Close Teaching Intelligence"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
         {/* ================================================================= */}
-        {/* TABS SELECTOR (5 TABS)                                            */}
+        {/* TABS SELECTOR (5 TABS - HORIZONTALLY SCROLLABLE ON MOBILE)        */}
         {/* ================================================================= */}
-        <div className="flex items-center justify-between px-6 py-2.5 border-b border-slate-100 bg-white shrink-0 overflow-x-auto gap-2">
-          <div className="flex items-center gap-2">
+        <div className="bg-white border-b border-slate-200/90 px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3 shrink-0 shadow-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 flex-1 min-w-0">
             
-            {/* Tab 1: Teaching Intelligence Dashboard */}
+            {/* Tab 1: Teaching Intelligence */}
             <button
               type="button"
               onClick={() => {
                 setActiveTab('intelligence');
                 setSelectedExamId(null);
               }}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
                 activeTab === 'intelligence'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-[#0a192f] text-white shadow-sm border border-[#0a192f]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
               <span>Teaching Intelligence</span>
             </button>
 
-            {/* Tab 2: Student Intelligence Drilldown */}
+            {/* Tab 2: Student Intelligence */}
             <button
               type="button"
               onClick={() => {
@@ -420,16 +429,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   handleSelectStudent(mergedRoster[0].studentId);
                 }
               }}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
                 activeTab === 'students'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 border border-indigo-600'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5 shrink-0" />
               <span>Student Intelligence</span>
               {((data?.metrics?.students_needing_attention?.length || 0) > 0 || (classHealth?.strugglingCount || 0) > 0) && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
                   activeTab === 'students' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-800'
                 }`}>
                   {data?.metrics?.students_needing_attention?.length || classHealth?.strugglingCount}
@@ -444,13 +453,13 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 setActiveTab('chat');
                 setSelectedExamId(null);
               }}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
                 activeTab === 'chat'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-sky-600 text-white shadow-sm shadow-sky-500/20 border border-sky-600'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
-              <MessageSquare className="w-3.5 h-3.5" />
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
               <span>AI Teacher Chat</span>
             </button>
 
@@ -460,16 +469,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               onClick={() => {
                 setActiveTab('recent-exams');
               }}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
                 activeTab === 'recent-exams'
-                  ? 'bg-[#026fc3] text-white shadow-md shadow-sky-500/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-[#026fc3] text-white shadow-sm shadow-sky-500/20 border border-[#026fc3]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
-              <ClipboardCheck className="w-3.5 h-3.5" />
+              <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
               <span>Recent Exam Reports</span>
               {recentExams.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
                   activeTab === 'recent-exams' ? 'bg-white/25 text-white' : 'bg-sky-100 text-sky-800'
                 }`}>
                   {recentExams.length}
@@ -484,18 +493,18 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 setActiveTab('30day-report');
                 setSelectedExamId(null);
               }}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
                 activeTab === '30day-report'
-                  ? 'bg-[#6366f1] text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-violet-600 text-white shadow-sm shadow-violet-500/20 border border-violet-600'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
               }`}
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-3.5 h-3.5 shrink-0" />
               <span>30-Day Performance Report</span>
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-400 font-bold hidden sm:block">
+          <div className="text-xs text-slate-500 font-bold hidden xl:flex items-center gap-1.5 shrink-0">
             {data?.updated_at ? `Last Updated: ${new Date(data.updated_at).toLocaleTimeString()}` : ''}
           </div>
         </div>
@@ -557,48 +566,48 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               )}
 
               {/* 1. TOP KPI METRICS STRIP (GROUNDED CLASS HEALTH) */}
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-                    <span className="text-xs font-bold text-slate-400 block">Class Average</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-2xl font-black text-indigo-600">
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border-2 border-slate-200/90 shadow-2xs hover:border-indigo-300 transition-all">
+                    <span className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Class Average</span>
+                    <div className="flex items-baseline gap-2 mt-1.5">
+                      <span className="text-2xl sm:text-3xl font-black text-indigo-600">
                         {classHealth?.classAverage != null ? `${classHealth.classAverage}%` : metrics?.overall_score != null ? `${metrics.overall_score}%` : '—'}
                       </span>
                       {metrics?.score_change ? (
-                        <span className={`text-[10px] font-black ${metrics.score_change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <span className={`text-xs font-black ${metrics.score_change >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                           {metrics.score_change >= 0 ? `+${metrics.score_change}%` : `${metrics.score_change}%`}
                         </span>
                       ) : (
-                        <span className="text-[10px] font-medium text-slate-400">All Sources</span>
+                        <span className="text-[11px] font-bold text-slate-500">All Sources</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-                    <span className="text-xs font-bold text-slate-400 block">Task Completion</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-2xl font-black text-slate-800">
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border-2 border-slate-200/90 shadow-2xs hover:border-sky-300 transition-all">
+                    <span className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Task Completion</span>
+                    <div className="flex items-baseline gap-2 mt-1.5">
+                      <span className="text-2xl sm:text-3xl font-black text-slate-900">
                         {classHealth?.completionRate ?? metrics?.task_completion_rate ?? 0}%
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400">Classroom</span>
+                      <span className="text-[11px] font-bold text-slate-500">Classroom</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-                    <span className="text-xs font-bold text-slate-400 block">Active Participation</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-2xl font-black text-purple-600">
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border-2 border-slate-200/90 shadow-2xs hover:border-purple-300 transition-all">
+                    <span className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Active Participation</span>
+                    <div className="flex items-baseline gap-2 mt-1.5">
+                      <span className="text-2xl sm:text-3xl font-black text-purple-600">
                         {classHealth?.participationRate ?? metrics?.engagement_rate ?? 0}%
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400">Enrolled</span>
+                      <span className="text-[11px] font-bold text-slate-500">Enrolled</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-                    <span className="text-xs font-bold text-slate-400 block">Assessments Count</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-2xl font-black text-cyan-600">
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border-2 border-slate-200/90 shadow-2xs hover:border-cyan-300 transition-all">
+                    <span className="text-xs font-bold text-slate-600 block uppercase tracking-wider">Assessments Count</span>
+                    <div className="flex items-baseline gap-2 mt-1.5">
+                      <span className="text-2xl sm:text-3xl font-black text-cyan-600">
                         {classHealth?.assessmentActivityCount ?? (
                           (metrics?.assessments_count?.tasks || 0) +
                           (metrics?.assessments_count?.quizzes || 0) +
@@ -606,25 +615,25 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                           (metrics?.assessments_count?.ocr_assessments || 0)
                         )}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400">Evaluated</span>
+                      <span className="text-[11px] font-bold text-slate-500">Evaluated</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Class Health Sub-bar */}
-                <div className="flex items-center justify-between p-3 bg-slate-50/70 rounded-2xl border border-slate-200/70 text-xs">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between p-3.5 bg-white rounded-2xl border-2 border-slate-200/80 shadow-2xs text-xs flex-wrap gap-2">
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="font-bold text-slate-700">Improving Students:</span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px]">
+                      <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-extrabold text-slate-800">Improving Students:</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs border border-emerald-200">
                         {classHealth?.improvingCount || 0}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
-                      <span className="font-bold text-slate-700">Struggling Students:</span>
-                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[11px]">
+                      <TrendingDown className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="font-extrabold text-slate-800">Struggling Students:</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-xs border border-rose-200">
                         {classHealth?.strugglingCount || data?.metrics?.students_needing_attention?.length || 0}
                       </span>
                     </div>
@@ -1362,36 +1371,36 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
                     {/* Student 4-KPI Metric Strip */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Avg Score</span>
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                        <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Avg Score</span>
                         <span className="text-xl font-black text-indigo-600 mt-0.5 block">
                           {studentDetail.averagePercentage != null ? `${studentDetail.averagePercentage}%` : '—'}
                         </span>
-                        <span className="text-[10px] font-medium text-slate-500">Across Activities</span>
+                        <span className="text-[10px] font-semibold text-slate-500">Across Activities</span>
                       </div>
 
-                      <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Accuracy</span>
-                        <span className="text-xl font-black text-slate-800 mt-0.5 block">
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                        <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Accuracy</span>
+                        <span className="text-xl font-black text-slate-900 mt-0.5 block">
                           {studentDetail.accuracyPercentage != null ? `${studentDetail.accuracyPercentage}%` : '—'}
                         </span>
-                        <span className="text-[10px] font-medium text-slate-500">Question Accuracy</span>
+                        <span className="text-[10px] font-semibold text-slate-500">Question Accuracy</span>
                       </div>
 
-                      <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Completion</span>
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                        <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Completion</span>
                         <span className="text-xl font-black text-emerald-600 mt-0.5 block">
                           {studentDetail.completionRate}%
                         </span>
-                        <span className="text-[10px] font-medium text-slate-500">Submission Rate</span>
+                        <span className="text-[10px] font-semibold text-slate-500">Submission Rate</span>
                       </div>
 
-                      <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Assessments</span>
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                        <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Assessments</span>
                         <span className="text-xl font-black text-purple-600 mt-0.5 block">
                           {studentDetail.attempts}
                         </span>
-                        <span className="text-[10px] font-medium text-slate-500">Total Attempts</span>
+                        <span className="text-[10px] font-semibold text-slate-500">Total Attempts</span>
                       </div>
                     </div>
 
@@ -1447,51 +1456,51 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                           <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
                             5-Source Learning Activity Breakdown
                           </h4>
-                          <p className="text-[11px] text-slate-400 font-medium">
+                          <p className="text-[11px] text-slate-500 font-medium">
                             Synthesized records across quizzes, exams, assignments, OCR, and AI challenges
                           </p>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
-                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-0.5">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Live Quizzes</span>
-                          <span className="text-sm font-black text-slate-800 block">
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-0.5">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Live Quizzes</span>
+                          <span className="text-sm font-black text-slate-900 block">
                             {studentDetail.activityBreakdown.live_quiz.averageScore != null ? `${studentDetail.activityBreakdown.live_quiz.averageScore}%` : '—'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{studentDetail.activityBreakdown.live_quiz.attempts} attempts</span>
+                          <span className="text-[10px] font-medium text-slate-500">{studentDetail.activityBreakdown.live_quiz.attempts} attempts</span>
                         </div>
 
-                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-0.5">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Exams</span>
-                          <span className="text-sm font-black text-slate-800 block">
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-0.5">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Exams</span>
+                          <span className="text-sm font-black text-slate-900 block">
                             {studentDetail.activityBreakdown.exam.averageScore != null ? `${studentDetail.activityBreakdown.exam.averageScore}%` : '—'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{studentDetail.activityBreakdown.exam.attempts} attempts</span>
+                          <span className="text-[10px] font-medium text-slate-500">{studentDetail.activityBreakdown.exam.attempts} attempts</span>
                         </div>
 
-                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-0.5">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Assignments</span>
-                          <span className="text-sm font-black text-slate-800 block">
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-0.5">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Assignments</span>
+                          <span className="text-sm font-black text-slate-900 block">
                             {studentDetail.activityBreakdown.assignment.averageScore != null ? `${studentDetail.activityBreakdown.assignment.averageScore}%` : '—'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{studentDetail.activityBreakdown.assignment.attempts} submitted</span>
+                          <span className="text-[10px] font-medium text-slate-500">{studentDetail.activityBreakdown.assignment.attempts} submitted</span>
                         </div>
 
-                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-0.5">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">OCR Tests</span>
-                          <span className="text-sm font-black text-slate-800 block">
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-0.5">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">OCR Tests</span>
+                          <span className="text-sm font-black text-slate-900 block">
                             {studentDetail.activityBreakdown.ocr.averageScore != null ? `${studentDetail.activityBreakdown.ocr.averageScore}%` : '—'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{studentDetail.activityBreakdown.ocr.attempts} graded</span>
+                          <span className="text-[10px] font-medium text-slate-500">{studentDetail.activityBreakdown.ocr.attempts} graded</span>
                         </div>
 
-                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-0.5 col-span-2 sm:col-span-1">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">AI Challenges</span>
-                          <span className="text-sm font-black text-slate-800 block">
+                        <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-center space-y-0.5 col-span-2 sm:col-span-1">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">AI Challenges</span>
+                          <span className="text-sm font-black text-slate-900 block">
                             {studentDetail.activityBreakdown.ai_challenge.averageScore != null ? `${studentDetail.activityBreakdown.ai_challenge.averageScore}%` : '—'}
                           </span>
-                          <span className="text-[10px] text-slate-500">{studentDetail.activityBreakdown.ai_challenge.attempts} completed</span>
+                          <span className="text-[10px] font-medium text-slate-500">{studentDetail.activityBreakdown.ai_challenge.attempts} completed</span>
                         </div>
                       </div>
                     </div>
@@ -1633,25 +1642,28 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
             </div>
           ) : activeTab === 'chat' ? (
             /* ============================================================= */
-            /* TAB 3: AI TEACHER CHAT                                        */
+            /* TAB 3: AI TEACHER CHAT (HIGH-CONTRAST EVIDENCE GROUNDED CHAT) */
             /* ============================================================= */
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-col h-[680px] overflow-hidden">
+            <div className="bg-white rounded-3xl border-2 border-slate-200/90 shadow-sm flex flex-col h-full min-h-[640px] flex-1 overflow-hidden">
               
               {/* Chat Top Banner */}
-              <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-black">
-                    <Bot className="w-4 h-4" />
+              <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-600 to-cyan-500 text-white flex items-center justify-center font-black shadow-xs ring-2 ring-sky-100 shrink-0">
+                    <Bot className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                      <span>Evidence-Grounded AI Teaching Assistant</span>
-                      <span className="px-2 py-0.2 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900">
+                        Evidence-Grounded AI Teaching Assistant
+                      </h3>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                         Zero Hallucination
                       </span>
-                    </h3>
-                    <p className="text-[11px] text-slate-400 font-medium">
-                      Ask anything about your students, weak topics, or lesson plans. Grounded strictly in this classroom's records.
+                    </div>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      Answers inquiries using verified assessment records from this classroom.
                     </p>
                   </div>
                 </div>
@@ -1659,15 +1671,15 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 <button
                   type="button"
                   onClick={() => setChatMessages([])}
-                  className="text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0"
                 >
                   Clear Chat
                 </button>
               </div>
 
               {/* Quick Prompt Suggestion Chips */}
-              <div className="px-5 py-2.5 bg-white border-b border-slate-100 flex items-center gap-2 overflow-x-auto">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0">
+              <div className="px-4 sm:px-6 py-3 bg-slate-50/70 border-b border-slate-200 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 shrink-0">
                   Try asking:
                 </span>
                 {[
@@ -1681,7 +1693,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                     type="button"
                     onClick={() => handleSendChat(chip)}
                     disabled={sendingChat}
-                    className="px-2.5 py-1 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer shrink-0"
+                    className="px-3 py-1.5 bg-white hover:bg-sky-50 text-slate-800 hover:text-sky-900 border-2 border-slate-200 hover:border-sky-300 rounded-full text-xs font-bold whitespace-nowrap transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
                   >
                     {chip}
                   </button>
@@ -1689,16 +1701,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               </div>
 
               {/* Chat Message Thread */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#f8fafc]">
                 {chatMessages.length === 0 ? (
                   <div className="py-24 text-center space-y-3 max-w-md mx-auto">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-                      <MessageSquare className="w-6 h-6" />
+                    <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-sky-500 to-cyan-500 text-white flex items-center justify-center mx-auto shadow-md shadow-sky-500/20 ring-4 ring-sky-100">
+                      <MessageSquare className="w-7 h-7" />
                     </div>
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-black text-slate-800">What would you like to know about your class?</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                        Ask questions about learner performance, test results, or next steps. The AI will answer strictly using real assessments from this classroom.
+                    <div className="space-y-1.5">
+                      <h4 className="text-base font-black text-slate-900">What would you like to know about your class?</h4>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
+                        Ask questions about student learning progress, exam results, or teaching suggestions. The AI answers strictly from this classroom&apos;s real data.
                       </p>
                     </div>
                   </div>
@@ -1711,21 +1723,21 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                         className={`flex gap-3 ${isTeacher ? 'justify-end' : 'justify-start'}`}
                       >
                         {!isTeacher && (
-                          <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-1 font-black text-xs">
-                            AI
+                          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-sky-600 to-cyan-500 text-white flex items-center justify-center shrink-0 mt-0.5 font-black text-xs shadow-xs ring-2 ring-sky-100">
+                            <Bot className="w-4 h-4" />
                           </div>
                         )}
                         <div
-                          className={`max-w-xl p-4 rounded-2xl text-xs space-y-1 ${
+                          className={`max-w-xl sm:max-w-2xl p-4 sm:p-5 rounded-2xl text-xs sm:text-sm space-y-1.5 shadow-xs ${
                             isTeacher
-                              ? 'bg-indigo-600 text-white rounded-br-none'
-                              : 'bg-slate-50 border border-slate-200/80 text-slate-800 rounded-bl-none'
+                              ? 'bg-gradient-to-r from-[#026fc3] to-[#0284c7] text-white rounded-br-xs border border-sky-400/30'
+                              : 'bg-white border-2 border-sky-100 text-slate-900 rounded-bl-xs'
                           }`}
                         >
-                          <div className="font-bold whitespace-pre-wrap leading-relaxed">
+                          <div className={`whitespace-pre-wrap leading-relaxed ${isTeacher ? 'font-semibold text-white' : 'font-medium text-slate-900'}`}>
                             {msg.content}
                           </div>
-                          <span className={`text-[9px] block ${isTeacher ? 'text-indigo-200 text-right' : 'text-slate-400'}`}>
+                          <span className={`text-[10px] block font-bold ${isTeacher ? 'text-sky-100 text-right' : 'text-slate-500'}`}>
                             {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                           </span>
                         </div>
@@ -1735,19 +1747,19 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 )}
 
                 {sendingChat && (
-                  <div className="flex gap-3 justify-start">
-                    <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 font-black text-xs">
-                      AI
+                  <div className="flex gap-3 justify-start items-center">
+                    <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-sky-600 to-cyan-500 text-white flex items-center justify-center shrink-0 font-black text-xs shadow-xs ring-2 ring-sky-100">
+                      <Bot className="w-4 h-4" />
                     </div>
-                    <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl text-xs text-slate-500 flex items-center gap-2">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                    <div className="bg-white border-2 border-sky-200 p-4 rounded-2xl text-xs sm:text-sm text-slate-700 font-bold flex items-center gap-2.5 shadow-xs">
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#026fc3]" />
                       <span>Synthesizing answer from classroom records...</span>
                     </div>
                   </div>
                 )}
 
                 {chatError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
+                  <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl text-xs sm:text-sm text-rose-800 font-semibold">
                     {chatError}
                   </div>
                 )}
@@ -1759,7 +1771,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   e.preventDefault();
                   handleSendChat();
                 }}
-                className="p-4 border-t border-slate-100 bg-white flex items-center gap-2"
+                className="p-3.5 sm:p-4 border-t-2 border-slate-200 bg-white flex items-center gap-3 relative z-10"
               >
                 <input
                   type="text"
@@ -1767,14 +1779,15 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="Ask about students, topics, or lesson strategies..."
                   disabled={sendingChat}
-                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', caretColor: '#026fc3' }}
+                  className="flex-1 px-4 py-3 bg-white border-2 border-slate-300 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition-all shadow-xs"
                 />
                 <button
                   type="submit"
                   disabled={!chatInput.trim() || sendingChat}
-                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                  className="px-5 sm:px-6 py-3 bg-gradient-to-r from-sky-600 via-[#026fc3] to-cyan-600 hover:from-sky-500 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl text-xs sm:text-sm font-black flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-sky-500/25 active:scale-95 shrink-0"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-4 h-4 stroke-[2.5]" />
                   <span className="hidden sm:inline">Send</span>
                 </button>
               </form>
@@ -1938,54 +1951,54 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
                       {/* A. EXAM SUMMARY STRIP (6 Metrics) */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Students</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Total Students</span>
                           <span className="text-xl font-black text-slate-900 mt-0.5 block">
                             {examAnalysis.summary.total_students}
                           </span>
-                          <span className="text-[10px] font-medium text-slate-500">Enrolled</span>
+                          <span className="text-[10px] font-semibold text-slate-500">Enrolled</span>
                         </div>
 
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Class Average</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Class Average</span>
                           <span className="text-xl font-black text-indigo-600 mt-0.5 block">
                             {examAnalysis.summary.average_score}%
                           </span>
-                          <span className="text-[10px] font-medium text-indigo-500">Overall</span>
+                          <span className="text-[10px] font-semibold text-indigo-600">Overall</span>
                         </div>
 
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Highest Score</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Highest Score</span>
                           <span className="text-xl font-black text-emerald-600 mt-0.5 block">
                             {examAnalysis.summary.highest_score}%
                           </span>
-                          <span className="text-[10px] font-medium text-emerald-500">Top Result</span>
+                          <span className="text-[10px] font-semibold text-emerald-600">Top Result</span>
                         </div>
 
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Lowest Score</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Lowest Score</span>
                           <span className="text-xl font-black text-rose-600 mt-0.5 block">
                             {examAnalysis.summary.lowest_score}%
                           </span>
-                          <span className="text-[10px] font-medium text-rose-500">Floor Result</span>
+                          <span className="text-[10px] font-semibold text-rose-600">Floor Result</span>
                         </div>
 
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Pass Rate</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Pass Rate</span>
                           <span className="text-xl font-black text-emerald-700 mt-0.5 block">
                             {examAnalysis.summary.pass_rate}%
                           </span>
-                          <span className="text-[10px] font-medium text-slate-500">
+                          <span className="text-[10px] font-semibold text-slate-500">
                             {examAnalysis.summary.passed_count} of {examAnalysis.summary.completed_students}
                           </span>
                         </div>
 
-                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">Completion Rate</span>
+                        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs text-center">
+                          <span className="text-[10px] font-black text-slate-600 block uppercase tracking-wider">Completion Rate</span>
                           <span className="text-xl font-black text-cyan-600 mt-0.5 block">
                             {examAnalysis.summary.completion_rate}%
                           </span>
-                          <span className="text-[10px] font-medium text-slate-500">
+                          <span className="text-[10px] font-semibold text-slate-500">
                             {examAnalysis.summary.completed_students} Submitted
                           </span>
                         </div>

@@ -595,39 +595,8 @@ export const ClassroomDetailPage: React.FC = () => {
       <BotanicalPaperCutFrame />
 
       {/* MAIN DIGITAL CLASSROOM WORKSPACE CONTAINER */}
-      <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7 relative z-10">
+      <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7 relative z-10 pt-2 sm:pt-3">
         
-        {/* ========================================================================= */}
-        {/* TOP SUBHEADER / BREADCRUMB                                                */}
-        {/* ========================================================================= */}
-        <div className="flex items-center justify-between gap-3 flex-wrap pb-1 sm:pb-2">
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-            <Link
-              to="/classes"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 px-3.5 py-1.5 rounded-full transition-all border border-slate-200/80 shadow-2xs cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>All Classes</span>
-            </Link>
-
-            <span className="text-slate-300 font-light">/</span>
-
-            <span className="px-3 py-1 rounded-full bg-sky-50 text-sky-800 text-xs font-extrabold border border-sky-100/90 shadow-2xs">
-              {classroom.subject || 'Classroom'}
-            </span>
-
-            {classroom.grade && (
-              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-extrabold border border-slate-200/60 shadow-2xs">
-                {classroom.grade}
-              </span>
-            )}
-
-            <h2 className="text-xs sm:text-sm font-black text-slate-800 truncate max-w-[200px] sm:max-w-md hidden sm:inline-block">
-              {classroom.title}
-            </h2>
-          </div>
-        </div>
-
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
