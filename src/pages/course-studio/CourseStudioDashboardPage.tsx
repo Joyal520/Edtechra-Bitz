@@ -278,7 +278,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
               {filteredCourses.map(course => {
                 const isPublished = course.status === 'published';
 
@@ -286,146 +286,162 @@ export const CourseStudioDashboardPage: React.FC = () => {
                   <div
                     key={course.id}
                     onClick={() => navigate(`/course-studio/${course.id}`)}
-                    className="bg-white rounded-[24px] border border-stone-200/80 shadow-xs hover:shadow-md hover:border-sky-300 transition-all cursor-pointer flex flex-col justify-between overflow-hidden group"
+                    className="bg-white rounded-[28px] border border-stone-200/80 shadow-xs hover:shadow-xl hover:border-sky-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden group h-full"
                   >
-                    {/* Cover / Header */}
-                    <div>
+                    {/* Dominant Hero Image Container (45–55% height, full width) */}
+                    <div className="relative w-full h-52 sm:h-56 bg-slate-950 overflow-hidden shrink-0 select-none">
                       {course.cover_image_url ? (
-                        <div className={`relative w-full bg-slate-900 overflow-hidden ${
-                          course.cover_aspect_ratio === '1:1' ? 'aspect-square max-h-56' : 'h-36'
-                        }`}>
-                          <img
-                            src={course.cover_image_url}
-                            alt={course.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                          <div className="absolute top-3 left-3">
-                            {course.cover_aspect_ratio === '1:1' && (
-                              <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-xs text-white text-[10px] font-black uppercase tracking-wider border border-white/20">
-                                1:1 Square
-                              </span>
-                            )}
-                          </div>
-                          <div className="absolute top-3 right-3">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                isPublished
-                                  ? 'bg-emerald-500 text-white shadow-sm'
-                                  : 'bg-slate-800/80 text-slate-300 border border-slate-600'
-                              }`}
-                            >
-                              {isPublished ? 'Published' : 'Draft'}
-                            </span>
-                          </div>
-                        </div>
+                        <img
+                          src={course.cover_image_url}
+                          alt={course.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                        />
                       ) : (
-                        <div className="p-5 pb-0 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-[#026fc3] text-[11px] font-black border border-sky-100">
-                              {course.subject}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-stone-100 text-slate-600 text-[11px] font-bold">
-                              {course.grade_level}
+                        <div className="w-full h-full relative flex items-center justify-center bg-gradient-to-br from-[#06182c] via-[#026fc3] to-[#7c3aed] overflow-hidden">
+                          {/* Ambient background lighting */}
+                          <div className="absolute -top-10 -right-10 w-44 h-44 bg-sky-400/20 rounded-full blur-2xl pointer-events-none" />
+                          <div className="absolute -bottom-10 -left-10 w-44 h-44 bg-purple-500/20 rounded-full blur-2xl pointer-events-none" />
+                          <div className="relative flex flex-col items-center justify-center text-center p-4">
+                            <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner mb-2 group-hover:scale-110 transition-transform duration-300">
+                              <BookOpen className="w-7 h-7 text-sky-200" />
+                            </div>
+                            <span className="text-xs font-black text-white/90 tracking-wide uppercase">
+                              {course.subject || 'Interactive Course'}
                             </span>
                           </div>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              isPublished
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : 'bg-stone-100 text-slate-600 border border-stone-200'
-                            }`}
-                          >
-                            {isPublished ? 'Published' : 'Draft'}
-                          </span>
                         </div>
                       )}
 
-                      {/* Title & Description */}
-                      <div className="p-5 space-y-2">
-                        <h3 className="text-base font-black text-slate-900 group-hover:text-[#026fc3] transition-colors leading-snug line-clamp-1">
-                          {course.title}
-                        </h3>
-                        <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed">
-                          {course.short_description || 'No description provided. Click to open course editor and build content.'}
-                        </p>
+                      {/* Vignette Overlay for Crisp Contrast */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent pointer-events-none" />
+
+                      {/* Top Overlays: Aspect ratio & Status Badge */}
+                      <div className="absolute top-3.5 left-3.5 right-3.5 flex items-center justify-between pointer-events-none">
+                        <div>
+                          {course.cover_aspect_ratio === '1:1' && (
+                            <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider border border-white/20 shadow-xs">
+                              1:1 Square
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span
+                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm backdrop-blur-md border ${
+                              isPublished
+                                ? 'bg-emerald-500/90 text-white border-emerald-300/40 shadow-emerald-500/20'
+                                : 'bg-slate-900/80 text-slate-300 border-white/15'
+                            }`}
+                          >
+                            {isPublished ? '● Published' : '○ Draft'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Overlays: Subject & Grade Pills */}
+                      <div className="absolute bottom-3 left-3.5 right-3.5 flex items-center gap-1.5 flex-wrap pointer-events-none">
+                        <span className="px-2.5 py-1 rounded-full bg-slate-900/70 backdrop-blur-md text-white text-[11px] font-bold border border-white/20 shadow-xs flex items-center gap-1">
+                          <BookOpen className="w-3 h-3 text-sky-400" />
+                          {course.subject || 'General'}
+                        </span>
+                        {course.grade_level && (
+                          <span className="px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-[11px] font-bold border border-white/25 shadow-xs">
+                            {course.grade_level}
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Metadata Counters & Action Footer */}
-                    <div className="p-5 pt-0 space-y-4">
-                      <div className="grid grid-cols-3 gap-2 py-3 border-y border-stone-100 text-center">
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{course.units_count || 1}</p>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase">Units</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-900">{course.episodes_count || 1}</p>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase">Lessons</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-[#026fc3]">
-                            {course.assigned_classrooms_count || 0}
-                          </p>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase">Classes</p>
-                        </div>
+                    {/* Content Section */}
+                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-3.5">
+                      {/* Title & Description */}
+                      <div className="space-y-1.5">
+                        <h3 className="text-base font-black text-slate-900 group-hover:text-[#026fc3] transition-colors leading-snug line-clamp-2 min-h-[2.5rem]">
+                          {course.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed min-h-[2rem]">
+                          {course.short_description || 'Build interactive lessons and activities.'}
+                        </p>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            title="Duplicate Course"
-                            onClick={e => handleDuplicate(e, course.id)}
-                            className="p-2 rounded-xl hover:bg-stone-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Delete Course"
-                            onClick={e => handleDelete(e, course.id)}
-                            className="p-2 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          {isPublished && (
-                            <button
-                              type="button"
-                              title="Course Analytics"
-                              onClick={e => {
-                                e.stopPropagation();
-                                navigate(`/course-studio/${course.id}/analytics`);
-                              }}
-                              className="p-2 rounded-xl hover:bg-sky-50 text-[#026fc3] transition-all cursor-pointer"
-                            >
-                              <BarChart3 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                      {/* Stats & Actions Container */}
+                      <div className="space-y-3.5 pt-1">
+                        {/* 3-Column Compact Stats */}
+                        <div className="grid grid-cols-3 py-2 px-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                          <div>
+                            <p className="text-xs font-black text-slate-900">{course.units_count || 1}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Units</p>
+                          </div>
+                          <div className="border-x border-slate-200/70">
+                            <p className="text-xs font-black text-slate-900">{course.episodes_count || 1}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Lessons</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-[#026fc3]">{course.assigned_classrooms_count || 0}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Classes</p>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setPublishTargetCourse(course);
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-black border border-emerald-200 transition-all cursor-pointer flex items-center gap-1"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>{isPublished ? 'Assign' : 'Publish'}</span>
-                          </button>
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="Duplicate Course"
+                              onClick={e => handleDuplicate(e, course.id)}
+                              className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete Course"
+                              onClick={e => handleDelete(e, course.id)}
+                              className="p-2 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            {isPublished && (
+                              <button
+                                type="button"
+                                title="Course Analytics"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  navigate(`/course-studio/${course.id}/analytics`);
+                                }}
+                                className="p-2 rounded-xl hover:bg-sky-50 text-[#026fc3] transition-all cursor-pointer"
+                              >
+                                <BarChart3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/course-studio/${course.id}`)}
-                            className="px-3 py-1.5 rounded-xl bg-[#026fc3] hover:bg-[#03589e] text-white text-[11px] font-black shadow-xs transition-all cursor-pointer flex items-center gap-1"
-                          >
-                            <span>Open</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <LiquidButton
+                              variant={isPublished ? 'secondary' : 'emerald'}
+                              size="sm"
+                              className="!px-3 !py-1.5 !text-[11px] !min-h-[32px]"
+                              icon={<Send className="w-3 h-3" />}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setPublishTargetCourse(course);
+                              }}
+                            >
+                              {isPublished ? 'Assign' : 'Publish'}
+                            </LiquidButton>
+
+                            <LiquidButton
+                              variant="primary"
+                              size="sm"
+                              className="!px-3 !py-1.5 !text-[11px] !min-h-[32px]"
+                              iconRight={<ArrowRight className="w-3 h-3" />}
+                              onClick={e => {
+                                e.stopPropagation();
+                                navigate(`/course-studio/${course.id}`);
+                              }}
+                            >
+                              Open
+                            </LiquidButton>
+                          </div>
                         </div>
                       </div>
                     </div>
