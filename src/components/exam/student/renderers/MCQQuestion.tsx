@@ -160,57 +160,48 @@ export const MCQQuestion: React.FC<MCQQuestionProps> = ({
               key={opt.id || optIdx}
               type="button"
               onClick={() => onAnswerChange(opt.id || opt.text)}
-              className={`w-full min-h-[48px] p-3 sm:p-3.5 md:p-4 rounded-xl sm:rounded-2xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
+              className={`w-full min-h-[56px] sm:min-h-[64px] p-3.5 sm:p-4 md:p-5 rounded-2xl sm:rounded-[24px] border-2 text-left flex items-center justify-between gap-3 sm:gap-4 cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-4 relative overflow-hidden group ${
                 isSelected
-                  ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md`
-                  : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs`
+                  ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md -translate-y-0.5`
+                  : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs hover:-translate-y-0.5`
               } ${isCorrect ? 'ring-4 ring-emerald-500/40 border-emerald-500' : ''}`}
             >
-              {/* Left: Square Colored Badge + Rays + Clean Answer Text (NO redundant letter!) */}
-              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+              {/* Glossy top-highlight reflection for liquid feel */}
+              <div className="absolute inset-x-0 top-0 h-[40%] bg-gradient-to-b from-white/60 to-transparent pointer-events-none rounded-t-2xl" />
+
+              {/* Left: Liquid Colored Badge + Answer Text */}
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1 relative z-10">
                 {/* Prominent Colored Letter Badge */}
                 <div
-                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm shrink-0`}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-lg sm:text-xl shadow-xs shrink-0 select-none group-hover:scale-105 transition-transform`}
                 >
                   {theme.letter}
                 </div>
 
-                {/* Decorative Sunburst Rays Accent (Matching Reference Design) */}
-                <svg
-                  className={`w-3.5 h-5 shrink-0 ${theme.accentRays} hidden xs:block`}
-                  viewBox="0 0 16 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path d="M2 5L7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                  <path d="M1 12H7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                  <path d="M2 19L7 17" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                </svg>
-
-                {/* Answer Text: Displays "is" directly without redundant "A. " */}
-                <span className="text-lg sm:text-xl font-black text-slate-900 break-words flex-1 leading-snug">
+                {/* Answer Text */}
+                <span className="text-base sm:text-lg md:text-xl font-bold sm:font-black text-slate-900 break-words flex-1 leading-snug">
                   {cleanedText}
                 </span>
               </div>
 
               {/* Right: Chevron or Check Circle Indicator */}
               <div
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 transition-transform relative z-10 ${
                   isSelected
-                    ? `${theme.badgeBg} text-white shadow-xs`
+                    ? `${theme.badgeBg} text-white shadow-xs scale-105`
                     : `${theme.chevronBg} ${theme.chevronText}`
                 }`}
               >
                 {isSelected ? (
                   <Check className="w-5 h-5 stroke-[3]" />
                 ) : (
-                  <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
                 )}
               </div>
 
               {/* Teacher Answer Key Badge */}
               {isCorrect && (
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0 ml-1">
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0 ml-1 relative z-10">
                   Key
                 </span>
               )}

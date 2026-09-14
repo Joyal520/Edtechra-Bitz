@@ -98,32 +98,32 @@ export function renderFormattedPrompt(
 
         if (isBlank) {
           if (isFillBlank && onInlineInputChange) {
-            // Interactive inline input field for Fill in the Blank
+            // Interactive Liquid inline input field for Fill in the Blank
             return (
-              <span key={`blank-${index}`} className="inline-block mx-1.5 align-middle">
+              <span key={`blank-${index}`} className="inline-block mx-2 my-1 align-middle">
                 <input
                   type="text"
                   value={inlineInputValue}
                   onChange={(e) => onInlineInputChange(e.target.value)}
-                  placeholder={inputPlaceholder}
+                  placeholder={inputPlaceholder || 'type answer...'}
                   autoComplete="off"
                   spellCheck={false}
-                  className="inline-block w-32 sm:w-40 px-3 py-1 bg-white border-2 border-indigo-400 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 rounded-lg text-xs sm:text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden shadow-2xs transition-all text-center"
+                  className="inline-block min-w-[140px] sm:min-w-[180px] max-w-[280px] px-4 py-2 sm:py-2.5 bg-white/95 backdrop-blur-md border-2 border-sky-400 focus:border-[#026fc3] focus:ring-4 focus:ring-sky-200/70 rounded-2xl text-base sm:text-lg font-black text-slate-950 placeholder:text-slate-400/80 focus:outline-hidden shadow-inner transition-all duration-200 text-center caret-[#026fc3]"
                 />
               </span>
             );
           }
 
-          // In MCQ or standard view: render clean typographic blank line
+          // In MCQ or standard view: render clean typographic liquid blank line
           return (
             <span
               key={`blank-${index}`}
-              className={`inline-block border-b-2 min-w-[54px] mx-1 text-center font-bold select-none px-1 tracking-wider ${
-                isMCQ ? 'border-indigo-600 text-indigo-700' : 'border-slate-700 text-slate-900'
+              className={`inline-block border-b-2 sm:border-b-3 min-w-[64px] mx-1.5 text-center font-black select-none px-2 tracking-wider ${
+                isMCQ ? 'border-indigo-600 text-indigo-700' : 'border-slate-800 text-slate-900'
               }`}
               title="Blank to complete"
             >
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
             </span>
           );
         }

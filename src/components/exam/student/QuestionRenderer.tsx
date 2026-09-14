@@ -304,15 +304,14 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
             </div>
           )}
 
-          {/* Question Prompt */}
-          <h2 className="text-base sm:text-lg md:text-xl font-black text-slate-900 leading-relaxed tracking-wide">
-            {renderFormattedPrompt(question.question, {
-              isMCQ: question.type === 'multiple_choice',
-              isFillBlank: question.type === 'fill_in_blank',
-              inlineInputValue: question.type === 'fill_in_blank' ? currentAnswer : undefined,
-              onInlineInputChange: question.type === 'fill_in_blank' ? onAnswerChange : undefined
-            })}
-          </h2>
+          {/* Question Prompt (For non-fill-in-blank questions; Fill-in-blank embeds its sentence directly) */}
+          {question.type !== 'fill_in_blank' && (
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 leading-snug tracking-tight">
+              {renderFormattedPrompt(question.question, {
+                isMCQ: question.type === 'multiple_choice'
+              })}
+            </h2>
+          )}
 
           {/* Interactive Question Input Form */}
           {renderContent()}

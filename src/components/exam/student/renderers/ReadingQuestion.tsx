@@ -18,23 +18,30 @@ export const ReadingQuestionLayout: React.FC<ReadingQuestionProps> = ({
   children
 }) => {
   return (
-    <div className="space-y-5">
-      {/* Passage Card */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-teal-200 shadow-2xs space-y-3">
-        <div className="flex items-center gap-2 border-b border-teal-100 pb-2.5">
-          <BookOpen className="w-4 h-4 text-teal-600 shrink-0" />
-          <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
-            {passageTitle || 'Reading Comprehension Passage'}
-          </h4>
+    <div className="space-y-6 w-full">
+      {/* Distinct Styled Reading Passage Card */}
+      <div className="bg-gradient-to-br from-amber-50/60 via-orange-50/30 to-amber-50/50 p-6 sm:p-8 rounded-3xl border-2 border-amber-200/80 shadow-xs space-y-4">
+        <div className="flex items-center gap-2 border-b border-amber-200/70 pb-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+            <BookOpen className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">
+              Reading Passage
+            </span>
+            <h4 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
+              {passageTitle || 'Comprehension Text'}
+            </h4>
+          </div>
         </div>
 
-        <div className="text-xs sm:text-sm text-slate-800 leading-[1.6] font-serif max-w-[72ch] whitespace-pre-wrap selection:bg-teal-100">
+        <div className="text-sm sm:text-base text-slate-800 leading-[1.8] font-serif max-w-[78ch] whitespace-pre-wrap selection:bg-amber-100/80 pr-2">
           {passage}
         </div>
       </div>
 
       {/* Associated Question Card */}
-      <div className="question-card">
+      <div className="question-card pt-1">
         {children}
       </div>
     </div>

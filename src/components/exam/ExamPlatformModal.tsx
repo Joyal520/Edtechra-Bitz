@@ -41,6 +41,29 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
   // Student Session State
   const [studentAttemptData, setStudentAttemptData] = useState<ExamSessionAttemptData | null>(null);
   const [studentResult, setStudentResult] = useState<any | null>(null);
+  const [freshAssessment, setFreshAssessment] = useState<any | null>(null);
+
+  // Fetch fresh assessment from database when reopening or changing activeExam
+  useEffect(() => {
+    if (!isOpen) {
+      setFreshAssessment(null);
+      return;
+    }
+
+    if (activeExam?.id) {
+      classroomExamService.getAssessmentV2(activeExam.id)
+        .then((fetched) => {
+          if (fetched) {
+            setFreshAssessment(fetched);
+          }
+        })
+        .catch((err) => {
+          console.warn('[ExamPlatformModal] Could not fetch fresh assessment:', err);
+        });
+    } else {
+      setFreshAssessment(null);
+    }
+  }, [isOpen, activeExam?.id]);
 
   // Format active exam into canonical schema if needed
   const canonicalActiveExam: CanonicalExamV1 | null = React.useMemo(() => {
@@ -192,8 +215,9 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
     return (
       <div className="fixed inset-0 z-50 overflow-hidden bg-slate-50">
         <AssessmentBuilder
+          key={activeExam?.id || 'new_exam'}
           classroomId={classroomId}
-          initialAssessment={canonicalActiveExam || undefined}
+          initialAssessment={(freshAssessment as any) || canonicalActiveExam || undefined}
           onBack={onClose}
           onSaveAssessment={async (assessmentData, isPublished) => {
             const res = await classroomExamService.saveAssessmentV2({

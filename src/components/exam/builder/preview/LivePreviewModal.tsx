@@ -143,22 +143,6 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Determine if the assessment conforms to the Simple Exam template
-  const isSimpleExam = useMemo(() => {
-    const typeStr = (liveAssessment.exam.examType || '').toLowerCase();
-    const titleStr = (liveAssessment.exam.title || '').toLowerCase();
-    const template = (liveAssessment as any).exam_template || (liveAssessment.exam as any)?.exam_template;
-    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
-      return true;
-    }
-    const allMCQ =
-      flattenedQuestions.length > 0 &&
-      flattenedQuestions.every((q) => q.question.type === 'multiple_choice');
-    if (allMCQ && (flattenedQuestions.length === 25 || typeStr.includes('quick') || (flattenedQuestions[0]?.question?.marks === 4))) {
-      return true;
-    }
-    return false;
-  }, [liveAssessment, flattenedQuestions]);
 
   const handleToggleFlag = (qId: string) => {
     setFlaggedIds((prev) => {
@@ -265,10 +249,10 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
   const fontClass =
     fontSize === 'xlarge'
-      ? 'text-lg leading-relaxed'
+      ? 'text-2xl sm:text-3xl leading-snug'
       : fontSize === 'large'
-      ? 'text-base leading-relaxed'
-      : 'text-sm leading-relaxed';
+      ? 'text-xl sm:text-2xl leading-snug'
+      : 'text-lg sm:text-xl md:text-2xl leading-snug';
 
   // Section Color Themes matching educational domains
   const getSectionColor = (title: string = '') => {
@@ -418,25 +402,25 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
 
       {/* Main Student Examination Viewport */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex justify-center custom-scrollbar bg-slate-100/70">
-        {viewMode === 'student' && isSimpleExam ? (
+        {viewMode === 'student' ? (
           <div className={`w-full transition-all duration-300 rounded-3xl overflow-hidden shadow-xl my-auto ${deviceWidthClass}`}>
             <SimpleExamStudentView
               exam={liveAssessment as any}
               questions={flattenedQuestions}
               currentIndex={currentIndex}
-              currentAnswer={mockAnswers[currentQItem?.question?.id]}
+              currentAnswer={currentQItem?.question?.id ? mockAnswers[currentQItem.question.id] : undefined}
               answers={mockAnswers}
               bookmarkedIds={flaggedIds}
               timeRemainingSeconds={liveTimerSeconds}
               answeredCount={answeredCount}
               unansweredCount={Math.max(0, totalQuestions - answeredCount)}
               markedCount={flaggedIds.size}
-              onAnswerChange={(val) => handleSelectAnswer(currentQItem.question.id, val)}
-              onClearAnswer={() => handleSelectAnswer(currentQItem.question.id, undefined)}
+              onAnswerChange={(val) => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, val)}
+              onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
               onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
               onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
               onSelectIndex={(idx) => setCurrentIndex(idx)}
-              onToggleBookmark={() => handleToggleFlag(currentQItem.question.id)}
+              onToggleBookmark={() => currentQItem?.question?.id && handleToggleFlag(currentQItem.question.id)}
               onSubmit={() => setIsPublishModalOpen(true)}
               onClose={onClose}
               isMobilePreview={device === 'mobile'}
@@ -687,15 +671,15 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                       )}
 
                       {/* Question Prompt */}
-                      <div className="space-y-2">
-                        <h3 className={`font-black text-slate-900 ${fontClass}`}>
-                          {renderFormattedPrompt(currentQItem.question.question, {
-                            isMCQ: currentQItem.question.type === 'multiple_choice',
-                            isFillBlank: currentQItem.question.type === 'fill_in_blank',
-                            inlineInputValue: currentQItem.question.type === 'fill_in_blank' ? mockAnswers[currentQItem.question.id] : undefined,
-                            onInlineInputChange: currentQItem.question.type === 'fill_in_blank' ? (val) => handleSelectAnswer(currentQItem.question.id, val) : undefined
-                          })}
-                        </h3>
+                      <div className="space-y-4">
+                        {currentQItem.question.type !== 'fill_in_blank' && (
+                          <h3 className={`font-black text-slate-900 ${fontClass}`}>
+                            {renderFormattedPrompt(currentQItem.question.question, {
+                              isMCQ: currentQItem.question.type === 'multiple_choice',
+                              isFillBlank: false,
+                            })}
+                          </h3>
+                        )}
 
                         {/* Multiple Choice Options */}
                         {['multiple_choice', 'checkboxes', 'dropdown'].includes(currentQItem.question.type) && (

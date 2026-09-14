@@ -140,6 +140,17 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
   );
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
+  // Synchronize internal state when initialAssessment updates (e.g. fresh fetch on modal reopen)
+  useEffect(() => {
+    if (initialAssessment) {
+      setAssessment(initialAssessment);
+      setHistory([initialAssessment]);
+      setHistoryIndex(0);
+      setSelectedSectionId(initialAssessment.sections?.[0]?.id || 'sec_1');
+      setSelectedQuestionId(initialAssessment.sections?.[0]?.questions?.[0]?.id || null);
+    }
+  }, [initialAssessment]);
+
   // Sidebar and Modal Visibility States
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
