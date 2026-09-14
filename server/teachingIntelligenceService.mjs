@@ -23,11 +23,57 @@ const __dirname = path.dirname(__filename);
 const tempReportsDir = path.resolve(__dirname, '../temp_reports');
 
 const CANDIDATE_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro'
+  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.6-flash',
+  'gemini-3.8-flash'
 ];
+
+/**
+ * Robust JSON extraction and parser handling markdown codeblocks, whitespace,
+ * and conversational lead-in/lead-out wrapper text from LLMs.
+ */
+export function cleanAndParseJson(rawText, fallback = null) {
+  if (!rawText || typeof rawText !== 'string') return fallback;
+  const trimmed = rawText.trim();
+  if (!trimmed) return fallback;
+
+  // 1. Direct JSON parse
+  try {
+    return JSON.parse(trimmed);
+  } catch (_) {}
+
+  // 2. Strip markdown code fences (```json ... ``` or ``` ... ```)
+  try {
+    const withoutBlocks = trimmed
+      .replace(/^```(?:json)?\s*/im, '')
+      .replace(/\s*```$/im, '')
+      .trim();
+    return JSON.parse(withoutBlocks);
+  } catch (_) {}
+
+  // 3. Extract outermost JSON object {...}
+  try {
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+      return JSON.parse(candidate);
+    }
+  } catch (_) {}
+
+  // 4. Extract outermost JSON array [...]
+  try {
+    const firstBracket = trimmed.indexOf('[');
+    const lastBracket = trimmed.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      const candidate = trimmed.slice(firstBracket, lastBracket + 1);
+      return JSON.parse(candidate);
+    }
+  } catch (_) {}
+
+  return fallback;
+}
 
 /**
  * Aggregates writing challenge analytics, criteria mastery, and AI authenticity signals for the classroom.
@@ -427,7 +473,7 @@ RULES:
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
         const resp = await fetch(geminiUrl, {
           method: 'POST',
@@ -454,13 +500,15 @@ RULES:
           const gData = await resp.json();
           const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
           if (rawText) {
-            const parsed = JSON.parse(rawText.replace(/```json/gi, '').replace(/```/g, '').trim());
-            console.log(`[TeachingIntelligence] Generated successfully via Google Gemini (${modelName})`);
-            return {
-              ...normalizeIntelligenceOutput(parsed, metricsSummary),
-              ai_provider: 'gemini',
-              model: modelName
-            };
+            const parsed = cleanAndParseJson(rawText);
+            if (parsed && typeof parsed === 'object') {
+              console.log(`[TeachingIntelligence] Generated successfully via Google Gemini (${modelName})`);
+              return {
+                ...normalizeIntelligenceOutput(parsed, metricsSummary),
+                ai_provider: 'gemini',
+                model: modelName
+              };
+            }
           }
         }
       } catch (gemErr) {
@@ -473,26 +521,36 @@ RULES:
   if (serverOpenAI || oaiKey) {
     try {
       const client = serverOpenAI || new (await import('openai')).default({ apiKey: oaiKey });
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: JSON.stringify(compactInput) }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-        max_tokens: 800
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+      const completion = await client.chat.completions.create(
+        {
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: JSON.stringify(compactInput) }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+          max_tokens: 800
+        },
+        { signal: controller.signal }
+      );
+
+      clearTimeout(timeoutId);
 
       const raw = completion.choices?.[0]?.message?.content;
       if (raw) {
-        const parsed = JSON.parse(raw);
-        console.log('[TeachingIntelligence] Generated successfully via OpenAI fallback (gpt-4o-mini)');
-        return {
-          ...normalizeIntelligenceOutput(parsed, metricsSummary),
-          ai_provider: 'openai_fallback',
-          model: 'gpt-4o-mini'
-        };
+        const parsed = cleanAndParseJson(raw);
+        if (parsed && typeof parsed === 'object') {
+          console.log('[TeachingIntelligence] Generated successfully via OpenAI fallback (gpt-4o-mini)');
+          return {
+            ...normalizeIntelligenceOutput(parsed, metricsSummary),
+            ai_provider: 'openai_fallback',
+            model: 'gpt-4o-mini'
+          };
+        }
       }
     } catch (oaiErr) {
       console.warn('[TeachingIntelligence] OpenAI fallback notice:', oaiErr.message);
@@ -881,10 +939,20 @@ export async function getClassroomTeachingIntelligence({
   }
 
   // 3. Level 2: Generate Fresh AI Intelligence via Gemini -> OpenAI fallback
-  const intelligence = await generateTeachingIntelligence({
-    metricsSummary,
-    serverOpenAI
-  });
+  let intelligence;
+  try {
+    intelligence = await generateTeachingIntelligence({
+      metricsSummary,
+      serverOpenAI
+    });
+  } catch (genErr) {
+    console.warn('[TeachingIntelligence] AI generation error, falling back to deterministic synthesis:', genErr.message);
+    intelligence = {
+      ...synthesizeDeterministicIntelligence(metricsSummary),
+      ai_provider: 'deterministic_fallback',
+      model: 'local-analytics-engine'
+    };
+  }
 
   // 4. Store in Cache Table
   if (serverSupabase && teacherId) {
@@ -1636,11 +1704,11 @@ Format STRICTLY as valid JSON with NO markdown blocks, conforming to this exact 
   if (gKey) {
     for (const modelName of CANDIDATE_GEMINI_MODELS) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-        const resp = await fetch(url, {
+        const resp = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
@@ -1664,12 +1732,14 @@ Format STRICTLY as valid JSON with NO markdown blocks, conforming to this exact 
           const gData = await resp.json();
           const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
           if (rawText) {
-            const parsed = JSON.parse(rawText.replace(/```json/gi, '').replace(/```/g, '').trim());
-            return {
-              ...parsed,
-              ai_provider: 'gemini',
-              model: modelName
-            };
+            const parsed = cleanAndParseJson(rawText);
+            if (parsed && typeof parsed === 'object') {
+              return {
+                ...parsed,
+                ai_provider: 'gemini',
+                model: modelName
+              };
+            }
           }
         }
       } catch (gemErr) {
@@ -1682,25 +1752,35 @@ Format STRICTLY as valid JSON with NO markdown blocks, conforming to this exact 
   if (serverOpenAI || oKey) {
     try {
       const client = serverOpenAI || new (await import('openai')).default({ apiKey: oKey });
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: JSON.stringify(compactInput) }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-        max_tokens: 900
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+      const completion = await client.chat.completions.create(
+        {
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: JSON.stringify(compactInput) }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.2,
+          max_tokens: 900
+        },
+        { signal: controller.signal }
+      );
+
+      clearTimeout(timeoutId);
 
       const raw = completion.choices?.[0]?.message?.content;
       if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          ...parsed,
-          ai_provider: 'openai_fallback',
-          model: 'gpt-4o-mini'
-        };
+        const parsed = cleanAndParseJson(raw);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...parsed,
+            ai_provider: 'openai_fallback',
+            model: 'gpt-4o-mini'
+          };
+        }
       }
     } catch (oaiErr) {
       console.warn('[TeachingIntelligence] OpenAI exam AI notice:', oaiErr.message);
@@ -1953,7 +2033,7 @@ RULES:
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 9000);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
         const resp = await fetch(url, {
           method: 'POST',
@@ -1975,13 +2055,15 @@ RULES:
           const gData = await resp.json();
           const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
           if (rawText) {
-            const parsed = JSON.parse(rawText.replace(/```json/gi, '').replace(/```/g, '').trim());
-            return {
-              ...parsed,
-              has_sufficient_data: true,
-              ai_provider: 'gemini',
-              model: modelName
-            };
+            const parsed = cleanAndParseJson(rawText);
+            if (parsed && typeof parsed === 'object') {
+              return {
+                ...parsed,
+                has_sufficient_data: true,
+                ai_provider: 'gemini',
+                model: modelName
+              };
+            }
           }
         }
       } catch (gemErr) {
@@ -2007,13 +2089,15 @@ RULES:
 
       const raw = completion.choices?.[0]?.message?.content;
       if (raw) {
-        const parsed = JSON.parse(raw);
-        return {
-          ...parsed,
-          has_sufficient_data: true,
-          ai_provider: 'openai_fallback',
-          model: 'gpt-4o-mini'
-        };
+        const parsed = cleanAndParseJson(raw);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...parsed,
+            has_sufficient_data: true,
+            ai_provider: 'openai_fallback',
+            model: 'gpt-4o-mini'
+          };
+        }
       }
     } catch (oaiErr) {
       console.warn('[TeachingIntelligence] OpenAI student AI notice:', oaiErr.message);
@@ -2121,7 +2205,7 @@ ${JSON.stringify(compactEvidence, null, 2)}`;
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
 
         const contents = [
           ...formattedHistory,

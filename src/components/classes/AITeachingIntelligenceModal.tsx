@@ -56,6 +56,14 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const sanitizeErrorMessage = (msg: any, fallback: string): string => {
+    if (!msg || typeof msg !== 'string') return fallback;
+    if (msg.includes('Unexpected token') || msg.includes('is not valid JSON') || msg.includes('JSON.parse') || msg.includes('FUNCTION_INVOCATION_TIMEOUT')) {
+      return 'The analytics service is processing a heavy load. Please click "Run Fresh AI Analysis" in a few seconds.';
+    }
+    return msg;
+  };
+
   // Student Intelligence State
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [studentDetail, setStudentDetail] = useState<StudentIntelligenceDetail | null>(null);
@@ -112,7 +120,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       setData(res);
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] load error:', err);
-      setErrorMsg(err.message || 'Failed to load classroom intelligence.');
+      setErrorMsg(sanitizeErrorMessage(err.message, 'Failed to load classroom intelligence.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -138,7 +146,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       setRecentExams(list);
     } catch (err: any) {
       console.warn('[TeachingIntelligenceModal] loadRecentExams error:', err);
-      setRecentExamsError(err.message || 'Failed to load recent exam reports.');
+      setRecentExamsError(sanitizeErrorMessage(err.message, 'Failed to load recent exam reports.'));
     } finally {
       setLoadingRecentExams(false);
     }
@@ -155,7 +163,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       setExamAnalysis(analysis);
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] load exam analysis error:', err);
-      setAnalysisError(err.message || 'Failed to load exam analysis.');
+      setAnalysisError(sanitizeErrorMessage(err.message, 'Failed to load exam analysis.'));
     } finally {
       setLoadingAnalysis(false);
     }
@@ -169,7 +177,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       setExamAnalysis(analysis);
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] refresh exam AI error:', err);
-      alert(err.message || 'Failed to refresh AI analysis.');
+      alert(sanitizeErrorMessage(err.message, 'Failed to refresh AI analysis.'));
     } finally {
       setRefreshingAnalysisAi(false);
     }
@@ -183,7 +191,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       setReportResult(res);
       loadReports();
     } catch (err: any) {
-      alert(err.message || 'Failed to generate 30-day report.');
+      alert(sanitizeErrorMessage(err.message, 'Failed to generate 30-day report.'));
     } finally {
       setIsGeneratingReport(false);
     }
@@ -202,7 +210,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       });
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] load student error:', err);
-      setStudentDetailError(err.message || 'Failed to load student intelligence.');
+      setStudentDetailError(sanitizeErrorMessage(err.message, 'Failed to load student intelligence.'));
     } finally {
       setLoadingStudentDetail(false);
     }
@@ -221,7 +229,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       }
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] refresh student AI error:', err);
-      alert(err.message || 'Failed to refresh student AI assessment.');
+      alert(sanitizeErrorMessage(err.message, 'Failed to refresh student AI assessment.'));
     } finally {
       setRefreshingStudentAi(false);
     }
@@ -261,7 +269,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       }
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] chat error:', err);
-      setChatError(err.message || 'Failed to send message to AI assistant.');
+      setChatError(sanitizeErrorMessage(err.message, 'Failed to send message to AI assistant.'));
     } finally {
       setSendingChat(false);
     }

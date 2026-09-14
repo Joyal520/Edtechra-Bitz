@@ -2775,6 +2775,12 @@ app.get('/api/classes/:id/analytics', async (req, res) => {
   }
 });
 
+// Middleware: Ensure all teaching-intelligence endpoints always respond with application/json
+app.use('/api/classes/:id/teaching-intelligence', (req, res, next) => {
+  res.setHeader('Content-Type', 'application/json');
+  next();
+});
+
 // GET /api/classes/:id/teaching-intelligence - Retrieve cached or fresh classroom intelligence
 app.get('/api/classes/:id/teaching-intelligence', async (req, res) => {
   try {
@@ -17137,6 +17143,28 @@ app.post('/api/admin/bitz/auto-image-backfill', async (req, res) => {
     console.error('[API /api/admin/bitz/auto-image-backfill Error]:', err.message || err);
     return res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Global API 404 Handler - Guarantee valid JSON response for unmatched API routes
+app.use('/api', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Global Express API Error Handler - Guarantee valid JSON response for unhandled errors
+app.use((err, req, res, next) => {
+  console.error('[Global API Unhandled Error]:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.setHeader('Content-Type', 'application/json');
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'An unexpected internal server error occurred.'
+  });
 });
 
 export default app;

@@ -36,6 +36,15 @@ server.listen(0, async () => {
   });
   console.log('Course studio courses status:', res5.status, await res5.json());
 
+  // 6. Test Teaching Intelligence
+  console.log('Testing /api/classes/' + classroomId + '/teaching-intelligence ...');
+  const res6 = await fetch('http://localhost:' + port + '/api/classes/' + classroomId + '/teaching-intelligence', {
+    headers: { 'x-mock-admin': 'true' }
+  });
+  console.log('Teaching intelligence status:', res6.status, res6.headers.get('content-type'));
+  const text6 = await res6.text();
+  console.log('Teaching intelligence body:', text6.slice(0, 300));
+
   server.close();
   process.exit(0);
 });

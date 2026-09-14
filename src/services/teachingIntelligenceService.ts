@@ -226,6 +226,26 @@ export interface ThirtyDayReportRecord {
   report_data_json?: any;
 }
 
+async function parseApiResponse<T = any>(res: Response, fallbackErrorMessage: string): Promise<T> {
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (_e) {
+    console.error(`[TeachingIntelligenceClient] Non-JSON API response (${res.status}):`, text.slice(0, 300));
+    throw new Error(
+      res.status >= 500
+        ? 'The server encountered an issue processing intelligence. Please try refreshing in a moment.'
+        : fallbackErrorMessage
+    );
+  }
+
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || fallbackErrorMessage);
+  }
+  return data as T;
+}
+
 class TeachingIntelligenceService {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     if (!supabase) return {};
@@ -243,11 +263,7 @@ class TeachingIntelligenceService {
       headers
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to load teaching intelligence.');
-    }
-    return data;
+    return await parseApiResponse<TeachingIntelligenceResponse>(res, 'Failed to load teaching intelligence.');
   }
 
   /**
@@ -260,11 +276,7 @@ class TeachingIntelligenceService {
       headers
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to refresh teaching intelligence.');
-    }
-    return data;
+    return await parseApiResponse<TeachingIntelligenceResponse>(res, 'Failed to refresh teaching intelligence.');
   }
 
   /**
@@ -281,11 +293,7 @@ class TeachingIntelligenceService {
       body: JSON.stringify({ period })
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to generate 30-Day performance report.');
-    }
-    return data;
+    return await parseApiResponse(res, 'Failed to generate 30-Day performance report.');
   }
 
   /**
@@ -297,11 +305,12 @@ class TeachingIntelligenceService {
       headers
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
+    try {
+      const data = await parseApiResponse<{ success: boolean; reports: ThirtyDayReportRecord[] }>(res, 'Failed to list reports.');
+      return data.reports || [];
+    } catch (_err) {
       return [];
     }
-    return data.reports || [];
   }
 
   /**
@@ -312,10 +321,7 @@ class TeachingIntelligenceService {
     const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/recent-exams`, {
       headers
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to load recent exam reports.');
-    }
+    const data = await parseApiResponse<{ success: boolean; exams: RecentExamReportCard[] }>(res, 'Failed to load recent exam reports.');
     return data.exams || [];
   }
 
@@ -328,10 +334,7 @@ class TeachingIntelligenceService {
     const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/exams/${examId}/analysis${query}`, {
       headers
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to load exam analysis.');
-    }
+    const data = await parseApiResponse<{ success: boolean; analysis: ExamDetailedAnalysisData }>(res, 'Failed to load exam analysis.');
     return data.analysis;
   }
 
@@ -344,10 +347,7 @@ class TeachingIntelligenceService {
       method: 'POST',
       headers
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to refresh exam AI analysis.');
-    }
+    const data = await parseApiResponse<{ success: boolean; analysis: ExamDetailedAnalysisData }>(res, 'Failed to refresh exam AI analysis.');
     return data.analysis;
   }
 
@@ -364,11 +364,7 @@ class TeachingIntelligenceService {
     const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/students/${studentId}${query}`, {
       headers
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to load student intelligence.');
-    }
-    return data;
+    return await parseApiResponse(res, 'Failed to load student intelligence.');
   }
 
   /**
@@ -383,11 +379,7 @@ class TeachingIntelligenceService {
       method: 'POST',
       headers
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to refresh student AI assessment.');
-    }
-    return data;
+    return await parseApiResponse(res, 'Failed to refresh student AI assessment.');
   }
 
   /**
@@ -407,11 +399,7 @@ class TeachingIntelligenceService {
       },
       body: JSON.stringify({ message, conversationHistory })
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Failed to communicate with AI Teacher Assistant.');
-    }
-    return data;
+    return await parseApiResponse<TeacherChatResponse>(res, 'Failed to communicate with AI Teacher Assistant.');
   }
 }
 
