@@ -4,14 +4,10 @@
 // into trusted classroom actions (exams, resources, announcements, live quizzes).
 // ============================================================================
 
+import { aiRouter, AI_TASK_TYPES } from './ai/aiRouter.mjs';
+
 // In-memory fallback cache when running in isolated tests or without Supabase connection
 const memoryActionStore = new Map();
-
-const CANDIDATE_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro'
-];
 
 /**
  * Normalizes strings for robust idempotency keys
@@ -35,78 +31,33 @@ function generateQuizPin() {
 }
 
 /**
- * AI Call wrapper supporting Gemini with OpenAI fallback & deterministic synthesis
+ * AI Call wrapper delegating to Central AI Router (Gemini + GPT-5 Nano)
  */
-async function callLLMStructured({ prompt, systemPrompt, serverOpenAI, fallbackFactory }) {
-  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  if (geminiApiKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-        const resp = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: `${systemPrompt ? systemPrompt + '\n\n' : ''}${prompt}` }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.3
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const json = await resp.json();
-          const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            return JSON.parse(rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim());
-          }
-        }
-      } catch (geminiErr) {
-        console.warn(`[ActionExecutionBus] Gemini (${modelName}) structured generation error:`, geminiErr.message);
-      }
+async function callLLMStructured({
+  prompt,
+  systemPrompt = '',
+  taskType = AI_TASK_TYPES.COMPLEX_STRUCTURED_JSON,
+  fallbackFactory = null,
+  validateQuestions = false,
+  questionValidationOptions = {}
+}) {
+  try {
+    const res = await aiRouter.executeTask({
+      taskType,
+      prompt,
+      systemPrompt,
+      fallbackFactory,
+      validateQuestions,
+      questionValidationOptions
+    });
+    return res.data;
+  } catch (err) {
+    if (fallbackFactory) {
+      console.warn('[ActionExecutionBus] Model execution failed, using fallback factory:', err.message);
+      return fallbackFactory();
     }
+    throw err;
   }
-
-  // Fallback to OpenAI if configured
-  if (serverOpenAI) {
-    try {
-      const completion = await serverOpenAI.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: prompt }
-        ],
-        response_format: { type: 'json_object' }
-      });
-
-      const text = completion.choices?.[0]?.message?.content;
-      if (text) {
-        return JSON.parse(text);
-      }
-    } catch (openAiErr) {
-      console.warn('[ActionExecutionBus] OpenAI fallback error:', openAiErr.message);
-    }
-  }
-
-  // Pedagogical fallback synthesis
-  if (fallbackFactory) {
-    return fallbackFactory();
-  }
-
-  throw new Error('All AI providers failed and no fallback factory was provided.');
 }
 
 /**
@@ -433,7 +384,9 @@ Return a valid JSON object matching this schema:
     const result = await callLLMStructured({
       prompt,
       systemPrompt,
-      serverOpenAI,
+      taskType: AI_TASK_TYPES.DIAGNOSTIC_GENERATION,
+      validateQuestions: true,
+      questionValidationOptions: { expectedCount: questionCount, enforceFourChoices: false },
       fallbackFactory: fallbackQuestions
     });
 
@@ -544,7 +497,7 @@ Return a valid JSON object:
     const result = await callLLMStructured({
       prompt,
       systemPrompt,
-      serverOpenAI,
+      taskType: AI_TASK_TYPES.COMPLEX_ACTIVITY_GENERATION,
       fallbackFactory: fallbackNotes
     });
 
@@ -767,7 +720,9 @@ Return valid JSON:
     const result = await callLLMStructured({
       prompt,
       systemPrompt,
-      serverOpenAI,
+      taskType: AI_TASK_TYPES.QUIZ_GENERATION,
+      validateQuestions: true,
+      questionValidationOptions: { expectedCount: 5, enforceFourChoices: true, enforceConciseOptions: true },
       fallbackFactory: fallbackQuestions
     });
 

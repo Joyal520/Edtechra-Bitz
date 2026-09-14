@@ -10,6 +10,8 @@ import {
   computeClassroomMetrics,
   cleanAndParseJson
 } from './teachingIntelligenceService.mjs';
+import { aiRouter } from './ai/aiRouter.mjs';
+import { AI_TASK_TYPES } from './ai/taskTypes.mjs';
 
 const CANDIDATE_GEMINI_MODELS = [
   'gemini-3.5-flash-lite',
@@ -447,94 +449,39 @@ CRITICAL PEDAGOGICAL RULES:
 REAL CLASSROOM METRICS EVIDENCE:
 ${JSON.stringify(evidenceSnapshot, null, 2)}`;
 
-  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  const oaiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+  // Delegate to Central AI Router (Primary: OpenAI GPT-5 nano -> Fallback: Gemini -> Fallback: Local Pedagogy Synthesizer)
+  let parsedPlan = null;
+  let providerUsed = 'deterministic_engine';
+  let modelUsed = 'local-pedagogy-synthesizer';
 
-  // --- Step A: Primary Call to Google Gemini ---
-  if (gemKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const aiResult = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.TEACHING_PLAN,
+      systemPrompt,
+      userPrompt,
+      classroomId,
+      temperature: 0.3
+    });
 
-        const resp = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: `${systemPrompt}\n\n${userPrompt}` }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.3
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = cleanAndParseJson(rawText);
-            if (parsed && typeof parsed === 'object') {
-              console.log(`[TeachingPlanner] Generated successfully via Google Gemini (${modelName})`);
-              const validated = validateAndNormalizePlan(parsed, input, metricsSummary);
-              return {
-                success: true,
-                plan: validated,
-                classroom_snapshot: evidenceSnapshot,
-                ai_provider: 'gemini',
-                model: modelName
-              };
-            }
-          }
-        }
-      } catch (gemErr) {
-        console.warn(`[TeachingPlanner] Gemini (${modelName}) notice:`, gemErr.message);
-      }
+    if (aiResult.success && aiResult.parsed && typeof aiResult.parsed === 'object') {
+      console.log(`[TeachingPlanner] Generated successfully via ${aiResult.provider} (${aiResult.model})`);
+      parsedPlan = aiResult.parsed;
+      providerUsed = aiResult.provider;
+      modelUsed = aiResult.model;
     }
+  } catch (err) {
+    console.warn('[TeachingPlanner] AI generation notice:', err.message);
   }
 
-  // --- Step B: Fallback Call to OpenAI ---
-  if (serverOpenAI || oaiKey) {
-    try {
-      const client = serverOpenAI || new (await import('openai')).default({ apiKey: oaiKey });
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3
-      });
-
-      const raw = completion.choices[0]?.message?.content;
-      if (raw) {
-        const parsed = cleanAndParseJson(raw);
-        if (parsed && typeof parsed === 'object') {
-          console.log('[TeachingPlanner] Generated successfully via OpenAI fallback (gpt-4o-mini)');
-          const validated = validateAndNormalizePlan(parsed, input, metricsSummary);
-          return {
-            success: true,
-            plan: validated,
-            classroom_snapshot: evidenceSnapshot,
-            ai_provider: 'openai_fallback',
-            model: 'gpt-4o-mini'
-          };
-        }
-      }
-    } catch (oaiErr) {
-      console.warn('[TeachingPlanner] OpenAI fallback notice:', oaiErr.message);
-    }
+  if (parsedPlan) {
+    const validated = validateAndNormalizePlan(parsedPlan, input, metricsSummary);
+    return {
+      success: true,
+      plan: validated,
+      classroom_snapshot: evidenceSnapshot,
+      ai_provider: providerUsed,
+      model: modelUsed
+    };
   }
 
   // --- Step C: Deterministic Local Synthesis Engine ---
@@ -598,41 +545,22 @@ Return ONLY a JSON object for Day ${dayNumber} with:
   "homework": "string"
 }`;
 
-  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   let newDay = null;
 
-  if (gemKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+  try {
+    const aiResult = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.TEACHING_PLAN_DAY,
+      systemPrompt: 'You are EdTechra\'s Pedagogical Lesson Refiner. Return ONLY a valid JSON object matching the requested schema.',
+      userPrompt: prompt,
+      classroomId: currentPlan.classroom_id,
+      temperature: 0.4
+    });
 
-        const resp = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.4 }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = cleanAndParseJson(rawText);
-            if (parsed && typeof parsed === 'object') {
-              newDay = parsed;
-              break;
-            }
-          }
-        }
-      } catch (_) {}
+    if (aiResult.success && aiResult.parsed && typeof aiResult.parsed === 'object') {
+      newDay = aiResult.parsed;
     }
+  } catch (err) {
+    console.warn('[TeachingPlanner] Day regeneration AI notice:', err.message);
   }
 
   // Fallback if AI not available

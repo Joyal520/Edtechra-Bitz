@@ -79,6 +79,9 @@ import {
   updateActionDetails
 } from './server/actionExecutionBus.mjs';
 import { actionScheduler } from './server/actionScheduler.mjs';
+import { aiRouter } from './server/ai/aiRouter.mjs';
+import { aiUsageLogger } from './server/ai/aiUsageLogger.mjs';
+import { AI_TASK_TYPES, getAIProvider, getPreferredModel, classifyTask } from './server/ai/taskTypes.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
   buildLessonFromMaterial,
@@ -182,6 +185,14 @@ ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
 
 // Initialize AI Action Execution Scheduler (Phase 2B)
 actionScheduler.init({ serverSupabase, serverOpenAI });
+
+// Initialize Two-Tier AI Provider Routing Engine (Gemini + OpenAI GPT-5 nano)
+aiRouter.init({
+  serverSupabase,
+  openAiApiKey: openaiApiKey,
+  geminiApiKey: cleanEnv(process.env.GEMINI_API_KEY) || cleanEnv(process.env.VITE_GEMINI_API_KEY),
+  serverOpenAI
+});
 
 // Helper: Purge stale abandoned live quiz sessions (> 2 hours old) to prevent ghost active sessions
 async function cleanStaleLiveQuizSessions(supabaseClient) {
@@ -3326,6 +3337,49 @@ app.delete('/api/classes/:id/teaching-planner/plans/:planId', async (req, res) =
   } catch (error) {
     console.error('Error in DELETE /api/classes/:id/teaching-planner/plans/:planId:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to delete teaching plan' });
+  }
+});
+
+// ============================================================================
+// AI PROVIDER ROUTING & USAGE MONITORING ENDPOINTS
+// ============================================================================
+
+// GET /api/admin/ai-usage - Admin analytics for AI token counts, estimated costs, and provider distribution
+app.get('/api/admin/ai-usage', async (req, res) => {
+  try {
+    const summary = aiUsageLogger.getSummary();
+    const recentLogs = aiUsageLogger.getRecentLogs(req.query.limit ? parseInt(req.query.limit, 10) : 50);
+    res.json({
+      success: true,
+      summary,
+      recentLogs
+    });
+  } catch (err) {
+    console.error('Error in GET /api/admin/ai-usage:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/ai/route-debug - Debug utility to test task classification and routing target
+app.post('/api/ai/route-debug', async (req, res) => {
+  try {
+    const { taskType, text } = req.body || {};
+    const effectiveType = taskType || (text ? classifyTask(text) : AI_TASK_TYPES.SIMPLE_CHAT);
+    const provider = getAIProvider(effectiveType);
+    const model = getPreferredModel(provider, effectiveType);
+
+    res.json({
+      success: true,
+      taskType: effectiveType,
+      provider,
+      model,
+      explanation: provider === 'openai'
+        ? `Routed to OpenAI Tier (${model}) for complex reasoning, high quality output, and structured educational integrity.`
+        : `Routed to Google Gemini Tier (${model}) for fast, cost-effective high-volume response.`
+    });
+  } catch (err) {
+    console.error('Error in POST /api/ai/route-debug:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

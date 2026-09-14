@@ -23,6 +23,7 @@ import {
 import { TeachingPlan, DailyLessonPlan, LessonActivity } from '@/services/teachingPlannerService';
 import { actionExecutionService } from '@/services/actionExecutionService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
+import { AIDebugBadge } from '../ai/AIDebugBadge';
 
 interface PlanReviewScreenProps {
   plan: TeachingPlan;
@@ -130,6 +131,11 @@ export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
               >
                 {initialStatus === 'approved' ? '● Approved Plan' : '○ Draft Plan'}
               </span>
+              <AIDebugBadge
+                provider="openai"
+                model="gpt-5-nano"
+                taskType="Teaching Plan"
+              />
             </div>
             <p className="text-xs text-slate-500 font-medium">
               Topic: <strong className="text-slate-800">{currentPlan.topic}</strong> &bull; {currentPlan.duration_days} Days &bull; {currentPlan.lesson_duration_minutes} Mins/lesson

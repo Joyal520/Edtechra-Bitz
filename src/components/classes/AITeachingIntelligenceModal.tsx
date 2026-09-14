@@ -40,6 +40,8 @@ import {
 import { StructuredAIReportRenderer, InlineMarkdown } from './StructuredAIReportRenderer';
 import { AITeachingPlannerTab } from './planner/AITeachingPlannerTab';
 import { AIActionsDashboard } from './actions/AIActionsDashboard';
+import { AIDebugBadge } from './ai/AIDebugBadge';
+import { AIUsageAdminModal } from './ai/AIUsageAdminModal';
 
 export type ModalTab = 'intelligence' | 'planner' | 'actions' | 'students' | 'chat' | 'recent-exams' | '30day-report';
 
@@ -61,6 +63,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showAIUsageModal, setShowAIUsageModal] = useState(false);
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -400,8 +403,15 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
             </div>
           </div>
 
-          {/* Right Controls: Refresh AI + Close Button */}
+          {/* Right Controls: AI Provider Badge + Refresh AI + Close Button */}
           <div className="flex items-center gap-2 sm:gap-2.5 relative z-10 shrink-0">
+            <AIDebugBadge
+              provider={activeTab === 'chat' ? 'gemini' : (data?.ai_provider || 'openai')}
+              model={activeTab === 'chat' ? 'gemini-3.5-flash-lite' : (data?.model || 'gpt-5-nano')}
+              taskType={activeTab === 'chat' ? 'AI Teacher Chat' : activeTab === 'planner' ? 'AI Teaching Planner' : 'Classroom Intelligence'}
+              onClick={() => setShowAIUsageModal(true)}
+              className="hidden sm:inline-flex"
+            />
             <button
               type="button"
               onClick={() => {
@@ -2782,6 +2792,12 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
         </div>
 
       </div>
+
+      {/* AI Provider Telemetry & Usage Admin Modal */}
+      <AIUsageAdminModal
+        isOpen={showAIUsageModal}
+        onClose={() => setShowAIUsageModal(false)}
+      />
     </div>
   );
 };

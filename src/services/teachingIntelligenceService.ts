@@ -210,6 +210,7 @@ export interface TeachingIntelligenceResponse {
   metrics: ClassroomMetricsSummary;
   intelligence: TeachingIntelligenceData | null;
   ai_provider?: string;
+  model?: string;
   updated_at: string;
   error?: string;
 }

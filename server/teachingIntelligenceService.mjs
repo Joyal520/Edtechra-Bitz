@@ -17,6 +17,8 @@ import {
   buildPublicUrl
 } from './r2Service.mjs';
 import { computeClassroomAnalytics } from './classroomAnalyticsService.mjs';
+import { aiRouter } from './ai/aiRouter.mjs';
+import { AI_TASK_TYPES } from './ai/taskTypes.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -467,94 +469,26 @@ RULES:
        - "target_students": array of student references
 5. Never invent student scores or topics. If evidence is missing, say so.`;
 
-  // --- Step A: Primary Call to Google Gemini ---
-  if (gemKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gemKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+  // Delegate to Central AI Router (Primary: OpenAI GPT-5 nano -> Fallback: Gemini -> Fallback: Local Synthesis)
+  try {
+    const aiResult = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.CLASS_ANALYSIS,
+      systemPrompt,
+      prompt: `CLASSROOM METRICS EVIDENCE:\n${JSON.stringify(compactInput)}`,
+      classroomId,
+      temperature: 0.3
+    });
 
-        const resp = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: `${systemPrompt}\n\nCLASSROOM METRICS EVIDENCE:\n${JSON.stringify(compactInput)}` }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.3
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = cleanAndParseJson(rawText);
-            if (parsed && typeof parsed === 'object') {
-              console.log(`[TeachingIntelligence] Generated successfully via Google Gemini (${modelName})`);
-              return {
-                ...normalizeIntelligenceOutput(parsed, metricsSummary),
-                ai_provider: 'gemini',
-                model: modelName
-              };
-            }
-          }
-        }
-      } catch (gemErr) {
-        console.warn(`[TeachingIntelligence] Gemini (${modelName}) notice:`, gemErr.message);
-      }
+    if (aiResult.success && aiResult.parsed && typeof aiResult.parsed === 'object') {
+      console.log(`[TeachingIntelligence] Generated successfully via ${aiResult.provider} (${aiResult.model})`);
+      return {
+        ...normalizeIntelligenceOutput(aiResult.parsed, metricsSummary),
+        ai_provider: aiResult.provider,
+        model: aiResult.model
+      };
     }
-  }
-
-  // --- Step B: Fallback Call to OpenAI ---
-  if (serverOpenAI || oaiKey) {
-    try {
-      const client = serverOpenAI || new (await import('openai')).default({ apiKey: oaiKey });
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
-
-      const completion = await client.chat.completions.create(
-        {
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: JSON.stringify(compactInput) }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.3,
-          max_tokens: 800
-        },
-        { signal: controller.signal }
-      );
-
-      clearTimeout(timeoutId);
-
-      const raw = completion.choices?.[0]?.message?.content;
-      if (raw) {
-        const parsed = cleanAndParseJson(raw);
-        if (parsed && typeof parsed === 'object') {
-          console.log('[TeachingIntelligence] Generated successfully via OpenAI fallback (gpt-4o-mini)');
-          return {
-            ...normalizeIntelligenceOutput(parsed, metricsSummary),
-            ai_provider: 'openai_fallback',
-            model: 'gpt-4o-mini'
-          };
-        }
-      }
-    } catch (oaiErr) {
-      console.warn('[TeachingIntelligence] OpenAI fallback notice:', oaiErr.message);
-    }
+  } catch (err) {
+    console.warn('[TeachingIntelligence] AI analysis notice:', err.message);
   }
 
   // --- Step C: Deterministic Local Algorithmic Synthesis ---
@@ -1730,91 +1664,25 @@ Format STRICTLY as valid JSON with NO markdown blocks, conforming to this exact 
   ]
 }`;
 
-  // --- Step A: Google Gemini ---
-  if (gKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+  // Delegate to Central AI Router (Primary: OpenAI GPT-5 nano -> Fallback: Gemini -> Fallback: Local Synthesis)
+  try {
+    const aiResult = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.DIAGNOSTIC_ANALYSIS,
+      systemPrompt,
+      prompt: `Exam Performance Data:\n${JSON.stringify(compactInput)}`,
+      classroomId,
+      temperature: 0.2
+    });
 
-        const resp = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `${systemPrompt}\n\nExam Performance Data:\n${JSON.stringify(compactInput)}`
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 900,
-              responseMimeType: 'application/json'
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = cleanAndParseJson(rawText);
-            if (parsed && typeof parsed === 'object') {
-              return {
-                ...parsed,
-                ai_provider: 'gemini',
-                model: modelName
-              };
-            }
-          }
-        }
-      } catch (gemErr) {
-        console.warn(`[TeachingIntelligence] Gemini exam AI (${modelName}) notice:`, gemErr.message);
-      }
+    if (aiResult.success && aiResult.parsed && typeof aiResult.parsed === 'object') {
+      return {
+        ...aiResult.parsed,
+        ai_provider: aiResult.provider,
+        model: aiResult.model
+      };
     }
-  }
-
-  // --- Step B: OpenAI Fallback ---
-  if (serverOpenAI || oKey) {
-    try {
-      const client = serverOpenAI || new (await import('openai')).default({ apiKey: oKey });
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
-
-      const completion = await client.chat.completions.create(
-        {
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: JSON.stringify(compactInput) }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-          max_tokens: 900
-        },
-        { signal: controller.signal }
-      );
-
-      clearTimeout(timeoutId);
-
-      const raw = completion.choices?.[0]?.message?.content;
-      if (raw) {
-        const parsed = cleanAndParseJson(raw);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            ...parsed,
-            ai_provider: 'openai_fallback',
-            model: 'gpt-4o-mini'
-          };
-        }
-      }
-    } catch (oaiErr) {
-      console.warn('[TeachingIntelligence] OpenAI exam AI notice:', oaiErr.message);
-    }
+  } catch (err) {
+    console.warn('[TeachingIntelligence] AI exam analysis notice:', err.message);
   }
 
   // --- Step C: Deterministic Synthesis Fallback ---
@@ -2057,81 +1925,26 @@ RULES:
 5. "next_steps": 1-2 actionable pedagogical interventions the teacher should execute next with this student.
 6. If data is insufficient for any aspect, explicitly state: "Not enough evidence yet."`;
 
-  // Try Gemini
-  if (gKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+  // Delegate to Central AI Router (Primary: OpenAI GPT-5 nano -> Fallback: Gemini -> Fallback: Local Synthesis)
+  try {
+    const aiResult = await aiRouter.executeTask({
+      taskType: AI_TASK_TYPES.CLASS_ANALYSIS,
+      systemPrompt,
+      prompt: `STUDENT ASSESSMENT EVIDENCE:\n${JSON.stringify(compactInput)}`,
+      classroomId,
+      temperature: 0.2
+    });
 
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${systemPrompt}\n\nSTUDENT ASSESSMENT EVIDENCE:\n${JSON.stringify(compactInput)}` }] }],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: 'application/json',
-              maxOutputTokens: 600
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const parsed = cleanAndParseJson(rawText);
-            if (parsed && typeof parsed === 'object') {
-              return {
-                ...parsed,
-                has_sufficient_data: true,
-                ai_provider: 'gemini',
-                model: modelName
-              };
-            }
-          }
-        }
-      } catch (gemErr) {
-        console.warn(`[TeachingIntelligence] Gemini student AI notice (${modelName}):`, gemErr.message);
-      }
+    if (aiResult.success && aiResult.parsed && typeof aiResult.parsed === 'object') {
+      return {
+        ...aiResult.parsed,
+        has_sufficient_data: true,
+        ai_provider: aiResult.provider,
+        model: aiResult.model
+      };
     }
-  }
-
-  // Try OpenAI fallback
-  if (serverOpenAI || oKey) {
-    try {
-      const client = serverOpenAI || new (await import('openai')).default({ apiKey: oKey });
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: JSON.stringify(compactInput) }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-        max_tokens: 600
-      });
-
-      const raw = completion.choices?.[0]?.message?.content;
-      if (raw) {
-        const parsed = cleanAndParseJson(raw);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            ...parsed,
-            has_sufficient_data: true,
-            ai_provider: 'openai_fallback',
-            model: 'gpt-4o-mini'
-          };
-        }
-      }
-    } catch (oaiErr) {
-      console.warn('[TeachingIntelligence] OpenAI student AI notice:', oaiErr.message);
-    }
+  } catch (err) {
+    console.warn('[TeachingIntelligence] AI student analysis notice:', err.message);
   }
 
   // Deterministic local synthesis fallback
@@ -2220,96 +2033,35 @@ STRICT GROUNDING RULES:
 VERIFIED CLASSROOM EVIDENCE:
 ${JSON.stringify(compactEvidence, null, 2)}`;
 
-  const gKey = geminiApiKey || process.env.GEMINI_API_KEY;
-  const oKey = openaiApiKey || process.env.OPENAI_API_KEY;
+  // Multi-turn context formatting
+  const historySnippet = (conversationHistory || []).slice(-4).map(m =>
+    `${m.role === 'teacher' || m.role === 'user' ? 'Teacher' : 'AI Assistant'}: ${m.content || m.text || ''}`
+  ).join('\n');
 
-  // Format messages for multi-turn chat
-  const formattedHistory = (conversationHistory || []).slice(-6).map(msg => ({
-    role: msg.role === 'teacher' || msg.role === 'user' ? 'user' : 'model',
-    parts: [{ text: msg.content || msg.text || '' }]
-  }));
+  const chatPrompt = historySnippet
+    ? `PREVIOUS CONVERSATION:\n${historySnippet}\n\nTeacher Question: "${message}"`
+    : `Teacher Question: "${message}"`;
 
-  // Try Gemini
-  if (gKey) {
-    for (const modelName of CANDIDATE_GEMINI_MODELS) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${gKey}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+  // Delegate to Central AI Router (Primary: Gemini Flash for high-volume chat -> Fallback: OpenAI -> Fallback: Deterministic)
+  try {
+    const aiResult = await aiRouter.executeTextTask({
+      taskType: AI_TASK_TYPES.TEACHER_CHAT,
+      systemPrompt,
+      prompt: chatPrompt,
+      classroomId,
+      timeoutMs: 8000
+    });
 
-        const contents = [
-          ...formattedHistory,
-          {
-            role: 'user',
-            parts: [{ text: `${systemPrompt}\n\nTeacher Question: "${message}"` }]
-          }
-        ];
-
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents,
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 800
-            }
-          })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (resp.ok) {
-          const gData = await resp.json();
-          const replyText = gData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (replyText) {
-            return {
-              success: true,
-              reply: replyText.trim(),
-              ai_provider: 'gemini',
-              model: modelName
-            };
-          }
-        }
-      } catch (gemErr) {
-        console.warn(`[TeachingIntelligence] Gemini chat notice (${modelName}):`, gemErr.message);
-      }
+    if (aiResult.success && aiResult.text) {
+      return {
+        success: true,
+        reply: aiResult.text.trim(),
+        ai_provider: aiResult.provider,
+        model: aiResult.model
+      };
     }
-  }
-
-  // Try OpenAI fallback
-  if (serverOpenAI || oKey) {
-    try {
-      const client = serverOpenAI || new (await import('openai')).default({ apiKey: oKey });
-      const oaiMessages = [
-        { role: 'system', content: systemPrompt },
-        ...(conversationHistory || []).slice(-6).map(m => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          content: m.content || m.text || ''
-        })),
-        { role: 'user', content: message }
-      ];
-
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: oaiMessages,
-        temperature: 0.3,
-        max_tokens: 800
-      });
-
-      const replyText = completion.choices?.[0]?.message?.content;
-      if (replyText) {
-        return {
-          success: true,
-          reply: replyText.trim(),
-          ai_provider: 'openai_fallback',
-          model: 'gpt-4o-mini'
-        };
-      }
-    } catch (oaiErr) {
-      console.warn('[TeachingIntelligence] OpenAI chat notice:', oaiErr.message);
-    }
+  } catch (err) {
+    console.warn('[TeachingIntelligence] AI chat notice:', err.message);
   }
 
   // Deterministic synthesis fallback for common teacher queries
