@@ -3315,6 +3315,9 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/cancel', async
 app.get('/api/classes/:classroomId/live-quiz/active-session', async (req, res) => {
   try {
     const { classroomId } = req.params;
+    if (!classroomId || classroomId === 'undefined' || classroomId === 'null') {
+      return res.json({ success: true, session: null, state: 'draft' });
+    }
     if (!serverSupabase) {
       return res.status(500).json({ success: false, error: 'Database uninitialized.' });
     }
@@ -3532,6 +3535,7 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
 
           const participants = partsRes.data || [];
           const answers = ansRes.data || [];
+          const totalQuestions = fullSession?.quiz?.questions?.length || fullSession?.total_questions || (answers.length > 0 ? new Set(answers.map(a => a.question_id)).size : 1);
 
           const answersByStudent = {};
           answers.forEach((a) => {
@@ -3593,7 +3597,6 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
             }
           }
         }
-      }
     } catch (calcErr) {
       console.warn('[LiveQuiz complete endpoint] Error computing stats:', calcErr);
     }
@@ -4893,6 +4896,9 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
     const { classroomId } = req.params;
+    if (!classroomId || classroomId === 'undefined' || classroomId === 'null') {
+      return res.json({ success: true, courses: [] });
+    }
 
     if (serverSupabase) {
       const { data: classroom, error: classErr } = await serverSupabase

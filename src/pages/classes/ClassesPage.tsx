@@ -54,15 +54,18 @@ export const ClassesPage: React.FC = () => {
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
 
   const [coursesLoading, setCoursesLoading] = useState(false);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
 
   const loadStudioCourses = useCallback(async () => {
     if (!isTeacher) return;
     setCoursesLoading(true);
+    setCoursesError(null);
     try {
       const courseList = await courseStudioService.getCourses();
       setStudioCourses(courseList);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load studio courses:', err);
+      setCoursesError(err?.message || 'Failed to load courses.');
     } finally {
       setCoursesLoading(false);
     }
@@ -329,6 +332,17 @@ export const ClassesPage: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            ) : coursesError ? (
+              <div className="bg-amber-50/70 rounded-xl p-4 text-center space-y-2 border border-amber-200/60">
+                <p className="text-xs font-bold text-amber-900">Unable to load courses: {coursesError}</p>
+                <button
+                  type="button"
+                  onClick={() => loadStudioCourses()}
+                  className="px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-colors cursor-pointer"
+                >
+                  Retry
+                </button>
               </div>
             ) : studioCourses.length === 0 ? (
               <div className="bg-slate-50/70 rounded-xl p-4 text-center space-y-2 border border-slate-200/60">
