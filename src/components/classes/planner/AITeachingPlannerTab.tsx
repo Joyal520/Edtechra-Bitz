@@ -17,11 +17,15 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface AITeachingPlannerTabProps {
   classroom: Classroom;
+  onOpenActionCenter?: () => void;
 }
 
 type PlannerViewMode = 'form' | 'review' | 'saved_list';
 
-export const AITeachingPlannerTab: React.FC<AITeachingPlannerTabProps> = ({ classroom }) => {
+export const AITeachingPlannerTab: React.FC<AITeachingPlannerTabProps> = ({
+  classroom,
+  onOpenActionCenter
+}) => {
   const [viewMode, setViewMode] = useState<PlannerViewMode>('form');
   const [currentPlan, setCurrentPlan] = useState<TeachingPlan | null>(null);
   const [planStatus, setPlanStatus] = useState<'draft' | 'approved' | 'archived'>('draft');
@@ -219,11 +223,14 @@ export const AITeachingPlannerTab: React.FC<AITeachingPlannerTabProps> = ({ clas
           status={planStatus}
           isSaving={isSaving}
           isRegeneratingDay={isRegeneratingDay}
+          classroomId={classroom?.id}
+          classroomTitle={classroom?.title}
           onApproveAndSave={handleApproveAndSave}
           onSaveDraft={handleSaveDraft}
           onRegenerateFullPlan={() => setViewMode('form')}
           onRegenerateDay={handleRegenerateDay}
           onBackToForm={() => setViewMode('form')}
+          onOpenActionCenter={onOpenActionCenter}
         />
       )}
 

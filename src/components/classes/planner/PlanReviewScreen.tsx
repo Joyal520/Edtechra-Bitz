@@ -12,15 +12,16 @@ import {
   ArrowLeft,
   Users,
   Target,
-  Sparkles,
   TrendingUp,
   AlertTriangle,
   Lightbulb,
   Check,
   X,
-  Award
+  Award,
+  Zap
 } from 'lucide-react';
 import { TeachingPlan, DailyLessonPlan, LessonActivity } from '@/services/teachingPlannerService';
+import { actionExecutionService } from '@/services/actionExecutionService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
 
 interface PlanReviewScreenProps {
@@ -28,11 +29,14 @@ interface PlanReviewScreenProps {
   status: 'draft' | 'approved' | 'archived';
   isSaving: boolean;
   isRegeneratingDay: boolean;
+  classroomId?: string;
+  classroomTitle?: string;
   onApproveAndSave: (updatedPlan: TeachingPlan) => void;
   onSaveDraft: (updatedPlan: TeachingPlan) => void;
   onRegenerateFullPlan: () => void;
   onRegenerateDay: (dayNumber: number, teacherInstructions: string) => void;
   onBackToForm: () => void;
+  onOpenActionCenter?: () => void;
 }
 
 export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
@@ -40,16 +44,22 @@ export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
   status: initialStatus,
   isSaving,
   isRegeneratingDay,
+  classroomId,
+  classroomTitle: _classroomTitle,
   onApproveAndSave,
   onSaveDraft,
   onRegenerateFullPlan,
   onRegenerateDay,
-  onBackToForm
+  onBackToForm,
+  onOpenActionCenter
 }) => {
   const [currentPlan, setCurrentPlan] = useState<TeachingPlan>(initialPlan);
   const [isEditing, setIsEditing] = useState(false);
   const [activeDayModal, setActiveDayModal] = useState<number | null>(null);
   const [dayInstructions, setDayInstructions] = useState('');
+  const [isConvertingActions, setIsConvertingActions] = useState(false);
+  const [convertedCount, setConvertedCount] = useState<number | null>(null);
+  const [conversionError, setConversionError] = useState<string | null>(null);
 
   // Keep internal state updated if parent changes plan
   React.useEffect(() => {
@@ -74,6 +84,23 @@ export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
     setActiveDayModal(null);
     onRegenerateDay(dayNum, dayInstructions);
     setDayInstructions('');
+  };
+
+  const handleConvertActions = async () => {
+    if (!classroomId) {
+      setConversionError('Classroom ID is required to create actions.');
+      return;
+    }
+    try {
+      setIsConvertingActions(true);
+      setConversionError(null);
+      const actions = await actionExecutionService.createActionsFromPlan(classroomId, currentPlan);
+      setConvertedCount(actions.length);
+    } catch (err: any) {
+      setConversionError(err.message || 'Failed to convert recommendations into actions.');
+    } finally {
+      setIsConvertingActions(false);
+    }
   };
 
   return (
@@ -418,28 +445,63 @@ export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
         </div>
       </div>
 
-      {/* Recommended Pedagogical Actions (Future Phase 2B Compatibility - Recommendations ONLY) */}
+      {/* Recommended Pedagogical Actions & Phase 2B Action Bus Integration */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/20 text-cyan-300 text-[10px] font-black uppercase tracking-wider border border-cyan-400/30">
-              <Sparkles className="w-3 h-3" />
-              <span>Phase 2B Recommendations &bull; No Auto-Execution</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-cyan-300 text-[10px] font-black uppercase tracking-wider border border-cyan-400/30">
+              <Zap className="w-3 h-3 text-amber-300" />
+              <span>AI Action Execution Bus (Phase 2B)</span>
             </div>
             <h4 className="text-base sm:text-lg font-black tracking-tight text-white">
               Recommended Pedagogical Actions
             </h4>
+            <p className="text-xs text-slate-300 max-w-lg">
+              Transform approved pedagogical recommendations into safe, controlled, observable classroom actions (diagnostic exams, study notes, live quizzes, and announcements).
+            </p>
           </div>
-          <p className="text-xs text-slate-300 max-w-sm">
-            These diagnostic and revision recommendations will connect directly to the Action Execution Bus in Phase 2B.
-          </p>
+
+          <div className="flex items-center gap-2.5">
+            {convertedCount !== null ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  {convertedCount} Actions Created!
+                </span>
+                {onOpenActionCenter && (
+                  <button
+                    onClick={onOpenActionCenter}
+                    className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-black transition-all shadow-sm"
+                  >
+                    View in Action Center &rarr;
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleConvertActions}
+                disabled={isConvertingActions || !classroomId}
+                className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 rounded-xl text-xs font-black shadow-lg shadow-cyan-500/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                <span>{isConvertingActions ? 'Converting...' : 'Convert to Executable Actions'}</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {conversionError && (
+          <div className="p-3 bg-rose-950/60 border border-rose-800 rounded-xl text-xs text-rose-300">
+            {conversionError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {currentPlan.recommended_actions.map((act, i) => (
             <div
               key={i}
-              className="p-4 rounded-2xl bg-white/10 border border-white/15 space-y-1.5"
+              className="p-4 rounded-2xl bg-white/10 border border-white/15 space-y-2 hover:border-cyan-400/40 transition-colors"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-cyan-300 tracking-tight">{act.title}</span>
@@ -452,9 +514,10 @@ export const PlanReviewScreen: React.FC<PlanReviewScreenProps> = ({
               <p className="text-xs text-slate-200 leading-relaxed font-medium">
                 <InlineMarkdown text={act.reason} />
               </p>
-              <span className="text-[10px] text-slate-400 font-semibold block capitalize pt-1">
-                Type: {act.type.replace('_', ' ')} (Recommendation only)
-              </span>
+              <div className="flex items-center justify-between pt-1 border-t border-white/10 text-[10px] text-slate-400 font-semibold">
+                <span className="capitalize">Type: {act.type.replace('_', ' ')}</span>
+                <span className="text-cyan-300">Safe Idempotent Action</span>
+              </div>
             </div>
           ))}
         </div>

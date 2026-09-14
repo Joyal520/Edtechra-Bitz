@@ -71,6 +71,14 @@ import {
   getTeachingPlanById,
   deleteTeachingPlan
 } from './server/teachingPlannerService.mjs';
+import {
+  createAction,
+  createActionsFromPlan,
+  executeAction,
+  getClassroomActions,
+  updateActionDetails
+} from './server/actionExecutionBus.mjs';
+import { actionScheduler } from './server/actionScheduler.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
   buildLessonFromMaterial,
@@ -171,6 +179,9 @@ const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 
 // Initialize AI OCR Worksheet Grader Engine
 ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
+
+// Initialize AI Action Execution Scheduler (Phase 2B)
+actionScheduler.init({ serverSupabase, serverOpenAI });
 
 // Helper: Purge stale abandoned live quiz sessions (> 2 hours old) to prevent ghost active sessions
 async function cleanStaleLiveQuizSessions(supabaseClient) {
@@ -17348,6 +17359,301 @@ app.post('/api/admin/bitz/auto-image-backfill', async (req, res) => {
     });
   } catch (err) {
     console.error('[API /api/admin/bitz/auto-image-backfill Error]:', err.message || err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// PHASE 2A: AI TEACHING PLANNER ENDPOINTS
+// ============================================================================
+
+app.get(['/api/classes/:id/teaching-plans', '/api/classes/:id/teaching-planner/plans'], async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.query.teacher_id;
+    const classroomId = req.params.id;
+
+    const plans = await getClassroomTeachingPlans(serverSupabase, classroomId);
+    return res.json({ success: true, plans });
+  } catch (err) {
+    console.error('[API GET /api/classes/:id/teaching-plans Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/classes/:id/teaching-plans/generate', '/api/classes/:id/teaching-planner/generate'], async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.body.teacher_id;
+    const classroomId = req.params.id;
+    const input = req.body;
+
+    const plan = await generateTeachingPlan({
+      serverSupabase,
+      serverOpenAI,
+      classroomId,
+      teacherId,
+      input
+    });
+
+    return res.json({ success: true, plan });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/teaching-plans/generate Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/classes/:id/teaching-plans/:planId/regenerate-day', '/api/classes/:id/teaching-planner/regenerate-day'], async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.body.teacher_id;
+    const { id: classroomId, planId } = req.params;
+    const { dayNumber, feedback, teacherInstructions, currentPlan } = req.body;
+
+    const updatedPlan = await regenerateTeachingPlanDay({
+      serverOpenAI,
+      currentPlan,
+      dayNumber: Number(dayNumber),
+      feedback: feedback || teacherInstructions || ''
+    });
+
+    return res.json({ success: true, plan: updatedPlan });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/teaching-plans/:planId/regenerate-day Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/classes/:id/teaching-plans/save', '/api/classes/:id/teaching-planner/save'], async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.body.teacher_id;
+    const classroomId = req.params.id;
+    const { plan, status, title } = req.body;
+
+    const saved = await saveTeachingPlan(serverSupabase, {
+      classroomId,
+      teacherId,
+      plan,
+      status: status || 'draft',
+      title
+    });
+
+    return res.json({ success: true, plan: saved });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/teaching-plans/save Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete(['/api/classes/:id/teaching-plans/:planId', '/api/classes/:id/teaching-planner/:planId'], async (req, res) => {
+  try {
+    const { planId } = req.params;
+    await deleteTeachingPlan(serverSupabase, planId);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[API DELETE /api/classes/:id/teaching-plans/:planId Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// PHASE 2B: AI ACTION EXECUTION BUS ENDPOINTS
+// ============================================================================
+
+// List actions for classroom
+app.get('/api/classes/:id/actions', async (req, res) => {
+  try {
+    const classroomId = req.params.id;
+    const { plan_id, status } = req.query;
+
+    const actions = await getClassroomActions(serverSupabase, classroomId, {
+      planId: plan_id || null,
+      status: status || null
+    });
+
+    return res.json({ success: true, actions });
+  } catch (err) {
+    console.error('[API GET /api/classes/:id/actions Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Convert teaching plan recommendations into actionable records
+app.post('/api/classes/:id/actions/create-from-plan', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.body.teacher_id;
+    const classroomId = req.params.id;
+    const { plan, plan_id } = req.body;
+
+    let targetPlan = plan;
+    if (!targetPlan && plan_id) {
+      targetPlan = await getTeachingPlanById(serverSupabase, plan_id);
+    }
+
+    if (!targetPlan) {
+      return res.status(400).json({ success: false, error: 'Teaching plan payload or valid plan_id is required.' });
+    }
+
+    const actions = await createActionsFromPlan(serverSupabase, {
+      plan: targetPlan,
+      classroomId,
+      teacherId
+    });
+
+    return res.json({ success: true, actions });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/create-from-plan Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create single ad-hoc action
+app.post('/api/classes/:id/actions/create', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    const teacherId = authData?.user?.id || req.headers['x-teacher-id'] || req.body.teacher_id;
+    const classroomId = req.params.id;
+    const {
+      plan_id,
+      action_type,
+      title,
+      description,
+      reason,
+      priority,
+      payload,
+      requires_approval,
+      scheduled_for,
+      idempotency_key
+    } = req.body;
+
+    const result = await createAction(serverSupabase, {
+      planId: plan_id,
+      classroomId,
+      teacherId,
+      actionType: action_type,
+      title,
+      description,
+      reason,
+      priority: priority || 'medium',
+      payload: payload || {},
+      requiresApproval: requires_approval ?? true,
+      scheduledFor: scheduled_for || null,
+      idempotencyKey: idempotency_key || null
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/create Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Approve an action (with optional immediate execution)
+app.post('/api/classes/:id/actions/:actionId/approve', async (req, res) => {
+  try {
+    const { actionId } = req.params;
+    const { execute_now } = req.body || {};
+
+    const updated = await updateActionDetails(serverSupabase, actionId, {
+      status: 'approved',
+      requires_approval: false
+    });
+
+    let execResult = null;
+    if (execute_now) {
+      execResult = await executeAction(serverSupabase, actionId, {
+        forceImmediate: true,
+        serverOpenAI
+      });
+    }
+
+    return res.json({
+      success: true,
+      action: execResult ? execResult.action : updated,
+      executed: Boolean(execute_now),
+      result: execResult ? execResult.result : null
+    });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/:actionId/approve Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Execute an action immediately
+app.post('/api/classes/:id/actions/:actionId/execute', async (req, res) => {
+  try {
+    const { actionId } = req.params;
+    const execResult = await executeAction(serverSupabase, actionId, {
+      forceImmediate: true,
+      serverOpenAI
+    });
+
+    return res.json({
+      success: true,
+      action: execResult.action,
+      result: execResult.result
+    });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/:actionId/execute Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Edit action properties
+app.post('/api/classes/:id/actions/:actionId/edit', async (req, res) => {
+  try {
+    const { actionId } = req.params;
+    const updates = req.body || {};
+
+    const updated = await updateActionDetails(serverSupabase, actionId, updates);
+    return res.json({ success: true, action: updated });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/:actionId/edit Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Reject/Cancel an action
+app.post('/api/classes/:id/actions/:actionId/reject', async (req, res) => {
+  try {
+    const { actionId } = req.params;
+
+    const updated = await updateActionDetails(serverSupabase, actionId, {
+      status: 'cancelled'
+    });
+
+    return res.json({ success: true, action: updated });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/:actionId/reject Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Retry a failed action
+app.post('/api/classes/:id/actions/:actionId/retry', async (req, res) => {
+  try {
+    const { actionId } = req.params;
+
+    // Reset status to approved and clear last_error
+    await updateActionDetails(serverSupabase, actionId, {
+      status: 'approved',
+      last_error: null
+    });
+
+    const execResult = await executeAction(serverSupabase, actionId, {
+      forceImmediate: true,
+      serverOpenAI
+    });
+
+    return res.json({
+      success: true,
+      action: execResult.action,
+      result: execResult.result
+    });
+  } catch (err) {
+    console.error('[API POST /api/classes/:id/actions/:actionId/retry Error]:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -39,8 +39,9 @@ import {
 } from '@/services/teachingIntelligenceService';
 import { StructuredAIReportRenderer, InlineMarkdown } from './StructuredAIReportRenderer';
 import { AITeachingPlannerTab } from './planner/AITeachingPlannerTab';
+import { AIActionsDashboard } from './actions/AIActionsDashboard';
 
-export type ModalTab = 'intelligence' | 'planner' | 'students' | 'chat' | 'recent-exams' | '30day-report';
+export type ModalTab = 'intelligence' | 'planner' | 'actions' | 'students' | 'chat' | 'recent-exams' | '30day-report';
 
 interface AITeachingIntelligenceModalProps {
   isOpen: boolean;
@@ -469,6 +470,29 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 activeTab === 'planner' ? 'bg-white/25 text-white' : 'bg-sky-100 text-[#026fc3]'
               }`}>
                 2A
+              </span>
+            </button>
+
+            {/* Tab 2B: AI Action Center */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('actions');
+                setSelectedStudentId(null);
+                setSelectedExamId(null);
+              }}
+              className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl text-xs font-extrabold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-all cursor-pointer select-none ${
+                activeTab === 'actions'
+                  ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-sm shadow-indigo-500/20 border border-indigo-400/30'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+              <span>Action Center</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                activeTab === 'actions' ? 'bg-white/25 text-white' : 'bg-indigo-100 text-indigo-700'
+              }`}>
+                2B
               </span>
             </button>
 
@@ -1289,7 +1313,19 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
             /* ============================================================= */
             /* TAB 2: AI TEACHING PLANNER (PHASE 2A)                         */
             /* ============================================================= */
-            <AITeachingPlannerTab classroom={classroom} />
+            <AITeachingPlannerTab
+              classroom={classroom}
+              onOpenActionCenter={() => setActiveTab('actions')}
+            />
+          ) : activeTab === 'actions' && classroom ? (
+            /* ============================================================= */
+            /* TAB 2B: AI ACTION EXECUTION BUS (PHASE 2B)                    */
+            /* ============================================================= */
+            <AIActionsDashboard
+              classroomId={classroom.id}
+              classroomTitle={classroom.title}
+              onNavigateToPlanner={() => setActiveTab('planner')}
+            />
           ) : activeTab === 'students' ? (
             /* ============================================================= */
             /* TAB 2: STUDENT INTELLIGENCE                                   */
