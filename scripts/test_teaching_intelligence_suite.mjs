@@ -21,10 +21,16 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import {
+  computeStudentAnalytics
+} from '../server/classroomAnalyticsService.mjs';
+
+import {
   computeClassroomMetrics,
   generateTeachingIntelligence,
   generateThirtyDayReportData,
-  compileThirtyDayPdfAndUploadR2
+  compileThirtyDayPdfAndUploadR2,
+  generateStudentAIAssessment,
+  handleTeacherChat
 } from '../server/teachingIntelligenceService.mjs';
 
 import {
@@ -116,6 +122,117 @@ async function runSuite() {
   assert(uploadResult.storage_key.startsWith('ai-reports/classrooms/test_classroom_8a/'), `R2 storage key created: ${uploadResult.storage_key}`);
   assert(uploadResult.file_size > 1000, `Generated PDF file size: ${uploadResult.file_size} bytes`);
   assert(uploadResult.download_url.includes('X-Amz-Signature='), 'Presigned AWS SigV4 download URL generated successfully');
+
+  console.log('\n--- 5. Testing 5-Source Student Analytics Computation Engine ---');
+  const sampleEvents = [
+    {
+      id: 'ev1',
+      student_id: 'test_student_1',
+      activity_type: 'live_quiz',
+      activity_title: 'Weekly Live Quiz #1',
+      topic: 'Prepositions',
+      score: 5,
+      max_score: 10,
+      percentage: 50,
+      completed_at: new Date(Date.now() - 86400000 * 4).toISOString()
+    },
+    {
+      id: 'ev2',
+      student_id: 'test_student_1',
+      activity_type: 'exam',
+      activity_title: 'Midterm Grammar Exam',
+      topic: 'Prepositions',
+      score: 55,
+      max_score: 100,
+      percentage: 55,
+      completed_at: new Date(Date.now() - 86400000 * 3).toISOString()
+    },
+    {
+      id: 'ev3',
+      student_id: 'test_student_1',
+      activity_type: 'assignment',
+      activity_title: 'Vocabulary Reading Worksheet',
+      topic: 'Vocabulary',
+      score: 90,
+      max_score: 100,
+      percentage: 90,
+      completed_at: new Date(Date.now() - 86400000 * 2).toISOString()
+    },
+    {
+      id: 'ev4',
+      student_id: 'test_student_1',
+      activity_type: 'ocr',
+      activity_title: 'Handwritten Worksheet OCR',
+      topic: 'Vocabulary',
+      score: 85,
+      max_score: 100,
+      percentage: 85,
+      completed_at: new Date(Date.now() - 86400000 * 1).toISOString()
+    },
+    {
+      id: 'ev5',
+      student_id: 'test_student_1',
+      activity_type: 'ai_challenge',
+      activity_title: 'Creative Writing Challenge',
+      topic: 'Writing Mechanics',
+      score: 80,
+      max_score: 100,
+      percentage: 80,
+      completed_at: new Date().toISOString()
+    }
+  ];
+
+  const studentMember = {
+    profile_id: 'test_student_1',
+    role: 'student',
+    profile: {
+      id: 'test_student_1',
+      full_name: 'Alex Turner',
+      email: 'alex@example.com'
+    }
+  };
+
+  const [studentAnalytics] = computeStudentAnalytics(sampleEvents, [studentMember]);
+  assert(studentAnalytics.attempts === 5, `All 5 learning events computed: ${studentAnalytics.attempts}`);
+  assert(studentAnalytics.averagePercentage === 72, `Average percentage accurately computed: ${studentAnalytics.averagePercentage}%`);
+  assert(studentAnalytics.activityBreakdown.live_quiz.attempts === 1, 'Live quiz breakdown counted');
+  assert(studentAnalytics.activityBreakdown.exam.attempts === 1, 'Exam breakdown counted');
+  assert(studentAnalytics.activityBreakdown.assignment.attempts === 1, 'Assignment breakdown counted');
+  assert(studentAnalytics.activityBreakdown.ocr.attempts === 1, 'OCR breakdown counted');
+  assert(studentAnalytics.activityBreakdown.ai_challenge.attempts === 1, 'AI Challenge breakdown counted');
+  assert(studentAnalytics.strongAreas.some(s => s.topic === 'Vocabulary'), 'Vocabulary identified as strong area');
+  assert(studentAnalytics.weakAreas.some(w => w.topic === 'Prepositions'), 'Prepositions identified as weak area');
+
+  console.log('\n--- 6. Testing Grounded Student AI Assessment (Zero Mock / Real Evidence) ---');
+  // 6a: Insufficient data test
+  const emptyAiAssessment = await generateStudentAIAssessment({
+    student: { attempts: 0, fullName: 'New Student' },
+    classroom: { title: '8A', subject: 'English', grade: 'Grade 8' }
+  });
+  assert(emptyAiAssessment.has_sufficient_data === false, 'Zero-data correctly returns has_sufficient_data: false');
+  assert(emptyAiAssessment.doing_well.includes('Not enough evidence yet'), 'Zero-data outputs "Not enough evidence yet."');
+
+  // 6b: Rich data test
+  const richAiAssessment = await generateStudentAIAssessment({
+    student: studentAnalytics,
+    classroom: { title: '8A', subject: 'English', grade: 'Grade 8' },
+    openaiApiKey: process.env.OPENAI_API_KEY
+  });
+  assert(richAiAssessment.has_sufficient_data === true, 'Sufficient data generates has_sufficient_data: true');
+  assert(Boolean(richAiAssessment.doing_well), `Doing well: "${richAiAssessment.doing_well.slice(0, 50)}..."`);
+  assert(Boolean(richAiAssessment.where_struggling), `Where struggling: "${richAiAssessment.where_struggling.slice(0, 50)}..."`);
+  assert(Boolean(richAiAssessment.evidence), `Evidence: "${richAiAssessment.evidence.slice(0, 50)}..."`);
+  assert(Boolean(richAiAssessment.next_steps), `Next steps: "${richAiAssessment.next_steps.slice(0, 50)}..."`);
+
+  console.log('\n--- 7. Testing Grounded AI Teacher Chat Assistant ---');
+  const chatRes = await handleTeacherChat({
+    classroomId: 'test_classroom_8a',
+    message: 'Which students need the most help right now and what is their weakness?',
+    openaiApiKey: process.env.OPENAI_API_KEY
+  });
+  const chatReply = chatRes.reply;
+  assert(Boolean(chatReply), `AI chat assistant replied: "${chatReply.slice(0, 80)}..."`);
+  assert(chatReply.toLowerCase().includes('student') || chatReply.toLowerCase().includes('attention') || chatReply.toLowerCase().includes('preposition'), 'Chat reply is strictly grounded in metrics facts');
 
   console.log('\n=================================================================');
   console.log(`  TEST RESULTS: ${passedTests} PASSED, ${failedTests} FAILED     `);

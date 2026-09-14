@@ -59,7 +59,9 @@ import {
   createThirtyDayReport,
   computeClassroomMetrics,
   getRecentExamReportsForClassroom,
-  getExamDetailedAnalysis
+  getExamDetailedAnalysis,
+  getStudentTeachingIntelligence,
+  handleTeacherChat
 } from './server/teachingIntelligenceService.mjs';
 import { computeClassroomAnalytics } from './server/classroomAnalyticsService.mjs';
 import {
@@ -2981,6 +2983,98 @@ app.post('/api/classes/:id/teaching-intelligence/exams/:examId/ai-analysis', asy
   }
 });
 
+// GET /api/classes/:id/teaching-intelligence/students/:studentId - Individual Student Intelligence Detail
+app.get('/api/classes/:id/teaching-intelligence/students/:studentId', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const studentId = req.params.studentId;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await getStudentTeachingIntelligence({
+      serverSupabase,
+      classroomId,
+      studentId,
+      forceRefresh: req.query.refresh === 'true',
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/teaching-intelligence/students/:studentId:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve student intelligence' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/students/:studentId/ai-assessment - Refresh Student AI Assessment
+app.post('/api/classes/:id/teaching-intelligence/students/:studentId/ai-assessment', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const studentId = req.params.studentId;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await getStudentTeachingIntelligence({
+      serverSupabase,
+      classroomId,
+      studentId,
+      forceRefresh: true,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/students/:studentId/ai-assessment:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to refresh student AI assessment' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/chat - Teacher AI Chat grounded in real classroom records
+app.post('/api/classes/:id/teaching-intelligence/chat', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const { message, conversationHistory } = req.body;
+
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
+
+    const result = await handleTeacherChat({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      message,
+      conversationHistory,
+      serverOpenAI
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/chat:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to process teacher chat' });
+  }
+});
+
 // POST /api/classes/ai-feedback - Backwards-compatible endpoint for executive summary
 app.post('/api/classes/ai-feedback', async (req, res) => {
   try {
@@ -3544,15 +3638,20 @@ app.get('/api/course-studio/courses', async (req, res) => {
 
     if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database connection uninitialized' });
 
-    const { data: courses, error } = await serverSupabase
+    let query = serverSupabase
       .from('courses')
       .select(`
         *,
         course_units(id, course_episodes(id)),
         course_classroom_assignments(id, classroom_id)
-      `)
-      .eq('teacher_id', authData.user.id)
-      .order('updated_at', { ascending: false });
+      `);
+
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    if (!isAdmin) {
+      query = query.eq('teacher_id', authData.user.id);
+    }
+
+    const { data: courses, error } = await query.order('updated_at', { ascending: false });
 
     if (error) throw error;
 
@@ -3813,11 +3912,16 @@ app.put('/api/course-studio/courses/:id', async (req, res) => {
     if (course_timezone !== undefined) updates.course_timezone = course_timezone;
     if (course_start_date !== undefined) updates.course_start_date = course_start_date;
 
-    const { data: updated, error } = await serverSupabase
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    let query = serverSupabase
       .from('courses')
       .update(updates)
-      .eq('id', courseId)
-      .eq('teacher_id', authData.user.id)
+      .eq('id', courseId);
+    if (!isAdmin) {
+      query = query.eq('teacher_id', authData.user.id);
+    }
+
+    const { data: updated, error } = await query
       .select()
       .single();
 
@@ -3836,11 +3940,16 @@ app.delete('/api/course-studio/courses/:id', async (req, res) => {
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
     const courseId = req.params.id;
-    const { error } = await serverSupabase
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    let query = serverSupabase
       .from('courses')
       .delete()
-      .eq('id', courseId)
-      .eq('teacher_id', authData.user.id);
+      .eq('id', courseId);
+    if (!isAdmin) {
+      query = query.eq('teacher_id', authData.user.id);
+    }
+
+    const { error } = await query;
 
     if (error) throw error;
     res.json({ success: true, message: 'Course deleted successfully.' });
@@ -4506,11 +4615,15 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
       }
     } = req.body;
 
-    const { data: updatedCourse, error: cErr } = await serverSupabase
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    let courseQuery = serverSupabase
       .from('courses')
       .update({ status: 'published', updated_at: new Date().toISOString() })
-      .eq('id', courseId)
-      .eq('teacher_id', authData.user.id)
+      .eq('id', courseId);
+    if (!isAdmin) {
+      courseQuery = courseQuery.eq('teacher_id', authData.user.id);
+    }
+    const { data: updatedCourse, error: cErr } = await courseQuery
       .select()
       .single();
 

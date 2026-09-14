@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: DETERMINISTIC CLASSROOM ANALYTICS ENGINE (PHASE 2)
 // High-performance, zero-mock, database-grounded statistical calculation service.
 // Unifies and transforms events from public.v_classroom_learning_events.
@@ -158,6 +158,8 @@ export function computeStudentAnalytics(events = [], studentMembers = [], option
     eventsByStudent.get(ev.student_id).push(ev);
   }
 
+  const totalClassActivities = options.totalClassActivities || 0;
+
   return studentMembers.map(member => {
     const studentId = member.profile_id || member.id;
     const profile = member.profile || {};
@@ -179,8 +181,115 @@ export function computeStudentAnalytics(events = [], studentMembers = [], option
       ? Number((totalScoreSum / validScoresCount).toFixed(2))
       : null;
 
+    // Accuracy calculation: percentage of questions or score earned
+    let accuracyPercentage = averagePercentage;
+    const eventsWithCorrectCounts = studentEvents.filter(e => e.metadata?.correct_count != null && e.metadata?.total_questions != null);
+    if (eventsWithCorrectCounts.length > 0) {
+      const totalCorrect = eventsWithCorrectCounts.reduce((s, e) => s + Number(e.metadata.correct_count), 0);
+      const totalQuestions = eventsWithCorrectCounts.reduce((s, e) => s + Math.max(1, Number(e.metadata.total_questions)), 0);
+      if (totalQuestions > 0) {
+        accuracyPercentage = Number(((totalCorrect / totalQuestions) * 100).toFixed(2));
+      }
+    }
+
     const strongResultsCount = scoredEvents.filter(e => Number(e.percentage) >= ANALYTICS_CONFIG.STRONG_SCORE_THRESHOLD).length;
     const weakResultsCount = scoredEvents.filter(e => Number(e.percentage) < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD).length;
+
+    // Topic performance for this student
+    const studentTopicMap = new Map();
+    for (const ev of scoredEvents) {
+      const rawTopic = ev.topic || ev.category;
+      if (!rawTopic || !rawTopic.trim()) continue;
+      const t = rawTopic.trim();
+      if (!studentTopicMap.has(t)) {
+        studentTopicMap.set(t, { topic: t, total: 0, count: 0 });
+      }
+      const item = studentTopicMap.get(t);
+      item.total += Number(ev.percentage);
+      item.count += 1;
+    }
+
+    const strongAreas = [];
+    const weakAreas = [];
+    for (const [topicName, stat] of studentTopicMap.entries()) {
+      const topicAvg = Number((stat.total / stat.count).toFixed(1));
+      if (topicAvg >= ANALYTICS_CONFIG.STRONG_SCORE_THRESHOLD) {
+        strongAreas.push({ topic: topicName, average: topicAvg, count: stat.count });
+      } else if (topicAvg < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD) {
+        weakAreas.push({ topic: topicName, average: topicAvg, count: stat.count });
+      }
+    }
+    strongAreas.sort((a, b) => b.average - a.average);
+    weakAreas.sort((a, b) => a.average - b.average);
+
+    // 5-Source Activity Breakdown for this student
+    const studentActivityBreakdown = {
+      live_quiz: { attempts: 0, averageScore: null, highestScore: null, recentScore: null },
+      exam: { attempts: 0, averageScore: null, passedCount: 0, failedCount: 0 },
+      assignment: { attempts: 0, averageScore: null, completedCount: 0 },
+      ocr: { attempts: 0, averageScore: null },
+      ai_challenge: { attempts: 0, averageScore: null }
+    };
+
+    const sourceEvents = {
+      live_quiz: studentEvents.filter(e => e.activity_type === 'live_quiz'),
+      exam: studentEvents.filter(e => e.activity_type === 'exam'),
+      assignment: studentEvents.filter(e => e.activity_type === 'assignment'),
+      ocr: studentEvents.filter(e => e.activity_type === 'ocr'),
+      ai_challenge: studentEvents.filter(e => e.activity_type === 'ai_challenge' || e.activity_type === 'competition')
+    };
+
+    for (const [typeKey, evList] of Object.entries(sourceEvents)) {
+      const scored = evList.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
+      const avg = scored.length > 0 ? Number((scored.reduce((s, e) => s + Number(e.percentage), 0) / scored.length).toFixed(1)) : null;
+
+      if (typeKey === 'live_quiz') {
+        studentActivityBreakdown.live_quiz = {
+          attempts: evList.length,
+          averageScore: avg,
+          highestScore: scored.length > 0 ? Math.max(...scored.map(e => Number(e.percentage))) : null,
+          recentScore: scored.length > 0 ? Number(scored[0].percentage) : null
+        };
+      } else if (typeKey === 'exam') {
+        const passed = evList.filter(e => e.metadata?.passed === true || (e.percentage != null && Number(e.percentage) >= 50)).length;
+        studentActivityBreakdown.exam = {
+          attempts: evList.length,
+          averageScore: avg,
+          passedCount: passed,
+          failedCount: evList.length - passed
+        };
+      } else if (typeKey === 'assignment') {
+        studentActivityBreakdown.assignment = {
+          attempts: evList.length,
+          averageScore: avg,
+          completedCount: evList.length
+        };
+      } else if (typeKey === 'ocr') {
+        studentActivityBreakdown.ocr = {
+          attempts: evList.length,
+          averageScore: avg
+        };
+      } else if (typeKey === 'ai_challenge') {
+        studentActivityBreakdown.ai_challenge = {
+          attempts: evList.length,
+          averageScore: avg
+        };
+      }
+    }
+
+    // Chronological assessment history
+    const assessmentHistory = studentEvents.map(e => ({
+      id: e.id,
+      activityId: e.activity_id,
+      activityType: e.activity_type,
+      activityTitle: e.activity_title || 'Classroom Activity',
+      topic: e.topic || e.category || 'General',
+      score: e.score != null ? Number(e.score) : null,
+      maxScore: e.max_score != null ? Number(e.max_score) : null,
+      percentage: e.percentage != null ? Number(e.percentage) : null,
+      completedAt: e.completed_at,
+      metadata: e.metadata || {}
+    }));
 
     // Most recent activity
     const mostRecent = studentEvents[0] || null;
@@ -214,9 +323,20 @@ export function computeStudentAnalytics(events = [], studentMembers = [], option
       ? Number((recentAvg - previousAvg).toFixed(2))
       : null;
 
+    let trend = 'STEADY';
+    if (scoreChange != null) {
+      if (scoreChange >= ANALYTICS_CONFIG.IMPROVEMENT_DELTA_THRESHOLD) trend = 'IMPROVING';
+      else if (scoreChange <= ANALYTICS_CONFIG.DECLINE_DELTA_THRESHOLD) trend = 'DECLINING';
+    }
+
     // Distinct active dates & activities
     const distinctDates = new Set(studentEvents.map(e => (e.completed_at || '').substring(0, 10)));
     const distinctActivities = new Set(studentEvents.map(e => e.activity_id));
+
+    // Completion rate
+    const completionRate = totalClassActivities > 0
+      ? Math.min(100, Math.round((distinctActivities.size / totalClassActivities) * 100))
+      : (distinctActivities.size > 0 ? 100 : 0);
 
     // Frequency (events per week over span)
     const activeDaysCount = distinctDates.size;
@@ -246,13 +366,21 @@ export function computeStudentAnalytics(events = [], studentMembers = [], option
       email,
       avatarUrl,
       totalEvents,
+      attempts: totalEvents,
       averagePercentage,
+      accuracyPercentage,
+      completionRate,
       strongResultsCount,
       weakResultsCount,
+      strongAreas,
+      weakAreas,
+      activityBreakdown: studentActivityBreakdown,
+      assessmentHistory,
       mostRecentActivity,
       recentAveragePercentage: recentAvg,
       previousAveragePercentage: previousAvg,
       scoreChangePercentagePoints: scoreChange,
+      trend,
       activityFrequency: {
         eventsPerWeek,
         activeDaysCount
@@ -603,10 +731,109 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   const distinctDates = new Set(events.map(e => (e.completed_at || '').substring(0, 10)));
   const dataConfidence = evaluateDataConfidence(scoredEvents.length, completedActivitiesCount, distinctDates.size);
 
-  const studentAnalytics = computeStudentAnalytics(events, studentMembers, options);
+  const studentAnalytics = computeStudentAnalytics(events, studentMembers, {
+    ...options,
+    totalClassActivities: completedActivitiesCount
+  });
   const activityBreakdown = computeActivityAnalytics(events, totalStudents);
   const topicAnalytics = computeTopicAnalytics(events, options);
   const trendAnalytics = computeTrendAnalytics(events, totalStudents, options);
+
+  // Improving and Struggling students
+  const improvingStudents = studentAnalytics.filter(
+    s => s.trend === 'IMPROVING' || (s.scoreChangePercentagePoints != null && s.scoreChangePercentagePoints >= ANALYTICS_CONFIG.IMPROVEMENT_DELTA_THRESHOLD)
+  );
+
+  const strugglingStudents = studentAnalytics.filter(
+    s => s.performanceCategory === 'AT_RISK' ||
+         s.performanceCategory === 'NEEDS_SUPPORT' ||
+         (s.averagePercentage != null && s.averagePercentage < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD) ||
+         (s.scoreChangePercentagePoints != null && s.scoreChangePercentagePoints <= ANALYTICS_CONFIG.DECLINE_DELTA_THRESHOLD)
+  );
+
+  // Top Strengths (Topics >= 75%)
+  const topStrengths = topicAnalytics
+    .filter(t => t.averagePercentage != null && t.averagePercentage >= ANALYTICS_CONFIG.STRONG_SCORE_THRESHOLD)
+    .slice(0, 5)
+    .map(t => ({
+      topic: t.topic,
+      averageScore: Math.round(t.averagePercentage),
+      eventsCount: t.eventCount,
+      status: t.status
+    }));
+
+  // Top Weaknesses (Topics < 60% or declining)
+  const topWeaknesses = topicAnalytics
+    .filter(t => t.averagePercentage != null && (t.averagePercentage < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD || t.status === 'declining' || t.status === 'weak'))
+    .slice(0, 5)
+    .map(t => ({
+      topic: t.topic,
+      averageScore: Math.round(t.averagePercentage),
+      eventsCount: t.eventCount,
+      change: t.scoreChangePercentagePoints,
+      status: t.status
+    }));
+
+  // Deterministic Ranked Attention Cases (Ranked based on real evidence)
+  const studentsNeedingAttention = strugglingStudents
+    .sort((a, b) => {
+      const aScore = a.averagePercentage != null ? a.averagePercentage : 0;
+      const bScore = b.averagePercentage != null ? b.averagePercentage : 0;
+      if (aScore !== bScore) return aScore - bScore;
+      const aDelta = a.scoreChangePercentagePoints || 0;
+      const bDelta = b.scoreChangePercentagePoints || 0;
+      return aDelta - bDelta;
+    })
+    .slice(0, 8)
+    .map(s => {
+      const recentEv = s.assessmentHistory && s.assessmentHistory[0];
+      const recentEvidenceStr = recentEv
+        ? `Scored ${recentEv.percentage ?? recentEv.score}% on ${recentEv.activityTitle} (${new Date(recentEv.completedAt).toLocaleDateString()})`
+        : 'No recent assessment submissions';
+      const mainWeakness = s.weakAreas[0]?.topic || (s.averagePercentage != null && s.averagePercentage < 50 ? 'Core assessment mastery' : 'Targeted concept practice');
+      const recAction = s.averagePercentage != null && s.averagePercentage < 50
+        ? 'Schedule 1-on-1 diagnostic review and assign scaffolded fundamentals practice.'
+        : s.scoreChangePercentagePoints != null && s.scoreChangePercentagePoints <= -5
+        ? 'Review recent misconceptions and follow up on quiz errors.'
+        : 'Assign targeted review quiz and check in on comprehension.';
+
+      return {
+        studentId: s.studentId,
+        student_ref: s.fullName,
+        average_score: s.averagePercentage,
+        trend: s.scoreChangePercentagePoints != null
+          ? `${s.scoreChangePercentagePoints >= 0 ? '+' : ''}${s.scoreChangePercentagePoints}%`
+          : (s.trend || 'Steady'),
+        main_weakness: mainWeakness,
+        recent_evidence: recentEvidenceStr,
+        recommended_action: recAction,
+        attempts: s.totalEvents,
+        completion_rate: s.completionRate
+      };
+    });
+
+  // Class Health Object
+  const classHealth = {
+    classAverage: averagePercentage != null ? Math.round(averagePercentage) : null,
+    participationRate: totalStudents > 0 ? Math.min(100, Math.round((activeStudents / totalStudents) * 100)) : 0,
+    completionRate: completionRate != null ? Math.round(completionRate) : (totalEvents > 0 ? 100 : 0),
+    assessmentActivityCount: totalEvents,
+    improvingCount: improvingStudents.length,
+    improvingStudents: improvingStudents.map(s => ({
+      studentId: s.studentId,
+      name: s.fullName,
+      average: s.averagePercentage,
+      change: s.scoreChangePercentagePoints
+    })),
+    strugglingCount: strugglingStudents.length,
+    strugglingStudents: strugglingStudents.map(s => ({
+      studentId: s.studentId,
+      name: s.fullName,
+      average: s.averagePercentage,
+      trend: s.scoreChangePercentagePoints,
+      weakestArea: s.weakAreas[0]?.topic || 'Multiple areas'
+    }))
+  };
 
   // 6. Recent activity feed (up to 15 latest events with resolved student names)
   const studentNameMap = new Map();
@@ -647,6 +874,10 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       completionRate,
       confidence: dataConfidence
     },
+    classHealth,
+    topStrengths,
+    topWeaknesses,
+    studentsNeedingAttention,
     recentActivity,
     students: studentAnalytics,
     activityBreakdown,

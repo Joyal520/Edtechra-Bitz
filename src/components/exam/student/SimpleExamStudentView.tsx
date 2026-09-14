@@ -1,11 +1,11 @@
 // ============================================================================
 // EDTECHRA DIGITAL EXAMINATION PLATFORM: SIMPLE EXAM STUDENT VIEW
-// Genuine Responsive Layout: 2-Column Desktop (2x2 Options Grid) &
-// Mobile-First Single-Column Flow (Stacked Colorful Options)
-// Strictly matches the EdTechra BiZ Simple Exam Reference Specification.
+// Genuine Responsive Layout: 2-Column Desktop & Mobile-First Single-Column Flow
+// Liquid / Glass Design with Multi-Type Question Renderer Support:
+// (MCQ, True/False, Fill-in-the-Blank, Short Answer, Error Correction, Reading Comprehension)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,7 +22,10 @@ import {
   Menu,
   X,
   ChevronRight,
-  Home
+  Edit3,
+  Type,
+  AlertCircle,
+  Lightbulb
 } from 'lucide-react';
 import { CanonicalExamV1 } from '../shared/ExamSchema';
 import { FlattenedExamQuestion } from '../shared/scoringUtilities';
@@ -53,9 +56,59 @@ export interface SimpleExamStudentViewProps {
   isMobilePreview?: boolean;
 }
 
+export type CanonicalQuestionType =
+  | 'mcq'
+  | 'true_false'
+  | 'fill_in_blank'
+  | 'short_answer'
+  | 'error_correction'
+  | 'reading_comprehension';
+
 /**
- * Robust helper to strip redundant option letter prefixes (e.g. "A. is" -> "is", "B) are" -> "are", "A  A. is" -> "is")
- * Guarantees that the option letter badge is the ONLY place displaying A, B, C, D.
+ * Normalizes loose or backend question types into canonical interactive renderer types.
+ */
+export function normalizeQuestionType(type?: string): CanonicalQuestionType {
+  const t = (type || '').toLowerCase().trim().replace(/[- ]/g, '_');
+  if (t === 'true_false' || t === 'tf' || t === 'boolean') {
+    return 'true_false';
+  }
+  if (
+    t === 'fill_in_blank' ||
+    t === 'fill_in_the_blank' ||
+    t === 'fib' ||
+    t === 'blank' ||
+    t === 'sentence_completion' ||
+    t === 'cloze_passage' ||
+    t === 'cloze_activity'
+  ) {
+    return 'fill_in_blank';
+  }
+  if (
+    t === 'short_answer' ||
+    t === 'sa' ||
+    t === 'paragraph' ||
+    t === 'essay' ||
+    t === 'open_ended' ||
+    t === 'text'
+  ) {
+    return 'short_answer';
+  }
+  if (t === 'error_correction' || t === 'find_error' || t === 'error') {
+    return 'error_correction';
+  }
+  if (
+    t === 'reading_comprehension' ||
+    t === 'comprehension' ||
+    t === 'passage' ||
+    t === 'reading_activity'
+  ) {
+    return 'reading_comprehension';
+  }
+  return 'mcq';
+}
+
+/**
+ * Helper to strip redundant option letter prefixes (e.g. "A. is" -> "is", "B) are" -> "are")
  */
 export function cleanOptionText(text: string): string {
   if (!text || typeof text !== 'string') return '';
@@ -63,7 +116,6 @@ export function cleanOptionText(text: string): string {
   let prev = '';
   while (cleaned !== prev) {
     prev = cleaned;
-    // Strip "(A) ", "[A] ", "A. ", "A) ", "A: ", "A - ", "A— ", "Option A: ", "Option A. ", "Option A - "
     const withDelim = cleaned.replace(
       /^(?:option\s+)?(?:[\(\[]?[A-Da-d][\)\]]?\s*[\.\:\-\–\—\)\]]|\(?[A-Da-d]\)\s*|(?:option\s+)[A-Da-d]\s*[:.-]?)\s*/i,
       ''
@@ -72,13 +124,11 @@ export function cleanOptionText(text: string): string {
       cleaned = withDelim;
       continue;
     }
-    // Strip standalone prefix like "A  " (A followed by 2 or more spaces)
     const withMultiSpaces = cleaned.replace(/^[A-Da-d]\s{2,}/i, '').trim();
     if (withMultiSpaces !== cleaned && withMultiSpaces.length > 0) {
       cleaned = withMultiSpaces;
       continue;
     }
-    // Strip "A " when followed by another prefix like "A. "
     const withRedundantLetter = cleaned.replace(/^[A-Da-d]\s+(?=[A-Da-d][\.\:\-\)]|[A-Da-d]\s+)/i, '').trim();
     if (withRedundantLetter !== cleaned && withRedundantLetter.length > 0) {
       cleaned = withRedundantLetter;
@@ -89,53 +139,44 @@ export function cleanOptionText(text: string): string {
   return cleaned;
 }
 
-/**
- * Parsed question structure separating the main instruction, context sentence, and target highlighted words
- */
 export interface ParsedQuestionContent {
+  instructionText: string | null;
   promptText: string;
   contextSentence: string | null;
   targetWords: string[];
 }
 
 /**
- * Intelligently decomposes question prompts into:
- * 1. Target words from quotes (e.g. "Maria", "John")
- * 2. Main question prompt (e.g. "Which subject pronoun can replace “Maria” in this sentence?")
- * 3. Context sentence card (e.g. "Maria is a student.")
+ * Intelligently separates prompt instructions, main question text, and context sentences
+ * WITHOUT aggressively surrounding standard quoted words in purple tags.
  */
 export function parseQuestionPrompt(rawText: string): ParsedQuestionContent {
   if (!rawText || typeof rawText !== 'string') {
-    return { promptText: '', contextSentence: null, targetWords: [] };
+    return { instructionText: null, promptText: '', contextSentence: null, targetWords: [] };
   }
 
-  const text = rawText.trim();
-
-  // 1. Extract target words from quotes (e.g. “Maria”, "John", ‘word’, 'word')
-  const targetWords: string[] = [];
-  const quoteRegex = /(?:[“"‘'])([^“”"'`\n\r]{1,40})(?:[”"’'])/g;
-  let match: RegExpExecArray | null;
-  while ((match = quoteRegex.exec(text)) !== null) {
-    const candidate = match[1].trim();
-    if (candidate.length > 0 && !candidate.includes('.') && !candidate.includes('?') && !candidate.includes('!')) {
-      if (!targetWords.includes(candidate)) {
-        targetWords.push(candidate);
-      }
-    }
-  }
-
-  let promptText = text;
+  let text = rawText.trim();
+  let instructionText: string | null = null;
   let contextSentence: string | null = null;
+  const targetWords: string[] = [];
 
-  // 2. Pattern A: Colon separator after "in this sentence", "in the sentence", "context", "passage", etc.
-  // e.g. "Which subject pronoun can replace the noun “Maria” in this sentence: Maria is a student."
+  // 1. Detect dynamic instruction prefix
+  const instructionRegex = /^(choose the (?:correct|best)[^:\n\r]*:|complete the sentence[^:\n\r]*:|identify the (?:error|correct|underlined)[^:\n\r]*:|read the (?:passage|text)[^:\n\r]*:|fill in the blank[s]?[^:\n\r]*:|select the best option[^:\n\r]*:|which of the following[^:\n\r]*:)/i;
+  const instMatch = text.match(instructionRegex);
+  if (instMatch) {
+    instructionText = instMatch[1].trim();
+    text = text.substring(instMatch[0].length).trim();
+  }
+
+  // 2. Pattern A: Colon separator after "in this sentence", "in the sentence", etc.
   const colonMatch = text.match(
     /^(.*?(?:in (?:this|the|following) sentence|in the sentence below|sentence|context|passage|example))\s*[:]\s*(.+)$/i
   );
+  let promptText = text;
+
   if (colonMatch) {
     let p = colonMatch[1].trim();
     let s = colonMatch[2].trim();
-    // Clean up wrapping quotes around sentence if any
     s = s.replace(/^[“"']\s*/, '').replace(/\s*[”"']$/, '').trim();
     if (!/[?.!]$/.test(p)) {
       p += '?';
@@ -143,7 +184,7 @@ export function parseQuestionPrompt(rawText: string): ParsedQuestionContent {
     promptText = p;
     contextSentence = s;
   } else {
-    // 3. Pattern B: Newline separator
+    // Check newline separation
     const lines = text.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
     if (lines.length >= 2) {
       if (/sentence\s*:/i.test(lines[0])) {
@@ -154,7 +195,6 @@ export function parseQuestionPrompt(rawText: string): ParsedQuestionContent {
         contextSentence = lines.slice(1).join(' ').trim();
       }
     } else {
-      // 4. Pattern C: Question mark followed by a sentence (e.g. "...in this sentence? John is my friend.")
       const qMarkMatch = text.match(/^(.*?\?)\s+([A-Z0-9][^?]+?\.)\s*$/);
       if (qMarkMatch) {
         promptText = qMarkMatch[1].trim();
@@ -167,61 +207,10 @@ export function parseQuestionPrompt(rawText: string): ParsedQuestionContent {
     contextSentence = contextSentence.replace(/^[“"']\s*/, '').replace(/\s*[”"']$/, '').trim();
   }
 
-  return { promptText, contextSentence, targetWords };
+  return { instructionText, promptText, contextSentence, targetWords };
 }
 
-/**
- * Safely renders text with soft lavender/purple inline highlighting for the target word.
- * Does NOT highlight everything and avoids neon yellow marker styling.
- */
-export function renderHighlightedText(
-  text: string,
-  targetWords: string[],
-  isContextSentence: boolean = false
-): React.ReactNode {
-  if (!text) return null;
-
-  if (!targetWords || targetWords.length === 0) {
-    return renderFormattedPrompt(text, { isMCQ: true });
-  }
-
-  const escapedWords = targetWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  let pattern: RegExp;
-  if (!isContextSentence) {
-    // In question prompt: match target word with quotes or word boundaries
-    pattern = new RegExp(`([“"‘'](?:${escapedWords.join('|')})[”"’']|\\b(?:${escapedWords.join('|')})\\b)`, 'gi');
-  } else {
-    // In context sentence: match target word with word boundaries
-    pattern = new RegExp(`(\\b(?:${escapedWords.join('|')})\\b)`, 'gi');
-  }
-
-  const parts = text.split(pattern);
-
-  return (
-    <>
-      {parts.map((part, idx) => {
-        if (!part) return null;
-        const stripped = part.replace(/[“"‘'”]/g, '').trim().toLowerCase();
-        const isTarget = targetWords.some((w) => w.toLowerCase() === stripped);
-
-        if (isTarget) {
-          return (
-            <span
-              key={`target-${idx}`}
-              className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-lg bg-purple-100 text-purple-950 font-black border border-purple-200/90 shadow-2xs select-text"
-            >
-              {part}
-            </span>
-          );
-        }
-
-        return <React.Fragment key={`text-${idx}`}>{renderFormattedPrompt(part, { isMCQ: true })}</React.Fragment>;
-      })}
-    </>
-  );
-}
-
-// Pastel style definition for options A, B, C, D (Visibly fills card in default state)
+// 4-Color Liquid Option Themes (A Pink, B Blue, C Green, D Yellow)
 interface OptionTheme {
   letter: string;
   badgeBg: string;
@@ -329,21 +318,44 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
   // Dynamic progress calculation
   const progressPercent = totalCount > 0 ? Math.round(((currentIndex + 1) / totalCount) * 100) : 0;
 
-  // Authoritative format time - reads from the single timeRemainingSeconds prop
+  // Authoritative format time
   const formattedTime = formatTime(timeRemainingSeconds);
   const isCritical = timeRemainingSeconds <= 60;
   const isWarning = !isCritical && timeRemainingSeconds <= 300;
 
-  // Subject and Topic labels
-  const subjectLabel = exam.exam.subject || 'English';
-  const topicLabel = exam.exam.topic || exam.exam.title || 'Simple Past Tense';
+  // Parse question text into prompt, instruction, and context
+  const parsedQuestion = useMemo(() => {
+    return currentQ
+      ? parseQuestionPrompt(currentQ.question.question)
+      : { instructionText: null, promptText: 'Question not found', contextSentence: null, targetWords: [] };
+  }, [currentQ]);
 
+  // Determine canonical interactive question type
+  const normalizedType = useMemo<CanonicalQuestionType>(() => {
+    if (!currentQ?.question) return 'mcq';
+    return normalizeQuestionType(currentQ.question.type);
+  }, [currentQ]);
+
+  // Extract raw options if MCQ
   const rawOptions = (currentQ?.question as any)?.options || [];
 
-  // Parse question text into prompt, context sentence, and target words
-  const parsedQuestion = currentQ
-    ? parseQuestionPrompt(currentQ.question.question)
-    : { promptText: 'Question not found', contextSentence: null, targetWords: [] };
+  // Question Type Label & Badge Meta
+  const typeMeta = useMemo(() => {
+    switch (normalizedType) {
+      case 'true_false':
+        return { label: 'True / False', icon: CheckCircle2, color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+      case 'fill_in_blank':
+        return { label: 'Fill in the Blank', icon: Edit3, color: 'text-sky-700 bg-sky-50 border-sky-200' };
+      case 'short_answer':
+        return { label: 'Short Answer', icon: Type, color: 'text-violet-700 bg-violet-50 border-violet-200' };
+      case 'error_correction':
+        return { label: 'Error Correction', icon: AlertCircle, color: 'text-amber-700 bg-amber-50 border-amber-200' };
+      case 'reading_comprehension':
+        return { label: 'Reading Comprehension', icon: BookOpen, color: 'text-indigo-700 bg-indigo-50 border-indigo-200' };
+      default:
+        return { label: 'Multiple Choice Question', icon: BookOpen, color: 'text-pink-700 bg-pink-50 border-pink-200' };
+    }
+  }, [normalizedType]);
 
   return (
     <div
@@ -352,10 +364,9 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
     >
       <div className="w-full max-w-[1360px] mx-auto flex flex-col gap-3.5 sm:gap-5 flex-1">
         {/* ================================================================
-            1. TOP HEADER (Synchronized Timer 1)
+            1. TOP HEADER (Synchronized Timer)
         ================================================================ */}
         {isMobilePreview ? (
-          // Dedicated Mobile Header when previewed in Mobile mode
           <header className="w-full flex items-center justify-between gap-2 bg-white/90 backdrop-blur-xs border border-blue-100 rounded-2xl px-3 py-2 shadow-2xs shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <button
@@ -379,7 +390,6 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
               </div>
             </div>
 
-            {/* Authoritative Timer Pill */}
             <div
               className={`rounded-xl px-2.5 py-1.5 flex items-center gap-1.5 border shrink-0 transition-all ${
                 isCritical
@@ -400,11 +410,8 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
             </div>
           </header>
         ) : (
-          // Responsive Standard Header (Desktop full, Mobile compact)
           <header className="w-full flex items-center justify-between gap-3 bg-transparent shrink-0">
-            {/* Left Branding */}
             <div className="flex items-center gap-2.5 sm:gap-3">
-              {/* Mobile Drawer Toggle (Visible on small screens) */}
               <button
                 type="button"
                 onClick={() => setMobileNavigatorOpen(true)}
@@ -414,7 +421,6 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                 <Menu className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
               </button>
 
-              {/* Back button (Desktop) */}
               <button
                 type="button"
                 onClick={onClose}
@@ -439,65 +445,44 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
               </div>
             </div>
 
-            {/* Desktop Center: Simple Exam / Subject Badge */}
             <div className="hidden sm:flex bg-white/90 backdrop-blur-xs border border-blue-100 rounded-2xl px-4 py-2 items-center gap-2.5 shadow-2xs min-w-0">
               <div className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
                 <FileText className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate flex items-center gap-1.5">
-                  <span>Simple Exam</span>
+                  <span>{exam.exam.title || 'Simple Exam'}</span>
                   {syncState === 'saving' && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" title="Saving..." />
+                    <span className="text-[10px] font-bold text-sky-600 animate-pulse">Saving...</span>
                   )}
                 </div>
-                <div className="text-[10px] sm:text-[11px] font-semibold text-slate-500 truncate">
-                  {subjectLabel}: {topicLabel}
-                </div>
+                <span className="text-[10px] font-bold text-slate-500 block truncate">
+                  {exam.exam.subject || 'English'}
+                </span>
               </div>
             </div>
 
-            {/* Right: Authoritative Timer Display 1 (Header Timer) */}
-            <div
-              className={`rounded-2xl px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2 sm:gap-2.5 shadow-2xs shrink-0 border transition-all ${
-                isCritical
-                  ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
-                  : isWarning
-                  ? 'bg-amber-50 text-amber-800 border-amber-300'
-                  : 'bg-sky-100/80 border-sky-200 text-slate-900'
-              }`}
-            >
-              <Clock
-                className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${
+            <div className="flex items-center gap-2">
+              <div
+                className={`rounded-2xl px-3.5 py-2 sm:px-4 sm:py-2.5 flex items-center gap-2 border shadow-2xs transition-all ${
                   isCritical
-                    ? 'text-rose-600'
+                    ? 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
                     : isWarning
-                    ? 'text-amber-600'
-                    : 'text-blue-600'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : 'bg-white/90 backdrop-blur-xs border-blue-100 text-slate-900'
                 }`}
-              />
-              <div className="leading-none text-right sm:text-left">
-                <div className="text-sm sm:text-lg font-black tracking-tight font-mono">
+              >
+                <Clock
+                  className={`w-4 h-4 shrink-0 ${
+                    isCritical ? 'text-rose-600' : isWarning ? 'text-amber-600' : 'text-blue-600'
+                  }`}
+                />
+                <span className="text-sm sm:text-base font-black tracking-tight font-mono">
                   {formattedTime}
-                </div>
-                <span className="text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider block mt-0.5">
-                  Time Left
                 </span>
               </div>
             </div>
           </header>
-        )}
-
-        {/* Desktop Breadcrumbs Bar (Hidden on Mobile) */}
-        {!isMobilePreview && (
-          <div className="hidden lg:flex items-center gap-2 text-xs font-semibold text-slate-400 px-1 -mt-1">
-            <Home className="w-3.5 h-3.5 text-slate-400" />
-            <span>Dashboard</span>
-            <ChevronRight className="w-3 h-3 text-slate-300" />
-            <span>Exams</span>
-            <ChevronRight className="w-3 h-3 text-slate-300" />
-            <span className="text-slate-600 font-bold">Simple Exam</span>
-          </div>
         )}
 
         {/* ================================================================
@@ -511,7 +496,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
           }
         >
           {/* ==============================================================
-              LEFT / MAIN COLUMN: Progress + Question + Options + Actions
+              LEFT / MAIN COLUMN: Progress + Question + Interactive Area + Actions
           ============================================================== */}
           <div
             className={
@@ -554,111 +539,363 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
 
             {/* Main Question Card */}
             <main className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-md shadow-blue-900/5 p-4 sm:p-6 md:p-8 flex flex-col justify-between w-full space-y-4 sm:space-y-5">
-              {/* Top Tag Row */}
+              {/* Top Tag Row: Dynamic Type Badge + Instruction Highlight */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="bg-[#fff0f3] border border-pink-200/80 text-pink-700 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 sm:gap-2 shadow-2xs">
-                  <BookOpen className="w-3.5 h-3.5 text-pink-600" />
-                  <span>Multiple Choice Question</span>
+                <div className={`border ${typeMeta.color} px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 sm:gap-2 shadow-2xs`}>
+                  <typeMeta.icon className="w-3.5 h-3.5" />
+                  <span>{typeMeta.label}</span>
                 </div>
 
-                {!isMobilePreview && (
-                  <div className="hidden sm:flex bg-[#f0f4ff] border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full text-xs font-bold items-center gap-1.5 shadow-2xs">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Choose the correct answer.</span>
+                {parsedQuestion.instructionText ? (
+                  <div className="inline-flex items-center gap-1.5 bg-gradient-to-r from-indigo-50 to-sky-50 border border-indigo-200/80 text-indigo-700 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold shadow-2xs">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+                    <span>{parsedQuestion.instructionText}</span>
                   </div>
+                ) : (
+                  !isMobilePreview && (
+                    <div className="hidden sm:flex bg-[#f0f4ff] border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full text-xs font-bold items-center gap-1.5 shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Answer carefully</span>
+                    </div>
+                  )
                 )}
               </div>
 
-              {/* Main Question Text with Soft Lavender/Purple Target Word Highlight */}
+              {/* Main Question Text */}
               <div className="pt-0.5">
                 <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-900 leading-snug sm:leading-tight tracking-tight break-words">
-                  {renderHighlightedText(parsedQuestion.promptText, parsedQuestion.targetWords, false)}
+                  {renderFormattedPrompt(parsedQuestion.promptText, { isMCQ: normalizedType === 'mcq' })}
                 </h2>
               </div>
 
               {/* Referenced Context Sentence Card (when sentence is detected) */}
               {parsedQuestion.contextSentence && (
                 <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl px-3.5 py-2.5 sm:px-5 sm:py-3 shadow-2xs flex items-center gap-2.5 w-full">
-                  <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0 select-none">
+                  <span className="text-[10px] sm:text-xs font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 select-none">
                     Context
                   </span>
-                  <div className="text-sm sm:text-base font-semibold text-slate-800 leading-relaxed break-words flex-1">
-                    {renderHighlightedText(parsedQuestion.contextSentence, parsedQuestion.targetWords, true)}
+                  <div className="text-sm sm:text-base font-semibold text-slate-800 leading-relaxed break-words flex-1 italic">
+                    &ldquo;{parsedQuestion.contextSentence}&rdquo;
                   </div>
                 </div>
               )}
 
               {/* ==========================================================
-                  FOUR COLORFUL PASTEL ANSWER PANELS:
-                  - 2x2 Grid on Desktop (md:grid-cols-2)
-                  - 1-Column Vertical Stack on Mobile (grid-cols-1)
-                  - Option text cleaned via cleanOptionText() (NO duplicate A./B./C./D.!)
-                  - Natural content-driven height (NO text clipping!)
+                  DYNAMIC INTERACTIVE QUESTION RENDERER:
+                  Maps canonical type to the exact interactive component!
               ========================================================== */}
-              <div
-                className={
-                  isMobilePreview
-                    ? 'grid grid-cols-1 gap-2.5 sm:gap-3.5 w-full pt-1'
-                    : 'grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-3.5 md:gap-4 w-full pt-1'
-                }
-              >
-                {rawOptions.map((opt: any, optIdx: number) => {
-                  const theme = OPTION_THEMES[optIdx % OPTION_THEMES.length];
-                  const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
-                  const cleanedText = cleanOptionText(opt.text);
-
-                  // Teacher answer key reveal if requested
-                  const isCorrect =
-                    showAnswerKey &&
-                    (Array.isArray((currentQ?.question as any)?.correctAnswer)
-                      ? (currentQ?.question as any).correctAnswer.includes(opt.id) ||
-                        (currentQ?.question as any).correctAnswer.includes(opt.text)
-                      : (currentQ?.question as any)?.correctAnswer === opt.id ||
-                        (currentQ?.question as any)?.correctAnswer === opt.text);
-
-                  return (
-                    <button
-                      key={opt.id || optIdx}
-                      type="button"
-                      onClick={() => onAnswerChange(opt.id || opt.text)}
-                      className={`w-full min-h-[56px] sm:min-h-[64px] md:min-h-[72px] p-3 sm:p-4 md:p-5 rounded-2xl sm:rounded-3xl border-2 text-left flex items-center justify-between gap-2.5 sm:gap-3.5 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
-                        isSelected
-                          ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md`
-                          : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs`
-                      } ${isCorrect ? 'ring-4 ring-emerald-500/40 border-emerald-500' : ''}`}
+              <div className="w-full pt-1">
+                {/* 1. MULTIPLE CHOICE QUESTION (MCQ) */}
+                {normalizedType === 'mcq' && (
+                  rawOptions && rawOptions.length > 0 ? (
+                    <div
+                      className={
+                        isMobilePreview
+                          ? 'grid grid-cols-1 gap-2.5 sm:gap-3.5 w-full'
+                          : 'grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-3.5 md:gap-4 w-full'
+                      }
                     >
-                      {/* Left: Square Colored Badge + Clean Answer Text (NO redundant letter!) */}
-                      <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
-                        {/* Letter Badge: Strong color, white bold letter */}
-                        <div
-                          className={`w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-xl sm:rounded-2xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-base sm:text-lg md:text-xl shadow-xs shrink-0 select-none`}
+                      {rawOptions.map((opt: any, optIdx: number) => {
+                        const theme = OPTION_THEMES[optIdx % OPTION_THEMES.length];
+                        const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
+                        const cleanedText = cleanOptionText(opt.text);
+
+                        const isCorrect =
+                          showAnswerKey &&
+                          (Array.isArray((currentQ?.question as any)?.correctAnswer)
+                            ? (currentQ?.question as any).correctAnswer.includes(opt.id) ||
+                              (currentQ?.question as any).correctAnswer.includes(opt.text)
+                            : (currentQ?.question as any)?.correctAnswer === opt.id ||
+                              (currentQ?.question as any)?.correctAnswer === opt.text);
+
+                        return (
+                          <button
+                            key={opt.id || optIdx}
+                            type="button"
+                            onClick={() => onAnswerChange(opt.id || opt.text)}
+                            className={`w-full min-h-[56px] sm:min-h-[64px] md:min-h-[72px] p-3 sm:p-4 md:p-5 rounded-2xl sm:rounded-3xl border-2 text-left flex items-center justify-between gap-2.5 sm:gap-3.5 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
+                              isSelected
+                                ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md`
+                                : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs`
+                            } ${isCorrect ? 'ring-4 ring-emerald-500/40 border-emerald-500' : ''}`}
+                          >
+                            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
+                              <div
+                                className={`w-9 h-9 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-xl sm:rounded-2xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-base sm:text-lg md:text-xl shadow-xs shrink-0 select-none`}
+                              >
+                                {theme.letter}
+                              </div>
+                              <span className="text-sm sm:text-base md:text-lg font-bold sm:font-black text-slate-900 break-words flex-1 leading-snug">
+                                {cleanedText}
+                              </span>
+                            </div>
+
+                            <div
+                              className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                                isSelected
+                                  ? `${theme.badgeBg} text-white shadow-xs scale-105`
+                                  : `${theme.chevronBg} ${theme.chevronText}`
+                              }`}
+                            >
+                              {isSelected ? (
+                                <Check className="w-4 h-4 sm:w-5 sm:h-5 stroke-[3]" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Fallback text input if an MCQ question was stored with 0 options */
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                        <span>Type your answer below for this question:</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={currentAnswer || ''}
+                        onChange={(e) => onAnswerChange(e.target.value)}
+                        placeholder="Type your answer here..."
+                        className="w-full p-4 rounded-2xl border-2 border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 text-base font-bold text-slate-900 outline-hidden transition-all bg-slate-50/60 focus:bg-white"
+                      />
+                    </div>
+                  )
+                )}
+
+                {/* 2. TRUE / FALSE RENDERER */}
+                {normalizedType === 'true_false' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 w-full">
+                    {/* TRUE Card */}
+                    {(() => {
+                      const isTrueSelected =
+                        String(currentAnswer).toLowerCase() === 'true' ||
+                        currentAnswer === true ||
+                        currentAnswer === 'T';
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onAnswerChange('true')}
+                          className={`w-full min-h-[64px] sm:min-h-[76px] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
+                            isTrueSelected
+                              ? 'bg-gradient-to-r from-emerald-100 to-teal-100 border-emerald-500 ring-4 ring-emerald-500/25 shadow-md'
+                              : 'bg-gradient-to-r from-emerald-50/70 to-teal-50/50 border-emerald-200/80 hover:border-emerald-400 hover:shadow-md hover:shadow-emerald-100 shadow-2xs'
+                          }`}
                         >
-                          {theme.letter}
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-lg shadow-xs shrink-0">
+                              <Check className="w-6 h-6 stroke-[3]" />
+                            </div>
+                            <div>
+                              <div className="text-base sm:text-lg font-black text-slate-900">TRUE</div>
+                              <span className="text-xs font-semibold text-emerald-700">Statement is correct</span>
+                            </div>
+                          </div>
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                              isTrueSelected ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-600'
+                            }`}
+                          >
+                            {isTrueSelected ? <Check className="w-5 h-5 stroke-[3]" /> : <ChevronRight className="w-5 h-5 stroke-[2.5]" />}
+                          </div>
+                        </button>
+                      );
+                    })()}
+
+                    {/* FALSE Card */}
+                    {(() => {
+                      const isFalseSelected =
+                        String(currentAnswer).toLowerCase() === 'false' ||
+                        currentAnswer === false ||
+                        currentAnswer === 'F';
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onAnswerChange('false')}
+                          className={`w-full min-h-[64px] sm:min-h-[76px] p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-150 active:scale-[0.99] focus:outline-hidden ${
+                            isFalseSelected
+                              ? 'bg-gradient-to-r from-rose-100 to-pink-100 border-rose-500 ring-4 ring-rose-500/25 shadow-md'
+                              : 'bg-gradient-to-r from-rose-50/70 to-pink-50/50 border-rose-200/80 hover:border-rose-400 hover:shadow-md hover:shadow-rose-100 shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center font-black text-lg shadow-xs shrink-0">
+                              <X className="w-6 h-6 stroke-[3]" />
+                            </div>
+                            <div>
+                              <div className="text-base sm:text-lg font-black text-slate-900">FALSE</div>
+                              <span className="text-xs font-semibold text-rose-700">Statement is incorrect</span>
+                            </div>
+                          </div>
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                              isFalseSelected ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-600'
+                            }`}
+                          >
+                            {isFalseSelected ? <Check className="w-5 h-5 stroke-[3]" /> : <ChevronRight className="w-5 h-5 stroke-[2.5]" />}
+                          </div>
+                        </button>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* 3. FILL IN THE BLANK RENDERER */}
+                {normalizedType === 'fill_in_blank' && (
+                  <div className="space-y-4 w-full">
+                    <div className="p-4 rounded-2xl bg-sky-50/80 border border-sky-200 flex items-start gap-3">
+                      <Edit3 className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-sky-900 uppercase tracking-wider">Fill In The Blank</h4>
+                        <p className="text-xs text-sky-700 font-medium">
+                          Type your word or phrase to complete the sentence correctly.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={currentAnswer || ''}
+                        onChange={(e) => onAnswerChange(e.target.value)}
+                        placeholder="Type your answer here..."
+                        className="w-full p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-slate-200 bg-slate-50/60 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 text-base sm:text-lg font-bold text-slate-900 outline-hidden transition-all shadow-2xs pr-12"
+                      />
+                      {currentAnswer && (
+                        <button
+                          type="button"
+                          onClick={() => onAnswerChange('')}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer"
+                          title="Clear input"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
+                      <span>Instant auto-save</span>
+                      <span>{(currentAnswer || '').length} characters</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. SHORT ANSWER / ESSAY RENDERER */}
+                {normalizedType === 'short_answer' && (
+                  <div className="space-y-4 w-full">
+                    <div className="p-4 rounded-2xl bg-violet-50/80 border border-violet-200 flex items-start gap-3">
+                      <Type className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-violet-900 uppercase tracking-wider">Short Answer</h4>
+                        <p className="text-xs text-violet-700 font-medium">
+                          Write a clear, structured response explaining your answer.
+                        </p>
+                      </div>
+                    </div>
+
+                    <textarea
+                      rows={4}
+                      value={currentAnswer || ''}
+                      onChange={(e) => onAnswerChange(e.target.value)}
+                      placeholder="Type your explanation or response here..."
+                      className="w-full p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-slate-200 bg-slate-50/60 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 text-sm sm:text-base font-semibold text-slate-900 outline-hidden transition-all shadow-2xs leading-relaxed"
+                    />
+
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
+                      <span>Auto-saved to cloud</span>
+                      <span>
+                        {(currentAnswer || '').trim().split(/\s+/).filter(Boolean).length} words &bull; {(currentAnswer || '').length} chars
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. ERROR CORRECTION RENDERER */}
+                {normalizedType === 'error_correction' && (
+                  <div className="space-y-4 w-full">
+                    <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider">Identify & Correct</h4>
+                        <p className="text-xs text-amber-700 font-medium">
+                          Find the grammatical or spelling error and type the corrected word or phrase below.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-700 block px-1">Corrected Form:</label>
+                      <input
+                        type="text"
+                        value={currentAnswer || ''}
+                        onChange={(e) => onAnswerChange(e.target.value)}
+                        placeholder="Type corrected word or sentence..."
+                        className="w-full p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-slate-200 bg-slate-50/60 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 text-base font-bold text-slate-900 outline-hidden transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. READING COMPREHENSION RENDERER */}
+                {normalizedType === 'reading_comprehension' && (
+                  <div className="space-y-4 w-full">
+                    {/* Passage Container */}
+                    {((currentQ?.question as any)?.passage || (currentQ?.question as any)?.content) && (
+                      <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/40 border border-amber-200/70 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wider">
+                          <BookOpen className="w-4 h-4 text-amber-700" />
+                          <span>Reading Passage</span>
                         </div>
-
-                        {/* Answer Text: Always fully visible, never clipped */}
-                        <span className="text-sm sm:text-base md:text-lg font-bold sm:font-black text-slate-900 break-words flex-1 leading-snug">
-                          {cleanedText}
-                        </span>
+                        <div className="max-h-56 overflow-y-auto pr-2 text-sm sm:text-base font-medium text-slate-800 leading-relaxed scrollbar-thin">
+                          {(currentQ?.question as any)?.passage || (currentQ?.question as any)?.content}
+                        </div>
                       </div>
+                    )}
 
-                      {/* Right: Chevron or Check Circle Indicator */}
-                      <div
-                        className={`w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                          isSelected
-                            ? `${theme.badgeBg} text-white shadow-xs`
-                            : `${theme.chevronBg} ${theme.chevronText}`
-                        }`}
-                      >
-                        {isSelected ? (
-                          <Check className="w-4 h-4 sm:w-5 sm:h-5 stroke-[3]" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-                        )}
+                    {/* Options if available, otherwise text response */}
+                    {rawOptions && rawOptions.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                        {rawOptions.map((opt: any, optIdx: number) => {
+                          const theme = OPTION_THEMES[optIdx % OPTION_THEMES.length];
+                          const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
+                          const cleanedText = cleanOptionText(opt.text);
+                          return (
+                            <button
+                              key={opt.id || optIdx}
+                              type="button"
+                              onClick={() => onAnswerChange(opt.id || opt.text)}
+                              className={`p-3.5 sm:p-4 rounded-2xl border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all ${
+                                isSelected
+                                  ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md`
+                                  : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover}`
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-sm shrink-0`}>
+                                  {theme.letter}
+                                </div>
+                                <span className="text-sm font-bold text-slate-900">{cleanedText}</span>
+                              </div>
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isSelected ? theme.badgeBg + ' text-white' : theme.chevronBg + ' ' + theme.chevronText}`}>
+                                {isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
-                    </button>
-                  );
-                })}
+                    ) : (
+                      <textarea
+                        rows={3}
+                        value={currentAnswer || ''}
+                        onChange={(e) => onAnswerChange(e.target.value)}
+                        placeholder="Type your response based on the passage above..."
+                        className="w-full p-4 rounded-2xl border-2 border-slate-200 bg-slate-50/60 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 text-sm font-semibold text-slate-900 outline-hidden transition-all shadow-2xs"
+                      />
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ==========================================================
@@ -667,9 +904,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                   - Mobile: 2 rows ([Flag] [Clear], then [Previous] [Next])
               ========================================================== */}
               {isMobilePreview ? (
-                // Mobile Navigation Layout for Mobile Preview
                 <div className="flex flex-col gap-2.5 pt-2 w-full border-t border-slate-100">
-                  {/* Row 1: Flag & Clear */}
                   <div className="grid grid-cols-2 gap-2.5 w-full">
                     <button
                       type="button"
@@ -695,7 +930,6 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Row 2: Previous & Next */}
                   <div className="grid grid-cols-2 gap-2.5 w-full">
                     <button
                       type="button"
@@ -729,141 +963,80 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                   </div>
                 </div>
               ) : (
-                // Standard Responsive Navigation (Desktop 1-row, Mobile 2-rows)
-                <>
-                  {/* Desktop Row */}
-                  <div className="hidden sm:flex items-center justify-between gap-3 pt-3 w-full border-t border-slate-100">
+                <div className="hidden sm:flex items-center justify-between gap-3 pt-3 w-full border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={currentIndex === 0}
+                    onClick={onPrevious}
+                    className="px-5 py-2.5 sm:py-3 rounded-2xl bg-[#edf2f7] hover:bg-slate-200 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </button>
+
+                  <div className="flex items-center gap-2.5">
                     <button
                       type="button"
-                      disabled={currentIndex === 0}
-                      onClick={onPrevious}
-                      className="px-5 py-2.5 sm:py-3 rounded-2xl bg-[#edf2f7] hover:bg-slate-200 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95"
+                      onClick={onToggleBookmark}
+                      className={`px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl border-2 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                        isBookmarked
+                          ? 'bg-amber-500 border-amber-500 text-white shadow-amber-300/30'
+                          : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
+                      }`}
                     >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>Previous</span>
+                      <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : 'text-slate-700'}`} />
+                      <span>{isBookmarked ? 'Flagged for Review' : 'Flag for Review'}</span>
                     </button>
 
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={onToggleBookmark}
-                        className={`px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl border-2 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                          isBookmarked
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-amber-300/30'
-                            : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : 'text-slate-700'}`} />
-                        <span>{isBookmarked ? 'Flagged' : 'Flag for Review'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={onClearAnswer}
-                        disabled={!hasAnsweredCurrent}
-                        className="px-4 py-2.5 sm:py-3 rounded-2xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
-                        title="Clear current selection"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Clear</span>
-                      </button>
-                    </div>
-
-                    {isLastQuestion ? (
-                      <button
-                        type="button"
-                        onClick={onSubmit}
-                        className="px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-500/25 transition-all cursor-pointer active:scale-95"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Submit Exam</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={onNext}
-                        className="px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] hover:from-[#4f46e5] hover:to-[#7c3aed] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-indigo-500/25 transition-all cursor-pointer active:scale-95"
-                      >
-                        <span>Next Question</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={onClearAnswer}
+                      disabled={!hasAnsweredCurrent}
+                      className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Clear Answer</span>
+                    </button>
                   </div>
 
-                  {/* Mobile Row */}
-                  <div className="sm:hidden flex flex-col gap-2.5 pt-2 w-full border-t border-slate-100">
-                    <div className="grid grid-cols-2 gap-2.5 w-full">
-                      <button
-                        type="button"
-                        onClick={onToggleBookmark}
-                        className={`py-2.5 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                          isBookmarked
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-amber-300/30'
-                            : 'bg-white border-slate-200 text-slate-800'
-                        }`}
-                      >
-                        <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : 'text-slate-700'}`} />
-                        <span>{isBookmarked ? 'Flagged' : 'Flag'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={onClearAnswer}
-                        disabled={!hasAnsweredCurrent}
-                        className="py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Clear</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5 w-full">
-                      <button
-                        type="button"
-                        disabled={currentIndex === 0}
-                        onClick={onPrevious}
-                        className="py-3 rounded-2xl bg-[#edf2f7] text-slate-600 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
-                      >
-                        <ArrowLeft className="w-4 h-4" />
-                        <span>Previous</span>
-                      </button>
-
-                      {isLastQuestion ? (
-                        <button
-                          type="button"
-                          onClick={onSubmit}
-                          className="py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/25 active:scale-95"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Submit</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={onNext}
-                          className="py-3 rounded-2xl bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 active:scale-95"
-                        >
-                          <span>Next</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </>
+                  {isLastQuestion ? (
+                    <button
+                      type="button"
+                      onClick={onSubmit}
+                      className="px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-500/25 transition-all cursor-pointer active:scale-95"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Submit Exam</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onNext}
+                      className="px-6 py-2.5 sm:py-3 rounded-2xl bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] hover:from-[#4f46e5] hover:to-[#7c3aed] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-indigo-500/25 transition-all cursor-pointer active:scale-95"
+                    >
+                      <span>Next Question</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               )}
             </main>
           </div>
 
           {/* ==============================================================
               RIGHT COLUMN: DESKTOP SIDEBAR
-              (Navigator, Synchronized Timer 2, Status, Submit)
-              Hidden on Mobile / Not rendered in Mobile Preview Mode
+              (Navigator, Mascot Card, Synchronized Timer 2, Status, Submit)
           ============================================================== */}
           {!isMobilePreview && (
             <aside className="hidden lg:flex lg:col-span-4 xl:col-span-4 2xl:col-span-3 flex-col gap-4 sticky top-6">
               {/* Card 1: Question Navigator Grid (5 x 5) */}
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-4">
-                <h3 className="text-sm font-black text-slate-900 tracking-wide">Question Navigator</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-900 tracking-wide">Question Navigator</h3>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black border border-indigo-100">
+                    {answeredCount} / {totalCount}
+                  </span>
+                </div>
 
                 {/* 5 x 5 Grid */}
                 <div className="grid grid-cols-5 gap-2">
@@ -898,7 +1071,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                   })}
                 </div>
 
-                {/* Navigator Legend */}
+                {/* Navigator Legend Matching Reference: Mint/Purple/Gray */}
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-600">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
@@ -919,7 +1092,40 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                 </div>
               </div>
 
-              {/* Card 2: Time Remaining (Second Synchronized Live Timer Display) */}
+              {/* Card 2: 3D Mascot Character Encouragement Card */}
+              <div className="bg-gradient-to-br from-indigo-50/90 via-white to-sky-50/90 rounded-3xl border border-indigo-100/90 p-4 shadow-sm space-y-3 overflow-hidden relative">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-xs border border-indigo-200/70 shrink-0 bg-indigo-100">
+                    <img
+                      src="/images/exam/exam-character-student.jpg"
+                      alt="Student Encouragement Mascot"
+                      className="w-full h-full object-cover object-center"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase">
+                      <Sparkles className="w-3 h-3 text-indigo-600" />
+                      <span>Focus & Flow</span>
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 leading-tight">
+                      You've got this!
+                    </h4>
+                    <p className="text-[11px] text-slate-500 font-medium line-clamp-2 leading-relaxed">
+                      Keep steady pacing and read each question carefully.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-white/80 border border-indigo-100/60 text-[11px] font-semibold text-slate-700 leading-relaxed flex items-start gap-2">
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <span>Small steps in grammar lead to big leaps in speaking!</span>
+                </div>
+              </div>
+
+              {/* Card 3: Time Remaining Display */}
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-3">
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Time Remaining</div>
 
@@ -940,12 +1146,11 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                       {formattedTime}
                     </div>
                     <span className="text-[10px] text-slate-400 font-semibold mt-0.5 block">
-                      Synchronized authoritative timer
+                      Live synchronized timer
                     </span>
                   </div>
                 </div>
 
-                {/* Purple Accent Progress Bar */}
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-indigo-600 rounded-full transition-all duration-300"
@@ -954,31 +1159,27 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                 </div>
               </div>
 
-              {/* Card 3: Exam Progress Stats (Answered, Marked, Remaining) */}
+              {/* Card 4: Exam Progress Stats (Answered, Marked, Remaining) */}
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 space-y-2">
                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider px-1">Exam Progress</div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  {/* Answered */}
                   <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-2.5 text-center">
                     <div className="text-lg font-black text-emerald-800 leading-none">{answeredCount}</div>
                     <div className="text-[10px] font-bold text-emerald-600 mt-1">Answered</div>
                   </div>
 
-                  {/* Marked */}
                   <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-2.5 text-center">
                     <div className="text-lg font-black text-amber-800 leading-none">{markedCount}</div>
                     <div className="text-[10px] font-bold text-amber-600 mt-1">Marked</div>
                   </div>
 
-                  {/* Remaining */}
                   <div className="bg-sky-50 border border-sky-200/80 rounded-2xl p-2.5 text-center">
                     <div className="text-lg font-black text-sky-800 leading-none">{unansweredCount}</div>
                     <div className="text-[10px] font-bold text-sky-600 mt-1">Remaining</div>
                   </div>
                 </div>
 
-                {/* Submit Exam Button */}
                 <div className="pt-2">
                   <button
                     type="button"
@@ -995,7 +1196,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
         </div>
 
         {/* ================================================================
-            3. BRAND FOOTER ("Every step you take builds a brighter tomorrow.")
+            3. BRAND FOOTER
         ================================================================ */}
         <footer className="w-full pt-3 pb-2 px-2 flex items-center justify-between gap-4 text-xs text-slate-500 shrink-0">
           <div className="relative">
@@ -1020,7 +1221,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
       </div>
 
       {/* ================================================================
-          MOBILE QUESTION NAVIGATOR DRAWER (Opened via Menu/Navigator Button)
+          MOBILE QUESTION NAVIGATOR DRAWER (Opened via Menu Button)
       ================================================================ */}
       {mobileNavigatorOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
@@ -1036,7 +1237,6 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
               </button>
             </div>
 
-            {/* 5x5 Grid */}
             <div className="grid grid-cols-5 gap-2">
               {questions.map((q, qIdx) => {
                 const isCurrent = qIdx === currentIndex;
@@ -1063,7 +1263,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                       onSelectIndex(qIdx);
                       setMobileNavigatorOpen(false);
                     }}
-                    className={`w-full aspect-square rounded-xl text-xs font-bold flex items-center justify-center transition-all cursor-pointer ${btnStyle}`}
+                    className={`w-full aspect-square rounded-xl text-xs flex items-center justify-center transition-all cursor-pointer active:scale-90 ${btnStyle}`}
                   >
                     {qIdx + 1}
                   </button>
@@ -1071,33 +1271,24 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
               })}
             </div>
 
-            {/* Progress stats */}
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-              <div className="bg-emerald-50 rounded-xl p-2">
-                <div className="text-sm font-black text-emerald-800">{answeredCount}</div>
-                <div className="text-[10px] font-bold text-emerald-600">Answered</div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-600">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#6366f1]" />
+                <span>Current</span>
               </div>
-              <div className="bg-amber-50 rounded-xl p-2">
-                <div className="text-sm font-black text-amber-800">{markedCount}</div>
-                <div className="text-[10px] font-bold text-amber-600">Marked</div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                <span>Not Attempted</span>
               </div>
-              <div className="bg-sky-50 rounded-xl p-2">
-                <div className="text-sm font-black text-sky-800">{unansweredCount}</div>
-                <div className="text-[10px] font-bold text-sky-600">Remaining</div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span>Answered</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                <span>Marked</span>
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setMobileNavigatorOpen(false);
-                onSubmit();
-              }}
-              className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Submit Exam</span>
-            </button>
           </div>
         </div>
       )}

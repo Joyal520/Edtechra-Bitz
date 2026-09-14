@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -53,15 +53,22 @@ export const ClassesPage: React.FC = () => {
   const [createCourseModalOpen, setCreateCourseModalOpen] = useState(false);
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadData();
-    } else {
-      setLoading(false);
-    }
-  }, [isAuthenticated, user]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadStudioCourses = useCallback(async () => {
+    if (!isTeacher) return;
+    setCoursesLoading(true);
+    try {
+      const courseList = await courseStudioService.getCourses();
+      setStudioCourses(courseList);
+    } catch (err) {
+      console.error('Failed to load studio courses:', err);
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, [isTeacher]);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [classList, statsData] = await Promise.all([
@@ -70,21 +77,26 @@ export const ClassesPage: React.FC = () => {
       ]);
       setClassrooms(classList);
       setStats(statsData);
-
-      if (isTeacher) {
-        try {
-          const courseList = await courseStudioService.getCourses();
-          setStudioCourses(courseList);
-        } catch {
-          // ignore if non-teacher or empty
-        }
-      }
     } catch (err) {
       console.error('Failed to load classrooms', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
+  }, [isAuthenticated, user, loadData]);
+
+  useEffect(() => {
+    if (isAuthenticated && isTeacher) {
+      loadStudioCourses();
+    }
+  }, [isAuthenticated, isTeacher, loadStudioCourses]);
 
   const handleOpenCreate = () => {
     if (!isAuthenticated) {
@@ -301,7 +313,24 @@ export const ClassesPage: React.FC = () => {
               </div>
             </div>
 
-            {studioCourses.length === 0 ? (
+            {coursesLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2.5 animate-pulse">
+                    <div className="flex justify-between">
+                      <div className="h-4 w-16 bg-slate-200 rounded"></div>
+                      <div className="h-4 w-14 bg-slate-200 rounded"></div>
+                    </div>
+                    <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
+                    <div className="h-3 w-full bg-slate-100 rounded"></div>
+                    <div className="pt-2 border-t border-slate-200/60 flex justify-between">
+                      <div className="h-3 w-20 bg-slate-200 rounded"></div>
+                      <div className="h-3 w-12 bg-slate-200 rounded"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : studioCourses.length === 0 ? (
               <div className="bg-slate-50/70 rounded-xl p-4 text-center space-y-2 border border-slate-200/60">
                 <div className="w-9 h-9 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center mx-auto">
                   <BookOpen className="w-4 h-4" />
@@ -665,6 +694,7 @@ export const ClassesPage: React.FC = () => {
         onClose={() => setCreateCourseModalOpen(false)}
         onSuccess={(c) => {
           loadData();
+          loadStudioCourses();
           navigate(`/course-studio/${c.id}`);
         }}
       />
@@ -676,6 +706,7 @@ export const ClassesPage: React.FC = () => {
           onClose={() => setPublishTargetCourse(null)}
           onSuccess={() => {
             loadData();
+            loadStudioCourses();
             setPublishTargetCourse(null);
           }}
         />

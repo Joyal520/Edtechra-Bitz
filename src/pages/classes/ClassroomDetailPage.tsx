@@ -12,7 +12,14 @@ import {
   Users,
   BookOpen,
   Clock,
-  FileText
+  FileText,
+  MoreHorizontal,
+  Link2,
+  UserPlus,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  Settings
 } from 'lucide-react';
 import {
   Classroom,
@@ -37,11 +44,6 @@ import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 
 import {
-  ClassroomHeroIllustration,
-  TaskIllustration,
-  CoursesIllustration,
-  StudentsIllustration,
-  ResourcesIllustration,
   AssignStudentsIllustration,
   LiveQuizIllustration,
   ExamIllustration,
@@ -105,6 +107,9 @@ export const ClassroomDetailPage: React.FC = () => {
 
   // Invite code copied feedback
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   // Modals state
   const [activeSubmitAssignment, setActiveSubmitAssignment] = useState<Assignment | null>(null);
@@ -540,6 +545,38 @@ export const ClassroomDetailPage: React.FC = () => {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  // Close floating options menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+        setOptionsMenuOpen(false);
+      }
+    };
+    if (optionsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [optionsMenuOpen]);
+
+  const handleCopyCodeOnly = () => {
+    navigator.clipboard.writeText(inviteCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleEnterClassroom = () => {
+    const el = document.getElementById('classroom-workspace');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (tabSectionRef.current) {
+      tabSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      handleSelectTab('assignments');
+    }
+  };
+
   const studentCount = members.filter(m => m.role === 'student').length || stats.total_students || 0;
 
   if (loading || !classroom) {
@@ -592,62 +629,78 @@ export const ClassroomDetailPage: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
-        {/* SECTION 1 — PREMIUM HERO CLASSROOM HEADER                                 */}
+        {/* SECTION 1 — PREMIUM HERO CLASSROOM HEADER (EdTechra Entrance UI)          */}
         {/* ========================================================================= */}
-        <section className="relative bg-gradient-to-br from-[#06152b] via-[#092347] to-[#071a36] text-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 lg:p-10 shadow-[0_20px_50px_-10px_rgba(2,25,55,0.45)] overflow-hidden border border-sky-500/25 transition-all">
+        <section className="relative bg-gradient-to-br from-[#e0f2fe]/90 via-[#f0f9ff] to-[#e8f5fe]/95 rounded-3xl sm:rounded-[36px] p-6 sm:p-8 lg:p-10 shadow-[0_15px_40px_-10px_rgba(2,111,195,0.12)] overflow-hidden border border-sky-200/90 transition-all">
           
-          {/* Subtle Organic Background Glow Waves */}
-          <div className="absolute -top-28 -left-28 w-96 h-96 bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute top-1/2 -right-24 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 left-1/3 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+          {/* Subtle Organic Background Glow & Liquid Wave Accents */}
+          <div className="absolute -top-24 -left-24 w-80 h-80 bg-sky-200/50 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/3 -right-20 w-96 h-96 bg-blue-200/40 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 left-1/3 w-72 h-72 bg-indigo-100/50 rounded-full blur-3xl pointer-events-none" />
 
           {/* Top Bar: Back to Classes & Quick Category Tag */}
           <div className="flex items-center justify-between gap-4 mb-5 sm:mb-6 relative z-10 flex-wrap">
             <Link
               to="/classes"
-              className="group inline-flex items-center gap-2 text-xs font-bold text-sky-200 hover:text-white bg-white/10 hover:bg-white/15 backdrop-blur-md px-4 py-2 rounded-full transition-all duration-200 border border-white/15 shadow-2xs active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-2 text-xs font-bold text-sky-800 hover:text-sky-950 bg-white/90 hover:bg-white backdrop-blur-md px-4 py-2 rounded-full transition-all duration-200 border border-sky-200/80 shadow-2xs active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
               <span>Back to Classes</span>
             </Link>
 
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-sky-400/15 border border-sky-400/30 text-sky-300 text-[11px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
-              <Sparkles className="w-3 h-3 text-sky-300" />
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/85 border border-sky-200 text-[#0284c7] text-[11px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
+              <Sparkles className="w-3 h-3 text-[#0284c7]" />
               <span>CLASSROOM</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center relative z-10">
             
-            {/* LEFT: Hero Headline, Classroom Details, Tagline & Invite Actions (7 cols) */}
-            <div className="lg:col-span-7 space-y-4">
+            {/* LEFT: Hero Headline, Classroom Details, Tagline & Primary Action (7 cols) */}
+            <div className="lg:col-span-7 space-y-4 sm:space-y-5">
               
-              {/* Classroom Title — The strongest element */}
-              <div className="space-y-2.5">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[42px] font-black text-white tracking-tight leading-[1.15] drop-shadow-sm">
-                  {classroom.title}
-                </h1>
+              {/* Classroom Title — Strongest visual element with two-tone styling */}
+              <div className="space-y-3">
+                {(() => {
+                  const titleStr = (classroom.title || 'Classroom').trim();
+                  const words = titleStr.split(' ');
+                  if (words.length > 1) {
+                    const lastWord = words.pop();
+                    const firstPart = words.join(' ');
+                    return (
+                      <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[42px] font-black tracking-tight leading-[1.15] text-slate-900 drop-shadow-xs">
+                        <span>{firstPart} </span>
+                        <span className="text-[#0284c7]">{lastWord}</span>
+                      </h1>
+                    );
+                  }
+                  return (
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[42px] font-black tracking-tight leading-[1.15] text-slate-900 drop-shadow-xs">
+                      {classroom.title}
+                    </h1>
+                  );
+                })()}
 
                 {/* Floating Metadata Pills */}
                 <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-bold text-sky-100 border border-white/15 shadow-2xs">
-                    <BookOpen className="w-3.5 h-3.5 text-sky-300" />
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-sky-200/80 shadow-2xs">
+                    <BookOpen className="w-3.5 h-3.5 text-[#0284c7]" />
                     <span>{classroom.subject || 'General'}</span>
                   </span>
 
                   {classroom.grade && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 backdrop-blur-md text-xs font-bold text-amber-200 border border-amber-400/30 shadow-2xs">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-sky-200/80 shadow-2xs">
                       <span>{classroom.grade}</span>
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-400/20 backdrop-blur-md text-xs font-bold text-emerald-200 border border-emerald-400/30 shadow-2xs">
-                    <Users className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-100/90 backdrop-blur-md text-xs font-bold text-[#0284c7] border border-sky-200 shadow-2xs">
+                    <Users className="w-3.5 h-3.5 text-[#0284c7]" />
                     <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
                   </span>
 
                   {isTeacher && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-500/25 backdrop-blur-md text-xs font-bold text-purple-200 border border-purple-400/30 shadow-2xs">
+                    <span className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-purple-50/90 backdrop-blur-md text-xs font-bold text-purple-700 border border-purple-200 shadow-2xs">
                       <span>Teacher Workspace</span>
                     </span>
                   )}
@@ -655,53 +708,144 @@ export const ClassroomDetailPage: React.FC = () => {
               </div>
 
               {/* Tagline / Motto Quote */}
-              <blockquote className="text-sm sm:text-base text-sky-100/90 font-medium italic border-l-2 border-sky-400/50 pl-3.5 py-0.5 max-w-xl">
+              <blockquote className="text-sm sm:text-base text-slate-500 font-medium italic border-l-2 border-sky-300 pl-3.5 py-0.5 max-w-xl">
                 &ldquo;Empower your classroom, inspire your students.&rdquo;
               </blockquote>
 
-              {/* Class Code & Action Buttons (Section 3 of user prompt) */}
-              <div className="pt-2 flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+              {/* Action Buttons: Primary Enter Classroom CTA & Clean Options Button */}
+              <div className="pt-2 flex items-center gap-3 flex-wrap">
                 
-                {/* Elegant Glass/Liquid Code Pill */}
-                <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-sky-400/35 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_2px_12px_rgba(0,0,0,0.25)] shrink-0">
-                  <span className="text-[10px] font-black uppercase text-sky-300 tracking-wider">CODE</span>
-                  <span className="font-mono font-black text-sm sm:text-base text-white tracking-widest selection:bg-sky-400 selection:text-slate-950">
-                    {inviteCode}
-                  </span>
+                {/* Primary Action Button: Enter Classroom */}
+                <button
+                  type="button"
+                  onClick={handleEnterClassroom}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-black text-sm text-white bg-gradient-to-r from-[#0284c7] via-[#0275be] to-[#0369a1] hover:from-[#0369a1] hover:to-[#0284c7] shadow-[0_8px_20px_-4px_rgba(2,132,199,0.38)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
+                >
+                  <span>Enter Classroom</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform stroke-[2.5]" />
+                </button>
+
+                {/* Secondary Options Button: [ ••• ] with Floating Popover Menu */}
+                <div className="relative inline-block" ref={optionsMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setOptionsMenuOpen(prev => !prev)}
+                    className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
+                      optionsMenuOpen
+                        ? 'bg-sky-100 border-sky-300 text-[#0284c7]'
+                        : 'bg-white/90 hover:bg-white border-sky-200 text-slate-700 hover:text-slate-900'
+                    }`}
+                    title="Classroom Options"
+                    aria-label="Classroom Options"
+                  >
+                    <MoreHorizontal className="w-5 h-5 stroke-[2.2]" />
+                  </button>
+
+                  {/* Floating Dropdown Menu */}
+                  {optionsMenuOpen && (
+                    <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-64 rounded-2xl bg-white border border-sky-100 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.15)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100">
+                      <div className="py-1">
+                        {/* Copy Code */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyCodeOnly();
+                            setOptionsMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Copy className="w-4 h-4 text-sky-500" />
+                            <span>Copy Class Code</span>
+                          </div>
+                          <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                            {copiedCode ? 'Copied!' : inviteCode}
+                          </span>
+                        </button>
+
+                        {/* Copy Link */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyInvite();
+                            setOptionsMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Link2 className="w-4 h-4 text-blue-500" />
+                            <span>Copy Class Link</span>
+                          </div>
+                          {copiedInvite && (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              Copied!
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Share WhatsApp */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleWhatsAppShare();
+                            setOptionsMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <MessageSquareShare className="w-4 h-4 text-emerald-500" />
+                          <span>Share via WhatsApp</span>
+                        </button>
+                      </div>
+
+                      <div className="py-1">
+                        {/* Invite Students */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCopyInvite();
+                            alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
+                            setOptionsMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
+                        >
+                          <UserPlus className="w-4 h-4 text-indigo-500" />
+                          <span>Invite Students</span>
+                        </button>
+
+                        {/* Class Settings if teacher */}
+                        {isTeacher && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOptionsMenuOpen(false);
+                              const el = document.getElementById('classroom-danger-zone');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
+                          >
+                            <Settings className="w-4 h-4 text-slate-400" />
+                            <span>Class Settings</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Copy Code & Link Button */}
-                <button
-                  type="button"
-                  onClick={handleCopyInvite}
-                  className="btn-liquid-secondary px-5 py-2.5 text-xs sm:text-sm font-bold shadow-sm active:scale-95 shrink-0"
-                >
-                  {copiedInvite ? (
-                    <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-[#026fc3]" />
-                  )}
-                  <span>{copiedInvite ? 'Copied Link!' : 'Copy Code & Link'}</span>
-                </button>
-
-                {/* Share via WhatsApp Button */}
-                <button
-                  type="button"
-                  onClick={handleWhatsAppShare}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-[#25D366] to-[#128C7E] hover:from-[#20bd5a] hover:to-[#0f7a6e] shadow-[inset_0_1px_1px_rgba(255,255,255,0.35),0_4px_14px_rgba(37,211,102,0.32)] border-t border-white/30 border-b border-emerald-800/30 active:scale-95 transition-all duration-200 shrink-0 cursor-pointer"
-                >
-                  <MessageSquareShare className="w-4 h-4 stroke-[2.2]" />
-                  <span>Share Classroom</span>
-                </button>
-
               </div>
 
             </div>
 
-            {/* RIGHT: 3D Classroom Illustration (5 cols) */}
+            {/* RIGHT: 3D Educational Pixar Illustration (5 cols) */}
             <div className="lg:col-span-5 flex justify-center lg:justify-end relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-sky-500/10 via-blue-600/15 to-transparent rounded-full blur-2xl pointer-events-none transform scale-90" />
-              <ClassroomHeroIllustration className="w-full max-w-[280px] sm:max-w-[340px] h-auto drop-shadow-2xl relative z-10 hover:scale-[1.02] transition-transform duration-300" />
+              <div className="relative w-full max-w-[280px] sm:max-w-[340px] lg:max-w-[380px] aspect-square flex items-center justify-center">
+                <div className="absolute inset-0 bg-sky-200/50 rounded-full blur-2xl pointer-events-none transform scale-90" />
+                <img
+                  src="/images/classroom/classroom-hero-student.jpg"
+                  alt="Classroom Illustration"
+                  className="w-full h-full object-contain mix-blend-multiply relative z-10 transition-transform duration-300 hover:scale-105 select-none pointer-events-none"
+                />
+              </div>
             </div>
 
           </div>
@@ -709,127 +853,126 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 2 — QUICK-ACTION PANELS (4 Harmonious Liquid Surfaces)             */}
+        {/* SECTION 2 — 4 SUMMARY STAT CARDS & INSPIRATIONAL BANNER                    */}
         {/* ========================================================================= */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
+        <section className="space-y-4">
           
-          {/* Card 1: My Tasks (Mint / Emerald Liquid Surface) */}
-          <div
-            onClick={() => handleSelectTab('assignments')}
-            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
-              activeTab === 'assignments'
-                ? 'bg-gradient-to-b from-emerald-50/90 via-white to-teal-50/70 border-emerald-300 shadow-[0_8px_24px_-4px_rgba(5,150,105,0.22)] ring-2 ring-emerald-500/50'
-                : 'bg-gradient-to-b from-emerald-50/80 via-white to-teal-50/40 border-emerald-200/80 hover:border-emerald-300 shadow-[0_4px_16px_-2px_rgba(5,150,105,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(5,150,105,0.18)]'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-emerald-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
-                <TaskIllustration className="w-8 h-8" />
+          {/* 4 Clean Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
+            
+            {/* Card 1: Students */}
+            <div
+              onClick={() => handleSelectTab('roster')}
+              className="bg-white hover:bg-sky-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-sky-100 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(2,111,195,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-sky-50 text-[#0284c7] border border-sky-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <Users className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-[#0284c7] transition-colors leading-tight">
+                    {studentCount}
+                  </div>
+                  <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
+                    Students
+                  </div>
+                </div>
               </div>
-              <div className="w-7 h-7 rounded-full bg-white text-emerald-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-emerald-600 group-hover:text-white shadow-2xs border border-emerald-200">
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-sky-100 text-slate-400 group-hover:text-[#0284c7] flex items-center justify-center transition-colors shrink-0">
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </div>
-            <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-emerald-950 transition-colors leading-snug">
-                {isTeacher ? 'Tasks' : 'My Tasks'}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
-                {isTeacher
-                  ? 'Create, manage and review assignments.'
-                  : 'View assigned tasks and submit work.'}
-              </p>
+
+            {/* Card 2: Assignments */}
+            <div
+              onClick={() => handleSelectTab('assignments')}
+              className="bg-white hover:bg-purple-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-purple-100 shadow-[0_4px_16px_-2px_rgba(124,58,237,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(124,58,237,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <BookOpen className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                    {assignments.length}
+                  </div>
+                  <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
+                    Assignments
+                  </div>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-purple-100 text-slate-400 group-hover:text-purple-600 flex items-center justify-center transition-colors shrink-0">
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 3: Quizzes */}
+            <div
+              onClick={() => {
+                if (isTeacher) {
+                  setLiveQuizBankOpen(true);
+                } else {
+                  const el = document.getElementById('classroom-workspace');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="bg-white hover:bg-emerald-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-emerald-100 shadow-[0_4px_16px_-2px_rgba(5,150,105,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(5,150,105,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors leading-tight">
+                    {stats.total_quizzes || 0}
+                  </div>
+                  <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
+                    Quizzes
+                  </div>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-emerald-100 text-slate-400 group-hover:text-emerald-600 flex items-center justify-center transition-colors shrink-0">
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 4: Average Score */}
+            <div
+              onClick={() => setAiReportModalOpen(true)}
+              className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-amber-100 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(217,119,6,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <BarChart3 className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-amber-700 transition-colors leading-tight">
+                    {stats.average_score || 0}%
+                  </div>
+                  <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
+                    Average Score
+                  </div>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-amber-100 text-slate-400 group-hover:text-amber-600 flex items-center justify-center transition-colors shrink-0">
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Courses (Sky / Blue Liquid Surface) */}
-          <div
-            onClick={() => handleSelectTab('courses')}
-            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
-              activeTab === 'courses'
-                ? 'bg-gradient-to-b from-sky-50/90 via-white to-indigo-50/70 border-sky-300 shadow-[0_8px_24px_-4px_rgba(2,111,195,0.22)] ring-2 ring-sky-500/50'
-                : 'bg-gradient-to-b from-sky-50/80 via-white to-indigo-50/40 border-sky-200/80 hover:border-sky-300 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.18)]'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-sky-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
-                <CoursesIllustration className="w-8 h-8" />
-              </div>
-              <div className="w-7 h-7 rounded-full bg-white text-[#026fc3] flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-[#026fc3] group-hover:text-white shadow-2xs border border-sky-200">
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
-              </div>
-            </div>
-            <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-[#025ca5] transition-colors leading-snug">
-                Courses
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
-                {isTeacher
-                  ? 'Build structured learning experiences.'
-                  : 'Access assigned interactive course lessons.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3: Classmates / Students (Purple / Lavender Liquid Surface) */}
-          <div
-            onClick={() => handleSelectTab('roster')}
-            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
-              activeTab === 'roster'
-                ? 'bg-gradient-to-b from-purple-50/90 via-white to-violet-50/70 border-purple-300 shadow-[0_8px_24px_-4px_rgba(124,58,237,0.22)] ring-2 ring-purple-500/50'
-                : 'bg-gradient-to-b from-purple-50/80 via-white to-violet-50/40 border-purple-200/80 hover:border-purple-300 shadow-[0_4px_16px_-2px_rgba(124,58,237,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(124,58,237,0.18)]'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-purple-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
-                <StudentsIllustration className="w-8 h-8" />
-              </div>
-              <div className="w-7 h-7 rounded-full bg-white text-purple-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-purple-600 group-hover:text-white shadow-2xs border border-purple-200">
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
-              </div>
-            </div>
-            <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-purple-950 transition-colors leading-snug">
-                {isTeacher ? 'Students' : 'Classmates'}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
-                {isTeacher
-                  ? 'View learners, progress and engagement.'
-                  : 'View classmates & learning progress.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 4: Resources (Peach / Rose Liquid Surface) */}
-          <div
-            onClick={() => handleSelectTab('resources')}
-            className={`rounded-2xl sm:rounded-[26px] p-4 sm:p-5 border transition-all duration-200 cursor-pointer flex flex-col justify-between group hover:-translate-y-1 relative overflow-hidden min-h-[135px] sm:min-h-[148px] ${
-              activeTab === 'resources'
-                ? 'bg-gradient-to-b from-rose-50/90 via-white to-amber-50/70 border-rose-300 shadow-[0_8px_24px_-4px_rgba(244,63,94,0.22)] ring-2 ring-rose-500/50'
-                : 'bg-gradient-to-b from-rose-50/80 via-white to-amber-50/40 border-rose-200/80 hover:border-rose-300 shadow-[0_4px_16px_-2px_rgba(244,63,94,0.08)] hover:shadow-[0_12px_28px_-4px_rgba(244,63,94,0.18)]'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="w-11 h-11 rounded-2xl bg-white/90 border border-rose-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform duration-200">
-                <ResourcesIllustration className="w-8 h-8" />
-              </div>
-              <div className="w-7 h-7 rounded-full bg-white text-rose-800 flex items-center justify-center transition-all duration-200 group-hover:translate-x-1 group-hover:bg-rose-600 group-hover:text-white shadow-2xs border border-rose-200">
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
-              </div>
-            </div>
-            <div className="pt-2 text-left">
-              <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-rose-950 transition-colors leading-snug">
-                Resources
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-medium leading-tight line-clamp-1 mt-0.5">
-                {isTeacher
-                  ? 'Access files, materials and links.'
-                  : 'Access learning materials, files and links.'}
-              </p>
-            </div>
+          {/* Inspirational Quote Banner */}
+          <div className="bg-gradient-to-r from-sky-50/80 via-white to-sky-50/80 border border-sky-200/70 rounded-2xl sm:rounded-[24px] px-6 py-3.5 sm:py-4 shadow-xs flex items-center justify-center text-center">
+            <p className="text-xs sm:text-sm font-semibold text-slate-700 tracking-wide">
+              <span className="text-[#0284c7] font-serif text-lg leading-none mr-1.5 select-none">&ldquo;</span>
+              <span>A great classroom today, a brighter tomorrow.</span>
+              <span className="text-[#0284c7] font-serif text-lg leading-none ml-1 mr-1.5 select-none">&rdquo;</span>
+              <span className="text-slate-400 font-bold ml-1">— EdTechra BITZ</span>
+            </p>
           </div>
 
         </section>
+
+        <div id="classroom-workspace" />
 
         {/* Contextual Active Live Quiz Banner (Liquid Surface) */}
         {activeLiveQuizSession && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled') && (() => {
@@ -1360,7 +1503,7 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* SECTION 7 — DANGER ZONE (Teacher/Admin Only)                              */}
         {/* ========================================================================= */}
         {isTeacher && classroom && (
-          <section>
+          <section id="classroom-danger-zone">
             <ClassroomDangerZone
               classroom={classroom}
               isOwnerOrAdmin={isTeacher}

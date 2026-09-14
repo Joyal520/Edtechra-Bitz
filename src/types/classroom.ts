@@ -285,6 +285,7 @@ export interface ClassroomStats {
   total_submissions: number;
   average_completion_percent: number;
   average_score: number;
+  total_quizzes?: number;
 }
 
 // ============================================================================

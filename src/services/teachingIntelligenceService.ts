@@ -29,10 +29,53 @@ export interface AreaToImproveItem {
 }
 
 export interface StudentAttentionItem {
+  studentId?: string;
   student_ref: string;
   issue: string;
-  average_score?: number;
-  suggested_support: string;
+  average_score?: number | null;
+  trend?: string;
+  main_weakness?: string;
+  recent_evidence?: string;
+  suggested_support?: string;
+  recommended_action?: string;
+  attempts?: number;
+  completion_rate?: number;
+}
+
+export interface ActionSpec {
+  action_type: 'create_revision_quiz' | 'assign_practice' | 'schedule_review' | 'group_students';
+  action_label: string;
+  target_topic?: string;
+  target_students?: string[];
+}
+
+export interface StructuredRecommendation {
+  observation: string;
+  analysis: string;
+  recommendation: string;
+  action_spec?: ActionSpec;
+}
+
+export interface ClassHealthSummary {
+  classAverage: number | null;
+  participationRate: number;
+  completionRate: number;
+  assessmentActivityCount: number;
+  improvingCount: number;
+  improvingStudents: Array<{
+    studentId: string;
+    name: string;
+    average: number | null;
+    change: number | null;
+  }>;
+  strugglingCount: number;
+  strugglingStudents: Array<{
+    studentId: string;
+    name: string;
+    average: number | null;
+    trend: number | null;
+    weakestArea?: string;
+  }>;
 }
 
 export interface TeachingIntelligenceData {
@@ -41,7 +84,91 @@ export interface TeachingIntelligenceData {
   class_strengths: ClassStrengthItem[];
   areas_to_improve: AreaToImproveItem[];
   students_needing_attention: StudentAttentionItem[];
-  recommended_actions: string[];
+  recommended_actions: Array<StructuredRecommendation | string>;
+  has_sufficient_data?: boolean;
+}
+
+export interface TopTopicItem {
+  topic: string;
+  averageScore: number;
+  eventsCount: number;
+  change?: number | null;
+  status: string;
+}
+
+export interface StudentAssessmentEvent {
+  id: string;
+  activityId: string;
+  activityType: 'live_quiz' | 'exam' | 'assignment' | 'ocr' | 'ai_challenge' | string;
+  activityTitle: string;
+  topic: string;
+  score: number | null;
+  maxScore: number | null;
+  percentage: number | null;
+  completedAt: string;
+  metadata?: any;
+}
+
+export interface StudentAIAssessment {
+  has_sufficient_data: boolean;
+  doing_well: string;
+  where_struggling: string;
+  evidence: string;
+  next_steps: string;
+  ai_provider?: string;
+  message?: string;
+}
+
+export interface StudentIntelligenceDetail {
+  studentId: string;
+  fullName: string;
+  email: string;
+  avatarUrl?: string | null;
+  totalEvents: number;
+  attempts: number;
+  averagePercentage: number | null;
+  accuracyPercentage: number | null;
+  completionRate: number;
+  strongResultsCount: number;
+  weakResultsCount: number;
+  strongAreas: Array<{ topic: string; average: number; count: number }>;
+  weakAreas: Array<{ topic: string; average: number; count: number }>;
+  activityBreakdown: {
+    live_quiz: { attempts: number; averageScore: number | null; highestScore?: number | null; recentScore?: number | null };
+    exam: { attempts: number; averageScore: number | null; passedCount: number; failedCount: number };
+    assignment: { attempts: number; averageScore: number | null; completedCount: number };
+    ocr: { attempts: number; averageScore: number | null };
+    ai_challenge: { attempts: number; averageScore: number | null };
+  };
+  assessmentHistory: StudentAssessmentEvent[];
+  mostRecentActivity?: {
+    completedAt: string;
+    title: string;
+    activityType: string;
+    percentage: number | null;
+  } | null;
+  recentAveragePercentage: number | null;
+  previousAveragePercentage: number | null;
+  scoreChangePercentagePoints: number | null;
+  trend: 'IMPROVING' | 'DECLINING' | 'STEADY';
+  engagementIndicator: 'HIGH' | 'MEDIUM' | 'LOW' | 'INACTIVE';
+  performanceCategory: string;
+  performanceCategoryLabel: string;
+  confidence: string;
+  ai_assessment?: StudentAIAssessment;
+}
+
+export interface TeacherChatMessage {
+  role: 'teacher' | 'assistant' | 'user' | 'model';
+  content: string;
+  timestamp?: string;
+}
+
+export interface TeacherChatResponse {
+  success: boolean;
+  reply: string;
+  ai_provider?: string;
+  error?: string;
 }
 
 export interface ClassroomMetricsSummary {
@@ -54,7 +181,7 @@ export interface ClassroomMetricsSummary {
   class_summary: {
     total_students: number;
     active_students: number;
-    overall_score: number;
+    overall_score: number | null;
     score_change: number;
     task_completion_rate: number;
     engagement_rate: number;
@@ -66,8 +193,12 @@ export interface ClassroomMetricsSummary {
       competitions: number;
     };
   };
+  class_health?: ClassHealthSummary;
+  top_strengths?: TopTopicItem[];
+  top_weaknesses?: TopTopicItem[];
   topic_performance: TopicPerformance[];
   students_needing_attention: StudentAttentionItem[];
+  students?: StudentIntelligenceDetail[];
   data_hash: string;
   computed_at: string;
 }
@@ -218,6 +349,69 @@ class TeachingIntelligenceService {
       throw new Error(data.error || 'Failed to refresh exam AI analysis.');
     }
     return data.analysis;
+  }
+
+  /**
+   * Retrieves comprehensive student intelligence details and AI assessment
+   */
+  async getStudentIntelligence(
+    classroomId: string,
+    studentId: string,
+    forceRefresh = false
+  ): Promise<{ success: boolean; student: StudentIntelligenceDetail; ai_assessment: StudentAIAssessment }> {
+    const headers = await this.getAuthHeaders();
+    const query = forceRefresh ? '?refresh=true' : '';
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/students/${studentId}${query}`, {
+      headers
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to load student intelligence.');
+    }
+    return data;
+  }
+
+  /**
+   * Triggers fresh AI assessment for an individual student
+   */
+  async refreshStudentAIAssessment(
+    classroomId: string,
+    studentId: string
+  ): Promise<{ success: boolean; student: StudentIntelligenceDetail; ai_assessment: StudentAIAssessment }> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/students/${studentId}/ai-assessment`, {
+      method: 'POST',
+      headers
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to refresh student AI assessment.');
+    }
+    return data;
+  }
+
+  /**
+   * Sends inquiry to the AI Teacher Assistant grounded in real classroom records
+   */
+  async sendTeacherChatMessage(
+    classroomId: string,
+    message: string,
+    conversationHistory: TeacherChatMessage[] = []
+  ): Promise<TeacherChatResponse> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify({ message, conversationHistory })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to communicate with AI Teacher Assistant.');
+    }
+    return data;
   }
 }
 
