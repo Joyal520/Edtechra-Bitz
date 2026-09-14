@@ -1477,7 +1477,7 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   <p className="text-base font-black text-white leading-relaxed">{q.questionText}</p>
                                   
                                   {/* Options for MCQs */}
-                                  {q.options && q.options.length > 0 && (
+                                  {(sec.questionType === 'multiple_choice' || q.questionType === 'multiple_choice' || q.type === 'multiple_choice') && q.options && q.options.length > 0 && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                                       {q.options.map((opt: string, optIdx: number) => (
                                         <div
@@ -1495,9 +1495,9 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                                   )}
 
                                   {/* Correct answer tag */}
-                                  {(!q.options || q.options.length === 0) && (
+                                  {(!((sec.questionType === 'multiple_choice' || q.questionType === 'multiple_choice' || q.type === 'multiple_choice') && q.options && q.options.length > 0)) && (
                                     <div className="text-xs sm:text-sm text-emerald-200 bg-emerald-950/70 p-2.5 rounded-xl font-bold border border-emerald-500/70">
-                                      Answer: {q.correctAnswer}
+                                      Answer: {Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length > 0 ? q.acceptedAnswers.join(' / ') : (q.correctAnswer || '(No answer specified)')}
                                     </div>
                                   )}
                                 </div>
@@ -1924,8 +1924,8 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       <div className="space-y-5">
                         {(sec.questions || []).map((q: any, qIdx: number) => {
                           const qId = q.questionId || `q_${secIdx}_${qIdx}`;
-                          const isMCQ = q.options && q.options.length > 0;
-                          const isTF = q.questionType?.includes('True');
+                          const isMCQ = Boolean((q.questionType === 'multiple_choice' || q.questionType === 'mcq' || sec.questionType === 'multiple_choice' || q.type === 'multiple_choice') && q.options && q.options.length > 0);
+                          const isTF = Boolean(q.questionType?.includes('True') || q.questionType === 'true_false' || sec.questionType === 'true_false' || q.type === 'true_false');
 
                           return (
                             <div key={qId} className="p-5 sm:p-6 bg-[#0f1b3d] rounded-2xl border border-blue-800/60 space-y-4">

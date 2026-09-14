@@ -331,6 +331,15 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             explanation: q.explanation
           } as any);
         } else if (normalizedType === 'true_false') {
+          if (Array.isArray(q.options) && q.options.length > 2) {
+            errors.push({
+              id: `invalid_options_on_true_false_${questionId}`,
+              questionId,
+              sectionId,
+              message: `True/False Question "${questionId}" contains multiple choice options. True/False questions must not have MCQ options.`
+            });
+          }
+
           const rawCorrect = q.correctAnswer ?? q.correct_answer;
           if (rawCorrect === undefined || rawCorrect === null) {
             errors.push({
@@ -355,6 +364,15 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             explanation: q.explanation
           });
         } else if (normalizedType === 'fill_in_blank') {
+          if (Array.isArray(q.options) && q.options.length > 0) {
+            errors.push({
+              id: `invalid_options_on_fill_blank_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Fill in the Blank Question "${questionId}" must not contain options. The student must type the answer into the [blank].`
+            });
+          }
+
           const rawAnswers = q.acceptedAnswers || q.correctAnswer || q.correct_answer || q.answers;
           let accepted: string[] = [];
           if (Array.isArray(rawAnswers)) {
@@ -454,7 +472,39 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             explanation: q.explanation
           });
         } else if (normalizedType === 'short_answer') {
-          if (!q.rubric && !q.sampleAnswer && !q.explanation) {
+          // Reject options on short_answer (Short Answer is strictly open-response text input)
+          if (Array.isArray(q.options) && q.options.length > 0) {
+            errors.push({
+              id: `invalid_options_on_short_answer_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Short Answer Question "${questionId}" must not contain options. Short Answer is an open-response question requiring text input.`
+            });
+          }
+
+          // Detect theoretical grammar-definition questions that fail practical application requirement
+          const THEORETICAL_SHORT_ANSWER_PATTERNS = [
+            /^(?:what|which)\s+is\s+the\s+(?:use|rule|structure|difference|meaning|definition|formula)\b/i,
+            /^(?:what|which)\s+(?:are|were)\s+the\s+(?:rules|uses|structures|differences|auxiliary|subjects)\b/i,
+            /^(?:which)\s+(?:auxiliary|auxiliary\s+verbs?|subjects?)\s+(?:are|take|use)\b/i,
+            /^(?:when)\s+do\s+we\s+use\b/i,
+            /^(?:explain|describe|define)\s+(?:the\s+)?(?:rule|tense|grammar|structure|use|difference)\b/i,
+            /^what\s+does\s+.*\s+mean\b/i,
+            /^explain\s+the\s+difference\s+between\b/i,
+            /^how\s+is\s+the\s+.*\s+(?:formed|structured)\b/i
+          ];
+
+          const isTheoretical = THEORETICAL_SHORT_ANSWER_PATTERNS.some(pattern => pattern.test(questionText.trim()));
+          if (isTheoretical) {
+            errors.push({
+              id: `theoretical_short_answer_${questionId}`,
+              questionId,
+              sectionId,
+              message: `Short Answer Question "${questionId}" is theoretical ("${questionText}"). Short answer questions must test practical language application (e.g. sentence rewrite, error correction, sentence completion, transformation, or question formation).`
+            });
+          }
+
+          if (!q.rubric && !q.sampleAnswer && !q.explanation && !q.correctAnswer && !q.acceptedAnswers) {
             warnings.push({
               id: `missing_rubric_${questionId}`,
               questionId,
@@ -463,12 +513,23 @@ export function validateExamJSON(input: string | Record<string, any>): Validatio
             });
           }
 
+          const rawCorrect = q.correctAnswer ?? q.correct_answer ?? q.sampleAnswer;
+          const rawAccepted = q.acceptedAnswers ?? q.accepted_answers;
+          let acceptedAnswers: string[] | undefined = undefined;
+          if (Array.isArray(rawAccepted)) {
+            acceptedAnswers = rawAccepted.map(a => String(a).trim()).filter(Boolean);
+          } else if (typeof rawAccepted === 'string' && rawAccepted.trim()) {
+            acceptedAnswers = [rawAccepted.trim()];
+          }
+
           validatedQuestions.push({
             id: questionId,
             type: 'short_answer',
             question: questionText,
+            correctAnswer: typeof rawCorrect === 'string' ? rawCorrect.trim() : (rawCorrect !== undefined ? String(rawCorrect) : undefined),
+            acceptedAnswers,
             rubric: q.rubric || q.sampleAnswer,
-            sampleAnswer: q.sampleAnswer,
+            sampleAnswer: q.sampleAnswer || (typeof rawCorrect === 'string' ? rawCorrect : undefined),
             keywords: Array.isArray(q.keywords) ? q.keywords.map(String) : [],
             difficulty: (q.difficulty || 'medium').toLowerCase(),
             marks: Number(q.marks) || 2,

@@ -48,7 +48,6 @@ import {
   AssignStudentsIllustration,
   LiveQuizIllustration,
   ExamIllustration,
-  OCRIllustration,
   CompetitionIllustration,
   CreateCourseIllustration,
   BotanicalPaperCutFrame,
@@ -1125,7 +1124,7 @@ export const ClassroomDetailPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             
             {/* Card 1: Assign Your Students / My Tasks (Blue identity) */}
             <div className="bg-gradient-to-b from-sky-50/80 via-white to-blue-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-sky-200/80 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
@@ -1141,8 +1140,8 @@ export const ClassroomDetailPage: React.FC = () => {
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
-                      ? 'Assign tasks, lessons or activities to selected students.'
-                      : 'Complete lessons and submit homework assignments.'}
+                      ? 'Assign tasks, lessons, or handwritten worksheets with AI evaluation.'
+                      : 'Complete lessons, answer questions, and submit handwritten work.'}
                   </p>
                 </div>
               </div>
@@ -1209,13 +1208,13 @@ export const ClassroomDetailPage: React.FC = () => {
                       ? effectiveLiveQuizState === 'live'
                         ? 'A live quiz session is currently running.'
                         : effectiveLiveQuizState === 'scheduled'
-                        ? 'A quiz is scheduled and waiting to start.'
-                        : 'Conduct live quizzes, engage students in real time.'
+                        ? `Live quiz scheduled for ${scheduledCountdownText ? scheduledCountdownText : 'today'}.`
+                        : 'Launch real-time competitive games with instant leaderboards.'
                       : effectiveLiveQuizState === 'live'
-                      ? 'A live quiz is currently in session! Click below to join directly.'
+                      ? 'Live quiz is running right now! Tap Join Quiz to enter!'
                       : effectiveLiveQuizState === 'scheduled'
-                      ? 'A quiz is starting soon! Enter the waiting lobby.'
-                      : 'Join real-time classroom quizzes directly without a PIN.'}
+                      ? `Starts in ${scheduledCountdownText || 'a few minutes'}. Enter the lobby early!`
+                      : 'Compete live with classmates when your teacher starts a quiz.'}
                   </p>
                 </div>
               </div>
@@ -1294,41 +1293,7 @@ export const ClassroomDetailPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Card 4: OCR Assessment (Violet identity) */}
-            <div className="bg-gradient-to-b from-violet-50/80 via-white to-fuchsia-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-violet-200/80 shadow-[0_4px_16px_-2px_rgba(139,92,246,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(139,92,246,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
-              <div className="space-y-3">
-                <div className="flex justify-center py-1">
-                  <div className="w-24 h-20 flex items-center justify-center rounded-2xl bg-white/80 border border-violet-100 shadow-2xs group-hover:scale-105 transition-transform duration-200">
-                    <OCRIllustration className="w-20 h-16" />
-                  </div>
-                </div>
-                <div className="space-y-1 text-center">
-                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-violet-900 transition-colors">
-                    {isTeacher ? 'OCR Assessment' : 'My Assessments'}
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
-                    {isTeacher
-                      ? 'Upload handwritten papers & get AI evaluation.'
-                      : 'View your graded worksheet AI evaluation reports.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isTeacher) {
-                    setOcrModalOpen(true);
-                  } else {
-                    setStudentAssessmentHistoryOpen(true);
-                  }
-                }}
-                className="btn-liquid-purple w-full py-2.5 px-4 text-xs font-bold"
-              >
-                {isTeacher ? 'Grade Worksheets' : 'View Evaluations'}
-              </button>
-            </div>
-
-            {/* Card 5: Competition (Warm gold / amber identity) */}
+            {/* Card 4: Competition (Warm gold / amber identity) */}
             <div className="bg-gradient-to-b from-amber-50/80 via-white to-orange-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-amber-200/80 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(217,119,6,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
@@ -2041,6 +2006,7 @@ export const ClassroomDetailPage: React.FC = () => {
         isOpen={taskDashboardOpen}
         classroomId={classroom.id}
         isTeacher={isTeacher}
+        members={members}
         onClose={() => setTaskDashboardOpen(false)}
       />
 

@@ -117,6 +117,8 @@ export interface TaskSubmission {
   teacher_adjusted?: boolean;
   teacher_adjustment_reason?: string | null;
   task_version?: number;
+  ocr_evaluation_id?: string | null;
+  ocr_evaluation?: any | null;
   submitted_at: string;
   completed_at?: string | null;
   updated_at: string;

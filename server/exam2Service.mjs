@@ -238,9 +238,9 @@ export async function generateExam({ payload, openaiApiKey, serverOpenAI }) {
     "",
     "QUESTION TYPE RULES:",
     "- Multiple Choice: exactly 4 distinct options, unambiguous correctAnswer mapping to an option.",
-    "- True / False: factually sound statement, boolean or True/False correctAnswer, balanced distribution.",
-    "- Fill in the Blank: question text with '[blank]', acceptedAnswers array with correct terms/synonyms.",
-    "- Short Answer: clear prompt, model answer/explanation for teacher grading. Note: Error-correction tasks must be generated as short_answer questions within this section, NOT as a separate question type.",
+    "- True / False: factually sound statement, boolean or True/False correctAnswer, balanced distribution. NEVER attach MCQ options.",
+    "- Fill in the Blank: question text with '[blank]', acceptedAnswers array with correct terms/synonyms. NEVER attach options.",
+    "- Short Answer: Student questions must assess practical language use (production, transformation, completion, correction, or application in context). Prioritize USE > RECALL and APPLICATION > DEFINITION. NEVER generate theoretical grammar-definition questions ('What is the use...', 'What is the structure...', 'Explain the rule...', 'Which auxiliary verbs...'). NEVER attach options to short_answer. If multiple answers are acceptable, provide them in acceptedAnswers array, NEVER in options. Note: Error-correction tasks must be generated as short_answer questions within this section, NOT as a separate question type.",
     "- Reading Comprehension: substantive passage (150-300 words) with nested subQuestions. The reading passage and its sub-questions count as EXACTLY 1 top-level question/activity (worth 20 marks total). Do NOT count sub-questions as separate top-level questions.",
     "- Matching: pairs array or distinct questionText (left) and correctAnswer (right).",
     "- Reorder / Sequencing: scrambled sentence or chronological items with correct order.",
@@ -413,15 +413,31 @@ export function buildFallbackExam(payload, reason = "Offline mode") {
         questionText = `Identify and correct the grammatical error: "Each of the participants were enthusiastic about the competition."`;
         correctAnswer = "Each of the participants was enthusiastic about the competition.";
       } else if (isShortAns) {
-        if (qIdx % 3 === 0) {
+        if (qIdx % 4 === 0) {
           questionText = `Identify and correct the grammatical error: "Each of the participants were enthusiastic about the competition."`;
-          correctAnswer = "Each of the participants was enthusiastic about the competition. ('Each' takes singular verb 'was'.)";
-        } else if (qIdx % 3 === 1) {
-          questionText = `Rewrite this sentence by correcting the misplaced modifier: "Walking into the room, the notes were found on the desk."`;
-          correctAnswer = "Walking into the room, the student found the notes on the desk.";
+          correctAnswer = "Each of the participants was enthusiastic about the competition.";
+          acceptedAnswers = [
+            "Each of the participants was enthusiastic about the competition.",
+            "Each of the participants was enthusiastic."
+          ];
+        } else if (qIdx % 4 === 1) {
+          questionText = `Rewrite this sentence by transforming it into the negative form: "The committee has approved the revised proposal."`;
+          correctAnswer = "The committee has not approved the revised proposal.";
+          acceptedAnswers = [
+            "The committee has not approved the revised proposal.",
+            "The committee hasn't approved the revised proposal."
+          ];
+        } else if (qIdx % 4 === 2) {
+          questionText = `Complete the sentence with the correct form of the verb in parentheses: "By the time the bell rang, the students had ________ (write) their essays."`;
+          correctAnswer = "written";
+          acceptedAnswers = ["written"];
         } else {
-          questionText = `Explain the primary significance of ${payload.content ? payload.content.slice(0, 30) : 'this concept'} in 2-3 concise sentences.`;
-          correctAnswer = "Demonstrates accurate domain knowledge, clear syntax, and supporting rationale.";
+          questionText = `Rewrite this sentence to correct the word order: "yesterday / arrived / at the airport / the delegation"`;
+          correctAnswer = "The delegation arrived at the airport yesterday.";
+          acceptedAnswers = [
+            "The delegation arrived at the airport yesterday.",
+            "Yesterday, the delegation arrived at the airport."
+          ];
         }
       } else if (isReading) {
         questionText = `Read the passage carefully and answer the comprehension sub-questions below.`;
@@ -448,7 +464,7 @@ export function buildFallbackExam(payload, reason = "Offline mode") {
         questionId: id,
         questionType: rawType,
         questionText,
-        options,
+        options: (normType === 'multiple_choice' || normType === 'multiple_select') ? options : undefined,
         correctAnswer,
         acceptedAnswers,
         pairs,
@@ -642,11 +658,14 @@ export function normalizeExam(exam, payload = {}, blueprintSpec = {}) {
 
       return {
         ...question,
+        id: question.id || question.questionId || `S${sectionIndex + 1}Q${questionIndex + 1}`,
         questionId: question.questionId || question.id || `S${sectionIndex + 1}Q${questionIndex + 1}`,
+        type: normType,
         questionType: sectionType,
+        question: questionText,
         questionText,
         correctAnswer,
-        options: (normType === 'multiple_choice' || normType === 'multiple_select') ? options : question.options,
+        options: (normType === 'multiple_choice' || normType === 'multiple_select') ? options : undefined,
         acceptedAnswers: question.acceptedAnswers,
         pairs: question.pairs,
         items: question.items,

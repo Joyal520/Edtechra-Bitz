@@ -9,30 +9,36 @@ import {
   Eye,
   Edit3,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  Upload
 } from 'lucide-react';
 import {
   ClassroomTask,
   TaskCategory,
   TaskSubmission
 } from '@/types/classroomTask';
+import { ClassroomMember } from '@/types/classroom';
 import { classroomTaskService } from '@/services/classroomTaskService';
 import { useClassroomAuth } from '@/hooks/useClassroomAuth';
+import { supabase } from '@/lib/supabase';
 import { CreateTaskModal } from './CreateTaskModal';
 import { StudentTaskModal } from './StudentTaskModal';
+import { TaskHandwrittenUploadModal } from './TaskHandwrittenUploadModal';
 
 interface TaskDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   classroomId: string;
   isTeacher?: boolean;
+  members?: ClassroomMember[];
 }
 
 export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   isOpen,
   onClose,
   classroomId,
-  isTeacher: isTeacherProp
+  isTeacher: isTeacherProp,
+  members: membersProp = []
 }) => {
   const classroomAuth = useClassroomAuth(classroomId);
   const isTeacher = isTeacherProp ?? classroomAuth.isTeacher;
@@ -42,10 +48,16 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   const [tasks, setTasks] = useState<ClassroomTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [members, setMembers] = useState<ClassroomMember[]>(membersProp);
 
   // Submodals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [activeTaskIdForStudent, setActiveTaskIdForStudent] = useState<string | null>(null);
+
+  // Teacher Handwritten Upload Modal State
+  const [isHandwrittenUploadOpen, setIsHandwrittenUploadOpen] = useState(false);
+  const [handwrittenTaskId, setHandwrittenTaskId] = useState<string | null>(null);
+  const [handwrittenStudentId, setHandwrittenStudentId] = useState<string | null>(null);
 
   // Teacher Review Submissions Modal
   const [reviewTaskId, setReviewTaskId] = useState<string | null>(null);
@@ -73,6 +85,28 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
       loadTasks();
     }
   }, [isOpen, classroomId, selectedCategory]);
+
+  useEffect(() => {
+    if (isOpen && classroomId && members.length === 0 && supabase) {
+      supabase
+        .from('classroom_members')
+        .select(`
+          id,
+          classroom_id,
+          profile_id,
+          role,
+          status,
+          display_name,
+          joined_at,
+          profile:profiles!classroom_members_profile_id_fkey(id, full_name, email, avatar_url, role)
+        `)
+        .eq('classroom_id', classroomId)
+        .eq('status', 'active')
+        .then(({ data }) => {
+          if (data) setMembers(data as any);
+        });
+    }
+  }, [isOpen, classroomId]);
 
   const handleOpenReview = async (taskId: string) => {
     setReviewTaskId(taskId);
@@ -141,14 +175,28 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
           <div className="flex items-center gap-2">
             {isTeacher && (
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create Task</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHandwrittenTaskId(null);
+                    setHandwrittenStudentId(null);
+                    setIsHandwrittenUploadOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer border border-white/20"
+                >
+                  <Upload className="w-3.5 h-3.5 text-indigo-300" />
+                  <span>Upload Student Work</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create Task</span>
+                </button>
+              </div>
             )}
             <button
               onClick={onClose}
@@ -289,6 +337,19 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                         <>
                           <button
                             type="button"
+                            onClick={() => {
+                              setHandwrittenTaskId(t.id);
+                              setHandwrittenStudentId(null);
+                              setIsHandwrittenUploadOpen(true);
+                            }}
+                            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 border border-indigo-200/60"
+                            title="Upload handwritten student work for this task"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload Work</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleOpenReview(t.id)}
                             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5"
                           >
@@ -359,12 +420,26 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 </span>
                 <h3 className="text-sm font-black">Student Attempts & Auto-Graded Scores</h3>
               </div>
-              <button
-                onClick={() => setReviewTaskId(null)}
-                className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHandwrittenTaskId(reviewTaskId);
+                    setHandwrittenStudentId(null);
+                    setIsHandwrittenUploadOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload Work</span>
+                </button>
+                <button
+                  onClick={() => setReviewTaskId(null)}
+                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 overflow-y-auto space-y-3 flex-1">
@@ -390,9 +465,14 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                         <h4 className="text-xs font-black text-slate-900">
                           {sub.student?.full_name || sub.student?.email || 'Student'}
                         </h4>
-                        <span className="text-[10px] text-slate-400 font-bold">
-                          Submitted: {new Date(sub.submitted_at).toLocaleDateString()}
-                        </span>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold">
+                          <span>Submitted: {new Date(sub.submitted_at).toLocaleDateString()}</span>
+                          {sub.ocr_evaluation_id && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-black">
+                              Handwritten Work
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -477,6 +557,25 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Teacher Handwritten Work Upload Modal */}
+      {isHandwrittenUploadOpen && (
+        <TaskHandwrittenUploadModal
+          isOpen={isHandwrittenUploadOpen}
+          onClose={() => setIsHandwrittenUploadOpen(false)}
+          classroomId={classroomId}
+          tasks={tasks}
+          members={members}
+          initialTaskId={handwrittenTaskId || undefined}
+          initialStudentId={handwrittenStudentId || undefined}
+          onSuccess={() => {
+            loadTasks();
+            if (reviewTaskId) {
+              classroomTaskService.getSubmissions(reviewTaskId).then(setTaskSubmissions);
+            }
+          }}
+        />
       )}
 
     </div>

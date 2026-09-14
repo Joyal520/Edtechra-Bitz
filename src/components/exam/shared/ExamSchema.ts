@@ -204,6 +204,8 @@ export interface DropdownQuestion extends BaseQuestion {
 // 4. Short Answer
 export interface ShortAnswerQuestion extends BaseQuestion {
   type: 'short_answer';
+  correctAnswer?: string;
+  acceptedAnswers?: string[];
   rubric?: string;
   sampleAnswer?: string;
   keywords?: string[];

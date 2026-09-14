@@ -340,22 +340,23 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
     }
     // Check if question has only True & False options
     const opts = (q as any).options;
-    if (Array.isArray(opts) && opts.length === 2) {
+    if (Array.isArray(opts) && opts.length === 2 && (t === 'multiple_choice' || t === 'mcq' || !t)) {
       const t0 = String(opts[0]?.text || opts[0]).trim().toLowerCase();
       const t1 = String(opts[1]?.text || opts[1]).trim().toLowerCase();
       if ((t0 === 'true' && t1 === 'false') || (t0 === 'false' && t1 === 'true')) {
         return 'true_false';
       }
     }
-    // Check reading passage
-    if (currentQ.parentPassage || (q as any).passage) {
-      return 'reading_comprehension';
-    }
+    // Reading sub-questions retain their own type (mcq, short_answer, etc.)
     return normalizeQuestionType(q.type);
   }, [currentQ]);
 
-  // Extract raw options if MCQ
-  const rawOptions = (currentQ?.question as any)?.options || [];
+  // Extract raw options ONLY if normalizedType is 'mcq'
+  const rawOptions = useMemo(() => {
+    if (normalizedType !== 'mcq') return [];
+    const opts = (currentQ?.question as any)?.options;
+    return Array.isArray(opts) ? opts : [];
+  }, [currentQ, normalizedType]);
 
   // Question Type Label & Badge Meta
   const typeMeta = useMemo(() => {
@@ -556,12 +557,23 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
             </div>
 
             {/* Main Question Card */}
-            <main className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-md shadow-blue-900/5 p-4 sm:p-6 md:p-8 flex flex-col justify-between w-full space-y-4 sm:space-y-5">
-              {/* Top Tag Row: Dynamic Type Badge + Instruction Highlight */}
+            <main
+              key={currentQ?.question?.id || currentIndex}
+              className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-md shadow-blue-900/5 p-4 sm:p-6 md:p-8 flex flex-col justify-between w-full space-y-4 sm:space-y-5"
+            >
+              {/* Top Tag Row: Dynamic Type Badge + Passage Tag + Instruction Highlight */}
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className={`border ${typeMeta.color} px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 sm:gap-2 shadow-2xs`}>
-                  <typeMeta.icon className="w-3.5 h-3.5" />
-                  <span>{typeMeta.label}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className={`border ${typeMeta.color} px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 sm:gap-2 shadow-2xs`}>
+                    <typeMeta.icon className="w-3.5 h-3.5" />
+                    <span>{typeMeta.label}</span>
+                  </div>
+                  {Boolean(currentQ?.parentPassage) && (
+                    <div className="border border-indigo-200 bg-indigo-50 text-indigo-800 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-2xs">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Comprehension Question</span>
+                    </div>
+                  )}
                 </div>
 
                 {parsedQuestion.instructionText ? (
@@ -578,6 +590,31 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                   )
                 )}
               </div>
+
+              {/* Dedicated Stimulus Reading Passage (rendered above question if present) */}
+              {(() => {
+                const passageText =
+                  currentQ?.parentPassage ||
+                  (currentQ?.question as any)?.passage ||
+                  (currentQ?.question as any)?.content ||
+                  '';
+                const passageTitle = currentQ?.parentPassageTitle || 'Comprehension Passage';
+                if (!passageText) return null;
+
+                return (
+                  <div className="bg-gradient-to-br from-amber-50/60 via-orange-50/30 to-amber-50/50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-2 border-amber-200/80 shadow-2xs space-y-2.5 w-full">
+                    <div className="flex items-center gap-2 border-b border-amber-200/70 pb-2">
+                      <BookOpen className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wider">
+                        Reading Passage: {passageTitle}
+                      </span>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto pr-3 text-sm sm:text-base font-medium text-slate-800 leading-[1.8] font-serif scrollbar-thin whitespace-pre-wrap selection:bg-amber-100">
+                      {passageText}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Main Question Text */}
               <div className="pt-1">
@@ -856,79 +893,19 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                   </div>
                 )}
 
-                {/* 6. READING COMPREHENSION RENDERER */}
-                {normalizedType === 'reading_comprehension' && (() => {
-                  const passageText =
-                    currentQ?.parentPassage ||
-                    (currentQ?.question as any)?.passage ||
-                    (currentQ?.question as any)?.content ||
-                    '';
-                  const passageTitle = currentQ?.parentPassageTitle || 'Comprehension Passage';
-
-                  return (
-                    <div className="space-y-5 w-full">
-                      {/* Distinct Styled Reading Passage Container */}
-                      {passageText && (
-                        <div className="bg-gradient-to-br from-amber-50/60 via-orange-50/30 to-amber-50/50 p-5 sm:p-7 rounded-3xl border-2 border-amber-200/80 shadow-xs space-y-3">
-                          <div className="flex items-center gap-2 border-b border-amber-200/70 pb-2.5">
-                            <BookOpen className="w-4.5 h-4.5 text-amber-700 shrink-0" />
-                            <span className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wider">
-                              Reading Passage: {passageTitle}
-                            </span>
-                          </div>
-                          <div className="max-h-80 overflow-y-auto pr-3 text-sm sm:text-base font-medium text-slate-850 leading-[1.8] font-serif scrollbar-thin whitespace-pre-wrap selection:bg-amber-100">
-                            {passageText}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Associated Question Options or Text Response */}
-                      {rawOptions && rawOptions.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
-                          {rawOptions.map((opt: any, optIdx: number) => {
-                            const theme = OPTION_THEMES[optIdx % OPTION_THEMES.length];
-                            const isSelected = currentAnswer === opt.id || currentAnswer === opt.text;
-                            const cleanedText = cleanOptionText(opt.text);
-                            return (
-                              <button
-                                key={opt.id || optIdx}
-                                type="button"
-                                onClick={() => onAnswerChange(opt.id || opt.text)}
-                                className={`w-full min-h-[58px] p-3.5 sm:p-4 rounded-2xl sm:rounded-[24px] border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-200 active:scale-[0.98] relative overflow-hidden group ${
-                                  isSelected
-                                    ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md -translate-y-0.5`
-                                    : `${theme.cardBg} ${theme.cardBorder} ${theme.cardHover} shadow-2xs hover:-translate-y-0.5`
-                                }`}
-                              >
-                                <div className="absolute inset-x-0 top-0 h-[40%] bg-gradient-to-b from-white/60 to-transparent pointer-events-none rounded-t-2xl" />
-                                <div className="flex items-center gap-3 relative z-10 min-w-0 flex-1">
-                                  <div className={`w-10 h-10 rounded-xl sm:rounded-2xl ${theme.badgeBg} ${theme.badgeText} flex items-center justify-center font-black text-lg shadow-xs shrink-0 select-none`}>
-                                    {theme.letter}
-                                  </div>
-                                  <span className="text-base font-bold text-slate-900 break-words flex-1 leading-snug">{cleanedText}</span>
-                                </div>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform relative z-10 ${isSelected ? theme.badgeBg + ' text-white shadow-xs scale-105' : theme.chevronBg + ' ' + theme.chevronText}`}>
-                                  {isSelected ? <Check className="w-4 h-4 stroke-[3]" /> : <ChevronRight className="w-4 h-4" />}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <label className="text-xs font-black text-slate-700 block px-1">Your Written Answer:</label>
-                          <textarea
-                            rows={4}
-                            value={currentAnswer || ''}
-                            onChange={(e) => onAnswerChange(e.target.value)}
-                            placeholder="Type your response based on the passage above..."
-                            className="w-full p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-slate-200 bg-white/95 focus:border-[#026fc3] focus:ring-4 focus:ring-sky-200/70 text-sm sm:text-base font-semibold text-slate-900 outline-hidden transition-all shadow-inner leading-relaxed min-h-[120px]"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* 6. READING COMPREHENSION RENDERER (Clean written response for standalone passage question) */}
+                {normalizedType === 'reading_comprehension' && (
+                  <div className="space-y-2 w-full">
+                    <label className="text-xs font-black text-slate-700 block px-1">Your Written Answer:</label>
+                    <textarea
+                      rows={4}
+                      value={currentAnswer || ''}
+                      onChange={(e) => onAnswerChange(e.target.value)}
+                      placeholder="Type your response based on the passage above..."
+                      className="w-full p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 border-slate-200 bg-white/95 focus:border-[#026fc3] focus:ring-4 focus:ring-sky-200/70 text-sm sm:text-base font-semibold text-slate-900 outline-hidden transition-all shadow-inner leading-relaxed min-h-[120px]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* ==========================================================

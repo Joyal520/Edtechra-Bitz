@@ -474,16 +474,39 @@ export function validateExamAgainstBlueprint(examData, blueprint = {}) {
         errors.push(`Question #${qNum} (${normType}): Missing correctAnswer.`);
       }
     } else if (normType === 'true_false') {
+      if (Array.isArray(q.options) && q.options.length > 2) {
+        errors.push(`Question #${qNum} (true_false): Must not contain multiple choice options.`);
+      }
       const hasAnswer = q.correctAnswer !== undefined || q.correct_answer !== undefined;
       if (!hasAnswer) {
         errors.push(`Question #${qNum} (true_false): Missing correctAnswer (must be true or false).`);
       }
     } else if (normType === 'fill_in_blank') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        errors.push(`Question #${qNum} (fill_in_blank): Must not contain options.`);
+      }
       const hasAccepted = (Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length > 0) ||
         (typeof q.correctAnswer === 'string' && q.correctAnswer.trim()) ||
         (typeof q.correct_answer === 'string' && q.correct_answer.trim());
       if (!hasAccepted) {
         errors.push(`Question #${qNum} (fill_in_blank): Missing accepted answers or correctAnswer.`);
+      }
+    } else if (normType === 'short_answer') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        errors.push(`Question #${qNum} (short_answer): Must not contain options. Short Answer is an open-response text question.`);
+      }
+      const THEORETICAL_PATTERNS = [
+        /^(?:what|which)\s+is\s+the\s+(?:use|rule|structure|difference|meaning|definition|formula)\b/i,
+        /^(?:what|which)\s+(?:are|were)\s+the\s+(?:rules|uses|structures|differences|auxiliary|subjects)\b/i,
+        /^(?:which)\s+(?:auxiliary|auxiliary\s+verbs?|subjects?)\s+(?:are|take|use)\b/i,
+        /^(?:when)\s+do\s+we\s+use\b/i,
+        /^(?:explain|describe|define)\s+(?:the\s+)?(?:rule|tense|grammar|structure|use|difference)\b/i,
+        /^what\s+does\s+.*\s+mean\b/i,
+        /^explain\s+the\s+difference\s+between\b/i,
+        /^how\s+is\s+the\s+.*\s+(?:formed|structured)\b/i
+      ];
+      if (THEORETICAL_PATTERNS.some(p => p.test(questionText))) {
+        errors.push(`Question #${qNum} (short_answer): Theoretical definition questions are forbidden ("${questionText}"). Must assess practical language application (sentence rewrite, error correction, completion, transformation).`);
       }
     } else if (normType === 'cloze_passage') {
       const blanks = Array.isArray(q.blanks) ? q.blanks : [];
@@ -498,9 +521,8 @@ export function validateExamAgainstBlueprint(examData, blueprint = {}) {
       }
     } else if (normType === 'reorder') {
       const items = Array.isArray(q.items) ? q.items : [];
-      const hasOrderText = typeof q.correctAnswer === 'string' || Array.isArray(q.correctOrder);
-      if (items.length < 2 && !hasOrderText) {
-        errors.push(`Question #${qNum} (reorder): Requires at least 2 sequence items to reorder.`);
+      if (items.length === 0 && !q.correctAnswer) {
+        errors.push(`Question #${qNum} (reorder): Missing reorder items or target sequence.`);
       }
     }
   });
@@ -509,13 +531,20 @@ export function validateExamAgainstBlueprint(examData, blueprint = {}) {
     isValid: errors.length === 0,
     errors,
     warnings,
-    diff
+    diff: {
+      expectedTotalQuestions,
+      actualTotalQuestions,
+      expectedTotalMarks,
+      actualTotalMarks,
+      expectedTypeCounts,
+      actualTypeCounts
+    }
   };
 }
 
 /**
- * Builds an actionable correction prompt to pass back into the AI repair loop
- * when generated JSON violates the assessment blueprint.
+ * Constructs an assertive, discrepancy-driven AI repair prompt.
+ * Lists the exact errors and count diffs so the model can fix them without regenerating from scratch.
  */
 export function generateBlueprintCorrectionPrompt(errors, diff, originalJson, blueprint) {
   const errorLines = errors.map((e, idx) => `  ${idx + 1}. ${e}`).join('\n');
@@ -547,9 +576,10 @@ GROUNDING RULES:
 2. Generate EVERY required question type with its exact count and marks.
 3. Keep the exact section structures.
 4. Ensure all multiple-choice questions have >= 2 options and valid correctAnswer.
-5. Ensure all true_false questions have true/false answers.
-6. Ensure fill_in_blank and short_answer questions have clear prompts and answers.
-7. Return ONLY the raw valid JSON object without markdown fences, explanation, or conversational text.
+5. Ensure all true_false questions have true/false answers. DO NOT attach MCQ options to true_false.
+6. Ensure fill_in_blank questions have clear prompts and acceptedAnswers. DO NOT attach options.
+7. Short Answer questions MUST assess practical language use (sentence rewrite, error correction, completion, transformation, question formation). NEVER generate theoretical grammar-definition questions ("What is the use...", "Explain the rule...", "What is the structure..."). NEVER include options for short_answer.
+8. Return ONLY the raw valid JSON object without markdown fences, explanation, or conversational text.
 
 PREVIOUS INCORRECT OUTPUT (EXCERPT):
 ${snippet}

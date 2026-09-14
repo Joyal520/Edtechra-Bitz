@@ -108,6 +108,8 @@ class ClassroomTaskClientService {
       studentAnswers?: Array<{ question_id: string; student_answer: any }>;
       textResponse?: string;
       fileUrls?: string[];
+      imageBase64?: string;
+      handwrittenImageBase64?: string;
     }
   ): Promise<{ data?: TaskSubmission; error?: string }> {
     try {
@@ -126,6 +128,72 @@ class ClassroomTaskClientService {
       return { data: json.data };
     } catch (err: any) {
       return { error: err.message || 'Error submitting task' };
+    }
+  }
+
+  /**
+   * Teacher or Student submits handwritten work for a task with OCR Vision AI evaluation
+   */
+  async submitHandwrittenTask(
+    taskId: string,
+    payload: {
+      classroomId: string;
+      studentId: string;
+      studentName?: string;
+      imageBase64: string;
+      maxMarks?: number;
+      category?: string;
+      title?: string;
+    }
+  ): Promise<{ data?: any; error?: string }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch('/api/classes/ocr-jobs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          taskId,
+          classroomId: payload.classroomId,
+          studentId: payload.studentId,
+          studentName: payload.studentName,
+          imageBase64: payload.imageBase64,
+          maxMarks: payload.maxMarks || 100,
+          category: payload.category || 'Paragraph Writing',
+          title: payload.title || ''
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        return { error: json.error || 'Failed to evaluate handwritten task work' };
+      }
+
+      return { data: json.data };
+    } catch (err: any) {
+      return { error: err.message || 'Network error evaluating handwritten work' };
+    }
+  }
+
+  /**
+   * Check existing submission for a specific student and task (Duplicate prevention)
+   */
+  async getStudentSubmission(taskId: string, studentId: string): Promise<TaskSubmission | null> {
+    try {
+      if (!supabase) return null;
+      const { data, error } = await supabase
+        .from('assignment_submissions')
+        .select(`
+          *,
+          student:profiles!student_id (id, full_name, email, avatar_url)
+        `)
+        .eq('assignment_id', taskId)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return data as TaskSubmission;
+    } catch {
+      return null;
     }
   }
 

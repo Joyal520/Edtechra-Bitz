@@ -500,6 +500,33 @@ CRITICAL ASSESSMENT & RENDERING RULES:
 - READING COMPREHENSION RULE: Reading Comprehension is 1 question/activity (worth 20 marks in standard exam). Its sub-questions must be nested inside the 'subQuestions' array of that 1 question object. Do NOT count sub-questions as separate top-level questions. Total questions in the exam must strictly equal ${totalQuestions}.
 - READING COMPREHENSION SCHEMA: The reading comprehension question object MUST include the 'subQuestions' property containing all sub-questions (each with 'id', 'type', 'question', 'options', 'correctAnswer', 'marks'). Sub-questions must NOT be placed as sibling items in the section questions array.
 - ERROR CORRECTION RULE: Error Correction is NOT a separate question type or section. Any grammatical error-correction or sentence revision items must be formulated as "type": "short_answer" within the Short Answer section.
+- SHORT ANSWER PRACTICAL APPLICATION MANDATE:
+  Student-facing questions must assess practical language use. Do not generate theoretical grammar-definition questions unless explicitly required by the blueprint. Short Answer questions must require students to produce, transform, complete, correct, or apply language in context.
+  Prioritize: USE > RECALL, APPLICATION > DEFINITION, CONTEXT > THEORY, PRODUCTION > TERMINOLOGY.
+  Distribute Short Answer questions across practical tasks:
+  1. Complete or rewrite a sentence (e.g., "Rewrite using the present perfect: I finish my homework." -> "I have finished my homework.")
+  2. Correct a grammatical mistake (e.g., "Correct the sentence: She have visited the museum." -> "She has visited the museum.")
+  3. Create a sentence using a given word (e.g., "Write one sentence using 'already' and the present perfect.")
+  4. Respond to a realistic situation (e.g., "Your friend asks whether you have eaten lunch. Write a short answer.")
+  5. Transform a sentence (e.g., "Change into a negative sentence: They have finished the work." -> "They have not finished the work.")
+  6. Form a question (e.g., "Make a question from these words: you / finish / your homework" -> "Have you finished your homework?")
+  7. Fill a meaningful gap where typing is required (e.g., "Complete the sentence: I ________ never ________ to Japan.")
+  8. Use a time expression correctly (e.g., "Write a sentence using 'for five years' and the present perfect.")
+  9. Correct verb form (e.g., "Complete with the correct form: She has ________ (write) three letters." -> "written")
+  10. Contextual response (e.g., "You have just finished your homework. Write a sentence to tell your teacher.")
+  NEVER generate theoretical definition questions such as:
+  - "What is the use of...?"
+  - "What is the difference between...?"
+  - "Which auxiliary verbs are used in...?"
+  - "When do we use...?"
+  - "What is the structure of...?"
+  - "Which subjects take 'have' / 'has'?"
+  - "Explain the rule..."
+  - "Define the tense..."
+  - "Describe the grammar rule..."
+- SHORT ANSWER NO-OPTIONS RULE:
+  Never create options for a short_answer question. Short Answer is strictly an open-response question and must be rendered as a text input. DO NOT output an "options" field for short_answer questions.
+  If a question has multiple acceptable responses, list them in "acceptedAnswers": ["...", "..."], NEVER in "options".
 ${blueprintItems.some((i) => i.enabled && i.id === 'cloze') ? `- Cloze Passage MUST contain a contextual passage with numbered '[blank_1]', '[blank_2]', etc., accompanied by a 'blanks' array where each blank has an 'id', 'correctAnswer', and 'acceptedAnswers'. Also provide a 'wordBank' array.\n` : ''}${requiresVideo && videoTranscript ? `- Video Questions MUST be strictly derived from this Video Transcript:\n"""\n${videoTranscript}\n"""\n` : ''}${requiresAudio && audioTranscript ? `- Audio Questions MUST be strictly derived from this Audio Transcript:\n"""\n${audioTranscript}\n"""\n` : ''}
 ================================================================================
 EXACT JSON ROOT STRUCTURE & ENVELOPE (MANDATORY)
@@ -560,11 +587,12 @@ ${activeBlueprint.map((b, idx) => {
     sampleQ = `          {
             "id": "q${idx + 1}_1",
             "type": "short_answer",
-            "question": "Briefly describe the key distinction between these two rules.",
-            "correctAnswer": "Model answer explaining distinction concisely.",
+            "question": "Rewrite the following sentence into the negative form: 'They have completed the assigned project.'",
+            "correctAnswer": "They have not completed the assigned project.",
+            "acceptedAnswers": ["They haven't completed the assigned project.", "They have not completed the assigned project."],
             "marks": ${b.marksPerItem},
             "difficulty": "${difficulty.toLowerCase()}",
-            "explanation": "Rubric criteria for teacher evaluation."
+            "explanation": "Add 'not' after auxiliary 'have' to form the negative present perfect."
           }`;
   } else if (b.type === 'reading_comprehension') {
     sampleQ = `          {

@@ -159,21 +159,27 @@ class OcrEvaluationQueue {
 
       // 5. Save structured evaluation data to Supabase
       if (this.serverSupabase) {
+        const updatePayload = {
+          score: validated.score,
+          ai_original_score: validated.score,
+          final_score: validated.score,
+          percentage: validated.percentage,
+          performance: validated.performance,
+          breakdown_json: validated.breakdown,
+          feedback: validated.feedback,
+          ai_original_feedback: validated.feedback,
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        if (job.taskId || job.assignmentId) {
+          updatePayload.assignment_id = job.taskId || job.assignmentId;
+        }
+
         const { data: savedData, error: dbError } = await this.serverSupabase
           .from('ocr_evaluations')
-          .update({
-            score: validated.score,
-            ai_original_score: validated.score,
-            final_score: validated.score,
-            percentage: validated.percentage,
-            performance: validated.performance,
-            breakdown_json: validated.breakdown,
-            feedback: validated.feedback,
-            ai_original_feedback: validated.feedback,
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload)
           .eq('id', evaluationId)
           .select('*')
           .maybeSingle();
@@ -182,6 +188,50 @@ class OcrEvaluationQueue {
           console.error(`[OCR Engine] Persist warning: ${dbError.message}`);
         } else if (savedData) {
           updatedEvalRecord = savedData;
+        }
+
+        // 5b. UNIFY WITH TASK SUBMISSIONS: If associated with a Task, upsert into assignment_submissions
+        if (job.taskId || job.assignmentId) {
+          const effectiveTaskId = job.taskId || job.assignmentId;
+          try {
+            const { data: taskData } = await this.serverSupabase
+              .from('assignments')
+              .select('id, version, points, title')
+              .eq('id', effectiveTaskId)
+              .maybeSingle();
+
+            const { error: taskSubErr } = await this.serverSupabase
+              .from('assignment_submissions')
+              .upsert(
+                {
+                  assignment_id: effectiveTaskId,
+                  classroom_id: job.classroomId,
+                  student_id: job.studentId,
+                  status: 'graded',
+                  ocr_evaluation_id: evaluationId,
+                  file_urls: job.temporaryFileKey ? [job.temporaryFileKey] : [],
+                  points_awarded: Math.round(validated.score),
+                  final_score: validated.score,
+                  ai_score: validated.score,
+                  percentage: validated.percentage,
+                  teacher_feedback: validated.feedback,
+                  is_ai_graded: true,
+                  task_version: taskData?.version || 1,
+                  completed_at: new Date().toISOString(),
+                  submitted_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                },
+                { onConflict: 'assignment_id,student_id' }
+              );
+
+            if (taskSubErr) {
+              console.warn('[OCR Engine] Notice: Could not sync to assignment_submissions:', taskSubErr.message);
+            } else {
+              console.log(`[OCR Engine] Successfully unified with Task submission (${effectiveTaskId}) for student ${job.studentId}`);
+            }
+          } catch (syncErr) {
+            console.warn('[OCR Engine] Warning on task submission sync:', syncErr.message);
+          }
         }
       }
 

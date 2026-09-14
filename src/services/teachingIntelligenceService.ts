@@ -171,6 +171,48 @@ export interface TeacherChatResponse {
   error?: string;
 }
 
+export interface RecentLearningEvidenceItem {
+  activityId: string;
+  activityType: 'task' | 'quiz' | 'assessment' | 'competition' | string;
+  rawActivityType: string;
+  activityTitle: string;
+  topic: string;
+  submissionsCount: number;
+  studentsCount: number;
+  averagePercentage: number | null;
+  passRate: number | null;
+  highestScore: number | null;
+  lowestScore: number | null;
+  performanceDistribution: {
+    strong: number;
+    steady: number;
+    weak: number;
+  };
+  latestCompletedAt: string | null;
+  aiShortInsight: string;
+  aiRecommendation: string;
+  studentResults?: Array<{
+    studentId: string;
+    studentName: string;
+    score: number | null;
+    percentage: number | null;
+    completedAt: string;
+  }>;
+}
+
+export interface WeakAreaVisualData {
+  hasWeakArea: boolean;
+  weakestTopic: string | null;
+  weakestScore: number | null;
+  topicsComparison: Array<{
+    topic: string;
+    score: number;
+    isWeak: boolean;
+  }>;
+  shortAnalysis: string;
+  recommendation: string;
+}
+
 export interface ClassroomMetricsSummary {
   classroom: {
     id: string;
@@ -199,6 +241,9 @@ export interface ClassroomMetricsSummary {
   topic_performance: TopicPerformance[];
   students_needing_attention: StudentAttentionItem[];
   students?: StudentIntelligenceDetail[];
+  recent_learning_evidence?: RecentLearningEvidenceItem[];
+  weak_area_visual_data?: WeakAreaVisualData | null;
+  activity_breakdown?: any;
   data_hash: string;
   computed_at: string;
 }

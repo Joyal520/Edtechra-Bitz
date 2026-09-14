@@ -5530,6 +5530,8 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       evaluationId,
       classroomId,
       studentId,
+      taskId: reqTaskId,
+      assignmentId: reqAssignmentId,
       category,
       maxMarks = 100,
       title = '',
@@ -5538,6 +5540,8 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       studentName: reqStudentName,
       imageBase64
     } = req.body;
+
+    const taskId = reqTaskId || reqAssignmentId || null;
 
     if (!classroomId || !studentId) {
       return res.status(400).json({ success: false, error: 'classroomId and studentId are required.' });
@@ -5594,21 +5598,27 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
 
     // Insert initial record with status = 'processing' in Supabase
     if (serverSupabase) {
+      const initialRecord = {
+        id: targetEvalId,
+        teacher_id: authData.user.id,
+        class_id: classroomId,
+        student_id: studentId,
+        category,
+        title: (title || '').trim(),
+        max_marks: marks,
+        status: 'processing',
+        temporary_file_key: temporaryFileKey || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      if (taskId) {
+        initialRecord.assignment_id = taskId;
+      }
+
       const { error: insertError } = await serverSupabase
         .from('ocr_evaluations')
-        .upsert({
-          id: targetEvalId,
-          teacher_id: authData.user.id,
-          class_id: classroomId,
-          student_id: studentId,
-          category,
-          title: (title || '').trim(),
-          max_marks: marks,
-          status: 'processing',
-          temporary_file_key: temporaryFileKey || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+        .upsert(initialRecord);
 
       if (insertError) {
         console.error('[OCR Job] Supabase insert warning:', insertError.message);
@@ -5629,7 +5639,8 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       title: (title || '').trim(),
       temporaryFileKey,
       fileContentType,
-      imageBase64
+      imageBase64,
+      taskId
     };
 
     const completedData = await ocrEvaluationQueue.processJob(jobPayload);
@@ -6745,7 +6756,10 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     const {
       studentAnswers = [],
       textResponse = '',
-      fileUrls = []
+      fileUrls = [],
+      imageBase64,
+      handwrittenImageBase64,
+      temporaryFileKey
     } = req.body;
 
     if (!serverSupabase) {
@@ -6762,6 +6776,82 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
 
     if (tErr || !task) {
       return res.status(404).json({ success: false, error: 'Task not found.' });
+    }
+
+    const rawImageBase64 = imageBase64 || handwrittenImageBase64;
+    const hasHandwrittenWork = Boolean(rawImageBase64 || temporaryFileKey);
+
+    // WORKFLOW A (Option B): Student submits handwritten work
+    if (hasHandwrittenWork) {
+      const evaluationId = crypto.randomUUID();
+      const studentName = authData.profile?.full_name || authData.user.email?.split('@')[0] || 'Student';
+
+      let ocrCategory = 'Paragraph Writing';
+      const titleLower = (task.title || '').toLowerCase();
+      if (titleLower.includes('essay')) ocrCategory = 'Essay Writing';
+      else if (titleLower.includes('story')) ocrCategory = 'Story Writing';
+      else if (titleLower.includes('letter')) ocrCategory = 'Letter Writing';
+      else if (titleLower.includes('neat') || titleLower.includes('handwriting')) ocrCategory = 'Handwritten Neatness';
+      else if (task.category === 'lesson' || task.category === 'activity' || task.category === 'resource') ocrCategory = 'Other';
+
+      await serverSupabase
+        .from('ocr_evaluations')
+        .upsert({
+          id: evaluationId,
+          assignment_id: taskId,
+          teacher_id: task.created_by,
+          class_id: task.classroom_id,
+          student_id: authData.user.id,
+          category: ocrCategory,
+          title: (task.title || '').trim(),
+          max_marks: task.points || 100,
+          status: 'processing',
+          temporary_file_key: temporaryFileKey || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+      const jobPayload = {
+        evaluationId,
+        classroomId: task.classroom_id,
+        teacherId: task.created_by,
+        studentId: authData.user.id,
+        studentName,
+        teacherName: 'Teacher',
+        classroomTitle: 'Classroom',
+        category: ocrCategory,
+        maxMarks: task.points || 100,
+        title: (task.title || '').trim(),
+        temporaryFileKey,
+        fileContentType: 'image/jpeg',
+        imageBase64: rawImageBase64,
+        taskId
+      };
+
+      const completedEval = await ocrEvaluationQueue.processJob(jobPayload);
+
+      const { data: finalSub } = await serverSupabase
+        .from('assignment_submissions')
+        .select('*')
+        .eq('assignment_id', taskId)
+        .eq('student_id', authData.user.id)
+        .maybeSingle();
+
+      return res.json({
+        success: true,
+        data: finalSub || {
+          id: evaluationId,
+          assignment_id: taskId,
+          classroom_id: task.classroom_id,
+          student_id: authData.user.id,
+          status: 'graded',
+          final_score: completedEval?.final_score ?? completedEval?.score,
+          points_awarded: Math.round(completedEval?.final_score ?? completedEval?.score ?? 0),
+          percentage: completedEval?.percentage,
+          teacher_feedback: completedEval?.feedback,
+          completed_at: new Date().toISOString()
+        }
+      });
     }
 
     // Execute server-authoritative hybrid auto-grading pipeline

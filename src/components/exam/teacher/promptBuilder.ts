@@ -205,7 +205,7 @@ QUALITY & ASSESSMENT RULES
 5. Matching: Provide at least 3 distinct, non-overlapping pairs with concise left and right items.
 6. Reorder: Provide clear sequential, chronological, or logical steps. Ensure 'correctOrder' holds the exact item IDs in chronological order.
 7. Reading Comprehension: If included, generate a rich, coherent passage appropriate for the grade level, followed by 3-5 distinct questions (factual, inferential, and vocabulary-in-context).
-8. Essays & Short Answer: Provide clear rubrics and sample answers for teacher reference.
+8. Short Answer & Essays: Short Answer questions must test practical language application (sentence rewrite, error correction, sentence completion, transformation, question formation, contextual response). NEVER generate theoretical grammar-definition questions ("What is the use...", "Explain the rule...", "What is the structure..."). Short Answer questions MUST NOT contain options. For multiple valid responses, provide 'acceptedAnswers' array. Provide clear rubrics and sample answers for teacher reference.
 9. Unique IDs: Every question must have a unique ID (e.g., "q1", "q2", "q3", etc.).
 10. Explanations: Every objective question MUST have a clear, educational explanation explaining WHY the correct answer is right.
 

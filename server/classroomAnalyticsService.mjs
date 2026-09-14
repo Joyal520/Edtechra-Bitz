@@ -855,6 +855,138 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     completedAt: e.completed_at
   }));
 
+  // 7. Grouped Recent Learning Evidence (Unified across 4 Sources: Tasks, Quizzes, Assessments, Competitions)
+  const activityMap = new Map();
+  for (const ev of events) {
+    if (!ev.activity_id) continue;
+    const key = `${ev.activity_type}:${ev.activity_id}`;
+    if (!activityMap.has(key)) {
+      activityMap.set(key, {
+        activityId: ev.activity_id,
+        activityType: ev.activity_type === 'assignment' ? 'task'
+          : ev.activity_type === 'live_quiz' ? 'quiz'
+          : ev.activity_type === 'exam' ? 'assessment'
+          : ev.activity_type === 'ai_challenge' || ev.activity_type === 'competition' ? 'competition'
+          : ev.activity_type,
+        rawActivityType: ev.activity_type,
+        activityTitle: ev.activity_title || 'Class Activity',
+        topic: ev.topic || ev.category || 'General',
+        events: []
+      });
+    }
+    activityMap.get(key).events.push(ev);
+  }
+
+  const recentLearningEvidence = [];
+  for (const [key, grp] of activityMap.entries()) {
+    const actEvents = grp.events;
+    const scored = actEvents.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
+    const totalSubmissions = actEvents.length;
+    const distinctStudents = new Set(actEvents.map(e => e.student_id).filter(Boolean));
+    const studentsCount = distinctStudents.size;
+
+    let averagePercentage = null;
+    let highestScore = null;
+    let lowestScore = null;
+    let passCount = 0;
+    let strongCount = 0;
+    let weakCount = 0;
+
+    if (scored.length > 0) {
+      const sum = scored.reduce((s, e) => s + Number(e.percentage), 0);
+      averagePercentage = Number((sum / scored.length).toFixed(1));
+      const percentages = scored.map(e => Number(e.percentage));
+      highestScore = Math.max(...percentages);
+      lowestScore = Math.min(...percentages);
+      passCount = scored.filter(e => Number(e.percentage) >= 50).length;
+      strongCount = scored.filter(e => Number(e.percentage) >= ANALYTICS_CONFIG.STRONG_SCORE_THRESHOLD).length;
+      weakCount = scored.filter(e => Number(e.percentage) < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD).length;
+    }
+
+    const passRate = scored.length > 0
+      ? Number(((passCount / scored.length) * 100).toFixed(1))
+      : null;
+
+    const latestDate = actEvents
+      .map(e => e.completed_at)
+      .filter(Boolean)
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null;
+
+    // Factual Short AI Analysis & Recommendation based strictly on computed results
+    let aiShortInsight = 'Not enough evidence yet.';
+    let aiRecommendation = 'Not enough evidence yet.';
+
+    if (averagePercentage != null && scored.length > 0) {
+      if (averagePercentage < 60) {
+        aiShortInsight = `Students are struggling with ${grp.topic} (averaging ${averagePercentage}%), with ${weakCount} student(s) below mastery threshold.`;
+        aiRecommendation = `Review foundational concepts for ${grp.topic} with guided examples, then give students a short 5-minute practice activity.`;
+      } else if (averagePercentage >= 75) {
+        aiShortInsight = `Students demonstrated solid mastery in ${grp.topic} with a class average of ${averagePercentage}%.`;
+        aiRecommendation = `Reinforce key takeaways and challenge students with progressive application questions.`;
+      } else {
+        aiShortInsight = `Students showed steady comprehension in ${grp.topic} with an average of ${averagePercentage}%.`;
+        aiRecommendation = `Clarify common misconceptions observed during the activity before moving to the next unit.`;
+      }
+    }
+
+    recentLearningEvidence.push({
+      activityId: grp.activityId,
+      activityType: grp.activityType,
+      rawActivityType: grp.rawActivityType,
+      activityTitle: grp.activityTitle,
+      topic: grp.topic,
+      submissionsCount: totalSubmissions,
+      studentsCount,
+      averagePercentage,
+      passRate,
+      highestScore,
+      lowestScore,
+      performanceDistribution: {
+        strong: strongCount,
+        steady: scored.length - strongCount - weakCount,
+        weak: weakCount
+      },
+      latestCompletedAt: latestDate,
+      aiShortInsight,
+      aiRecommendation,
+      studentResults: actEvents.slice(0, 30).map(e => ({
+        studentId: e.student_id,
+        studentName: studentNameMap.get(e.student_id) || 'Student',
+        score: e.score != null ? Number(e.score) : null,
+        percentage: e.percentage != null ? Number(e.percentage) : null,
+        completedAt: e.completed_at
+      }))
+    });
+  }
+
+  // Sort by latest completed date
+  recentLearningEvidence.sort((a, b) => {
+    const timeA = a.latestCompletedAt ? new Date(a.latestCompletedAt).getTime() : 0;
+    const timeB = b.latestCompletedAt ? new Date(b.latestCompletedAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  // 8. Visual Weak Area Identification (Example: Simple Past Negative 38% vs Positive 76%)
+  const sortedTopics = [...(topicAnalytics || [])].sort((a, b) => (a.averagePercentage ?? 100) - (b.averagePercentage ?? 100));
+  const identifiedWeakArea = sortedTopics.find(t => t.averagePercentage != null && t.averagePercentage < 65) || null;
+
+  const weakAreaVisualData = {
+    hasWeakArea: Boolean(identifiedWeakArea),
+    weakestTopic: identifiedWeakArea ? identifiedWeakArea.topic : null,
+    weakestScore: identifiedWeakArea ? Math.round(identifiedWeakArea.averagePercentage) : null,
+    topicsComparison: sortedTopics.slice(0, 6).map(t => ({
+      topic: t.topic,
+      score: t.averagePercentage != null ? Math.round(t.averagePercentage) : 0,
+      isWeak: identifiedWeakArea ? t.topic === identifiedWeakArea.topic : false
+    })),
+    shortAnalysis: identifiedWeakArea
+      ? `Your students are struggling with ${identifiedWeakArea.topic} (${Math.round(identifiedWeakArea.averagePercentage)}% accuracy).`
+      : (sortedTopics.length > 0 ? 'All assessed topic areas are currently performing at or above baseline.' : 'Not enough evidence yet.'),
+    recommendation: identifiedWeakArea
+      ? `Review core principles of ${identifiedWeakArea.topic} with direct modeling, then give students a focused practice task.`
+      : (sortedTopics.length > 0 ? 'Continue regular progressive assessments to track topic growth.' : 'Not enough evidence yet.')
+  };
+
   return {
     classroom: {
       id: classroom.id,
@@ -879,6 +1011,8 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     topWeaknesses,
     studentsNeedingAttention,
     recentActivity,
+    recentLearningEvidence,
+    weakAreaVisualData,
     students: studentAnalytics,
     activityBreakdown,
     topics: topicAnalytics,

@@ -4,7 +4,9 @@ import {
   XCircle,
   Printer,
   Send,
-  Loader2
+  Loader2,
+  Upload,
+  Trash2
 } from 'lucide-react';
 import {
   ClassroomTask,
@@ -17,7 +19,11 @@ interface PremiumTaskPageProps {
   task: ClassroomTask;
   submission?: TaskSubmission | null;
   isPreview?: boolean;
-  onSubmit?: (answers: Array<{ question_id: string; student_answer: any }>, textResponse?: string) => Promise<void>;
+  onSubmit?: (
+    answers: Array<{ question_id: string; student_answer: any }>,
+    textResponse?: string,
+    handwrittenImageBase64?: string
+  ) => Promise<void>;
   isSubmitting?: boolean;
 }
 
@@ -41,6 +47,10 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   });
 
   const [textResponse, setTextResponse] = useState<string>(submission?.text_response || '');
+  const [submissionMode, setSubmissionMode] = useState<'text' | 'handwritten'>('text');
+  const [handwrittenPreview, setHandwrittenPreview] = useState<string | null>(null);
+  const [handwrittenBase64, setHandwrittenBase64] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(Boolean(submission && submission.status !== 'draft'));
 
   const questions: TaskQuestion[] = Array.isArray(task.questions) ? task.questions : [];
@@ -54,6 +64,31 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
     }));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setFileError('Please select an image file (.jpg, .jpeg, .png, or .webp). PDF and document formats are not supported.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError('Image size exceeds 10MB limit. Please choose a smaller photo.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setHandwrittenPreview(result);
+      setHandwrittenBase64(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onSubmit || isSubmitting) return;
@@ -63,7 +98,11 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
       student_answer: ans
     }));
 
-    await onSubmit(formattedAnswers, textResponse);
+    await onSubmit(
+      formattedAnswers,
+      textResponse,
+      submissionMode === 'handwritten' ? handwrittenBase64 || undefined : undefined
+    );
     setSubmitted(true);
   };
 
@@ -353,20 +392,129 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
             </div>
           )}
 
-          {/* Standard Submission Box if no interactive questions */}
-          {questions.length === 0 && task.category !== 'resource' && (
-            <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
-              <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-                Your Response / Work
-              </span>
-              <textarea
-                rows={5}
-                disabled={submitted}
-                value={textResponse}
-                onChange={(e) => setTextResponse(e.target.value)}
-                placeholder="Type your response or assignment notes here..."
-                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-              />
+          {/* Handwritten Evaluation Feedback if present */}
+          {submission?.ocr_evaluation_id && (
+            <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-xs font-black uppercase text-amber-900 tracking-wider">
+                    Handwritten Work Evaluated
+                  </span>
+                </div>
+                <span className="text-xs font-black text-amber-900">
+                  Score: {submission.final_score ?? submission.points_awarded ?? 0} / {task.points} pts
+                  {submission.percentage != null && ` (${submission.percentage}%)`}
+                </span>
+              </div>
+              {submission.teacher_feedback && (
+                <p className="text-xs text-amber-950 font-medium leading-relaxed bg-white/70 p-3 rounded-xl border border-amber-100">
+                  {submission.teacher_feedback}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Submission Box for tasks allowing responses or handwritten work */}
+          {task.category !== 'resource' && (
+            <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                    Submit Your Work
+                  </span>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    You can type your answer or upload a clear photo of your handwritten work.
+                  </p>
+                </div>
+                {!submitted && (
+                  <div className="flex items-center p-1 bg-white border border-slate-200 rounded-xl shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSubmissionMode('text')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        submissionMode === 'text'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Type Response
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSubmissionMode('handwritten')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        submissionMode === 'handwritten'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Upload Handwritten Work
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {submissionMode === 'text' ? (
+                <textarea
+                  rows={questions.length > 0 ? 3 : 5}
+                  disabled={submitted}
+                  value={textResponse}
+                  onChange={(e) => setTextResponse(e.target.value)}
+                  placeholder="Type your explanation, summary, or response notes here..."
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {handwrittenPreview ? (
+                    <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5 p-3 flex flex-col items-center">
+                      <img
+                        src={handwrittenPreview}
+                        alt="Handwritten Work Preview"
+                        className="max-h-80 object-contain rounded-lg shadow-sm"
+                      />
+                      {!submitted && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHandwrittenPreview(null);
+                            setHandwrittenBase64(null);
+                          }}
+                          className="mt-3 px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove and select different image</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-6 flex flex-col items-center justify-center gap-2.5 cursor-pointer bg-white transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div className="text-center">
+                        <span className="text-xs font-black text-slate-800 block">
+                          Take a photo or upload handwritten worksheet
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Supports JPG, JPEG, PNG, or WEBP (up to 10MB)
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={handleFileChange}
+                        disabled={submitted}
+                      />
+                    </label>
+                  )}
+
+                  {fileError && (
+                    <p className="text-xs text-rose-600 font-bold">{fileError}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -390,19 +538,19 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               ) : (
                 <button
                   type="button"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (submissionMode === 'handwritten' && !handwrittenBase64)}
                   onClick={handleSubmit}
                   className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Evaluating Answers...</span>
+                      <span>Evaluating Submission...</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Submit Assignment</span>
+                      <span>Submit your Task</span>
                     </>
                   )}
                 </button>

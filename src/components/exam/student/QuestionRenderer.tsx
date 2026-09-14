@@ -180,7 +180,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
   };
 
   const coreCard = (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-4 text-slate-900 question-card question-content [color-scheme:light]">
+    <div key={question.id} className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-4 text-slate-900 question-card question-content [color-scheme:light]">
       {/* Question Header: Section, Question Number & Marks */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2.5">

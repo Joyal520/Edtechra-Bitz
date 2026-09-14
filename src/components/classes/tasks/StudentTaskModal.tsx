@@ -49,7 +49,8 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
 
   const handleSubmit = async (
     answers: Array<{ question_id: string; student_answer: any }>,
-    textResponse?: string
+    textResponse?: string,
+    handwrittenImageBase64?: string
   ) => {
     setSubmitting(true);
     setError(null);
@@ -57,7 +58,8 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
     try {
       const res = await classroomTaskService.submitTask(taskId, {
         studentAnswers: answers,
-        textResponse
+        textResponse,
+        handwrittenImageBase64
       });
 
       if (res.error) {

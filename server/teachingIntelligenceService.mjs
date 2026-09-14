@@ -303,6 +303,9 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       students_needing_attention: analytics.studentsNeedingAttention || [],
       students: analytics.students || [],
       writing_intelligence: writingIntelligence,
+      recent_learning_evidence: analytics.recentLearningEvidence || [],
+      weak_area_visual_data: analytics.weakAreaVisualData || null,
+      activity_breakdown: analytics.activityBreakdown || {},
       data_hash: dataHash,
       computed_at: new Date().toISOString()
     };

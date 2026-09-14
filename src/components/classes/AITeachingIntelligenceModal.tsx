@@ -42,6 +42,10 @@ import { AITeachingPlannerTab } from './planner/AITeachingPlannerTab';
 import { AIActionsDashboard } from './actions/AIActionsDashboard';
 import { AIDebugBadge } from './ai/AIDebugBadge';
 import { AIUsageAdminModal } from './ai/AIUsageAdminModal';
+import { ActivitySourceBarChart } from './charts/ActivitySourceBarChart';
+import { WeakAreaVisualizer } from './charts/WeakAreaVisualizer';
+import { ClassPerformanceDonutChart } from './charts/ClassPerformanceDonutChart';
+import { RecentLearningEvidenceFeed } from './RecentLearningEvidenceFeed';
 
 export type ModalTab = 'intelligence' | 'planner' | 'actions' | 'students' | 'chat' | 'recent-exams' | '30day-report';
 
@@ -742,7 +746,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 </div>
               </div>
 
-              {/* RECENT EXAM REPORTS SECTION (AUTOMATICALLY SYNCED) */}
+              {/* MULTI-SOURCE ACTIVITY BREAKDOWN & PERFORMANCE DISTRIBUTION CHARTS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ActivitySourceBarChart activityBreakdown={data?.metrics?.activity_breakdown} />
+                <ClassPerformanceDonutChart
+                  students={data?.metrics?.students}
+                  totalStudents={data?.metrics?.class_summary?.total_students}
+                />
+              </div>
+
+              {/* RECENT LEARNING EVIDENCE FEED (MULTI-SOURCE: TASK, QUIZ, ASSESSMENT, COMPETITION) */}
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
@@ -752,58 +765,27 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                          Recent Exam Reports
+                          Recent Learning Evidence
                         </h3>
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200/60">
-                          Automatically Synced
+                          Tasks • Quizzes • Assessments • Competitions
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-medium">
-                        Completed exam outcomes and AI diagnostic analysis for this classroom
+                        Unified student learning results and AI diagnostic evidence across all classroom activities
                       </p>
                     </div>
                   </div>
-
-                  {recentExams.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('recent-exams');
-                        setSelectedExamId(null);
-                      }}
-                      className="text-xs font-black text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer transition-all"
-                    >
-                      <span>View All ({recentExams.length})</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                 </div>
 
-                {loadingRecentExams ? (
-                  <div className="py-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                    <span>Loading recent exam reports...</span>
-                  </div>
-                ) : recentExams.length === 0 ? (
-                  <div className="p-6 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 text-center space-y-2">
-                    <BookOpen className="w-7 h-7 text-slate-400 mx-auto" />
-                    <p className="text-xs font-bold text-slate-700">No exams submitted yet</p>
-                    <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                      Once students take exams in this class, detailed performance reports and AI teaching recommendations will appear here automatically.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {recentExams.slice(0, 4).map((exam) => (
-                      <RecentExamCard
-                        key={exam.id}
-                        exam={exam}
-                        subject={classroom.subject}
-                        onViewAnalysis={() => handleOpenExamAnalysis(exam.id)}
-                      />
-                    ))}
-                  </div>
-                )}
+                <RecentLearningEvidenceFeed
+                  evidenceList={data?.metrics?.recent_learning_evidence}
+                  onOpenActivity={(type, actId) => {
+                    if (type === 'assessment' || type === 'exam') {
+                      handleOpenExamAnalysis(actId);
+                    }
+                  }}
+                />
               </div>
 
               {/* CLEAN EMPTY STATE WHEN NO ANALYSIS GENERATED YET */}
@@ -958,58 +940,62 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               </div>
 
               {/* 4. TOPIC & SKILL PERFORMANCE ENGINE */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                      Topic & Skill Performance Distribution
-                    </h4>
-                    <p className="text-[11px] text-slate-400 font-medium">
-                      Continuous mastery tracking across all digital assignments & exams
-                    </p>
+              {data?.metrics?.weak_area_visual_data ? (
+                <WeakAreaVisualizer data={data.metrics.weak_area_visual_data} />
+              ) : (
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                        Topic & Skill Performance Distribution
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        Continuous mastery tracking across all digital assignments & exams
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400">Target: 70%+</span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400">Target: 70%+</span>
-                </div>
 
-                <div className="space-y-3">
-                  {topics.map((t, idx) => {
-                    const isWeak = t.score < 65;
-                    const isStrong = t.score >= 80;
+                  <div className="space-y-3">
+                    {topics.map((t, idx) => {
+                      const isWeak = t.score < 65;
+                      const isStrong = t.score >= 80;
 
-                    return (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs font-bold">
-                          <span className="text-slate-800">{t.topic}</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                              isWeak
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : isStrong
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}>
-                              {t.score}% ({t.change >= 0 ? `+${t.change}%` : `${t.change}%`})
-                            </span>
+                      return (
+                        <div key={idx} className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-bold">
+                            <span className="text-slate-800">{t.topic}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                isWeak
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : isStrong
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {t.score}% ({t.change >= 0 ? `+${t.change}%` : `${t.change}%`})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isWeak
+                                  ? 'bg-rose-500'
+                                  : isStrong
+                                  ? 'bg-emerald-500'
+                                  : 'bg-indigo-500'
+                              }`}
+                              style={{ width: `${Math.min(100, t.score)}%` }}
+                            />
                           </div>
                         </div>
-
-                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isWeak
-                                ? 'bg-rose-500'
-                                : isStrong
-                                ? 'bg-emerald-500'
-                                : 'bg-indigo-500'
-                            }`}
-                            style={{ width: `${Math.min(100, t.score)}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 5. STUDENT WRITING & CHALLENGE INTELLIGENCE */}
               <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs space-y-5">
