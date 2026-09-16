@@ -294,6 +294,11 @@ export interface ClassroomStats {
 
 export type OCREvaluationCategory =
   | 'Paragraph Writing'
+  | 'Grammar'
+  | 'Vocabulary'
+  | 'Reading'
+  | 'Writing'
+  | 'Comprehension'
   | 'Essay Writing'
   | 'Story Writing'
   | 'Letter Writing'

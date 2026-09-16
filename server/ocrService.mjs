@@ -15,6 +15,11 @@ import { generateEvaluationReportPdf } from './pdfReportService.mjs';
 
 export const OCR_CATEGORIES = [
   'Paragraph Writing',
+  'Grammar',
+  'Vocabulary',
+  'Reading',
+  'Writing',
+  'Comprehension',
   'Essay Writing',
   'Story Writing',
   'Letter Writing',
@@ -23,6 +28,36 @@ export const OCR_CATEGORIES = [
 ];
 
 export const CATEGORY_CRITERIA_MAP = {
+  'Grammar': [
+    { criterion: 'Sentence Structure & Syntax', weight: 0.30 },
+    { criterion: 'Punctuation & Capitalization', weight: 0.25 },
+    { criterion: 'Tense & Agreement', weight: 0.25 },
+    { criterion: 'Clarity & Flow', weight: 0.20 }
+  ],
+  'Vocabulary': [
+    { criterion: 'Word Choice & Precision', weight: 0.35 },
+    { criterion: 'Context Appropriateness', weight: 0.25 },
+    { criterion: 'Spelling & Accuracy', weight: 0.25 },
+    { criterion: 'Vocabulary Range', weight: 0.15 }
+  ],
+  'Reading': [
+    { criterion: 'Comprehension & Understanding', weight: 0.35 },
+    { criterion: 'Inference & Context Clues', weight: 0.25 },
+    { criterion: 'Vocabulary Recognition', weight: 0.20 },
+    { criterion: 'Response Accuracy', weight: 0.20 }
+  ],
+  'Writing': [
+    { criterion: 'Content & Relevance', weight: 0.30 },
+    { criterion: 'Organization & Structure', weight: 0.25 },
+    { criterion: 'Grammar & Mechanics', weight: 0.25 },
+    { criterion: 'Vocabulary & Style', weight: 0.20 }
+  ],
+  'Comprehension': [
+    { criterion: 'Question Comprehension', weight: 0.35 },
+    { criterion: 'Answer Accuracy', weight: 0.30 },
+    { criterion: 'Text Evidence & Explanation', weight: 0.20 },
+    { criterion: 'Completeness', weight: 0.15 }
+  ],
   'Paragraph Writing': [
     { criterion: 'Content and Relevance', weight: 0.25 },
     { criterion: 'Organization & Flow', weight: 0.15 },
@@ -369,7 +404,7 @@ class OcrEvaluationQueue {
       return this.generateHeuristicEvaluation({ category, maxMarks, title });
     }
 
-    const criteriaList = CATEGORY_CRITERIA_MAP[category] || CATEGORY_CRITERIA_MAP['Other'];
+    const criteriaList = CATEGORY_CRITERIA_MAP[category] || (title && CATEGORY_CRITERIA_MAP[title]) || CATEGORY_CRITERIA_MAP['Other'];
     const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
 
     const promptText = `You are an educational worksheet evaluator for EdTechra Digital Classroom.
@@ -529,6 +564,11 @@ Required JSON Schema:
     });
 
     const feedbackMap = {
+      'Grammar': 'Strong grasp of sentence mechanics. Focus on consistent verb tenses and precise comma usage.',
+      'Vocabulary': 'Rich vocabulary choices throughout. Continue expanding descriptive word choices in context.',
+      'Reading': 'Demonstrated solid text comprehension and retrieval. Practice drawing deeper inferences from the passage.',
+      'Writing': 'Well-structured response with clear focus. Work on smoother transitions between key ideas.',
+      'Comprehension': 'Clear understanding of the key questions. Support your answers with specific details from the text.',
       'Paragraph Writing': 'Well-constructed paragraph with clear main ideas. Focus on sentence variety and expanding descriptive vocabulary.',
       'Essay Writing': 'Well-organized arguments and cohesive development. Enhance transition phrases and refine grammatical precision.',
       'Story Writing': 'Creative storyline with engaging character dynamics. Work on descriptive pacing and punctuation consistency.',

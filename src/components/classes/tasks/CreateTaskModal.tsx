@@ -156,19 +156,19 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* EdTechra Light Header */}
-        <div className="p-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+        {/* EdTechra High-Contrast Header */}
+        <div className="p-5 sm:p-6 bg-gradient-to-r from-[#071a1c] via-[#0d2a2d] to-[#173B3F] text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-200/70 text-teal-700 flex items-center justify-center shadow-xs">
-              <FileText className="w-5 h-5" />
+            <div className="w-11 h-11 rounded-2xl bg-[#087477]/80 border border-teal-400/30 text-teal-200 flex items-center justify-center shadow-xs">
+              <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 border border-teal-200/80 px-2.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-black uppercase tracking-wider text-teal-300 bg-teal-900/60 border border-teal-500/40 px-2.5 py-0.5 rounded-full">
                   Task Workspace
                 </span>
               </div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
                 Create & Assign Task
               </h2>
             </div>
@@ -177,25 +177,25 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handlePublish} className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/40">
+        <form onSubmit={handlePublish} className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 bg-[#F8FCFB]">
           {error && (
-            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-bold flex items-center gap-2 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="p-3.5 bg-rose-50 border-2 border-rose-200 rounded-2xl text-xs text-rose-900 font-bold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Section 1: Title & Topic */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-800 flex items-center gap-1">
+              <label className="text-xs font-black text-[#173B3F] flex items-center gap-1">
                 Task Title <span className="text-rose-500">*</span>
               </label>
               <input
@@ -204,26 +204,28 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., My Favourite Hobby, Chapter 4 Summary, Math Problem Set"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                className="w-full px-4 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-sm font-black text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700">
-                  Topic / Subtitle <span className="text-slate-400 font-normal">(Optional)</span>
+                <label className="text-xs font-black text-[#173B3F]">
+                  Topic / Subtitle <span className="text-[#36565A] font-semibold">(Optional)</span>
                 </label>
                 <input
                   type="text"
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
                   placeholder="e.g., Creative Writing, Unit 2"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                  style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                  className="w-full px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700">
+                <label className="text-xs font-black text-[#173B3F]">
                   Total Points / Max Score <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -233,13 +235,14 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   required
                   value={points}
                   onChange={(e) => setPoints(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                  style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                  className="w-full px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-800">
+              <label className="text-xs font-black text-[#173B3F]">
                 Instructions & Prompt <span className="text-rose-500">*</span>
               </label>
               <textarea
@@ -248,18 +251,19 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="Give students clear instructions. Example: Write a paragraph about your favourite hobby, describing why you enjoy it and what you have learned from it."
-                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all resize-none leading-relaxed"
+                style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all resize-none leading-relaxed shadow-2xs"
               />
             </div>
           </div>
 
           {/* Section 2: Submission Method */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+          <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-3">
             <div>
-              <label className="text-xs font-black text-slate-800 block">
+              <label className="text-xs font-black text-[#173B3F] block">
                 Allowed Submission Method
               </label>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11px] text-[#36565A] font-semibold">
                 Choose how students are allowed to submit their work for this task.
               </p>
             </div>
@@ -291,29 +295,29 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   <div
                     key={method.id}
                     onClick={() => setSubmissionMethod(method.id as any)}
-                    className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
+                    className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
                       isSelected
-                        ? 'border-teal-600 bg-teal-50/50 shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                        ? 'border-[#087477] bg-[#E8F7F5] shadow-xs'
+                        : 'border-[#C9E5E2] hover:border-[#159A9C] bg-white'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        isSelected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                        isSelected ? 'bg-[#087477] text-white' : 'bg-[#E8F7F5] text-[#087477]'
                       }`}>
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        isSelected ? 'border-teal-600 bg-teal-600' : 'border-slate-300'
+                        isSelected ? 'border-[#087477] bg-[#087477]' : 'border-[#C9E5E2]'
                       }`}>
                         {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
                     </div>
                     <div>
-                      <span className="text-xs font-black text-slate-900 block">
+                      <span className="text-xs font-black text-[#173B3F] block">
                         {method.label}
                       </span>
-                      <span className="text-[10px] text-slate-500 font-medium leading-tight block mt-0.5">
+                      <span className="text-[10px] text-[#36565A] font-semibold leading-tight block mt-0.5">
                         {method.desc}
                       </span>
                     </div>
@@ -324,40 +328,41 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           </div>
 
           {/* Section 3: Due Date & Student Assignment */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+          <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>Due Date <span className="text-slate-400 font-normal">(Optional)</span></span>
+              <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-[#087477]" />
+                <span>Due Date <span className="text-[#36565A] font-normal">(Optional)</span></span>
               </label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full sm:w-64 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                className="w-full sm:w-64 px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all"
               />
             </div>
 
-            <div className="pt-2 border-t border-slate-100 space-y-2.5">
-              <div className="flex items-center justify-between">
+            <div className="pt-2 border-t border-[#C9E5E2] space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-[#087477]" />
                     <span>Assign Students</span>
                   </label>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-[11px] text-[#36565A] font-semibold">
                     Assign this task to the entire classroom or choose specific students.
                   </p>
                 </div>
 
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                <div className="flex items-center bg-[#E8F7F5] p-1 rounded-xl border border-[#C9E5E2] text-xs font-bold">
                   <button
                     type="button"
                     onClick={() => setAssignTarget('all')}
                     className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       assignTarget === 'all'
-                        ? 'bg-white text-slate-900 shadow-2xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-[#087477] text-white shadow-2xs font-black'
+                        : 'text-[#36565A] hover:text-[#173B3F]'
                     }`}
                   >
                     All Students ({students.length})
@@ -367,8 +372,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     onClick={() => setAssignTarget('specific')}
                     className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       assignTarget === 'specific'
-                        ? 'bg-white text-slate-900 shadow-2xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-[#087477] text-white shadow-2xs font-black'
+                        : 'text-[#36565A] hover:text-[#173B3F]'
                     }`}
                   >
                     Specific Students
@@ -378,24 +383,24 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
               {/* Specific Students Checklist */}
               {assignTarget === 'specific' && (
-                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 animate-in fade-in">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 text-[11px]">
-                    <span className="font-bold text-slate-600">
+                <div className="p-3.5 bg-[#F8FCFB] rounded-2xl border-2 border-[#C9E5E2] space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#C9E5E2] text-[11px]">
+                    <span className="font-black text-[#173B3F]">
                       Selected: {selectedStudentIds.length} of {students.length}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleSelectAllStudents}
-                        className="text-teal-700 hover:underline font-bold"
+                        className="text-[#087477] hover:underline font-black"
                       >
                         Select All
                       </button>
-                      <span>•</span>
+                      <span className="text-[#C9E5E2]">•</span>
                       <button
                         type="button"
                         onClick={handleClearStudents}
-                        className="text-slate-500 hover:underline font-bold"
+                        className="text-[#36565A] hover:underline font-bold"
                       >
                         Clear
                       </button>
@@ -410,18 +415,18 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         <div
                           key={st.profile_id}
                           onClick={() => toggleStudent(st.profile_id)}
-                          className={`p-2 rounded-xl flex items-center justify-between cursor-pointer text-xs font-bold transition-colors ${
-                            isChecked ? 'bg-teal-50 text-teal-900' : 'bg-white text-slate-700 hover:bg-slate-100'
+                          className={`p-2.5 rounded-xl flex items-center justify-between cursor-pointer text-xs font-bold transition-colors ${
+                            isChecked ? 'bg-[#E8F7F5] text-[#087477] border border-[#159A9C]' : 'bg-white text-[#173B3F] border border-[#C9E5E2] hover:bg-[#E8F7F5]/40'
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
-                            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-black">
+                            <div className="w-6 h-6 rounded-full bg-[#D4EFEC] text-[#087477] flex items-center justify-center text-[10px] font-black">
                               {name.charAt(0).toUpperCase()}
                             </div>
-                            <span>{name}</span>
+                            <span className="font-black text-[#173B3F]">{name}</span>
                           </div>
                           <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                            isChecked ? 'border-teal-600 bg-teal-600 text-white' : 'border-slate-300'
+                            isChecked ? 'border-[#087477] bg-[#087477] text-white' : 'border-[#C9E5E2]'
                           }`}>
                             {isChecked && <CheckCircle2 className="w-3 h-3" />}
                           </div>
@@ -439,23 +444,23 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+              className="px-5 py-2.5 rounded-xl border border-[#C9E5E2] text-[#36565A] hover:bg-[#E8F7F5] text-xs font-bold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
+              className="px-6 py-2.5 bg-[#087477] hover:bg-[#065e60] text-white rounded-xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>Publishing Task...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 text-teal-200" />
                   <span>Create & Assign Task</span>
                 </>
               )}

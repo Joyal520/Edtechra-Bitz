@@ -13,7 +13,8 @@ import {
   Upload,
   Sparkles,
   Calendar,
-  ListFilter
+  ListFilter,
+  Camera
 } from 'lucide-react';
 import {
   ClassroomTask,
@@ -26,6 +27,7 @@ import { supabase } from '@/lib/supabase';
 import { CreateTaskModal } from './CreateTaskModal';
 import { StudentTaskModal } from './StudentTaskModal';
 import { TaskHandwrittenUploadModal } from './TaskHandwrittenUploadModal';
+import { QuickAssessmentModal } from './QuickAssessmentModal';
 
 interface TaskDashboardModalProps {
   isOpen: boolean;
@@ -54,6 +56,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
   // Submodals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isQuickAssessmentOpen, setIsQuickAssessmentOpen] = useState(false);
   const [activeTaskIdForStudent, setActiveTaskIdForStudent] = useState<string | null>(null);
 
   // Teacher Handwritten Upload Modal State (Evaluate Classroom Work)
@@ -206,18 +209,18 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
           </button>
         </div>
 
-        {/* Teacher Workflow Landing Banner (Part F: 3 Clear Action Cards) */}
+        {/* Teacher Workflow Landing Banner (3 Clear Action Cards) */}
         {isTeacher && (
           <div className="p-4 sm:p-6 bg-white border-b border-[#C9E5E2] shrink-0">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               
-              {/* Card 1: Create & Assign Task */}
+              {/* Card 1: Create & Assign Task (Primary Teal) */}
               <div
                 onClick={() => setIsCreateOpen(true)}
-                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
+                className="p-4 bg-[#E8F7F5] hover:bg-[#D4EFEC] rounded-2xl border-2 border-[#159A9C] hover:border-[#087477] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#159A9C] group-hover:text-white transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-[#159A9C] text-white flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#087477] transition-all shadow-xs">
                     <Plus className="w-5 h-5" />
                   </div>
                   <div>
@@ -227,7 +230,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                     <span className="text-[10px] font-bold text-[#36565A]">Online or Written</span>
                   </div>
                 </div>
-                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
+                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
                   Give students work with instructions, criteria, and optional typed or handwritten responses.
                 </p>
                 <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
@@ -236,42 +239,40 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 </div>
               </div>
 
-              {/* Card 2: Evaluate Classroom Work */}
+              {/* Card 2: Quick Assessment (Secondary Dark Teal) */}
               <div
-                onClick={() => {
-                  setHandwrittenTaskId(null);
-                  setHandwrittenStudentId(null);
-                  setIsHandwrittenUploadOpen(true);
-                }}
-                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
+                onClick={() => setIsQuickAssessmentOpen(true)}
+                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border-2 border-[#C9E5E2] hover:border-[#087477] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#D4EFEC] text-[#087477] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#087477] group-hover:text-white transition-all">
-                    <Upload className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-xl bg-[#087477] text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-all shadow-xs">
+                    <Camera className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
-                      Evaluate Classroom Work
+                      Quick Assessment
                     </h3>
-                    <span className="text-[10px] font-bold text-[#087477]">AI OCR Grading</span>
+                    <span className="text-[10px] font-black text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2 py-0.5 rounded-full inline-block mt-0.5">
+                      Instant Classroom Grading
+                    </span>
                   </div>
                 </div>
-                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
-                  Upload photos of physical handwritten assignments to extract text, evaluate, and record scores.
+                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
+                  Immediately photograph or upload student work to evaluate with AI and record evidence.
                 </p>
                 <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
-                  <span>Upload Submissions</span>
+                  <span>Start Assessment</span>
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
 
-              {/* Card 3: View Tasks */}
+              {/* Card 3: View Tasks (Neutral) */}
               <div
                 onClick={scrollToTasks}
-                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
+                className="p-4 bg-white hover:bg-[#F8FCFB] rounded-2xl border-2 border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white text-[#173B3F] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-[#159A9C] transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-[#F8FCFB] text-[#173B3F] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-[#159A9C] transition-all">
                     <ListFilter className="w-5 h-5 text-[#087477]" />
                   </div>
                   <div>
@@ -281,7 +282,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                     <span className="text-[10px] font-bold text-[#36565A]">{tasks.length} active assignments</span>
                   </div>
                 </div>
-                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
+                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
                   Review student submissions, view submitted handwritten pages, and adjust grades.
                 </p>
                 <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
@@ -312,8 +313,8 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
-              className="w-full pl-8 pr-3 py-1.5 bg-white border border-[#C9E5E2] rounded-xl text-xs font-bold text-[#173B3F] placeholder:text-[#36565A]/50 focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
+              style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+              className="w-full pl-8 pr-3 py-1.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-bold text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
             />
           </div>
         </div>
@@ -758,8 +759,8 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 type="number"
                 value={overrideScoreVal}
                 onChange={(e) => setOverrideScoreVal(e.target.value)}
-                style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
-                className="w-full px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl text-sm font-bold text-[#173B3F] focus:outline-none focus:border-[#159A9C]"
+                style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                className="w-full px-3 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-sm font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C]"
               />
             </div>
 
@@ -770,8 +771,8 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder="e.g., Recognized valid alternate solution"
-                style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
-                className="w-full px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl text-xs font-medium text-[#173B3F] focus:outline-none focus:border-[#159A9C]"
+                style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                className="w-full px-3 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C]"
               />
             </div>
 
@@ -811,6 +812,19 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
             if (reviewTaskId) {
               classroomTaskService.getSubmissions(reviewTaskId).then(setTaskSubmissions);
             }
+          }}
+        />
+      )}
+
+      {/* Quick Classroom Assessment Modal */}
+      {isQuickAssessmentOpen && (
+        <QuickAssessmentModal
+          isOpen={isQuickAssessmentOpen}
+          onClose={() => setIsQuickAssessmentOpen(false)}
+          classroomId={classroomId}
+          members={members}
+          onSuccess={() => {
+            loadTasks();
           }}
         />
       )}

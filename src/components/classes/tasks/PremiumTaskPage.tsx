@@ -349,7 +349,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                             value={currentAns || ''}
                             onChange={(e) => handleAnswerChange(q.id, e.target.value)}
                             placeholder="Type your answer here..."
-                            className="w-full sm:max-w-md px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                            style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                            className="w-full sm:max-w-md px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20"
                           />
                         </div>
                       )}
@@ -363,7 +364,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                             value={currentAns || ''}
                             onChange={(e) => handleAnswerChange(q.id, e.target.value)}
                             placeholder="Write your explanation or response here..."
-                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                            style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                            className="w-full p-3 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 leading-relaxed"
                           />
                         </div>
                       )}
@@ -479,7 +481,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   value={textResponse}
                   onChange={(e) => setTextResponse(e.target.value)}
                   placeholder="Type your explanation, summary, or response notes here..."
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                  className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 leading-relaxed"
                 />
               ) : (
                 <div className="space-y-3">
