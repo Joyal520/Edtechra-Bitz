@@ -12,8 +12,8 @@ interface ActivityHubModalProps {
 }
 
 /**
- * Assign Your Students Creation Hub
- * Directly renders the unified 5-category builder modal with the 3-column desktop layout.
+ * Task Creation Hub
+ * Directly renders the unified Task workspace modal.
  */
 export const ActivityHubModal: React.FC<ActivityHubModalProps> = ({
   isOpen,

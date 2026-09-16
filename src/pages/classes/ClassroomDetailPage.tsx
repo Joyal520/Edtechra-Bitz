@@ -61,7 +61,7 @@ import { ClassroomMessages } from '@/components/classes/ClassroomMessages';
 import { ClassroomResources } from '@/components/classes/ClassroomResources';
 import { StudentSubmitModal } from '@/components/classes/StudentSubmitModal';
 import { SubmissionListModal } from '@/components/classes/SubmissionListModal';
-import { ActivityHubModal } from '@/components/classes/ActivityHubModal';
+import { CreateTaskModal } from '@/components/classes/tasks/CreateTaskModal';
 import { OCRGradingModal } from '@/components/classes/OCRGradingModal';
 import { ExamPlatformModal } from '@/components/exam/ExamPlatformModal';
 import { AssessmentTypeSelectionModal } from '@/components/exam/entry/AssessmentTypeSelectionModal';
@@ -1117,7 +1117,7 @@ export const ClassroomDetailPage: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-indigo-100" />
             <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
-              {isTeacher ? 'Assign Your Students' : 'Classroom Activities & Learning'}
+              {isTeacher ? 'Learning Tasks' : 'Classroom Activities & Learning'}
             </h2>
             <span className="text-[11px] font-bold text-slate-500 bg-slate-100/90 border border-slate-200/60 px-3 py-0.5 rounded-full">
               Learning Tools
@@ -1126,7 +1126,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             
-            {/* Card 1: Assign Your Students / My Tasks (Blue identity) */}
+            {/* Card 1: Tasks / My Tasks (Blue identity) */}
             <div className="bg-gradient-to-b from-sky-50/80 via-white to-blue-50/40 rounded-2xl sm:rounded-[26px] p-5 border border-sky-200/80 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_12px_28px_-4px_rgba(2,111,195,0.16)] hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between space-y-4 group relative overflow-hidden">
               <div className="space-y-3">
                 <div className="flex justify-center py-1">
@@ -1136,12 +1136,12 @@ export const ClassroomDetailPage: React.FC = () => {
                 </div>
                 <div className="space-y-1 text-center">
                   <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-[#025ca5] transition-colors">
-                    {isTeacher ? 'Assign Your Students' : 'My Tasks'}
+                    {isTeacher ? 'Tasks' : 'My Tasks'}
                   </h3>
                   <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
                     {isTeacher
-                      ? 'Assign tasks, lessons, or handwritten worksheets with AI evaluation.'
-                      : 'Complete lessons, answer questions, and submit handwritten work.'}
+                      ? 'Create and assign learning tasks, or upload and evaluate physical classroom work.'
+                      : 'View assigned tasks, type your answers, or submit handwritten work.'}
                   </p>
                 </div>
               </div>
@@ -1909,16 +1909,12 @@ export const ClassroomDetailPage: React.FC = () => {
         onGraded={loadAllClassroomData}
       />
 
-      <ActivityHubModal
+      <CreateTaskModal
         isOpen={activityHubOpen}
         classroomId={classroom.id}
+        members={members}
         onClose={() => setActivityHubOpen(false)}
-        onCreateTask={() => setShowQuickCreateTask(true)}
-        onOpenOCR={() => setOcrModalOpen(true)}
-        onOpenExam={() => {
-          setSelectedExam(null);
-          setAssessmentTypeModalOpen(true);
-        }}
+        onTaskCreated={loadAllClassroomData}
       />
 
       <OCRGradingModal

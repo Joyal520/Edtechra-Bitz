@@ -6606,7 +6606,9 @@ app.post('/api/classes/tasks', async (req, res) => {
           show_result_immediately: settings.show_result_immediately ?? true,
           show_correct_answers: settings.show_correct_answers ?? true,
           allow_retry: settings.allow_retry ?? false,
-          enable_ai_feedback: settings.enable_ai_feedback ?? true
+          enable_ai_feedback: settings.enable_ai_feedback ?? true,
+          submission_method: settings.submission_method || 'both',
+          assigned_student_ids: req.body.assignedStudentIds || null
         },
         status: 'published'
       })

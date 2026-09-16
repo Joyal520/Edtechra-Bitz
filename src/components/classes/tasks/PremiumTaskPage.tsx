@@ -47,9 +47,22 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   });
 
   const [textResponse, setTextResponse] = useState<string>(submission?.text_response || '');
-  const [submissionMode, setSubmissionMode] = useState<'text' | 'handwritten'>('text');
-  const [handwrittenPreview, setHandwrittenPreview] = useState<string | null>(null);
-  const [handwrittenBase64, setHandwrittenBase64] = useState<string | null>(null);
+  const [submissionMode, setSubmissionMode] = useState<'text' | 'handwritten'>(() => {
+    if (task.settings?.submission_method === 'upload') return 'handwritten';
+    return 'text';
+  });
+  const [handwrittenPreview, setHandwrittenPreview] = useState<string | null>(() => {
+    if (submission?.file_urls && submission.file_urls.length > 0) {
+      return submission.file_urls[0];
+    }
+    return null;
+  });
+  const [handwrittenBase64, setHandwrittenBase64] = useState<string | null>(() => {
+    if (submission?.file_urls && submission.file_urls.length > 0) {
+      return submission.file_urls[0];
+    }
+    return null;
+  });
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(Boolean(submission && submission.status !== 'draft'));
 
@@ -122,8 +135,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
       {/* Action Toolbar (Hidden during print) */}
       <div className="w-full max-w-[8.5in] mb-4 flex items-center justify-between no-print px-2">
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-black rounded-full uppercase tracking-wider">
-            {task.category.toUpperCase()}
+          <span className="px-3 py-1 bg-teal-50 text-teal-800 border border-teal-200 text-xs font-black rounded-full uppercase tracking-wider">
+            TASK
           </span>
           {isPreview && (
             <span className="px-3 py-1 bg-amber-100 text-amber-900 text-xs font-black rounded-full">
@@ -421,20 +434,24 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-                    Submit Your Work
+                    Submit your Task
                   </span>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    You can type your answer or upload a clear photo of your handwritten work.
+                    {task.settings?.submission_method === 'text'
+                      ? 'Type your response directly into the field below.'
+                      : task.settings?.submission_method === 'upload'
+                      ? 'Upload a clear photo of your handwritten paper or worksheet.'
+                      : 'You can type your answer or upload a clear photo of your handwritten work.'}
                   </p>
                 </div>
-                {!submitted && (
+                {!submitted && (!task.settings?.submission_method || task.settings?.submission_method === 'both') && (
                   <div className="flex items-center p-1 bg-white border border-slate-200 rounded-xl shrink-0">
                     <button
                       type="button"
                       onClick={() => setSubmissionMode('text')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         submissionMode === 'text'
-                          ? 'bg-indigo-600 text-white shadow-xs'
+                          ? 'bg-teal-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -445,7 +462,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                       onClick={() => setSubmissionMode('handwritten')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         submissionMode === 'handwritten'
-                          ? 'bg-indigo-600 text-white shadow-xs'
+                          ? 'bg-teal-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >

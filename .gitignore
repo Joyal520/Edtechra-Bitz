@@ -38,4 +38,5 @@ Thumbs.db
 supabase/.temp/
 server/data/*.json
 !server/data/.gitkeep
+.kilo/
 scratch/

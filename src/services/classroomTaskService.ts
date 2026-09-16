@@ -26,19 +26,20 @@ class ClassroomTaskClientService {
   }
 
   /**
-   * Teacher creates a new task (Assignment, Lesson, Practice, Activity, Resource)
+   * Teacher creates a new task
    */
   async createTask(payload: {
     classroomId: string;
     title: string;
     subtitle?: string;
     instructions?: string;
-    category: TaskCategory;
+    category?: TaskCategory;
     points?: number;
     dueDate?: string | null;
     contentBlocks?: TaskContentBlock[];
     questions?: TaskQuestion[];
     attachmentUrls?: any[];
+    assignedStudentIds?: string[];
     settings?: Partial<TaskSettings>;
   }): Promise<{ data?: ClassroomTask; error?: string }> {
     try {

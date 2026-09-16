@@ -209,7 +209,7 @@ class OcrEvaluationQueue {
                   student_id: job.studentId,
                   status: 'graded',
                   ocr_evaluation_id: evaluationId,
-                  file_urls: job.temporaryFileKey ? [job.temporaryFileKey] : [],
+                  file_urls: job.temporaryFileKey ? [job.temporaryFileKey] : (job.imageBase64 ? [job.imageBase64] : []),
                   points_awarded: Math.round(validated.score),
                   final_score: validated.score,
                   ai_score: validated.score,

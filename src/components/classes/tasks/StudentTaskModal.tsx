@@ -86,8 +86,8 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
               E
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 block">
-                {task?.category.toUpperCase() || 'TASK'}
+              <span className="text-[10px] font-black uppercase tracking-wider text-teal-300 block">
+                TASK
               </span>
               <h2 className="text-sm font-black tracking-tight leading-snug text-white">
                 {task?.title || 'Loading task...'}

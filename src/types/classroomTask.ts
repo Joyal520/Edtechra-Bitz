@@ -47,6 +47,7 @@ export interface TaskSettings {
   show_correct_answers: boolean;
   allow_retry: boolean;
   enable_ai_feedback: boolean;
+  submission_method?: 'text' | 'upload' | 'both';
 }
 
 export interface ClassroomTask {
@@ -63,6 +64,7 @@ export interface ClassroomTask {
   content_blocks: TaskContentBlock[];
   questions: TaskQuestion[];
   attachment_urls: any[];
+  assigned_student_ids?: string[];
   settings: TaskSettings;
   version: number;
   status: 'draft' | 'published' | 'closed' | 'deleted';

@@ -92,9 +92,14 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
       const sub = await classroomTaskService.getStudentSubmission(taskId, studentId);
       setExistingSubmission(sub);
       setReplaceWork(false);
-      if (sub && sub.final_score != null) {
-        setEditScore(Number(sub.final_score));
-        setEditFeedback(sub.teacher_feedback || '');
+      if (sub) {
+        if (sub.final_score != null) {
+          setEditScore(Number(sub.final_score));
+          setEditFeedback(sub.teacher_feedback || '');
+        }
+        if (sub.file_urls && sub.file_urls.length > 0 && sub.file_urls[0]) {
+          setImagePreview(sub.file_urls[0]);
+        }
       }
     } catch {
       setExistingSubmission(null);
@@ -120,7 +125,7 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
     if (!files || files.length === 0) return;
     const file = files[0];
 
-    // Strictly enforce image formats
+    // Strictly enforce image formats (JPG, JPEG, PNG, WEBP)
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
     if (!validTypes.includes(file.type.toLowerCase())) {
       alert('Only image files (JPG, JPEG, PNG, WEBP) are supported for classroom handwritten work.');
@@ -144,8 +149,8 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleEvaluate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleEvaluate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedTaskId) {
       alert('Please select a Task.');
       return;
@@ -183,9 +188,9 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
         studentId: selectedStudentId,
         studentName,
         imageBase64: base64,
-        maxMarks: currentTask?.points || 100,
-        category: currentTask?.category === 'lesson' || currentTask?.category === 'activity' ? 'Other' : 'Paragraph Writing',
-        title: currentTask?.title || 'Handwritten Task Work'
+        maxMarks: currentTask?.points || 20,
+        category: 'Paragraph Writing',
+        title: currentTask?.title || 'Classroom Task'
       });
 
       if (result.error) {
@@ -216,7 +221,6 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
 
     setIsSavingAdjustment(true);
     try {
-      // If evaluation record exists, update feedback/score
       if (evalId) {
         await ocrService.updateEvaluation(evalId, {
           score: editScore,
@@ -224,7 +228,6 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
         });
       }
 
-      // If submission row exists, override score directly
       if (subId) {
         await classroomTaskService.overrideScore(
           subId,
@@ -246,20 +249,20 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
 
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         
         {/* Modal Header */}
-        <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+        <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black">
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200/70 text-teal-700 flex items-center justify-center font-black">
               <Upload className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 block">
-                Classroom Work Evaluation
+              <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-full inline-block mb-0.5">
+                Classroom Work
               </span>
-              <h3 className="text-base font-black text-white">
-                Upload & Grade Student Handwritten Work
+              <h3 className="text-base font-black text-slate-900">
+                Evaluate Classroom Work
               </h3>
             </div>
           </div>
@@ -267,14 +270,14 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/40">
           
           {/* Step 1 & 2: Select Task & Student */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -285,12 +288,12 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
               <select
                 value={selectedTaskId}
                 onChange={(e) => setSelectedTaskId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
               >
                 <option value="">-- Choose a Task --</option>
                 {tasks.map((t) => (
                   <option key={t.id} value={t.id}>
-                    [{t.category.toUpperCase()}] {t.title} ({t.points} pts)
+                    {t.title} ({t.points} pts)
                   </option>
                 ))}
               </select>
@@ -303,7 +306,7 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
               <select
                 value={selectedStudentId}
                 onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
               >
                 <option value="">-- Choose a Student --</option>
                 {students.map((m) => (
@@ -315,31 +318,31 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
             </div>
           </div>
 
-          {/* Existing Submission Found Alert (Duplicate Prevention) */}
+          {/* Existing Submission Found Alert */}
           {loadingExistingSub ? (
-            <div className="p-3 bg-slate-50 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-400">
+            <div className="p-3 bg-white rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-400 border border-slate-200">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               <span>Checking student submission history...</span>
             </div>
           ) : existingSubmission && !replaceWork ? (
-            <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200 space-y-3">
+            <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span className="text-xs font-black text-indigo-950">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span className="text-xs font-black text-teal-950">
                     Existing Submission on File
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-indigo-700">
+                <span className="text-[10px] font-bold text-teal-700">
                   {new Date(existingSubmission.submitted_at).toLocaleDateString()}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs bg-white p-3 rounded-xl border border-indigo-100">
+              <div className="grid grid-cols-2 gap-3 text-xs bg-white p-3 rounded-xl border border-teal-100">
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">Recorded Score</span>
-                  <span className="text-sm font-black text-indigo-700">
-                    {existingSubmission.final_score ?? existingSubmission.points_awarded ?? 'Ungraded'} / {currentTask?.points || 100} pts
+                  <span className="text-sm font-black text-teal-700">
+                    {existingSubmission.final_score ?? existingSubmission.points_awarded ?? 'Ungraded'} / {currentTask?.points || 20} pts
                   </span>
                 </div>
                 <div>
@@ -350,23 +353,66 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
                 </div>
               </div>
 
+              {/* Display student's existing typed text response if available */}
+              {existingSubmission.text_response && (
+                <div className="bg-white p-3 rounded-xl border border-teal-100 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Student Typed Response</span>
+                  <p className="text-xs text-slate-800 leading-relaxed font-medium">
+                    {existingSubmission.text_response}
+                  </p>
+                </div>
+              )}
+
+              {/* Display student's existing handwritten image if available */}
+              {imagePreview && (
+                <div className="bg-white p-3 rounded-xl border border-teal-100 space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Student Uploaded Work</span>
+                  <div className="rounded-lg overflow-hidden border border-slate-200 max-h-52 flex justify-center bg-slate-100">
+                    <img
+                      src={imagePreview}
+                      alt="Student Work"
+                      className="max-h-52 object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+
               {existingSubmission.teacher_feedback && (
-                <p className="text-xs text-slate-600 font-medium bg-white/80 p-2.5 rounded-xl border border-indigo-100">
+                <p className="text-xs text-slate-600 font-medium bg-white/90 p-2.5 rounded-xl border border-teal-100">
                   <strong>Feedback:</strong> {existingSubmission.teacher_feedback}
                 </p>
               )}
 
               <div className="flex items-center justify-between pt-1">
                 <p className="text-[11px] text-slate-500 font-medium">
-                  This student already has work recorded. You can keep this or upload a new photo to replace it.
+                  {imagePreview
+                    ? 'Student already submitted work. You can evaluate this image or upload a replacement.'
+                    : 'This student has work recorded. You can adjust the score or upload a photo to replace it.'}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setReplaceWork(true)}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black cursor-pointer shrink-0"
-                >
-                  Upload New Work
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {imagePreview && (
+                    <button
+                      type="button"
+                      disabled={evaluating}
+                      onClick={() => handleEvaluate()}
+                      className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      {evaluating ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      <span>Evaluate Image</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setReplaceWork(true)}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Upload New Work
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
@@ -376,10 +422,10 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-black text-slate-700">
-                  3. Upload Handwritten Photo <span className="text-rose-500">*</span>
+                  3. Upload Student Work Photo <span className="text-rose-500">*</span>
                 </label>
                 <span className="text-[10px] font-bold text-slate-400">
-                  Supported: JPG, JPEG, PNG, WEBP (Max 15MB)
+                  Images only: JPG, JPEG, PNG, WEBP (Max 15MB)
                 </span>
               </div>
 
@@ -394,9 +440,9 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
               {!imagePreview ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-8 text-center cursor-pointer hover:bg-slate-50/60 transition-all space-y-2 group"
+                  className="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-2xl p-8 text-center cursor-pointer hover:bg-white transition-all space-y-2 group bg-slate-50/50"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
                     <Upload className="w-6 h-6" />
                   </div>
                   <h4 className="text-xs font-black text-slate-800">
@@ -407,7 +453,7 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
                   </p>
                 </div>
               ) : (
-                <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-2 group">
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-white p-2 group">
                   <img
                     src={imagePreview}
                     alt="Handwritten work preview"
@@ -448,8 +494,8 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
                 <button
                   type="button"
                   disabled={evaluating || (!selectedImage && !imagePreview) || !selectedTaskId || !selectedStudentId}
-                  onClick={handleEvaluate}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all"
+                  onClick={() => handleEvaluate()}
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all"
                 >
                   {evaluating ? (
                     <>
@@ -490,9 +536,9 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
                     type="number"
                     value={editScore}
                     onChange={(e) => setEditScore(Number(e.target.value))}
-                    max={currentTask?.points || 100}
+                    max={currentTask?.points || 20}
                     min={0}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-indigo-700"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-black text-teal-700"
                   />
                 </div>
 
@@ -503,7 +549,7 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
                     value={editFeedback}
                     onChange={(e) => setEditFeedback(e.target.value)}
                     placeholder="Enter actionable praise or guidance..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
                   />
                 </div>
               </div>
@@ -526,14 +572,14 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400">
-            OCR evaluation writes directly into Task submissions.
+            Work evaluation records directly into Task submissions.
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-black cursor-pointer transition-colors"
+            className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-colors"
           >
             Close
           </button>
