@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Plus,
@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Upload,
   Sparkles,
-  Calendar
+  Calendar,
+  ListFilter
 } from 'lucide-react';
 import {
   ClassroomTask,
@@ -49,6 +50,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [members, setMembers] = useState<ClassroomMember[]>(membersProp);
+  const tasksListRef = useRef<HTMLDivElement>(null);
 
   // Submodals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -157,6 +159,10 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
     }
   };
 
+  const scrollToTasks = () => {
+    tasksListRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   if (!isOpen) return null;
 
   const filteredTasks = tasks.filter((t) => {
@@ -168,134 +174,173 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   const activeReviewTask = tasks.find((t) => t.id === reviewTaskId) || null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-[#F8FCFB] w-full max-w-5xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Modal Header */}
-        <div className="p-6 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-200/70 text-teal-700 flex items-center justify-center font-black shadow-xs">
+        <div className="px-6 py-4 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] text-white flex items-center justify-center font-black shadow-md shadow-[#159A9C]/25">
               <FileText className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">Tasks</h2>
-              <p className="text-xs text-slate-500 font-medium">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white">Classroom Tasks</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide bg-[#159A9C]/30 text-teal-200 border border-[#159A9C]/40">
+                  {tasks.length} {tasks.length === 1 ? 'Task' : 'Tasks'}
+                </span>
+              </div>
+              <p className="text-xs text-teal-100/75 font-medium">
                 {isTeacher
-                  ? 'Give students work to complete, or upload and evaluate classroom submissions.'
-                  : 'View assigned tasks, type responses, or upload your handwritten work.'}
+                  ? 'Assign learning work to students, or upload and evaluate physical classroom submissions.'
+                  : 'View assigned learning work, complete typed responses, or upload handwritten papers.'}
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+            className="p-2 text-teal-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Teacher Workflow Landing Banner */}
+        {/* Teacher Workflow Landing Banner (Part F: 3 Clear Action Cards) */}
         {isTeacher && (
-          <div className="p-5 bg-slate-50/70 border-b border-slate-100 shrink-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="p-4 sm:p-6 bg-white border-b border-[#C9E5E2] shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               
-              {/* Workflow A: Create & Assign Task */}
+              {/* Card 1: Create & Assign Task */}
               <div
                 onClick={() => setIsCreateOpen(true)}
-                className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-3.5 group"
+                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
               >
-                <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 border border-teal-200/60 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Plus className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-black text-slate-900 group-hover:text-teal-700 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#159A9C] group-hover:text-white transition-all">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
                       Create & Assign Task
                     </h3>
+                    <span className="text-[10px] font-bold text-[#36565A]">Online or Written</span>
                   </div>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Give students work to complete and submit.
-                  </p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
+                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
+                  Give students work with instructions, criteria, and optional typed or handwritten responses.
+                </p>
+                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
+                  <span>Start Task</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
 
-              {/* Workflow B: Evaluate Classroom Work */}
+              {/* Card 2: Evaluate Classroom Work */}
               <div
                 onClick={() => {
                   setHandwrittenTaskId(null);
                   setHandwrittenStudentId(null);
                   setIsHandwrittenUploadOpen(true);
                 }}
-                className="p-4 bg-white rounded-2xl border border-slate-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer flex items-center gap-3.5 group"
+                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
               >
-                <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="text-sm font-black text-slate-900 group-hover:text-teal-700 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#D4EFEC] text-[#087477] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#087477] group-hover:text-white transition-all">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
                       Evaluate Classroom Work
                     </h3>
+                    <span className="text-[10px] font-bold text-[#087477]">AI OCR Grading</span>
                   </div>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Upload physical student work and evaluate it with AI.
-                  </p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
+                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
+                  Upload photos of physical handwritten assignments to extract text, evaluate, and record scores.
+                </p>
+                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
+                  <span>Upload Submissions</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+
+              {/* Card 3: View Tasks */}
+              <div
+                onClick={scrollToTasks}
+                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white text-[#173B3F] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-[#159A9C] transition-all">
+                    <ListFilter className="w-5 h-5 text-[#087477]" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
+                      View Tasks
+                    </h3>
+                    <span className="text-[10px] font-bold text-[#36565A]">{tasks.length} active assignments</span>
+                  </div>
+                </div>
+                <p className="text-xs text-[#36565A] font-medium leading-relaxed">
+                  Review student submissions, view submitted handwritten pages, and adjust grades.
+                </p>
+                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
+                  <span>Browse Roster</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
 
             </div>
           </div>
         )}
 
-        {/* Search Bar */}
-        <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+        {/* Search Bar & Title Strip */}
+        <div ref={tasksListRef} className="px-6 py-3.5 bg-white border-b border-[#C9E5E2] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-800">
-              All Classroom Tasks
+            <span className="text-xs font-black text-[#173B3F]">
+              Assigned Tasks
             </span>
-            <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+            <span className="text-[11px] font-bold text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2 py-0.5 rounded-full">
               {filteredTasks.length}
             </span>
           </div>
 
           <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[#36565A] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+              style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
+              className="w-full pl-8 pr-3 py-1.5 bg-white border border-[#C9E5E2] rounded-xl text-xs font-bold text-[#173B3F] placeholder:text-[#36565A]/50 focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
             />
           </div>
         </div>
 
         {/* Task Cards List */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-slate-50/40">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-3 bg-[#F8FCFB]">
           {(loading || isRoleResolving) && tasks.length === 0 ? (
             <div className="py-20 text-center space-y-3">
-              <Loader2 className="w-8 h-8 text-teal-600 animate-spin mx-auto" />
-              <p className="text-xs text-slate-500 font-bold">Loading tasks...</p>
+              <Loader2 className="w-8 h-8 text-[#159A9C] animate-spin mx-auto" />
+              <p className="text-xs text-[#36565A] font-bold">Loading tasks...</p>
             </div>
           ) : filteredTasks.length === 0 ? (
-            <div className="py-20 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto border border-teal-200/60">
+            <div className="py-20 text-center space-y-3 bg-white rounded-3xl border border-[#C9E5E2] p-8 shadow-2xs">
+              <div className="w-14 h-14 rounded-2xl bg-[#E8F7F5] text-[#087477] flex items-center justify-center mx-auto border border-[#C9E5E2]">
                 <FileText className="w-7 h-7" />
               </div>
-              <h4 className="text-base font-black text-slate-900">No tasks created yet</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+              <h4 className="text-base font-black text-[#173B3F]">No tasks found</h4>
+              <p className="text-xs text-[#36565A] max-w-sm mx-auto font-medium">
                 {isTeacher
-                  ? 'Click "Create & Assign Task" above to publish your first classroom task.'
-                  : 'Your teacher has not published any tasks yet. Check back soon!'}
+                  ? 'Click "Create & Assign Task" above to publish your first classroom assignment.'
+                  : 'Your teacher has not assigned any tasks yet. Check back soon!'}
               </p>
               {isTeacher && (
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(true)}
-                  className="mt-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer inline-flex items-center gap-2 transition-all active:scale-95"
+                  className="mt-2 px-5 py-2.5 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black shadow-sm cursor-pointer inline-flex items-center gap-2 transition-all active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Create First Task</span>
@@ -311,47 +356,47 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 return (
                   <div
                     key={t.id}
-                    className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-teal-300 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                    className="p-5 rounded-2xl border border-[#C9E5E2] bg-white hover:border-[#159A9C] hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
                   >
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/80">
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2]">
                           Task
                         </span>
-                        <span className="text-[11px] font-black text-slate-700">
+                        <span className="text-[11px] font-black text-[#173B3F]">
                           {t.points} Points Total
                         </span>
                         {t.due_date && (
-                          <span className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" />
+                          <span className="text-[10px] font-medium text-[#36565A] flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-[#159A9C]" />
                             <span>Due: {new Date(t.due_date).toLocaleDateString()}</span>
                           </span>
                         )}
                       </div>
 
-                      <h3 className="text-base font-black text-slate-900 group-hover:text-teal-700 transition-colors">
+                      <h3 className="text-base font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
                         {t.title}
                       </h3>
 
                       {t.subtitle && (
-                        <p className="text-xs font-medium text-slate-500">
+                        <p className="text-xs font-medium text-[#36565A]">
                           {t.subtitle}
                         </p>
                       )}
 
-                      <div className="flex items-center gap-4 text-[11px] font-bold text-slate-400 pt-1">
-                        <span className="flex items-center gap-1 text-slate-600">
-                          <Users className="w-3.5 h-3.5 text-teal-600" />
+                      <div className="flex items-center gap-4 text-[11px] font-bold text-[#36565A] pt-1">
+                        <span className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5 text-[#159A9C]" />
                           <span>{t.total_assigned || studentMembers.length} Assigned</span>
                         </span>
-                        <span className="flex items-center gap-1 text-slate-600">
+                        <span className="flex items-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           <span>{t.completed_count || 0} Graded</span>
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 sm:self-center">
+                    <div className="flex items-center gap-2 shrink-0 sm:self-center flex-wrap">
                       {isTeacher ? (
                         <>
                           <button
@@ -361,7 +406,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                               setHandwrittenStudentId(null);
                               setIsHandwrittenUploadOpen(true);
                             }}
-                            className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 border border-teal-200/70"
+                            className="px-3.5 py-2 bg-[#E8F7F5] hover:bg-[#D4EFEC] text-[#087477] rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 border border-[#C9E5E2]"
                             title="Upload physical student work and evaluate"
                           >
                             <Upload className="w-3.5 h-3.5" />
@@ -370,15 +415,15 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleOpenReview(t.id)}
-                            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                            className="px-3.5 py-2 bg-white hover:bg-slate-100 text-[#173B3F] border border-[#C9E5E2] rounded-xl text-xs font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
                           >
-                            <Users className="w-3.5 h-3.5" />
+                            <Users className="w-3.5 h-3.5 text-[#159A9C]" />
                             <span>Submissions ({t.submitted_count || 0})</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setActiveTaskIdForStudent(t.id)}
-                            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                            className="px-3.5 py-2 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             <span>View Task</span>
@@ -391,7 +436,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                           className={`px-5 py-2.5 rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer flex items-center gap-1.5 ${
                             isCompleted
                               ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                              : 'bg-teal-600 hover:bg-teal-700 text-white'
+                              : 'bg-[#087477] hover:bg-[#159A9C] text-white'
                           }`}
                         >
                           <span>{isCompleted ? 'View Results' : mySub ? 'Continue' : 'Submit your Task'}</span>
@@ -429,18 +474,18 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
         />
       )}
 
-      {/* Teacher Review Submissions Modal (Part 5: Complete Student Submissions Roster) */}
+      {/* Teacher Review Submissions Modal */}
       {reviewTaskId && activeReviewTask && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh]">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-[#F8FCFB] w-full max-w-4xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[88vh]">
             
             {/* Review Header */}
-            <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+            <div className="p-5 bg-white border-b border-[#C9E5E2] flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-black uppercase text-teal-700 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-full inline-block mb-1">
+                <span className="text-[10px] font-black uppercase text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2.5 py-0.5 rounded-full inline-block mb-1">
                   Submissions Roster
                 </span>
-                <h3 className="text-base font-black text-slate-900">
+                <h3 className="text-base font-black text-[#173B3F]">
                   {activeReviewTask.title} • {activeReviewTask.points} Points Max
                 </h3>
               </div>
@@ -452,29 +497,29 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                     setHandwrittenStudentId(null);
                     setIsHandwrittenUploadOpen(true);
                   }}
-                  className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3.5 py-2 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>Evaluate Classroom Work</span>
                 </button>
                 <button
                   onClick={() => setReviewTaskId(null)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
+                  className="p-2 text-[#36565A] hover:text-[#173B3F] hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
             {/* Roster List of ALL Students in Classroom */}
-            <div className="p-6 overflow-y-auto space-y-2.5 flex-1 bg-slate-50/40">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-2.5 flex-1 bg-[#F8FCFB]">
               {loadingSubs ? (
                 <div className="py-16 text-center">
-                  <Loader2 className="w-7 h-7 animate-spin text-teal-600 mx-auto" />
-                  <p className="text-xs text-slate-500 font-bold mt-2">Loading submissions...</p>
+                  <Loader2 className="w-7 h-7 animate-spin text-[#159A9C] mx-auto" />
+                  <p className="text-xs text-[#36565A] font-bold mt-2">Loading submissions...</p>
                 </div>
               ) : studentMembers.length === 0 ? (
-                <div className="py-16 text-center text-xs text-slate-400 font-bold">
+                <div className="py-16 text-center text-xs text-[#36565A] font-bold">
                   No enrolled students found in this classroom.
                 </div>
               ) : (
@@ -488,16 +533,16 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                   return (
                     <div
                       key={studentId}
-                      className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-slate-300 transition-colors"
+                      className="p-4 rounded-2xl border border-[#C9E5E2] bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs hover:border-[#159A9C] transition-colors"
                     >
                       {/* Student Info & Status */}
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200/70 text-teal-700 flex items-center justify-center font-black text-sm shrink-0">
+                        <div className="w-10 h-10 rounded-2xl bg-[#E8F7F5] border border-[#C9E5E2] text-[#087477] flex items-center justify-center font-black text-sm shrink-0">
                           {studentName.charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-black text-slate-900">
+                            <h4 className="text-xs font-black text-[#173B3F]">
                               {studentName}
                             </h4>
                             {isSubmitted ? (
@@ -505,23 +550,23 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                                 Submitted
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-[#36565A]">
                                 Not submitted
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium mt-0.5">
+                          <div className="flex items-center gap-2 text-[10px] text-[#36565A] font-medium mt-0.5">
                             {isSubmitted && sub?.submitted_at && (
                               <span>Submitted {new Date(sub.submitted_at).toLocaleDateString()}</span>
                             )}
                             {isHandwritten && (
-                              <span className="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 text-[9px] font-black border border-teal-200/60">
+                              <span className="px-1.5 py-0.5 rounded bg-[#E8F7F5] text-[#087477] text-[9px] font-black border border-[#C9E5E2]">
                                 Handwritten Work
                               </span>
                             )}
                             {sub?.text_response && (
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[9px] font-bold">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[#173B3F] text-[9px] font-bold">
                                 Typed Response
                               </span>
                             )}
@@ -534,11 +579,11 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                         {isSubmitted ? (
                           <>
                             <div className="text-right">
-                              <span className="text-sm font-black text-teal-700 block">
+                              <span className="text-sm font-black text-[#087477] block">
                                 {sub?.final_score ?? sub?.points_awarded ?? 'Ungraded'} / {activeReviewTask.points} pts
                               </span>
                               {sub?.teacher_adjusted && (
-                                <span className="text-[9px] text-purple-600 font-bold block">
+                                <span className="text-[9px] text-purple-700 font-bold block">
                                   (Adjusted)
                                 </span>
                               )}
@@ -548,14 +593,14 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                             <button
                               type="button"
                               onClick={() => setSelectedSubForView(sub || null)}
-                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                              className="px-3 py-1.5 bg-white hover:bg-[#E8F7F5] text-[#173B3F] border border-[#C9E5E2] rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               title="View student work"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>View</span>
                             </button>
 
-                            {/* Evaluate Button (Reuses uploaded image if present!) */}
+                            {/* Evaluate Button */}
                             <button
                               type="button"
                               onClick={() => {
@@ -563,7 +608,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                                 setHandwrittenStudentId(studentId);
                                 setIsHandwrittenUploadOpen(true);
                               }}
-                              className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
+                              className="px-3 py-1.5 bg-[#E8F7F5] hover:bg-[#D4EFEC] text-[#087477] border border-[#C9E5E2] rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-colors"
                               title="Evaluate with AI or adjust score"
                             >
                               <Sparkles className="w-3.5 h-3.5" />
@@ -578,7 +623,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                                 setOverrideScoreVal(String(sub?.final_score ?? sub?.points_awarded ?? ''));
                                 setOverrideReason(sub?.teacher_adjustment_reason || '');
                               }}
-                              className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl text-xs font-medium cursor-pointer"
+                              className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-[#36565A] rounded-xl text-xs font-medium cursor-pointer"
                               title="Adjust score manually"
                             >
                               <Edit3 className="w-3 h-3" />
@@ -592,7 +637,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                               setHandwrittenStudentId(studentId);
                               setIsHandwrittenUploadOpen(true);
                             }}
-                            className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
+                            className="px-3.5 py-1.5 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95"
                           >
                             <Upload className="w-3.5 h-3.5" />
                             <span>Upload Work & Evaluate</span>
@@ -611,33 +656,33 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
       {/* View Student Submission Detail Modal */}
       {selectedSubForView && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#F8FCFB] w-full max-w-2xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 bg-white border-b border-[#C9E5E2] flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-black uppercase text-teal-700 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-full inline-block mb-1">
+                <span className="text-[10px] font-black uppercase text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2 py-0.5 rounded-full inline-block mb-1">
                   Student Submission
                 </span>
-                <h3 className="text-sm font-black text-slate-900">
+                <h3 className="text-sm font-black text-[#173B3F]">
                   {selectedSubForView.student?.full_name || 'Student'} • {selectedSubForView.final_score ?? selectedSubForView.points_awarded ?? 'Ungraded'} pts
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedSubForView(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
+                className="p-1.5 text-[#36565A] hover:text-[#173B3F] hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50/40">
+            <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-[#F8FCFB]">
               {/* Typed Response */}
               {selectedSubForView.text_response && (
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1.5">
-                  <label className="text-xs font-black text-slate-800 block">
+                <div className="bg-white p-4 rounded-2xl border border-[#C9E5E2] space-y-1.5">
+                  <label className="text-xs font-black text-[#173B3F] block">
                     Typed Response
                   </label>
-                  <p className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-xs text-[#173B3F] whitespace-pre-wrap leading-relaxed">
                     {selectedSubForView.text_response}
                   </p>
                 </div>
@@ -645,11 +690,11 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
               {/* Uploaded Handwritten Image */}
               {selectedSubForView.file_urls && selectedSubForView.file_urls.length > 0 && selectedSubForView.file_urls[0] && (
-                <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
-                  <label className="text-xs font-black text-slate-800 block">
+                <div className="bg-white p-4 rounded-2xl border border-[#C9E5E2] space-y-2">
+                  <label className="text-xs font-black text-[#173B3F] block">
                     Handwritten Work Image
                   </label>
-                  <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 max-h-96 flex justify-center p-2">
+                  <div className="rounded-xl overflow-hidden border border-[#C9E5E2] bg-slate-50 max-h-96 flex justify-center p-2">
                     <img
                       src={selectedSubForView.file_urls[0]}
                       alt="Student handwritten work"
@@ -661,18 +706,18 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
               {/* Teacher Feedback */}
               {selectedSubForView.teacher_feedback && (
-                <div className="bg-teal-50/60 p-4 rounded-2xl border border-teal-200 space-y-1">
-                  <label className="text-xs font-black text-teal-900 block">
+                <div className="bg-[#E8F7F5] p-4 rounded-2xl border border-[#C9E5E2] space-y-1">
+                  <label className="text-xs font-black text-[#087477] block">
                     Feedback
                   </label>
-                  <p className="text-xs text-teal-950 font-medium leading-relaxed">
+                  <p className="text-xs text-[#173B3F] font-medium leading-relaxed">
                     {selectedSubForView.teacher_feedback}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-end gap-2">
+            <div className="p-4 bg-white border-t border-[#C9E5E2] flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -682,7 +727,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                   setHandwrittenStudentId(s.student_id);
                   setIsHandwrittenUploadOpen(true);
                 }}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Evaluate with AI</span>
@@ -690,7 +735,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedSubForView(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                className="px-4 py-2 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-[#E8F7F5] rounded-xl text-xs font-bold cursor-pointer"
               >
                 Close
               </button>
@@ -701,30 +746,32 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
       {/* Teacher Score Override Prompt */}
       {selectedSubForOverride && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200">
-            <h3 className="text-sm font-black text-slate-900">
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 border border-[#C9E5E2]">
+            <h3 className="text-sm font-black text-[#173B3F]">
               Adjust Score for {selectedSubForOverride.student?.full_name || 'Student'}
             </h3>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-700 block">Final Score (pts)</label>
+              <label className="text-xs font-black text-[#173B3F] block">Final Score (pts)</label>
               <input
                 type="number"
                 value={overrideScoreVal}
                 onChange={(e) => setOverrideScoreVal(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
+                className="w-full px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl text-sm font-bold text-[#173B3F] focus:outline-none focus:border-[#159A9C]"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-slate-700 block">Adjustment Reason</label>
+              <label className="text-xs font-black text-[#173B3F] block">Adjustment Reason</label>
               <input
                 type="text"
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder="e.g., Recognized valid alternate solution"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                style={{ color: '#173B3F', backgroundColor: '#FFFFFF' }}
+                className="w-full px-3 py-2 bg-white border border-[#C9E5E2] rounded-xl text-xs font-medium text-[#173B3F] focus:outline-none focus:border-[#159A9C]"
               />
             </div>
 
@@ -732,7 +779,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedSubForOverride(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-[#36565A] hover:bg-slate-100 rounded-xl cursor-pointer"
               >
                 Cancel
               </button>
@@ -740,7 +787,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                 type="button"
                 disabled={overriding}
                 onClick={handleSaveScoreOverride}
-                className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer disabled:opacity-50"
+                className="px-5 py-2 bg-[#087477] hover:bg-[#159A9C] text-white rounded-xl text-xs font-black shadow-md cursor-pointer disabled:opacity-50"
               >
                 {overriding ? 'Saving...' : 'Save Score'}
               </button>
