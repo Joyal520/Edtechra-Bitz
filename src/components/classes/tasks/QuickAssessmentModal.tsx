@@ -283,28 +283,31 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
         {/* Sticky Header */}
         <div className="p-5 sm:p-6 bg-gradient-to-r from-[#071a1c] via-[#0d2a2d] to-[#173B3F] text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-[#087477]/80 border border-teal-400/30 text-teal-200 flex items-center justify-center shadow-xs">
+            <div className="w-11 h-11 rounded-2xl bg-[#087477]/80 border border-teal-400/30 text-teal-200 flex items-center justify-center shadow-xs shrink-0">
               <Camera className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-teal-300 bg-teal-900/60 border border-teal-500/40 px-2.5 py-0.5 rounded-full">
-                  Instant Assessment
+                <span className="text-[10px] font-black uppercase tracking-wider text-teal-300 bg-teal-900/60 border border-teal-500/40 px-2 py-0.5 rounded-full">
+                  Classroom Mode
                 </span>
                 <span className="text-[10px] font-bold text-teal-200/80">
-                  Zero Setup Needed
+                  Direct Evidence
                 </span>
               </div>
-              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                Quick Assessment
+              <h2 className="text-base sm:text-lg font-black text-white tracking-tight uppercase">
+                QUICK CLASSROOM ASSESSMENT
               </h2>
+              <p className="text-xs text-teal-100/90 font-medium mt-0.5">
+                Evaluate student work instantly and add the result to Teaching Intelligence.
+              </p>
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -345,7 +348,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
             <div className="space-y-5 animate-in fade-in duration-200">
               
               {/* Score Announcement Banner */}
-              <div className="p-6 bg-gradient-to-br from-[#173B3F] to-[#087477] text-white rounded-3xl shadow-md space-y-3">
+              <div className="p-6 bg-gradient-to-br from-[#173B3F] to-[#087477] text-white rounded-3xl shadow-md space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-teal-300" />
@@ -353,28 +356,29 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                       Assessment Completed
                     </span>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
-                    (evaluationResult.percentage ?? 0) >= 80
-                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40'
-                      : (evaluationResult.percentage ?? 0) >= 60
-                      ? 'bg-amber-500/30 text-amber-200 border border-amber-400/40'
-                      : 'bg-rose-500/30 text-rose-200 border border-rose-400/40'
-                  }`}>
-                    {evaluationResult.performance || 'Evaluated'}
+                  <span className="px-3 py-1 rounded-full text-xs font-black tracking-wide bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                    Result saved to Teaching Intelligence
                   </span>
                 </div>
 
-                <div className="flex items-baseline gap-3">
-                  <span className="text-4xl sm:text-5xl font-black text-white">
-                    {evaluationResult.final_score ?? evaluationResult.score}
-                  </span>
-                  <span className="text-lg sm:text-xl font-bold text-teal-200">
-                    / {evaluationResult.max_marks || maxMarks} marks ({evaluationResult.percentage}%)
-                  </span>
-                </div>
-
-                <div className="text-xs text-teal-100/90 font-medium">
-                  Learner: <span className="font-black text-white">{currentSelectedStudent?.display_name || currentSelectedStudent?.profile?.full_name || 'Student'}</span> • Category: <span className="font-black text-white">{evaluationResult.title || evaluationResult.category}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-teal-600/40">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-teal-200/80 block">Student</span>
+                    <span className="text-sm font-black text-white block truncate">{currentSelectedStudent?.display_name || currentSelectedStudent?.profile?.full_name || 'Student'}</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-teal-200/80 block">Evaluation</span>
+                    <span className="text-sm font-black text-white block truncate">{evaluationResult.title || evaluationResult.category}</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-teal-200/80 block">Score</span>
+                    <span className="text-xl font-black text-white block">{evaluationResult.final_score ?? evaluationResult.score} <span className="text-xs font-bold text-teal-200">/ {evaluationResult.max_marks || maxMarks}</span></span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-teal-200/80 block">Performance</span>
+                    <span className="text-xl font-black text-emerald-300 block">{evaluationResult.percentage}%</span>
+                  </div>
                 </div>
               </div>
 
@@ -487,7 +491,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
           ) : (
 
             /* =============================================================== */
-            /* STATE B: ASSESSMENT FORM (STUDENT + CATEGORY + PHOTO + EVALUATE)*/
+            /* STATE B: ASSESSMENT FORM (STUDENT + CATEGORY + MARKS + WORK)    */
             /* =============================================================== */
             <div className="space-y-5">
               
@@ -495,7 +499,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
               <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-2">
                 <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-[#087477]" />
-                  <span>1. Select Student to Assess</span>
+                  <span>Student</span>
                   <span className="text-rose-500">*</span>
                 </label>
                 <select
@@ -504,29 +508,50 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                   style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
                   className="w-full px-4 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all cursor-pointer"
                 >
-                  <option value="">-- Choose Student from Roster --</option>
+                  <option value="">Choose student ▼</option>
                   {students.map((st) => (
                     <option key={st.profile_id} value={st.profile_id}>
                       {st.display_name || st.profile?.full_name || st.profile?.email || 'Student'}
                     </option>
                   ))}
                 </select>
+                {students.length === 0 && (
+                  <p className="text-[11px] text-amber-700 font-bold bg-amber-50 p-2 rounded-lg border border-amber-200">
+                    No enrolled students found in this classroom roster.
+                  </p>
+                )}
               </div>
 
               {/* Step 2: Choose Evaluation Category / Skill */}
               <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-3">
-                <div>
-                  <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-[#087477]" />
-                    <span>2. Choose Skill / Evaluation Category</span>
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <p className="text-[11px] text-[#36565A] font-semibold mt-0.5">
-                    Select the learning skill being evaluated on the worksheet.
-                  </p>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-[#087477]" />
+                      <span>Evaluation Area</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <p className="text-[11px] text-[#36565A] font-semibold mt-0.5">
+                      Select the skill or category being evaluated.
+                    </p>
+                  </div>
+                  
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as OCREvaluationCategory)}
+                    style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                    className="px-3 py-1.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] cursor-pointer"
+                  >
+                    <option value="">Select category ▼</option>
+                    {PRESET_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
                   {PRESET_CATEGORIES.map((cat) => {
                     const isSelected = category === cat.id;
                     return (
@@ -536,7 +561,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                         onClick={() => setCategory(cat.id)}
                         className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
-                            ? 'bg-[#E8F7F5] border-[#087477] shadow-xs'
+                            ? 'bg-[#E8F7F5] border-[#087477] shadow-xs ring-1 ring-[#087477]'
                             : 'bg-white border-[#C9E5E2] hover:border-[#159A9C]'
                         }`}
                       >
@@ -573,7 +598,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
               <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-[#173B3F]">
-                    3. Maximum Marks <span className="text-rose-500">*</span>
+                    Maximum Marks <span className="text-rose-500">*</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     {[10, 20, 50, 100].map((val) => (
@@ -604,32 +629,42 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                 />
               </div>
 
-              {/* Step 4: Capture or Upload Student Work */}
+              {/* Step 4: Student Work (Camera / Upload) */}
               <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-3">
                 <label className="text-xs font-black text-[#173B3F] block">
-                  4. Capture or Upload Student's Work <span className="text-rose-500">*</span>
+                  Student Work <span className="text-rose-500">*</span>
                 </label>
 
                 {imagePreview ? (
-                  <div className="p-3 bg-[#F8FCFB] rounded-2xl border-2 border-[#C9E5E2] flex flex-col items-center gap-3">
-                    <img
-                      src={imagePreview}
-                      alt="Student Work Preview"
-                      className="max-h-72 object-contain rounded-xl shadow-xs border border-[#C9E5E2]"
-                    />
-                    <div className="flex items-center gap-2">
+                  <div className="p-4 bg-[#F8FCFB] rounded-2xl border-2 border-[#C9E5E2] flex flex-col items-center gap-3.5">
+                    <div className="relative max-h-72 overflow-hidden rounded-xl shadow-xs border border-[#C9E5E2] bg-black/5">
+                      <img
+                        src={imagePreview}
+                        alt="Student Work Preview"
+                        className="max-h-72 object-contain mx-auto"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3.5 py-1.5 bg-white hover:bg-[#E8F7F5] text-[#173B3F] border border-[#C9E5E2] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-[#087477]" />
+                        <span>Change Image</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => cameraInputRef.current?.click()}
-                        className="px-3 py-1.5 bg-[#E8F7F5] hover:bg-[#D4EFEC] text-[#087477] border border-[#C9E5E2] rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                        className="px-3.5 py-1.5 bg-[#E8F7F5] hover:bg-[#D4EFEC] text-[#087477] border border-[#C9E5E2] rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors"
                       >
                         <Camera className="w-3.5 h-3.5" />
-                        <span>Retake Photo</span>
+                        <span>Retake</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleClearImage}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black cursor-pointer"
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                       >
                         Remove
                       </button>
@@ -642,17 +677,18 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                     <button
                       type="button"
                       onClick={() => cameraInputRef.current?.click()}
-                      className="p-5 rounded-2xl border-2 border-dashed border-[#087477] bg-[#E8F7F5]/50 hover:bg-[#E8F7F5] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
+                      className="p-5 rounded-2xl border-2 border-dashed border-[#087477] bg-[#E8F7F5]/60 hover:bg-[#E8F7F5] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-[#087477] text-white flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
                         <Camera className="w-6 h-6" />
                       </div>
                       <div>
-                        <span className="text-sm font-black text-[#173B3F] block">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-[#087477] block">CAMERA</span>
+                        <span className="text-sm font-black text-[#173B3F] block mt-0.5">
                           Take Photo
                         </span>
                         <span className="text-[11px] text-[#36565A] font-semibold block mt-0.5">
-                          Use device camera to photograph work
+                          Use device camera where supported
                         </span>
                       </div>
                     </button>
@@ -667,11 +703,12 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                         <Upload className="w-6 h-6" />
                       </div>
                       <div>
-                        <span className="text-sm font-black text-[#173B3F] block">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-[#36565A] block">UPLOAD</span>
+                        <span className="text-sm font-black text-[#173B3F] block mt-0.5">
                           Upload Image
                         </span>
                         <span className="text-[11px] text-[#36565A] font-semibold block mt-0.5">
-                          Select JPG, JPEG, PNG, or WEBP
+                          Choose JPG, JPEG, PNG, or WEBP
                         </span>
                       </div>
                     </button>

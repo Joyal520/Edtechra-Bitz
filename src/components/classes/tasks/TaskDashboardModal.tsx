@@ -183,30 +183,52 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 py-4 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] text-white flex items-center justify-center font-black shadow-md shadow-[#159A9C]/25">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] text-white flex items-center justify-center font-black shadow-md shadow-[#159A9C]/25 shrink-0">
               <FileText className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-white">Classroom Tasks</h2>
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white uppercase">Tasks</h2>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide bg-[#159A9C]/30 text-teal-200 border border-[#159A9C]/40">
                   {tasks.length} {tasks.length === 1 ? 'Task' : 'Tasks'}
                 </span>
               </div>
-              <p className="text-xs text-teal-100/75 font-medium">
+              <p className="text-xs text-teal-100/80 font-medium">
                 {isTeacher
-                  ? 'Assign learning work to students, or upload and evaluate physical classroom submissions.'
+                  ? 'Collect and measure student learning evidence.'
                   : 'View assigned learning work, complete typed responses, or upload handwritten papers.'}
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 text-teal-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isTeacher && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600/80 hover:bg-teal-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create & Assign</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickAssessmentOpen(true)}
+                  className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#087477] hover:bg-[#065e60] text-white text-xs font-black transition-all shadow-xs border border-teal-400/30 cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Quick Assessment</span>
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 text-teal-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Teacher Workflow Landing Banner (3 Clear Action Cards) */}
@@ -253,7 +275,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                       Quick Assessment
                     </h3>
                     <span className="text-[10px] font-black text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2 py-0.5 rounded-full inline-block mt-0.5">
-                      Instant Classroom Grading
+                      Instant Classroom Assessment
                     </span>
                   </div>
                 </div>
@@ -286,7 +308,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
                   Review student submissions, view submitted handwritten pages, and adjust grades.
                 </p>
                 <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
-                  <span>Browse Roster</span>
+                  <span>Browse Tasks</span>
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>

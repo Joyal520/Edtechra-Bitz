@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Settings,
-  CalendarDays
+  CalendarDays,
+  Camera
 } from 'lucide-react';
 import {
   Classroom,
@@ -72,6 +73,7 @@ import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQu
 import { LiveQuizLaunchDecisionModal } from '@/components/classes/live-quiz/LiveQuizLaunchDecisionModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
 import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
+import { QuickAssessmentModal } from '@/components/classes/tasks/QuickAssessmentModal';
 import { StudentAssessmentHistoryModal } from '@/components/classes/StudentAssessmentHistoryModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 import { CourseClassroomAssignment } from '@/types/courseStudio';
@@ -116,6 +118,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [activeReviewAssignment, setActiveReviewAssignment] = useState<Assignment | null>(null);
   const [activityHubOpen, setActivityHubOpen] = useState(false);
   const [taskDashboardOpen, setTaskDashboardOpen] = useState(false);
+  const [quickAssessmentOpen, setQuickAssessmentOpen] = useState(false);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<ClassroomExam | null>(null);
@@ -1135,31 +1138,45 @@ export const ClassroomDetailPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="space-y-1 text-center">
-                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-[#025ca5] transition-colors">
-                    {isTeacher ? 'Tasks' : 'My Tasks'}
+                  <h3 className="text-sm sm:text-[15px] font-black text-slate-900 group-hover:text-[#025ca5] transition-colors tracking-tight">
+                    {isTeacher ? 'TASKS' : 'My Tasks'}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-2">
+                  <p className="text-xs text-slate-600 font-semibold leading-relaxed line-clamp-2">
                     {isTeacher
-                      ? 'Create and assign learning tasks, or upload and evaluate physical classroom work.'
+                      ? 'Collect and measure student learning evidence.'
                       : 'View assigned tasks, type your answers, or submit handwritten work.'}
                   </p>
                 </div>
               </div>
               {isTeacher ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setActivityHubOpen(true)}
-                    className="btn-liquid-primary flex-1 py-2.5 px-3 text-xs font-bold"
-                  >
-                    Create Task
-                  </button>
+                <div className="space-y-2 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActivityHubOpen(true)}
+                      className="btn-liquid-primary py-2.5 px-2 text-[11px] font-black flex items-center justify-center gap-1.5 shadow-xs"
+                      title="Give students work to complete and submit."
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Create & Assign</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickAssessmentOpen(true)}
+                      className="py-2.5 px-2 text-[11px] font-black text-white bg-[#087477] hover:bg-[#065e60] rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                      title="Assess a student's work immediately in the classroom."
+                    >
+                      <Camera className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Quick Assessment</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setTaskDashboardOpen(true)}
-                    className="btn-liquid-secondary py-2.5 px-3 text-xs font-bold"
+                    className="w-full py-1.5 px-3 text-[11px] font-bold text-slate-700 hover:text-[#087477] bg-white/90 hover:bg-white border border-sky-200/90 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="Review existing tasks and submissions."
                   >
-                    Tasks
+                    <span>View Tasks ({stats.total_assignments || 0}) →</span>
                   </button>
                 </div>
               ) : (
@@ -2004,6 +2021,14 @@ export const ClassroomDetailPage: React.FC = () => {
         isTeacher={isTeacher}
         members={members}
         onClose={() => setTaskDashboardOpen(false)}
+      />
+
+      <QuickAssessmentModal
+        isOpen={quickAssessmentOpen}
+        classroomId={classroom.id}
+        members={members}
+        onClose={() => setQuickAssessmentOpen(false)}
+        onSuccess={loadAllClassroomData}
       />
 
       <StudentAssessmentHistoryModal
