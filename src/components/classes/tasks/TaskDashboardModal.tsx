@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Plus,
@@ -13,7 +13,6 @@ import {
   Upload,
   Sparkles,
   Calendar,
-  ListFilter,
   Camera
 } from 'lucide-react';
 import {
@@ -52,7 +51,6 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [members, setMembers] = useState<ClassroomMember[]>(membersProp);
-  const tasksListRef = useRef<HTMLDivElement>(null);
 
   // Submodals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -162,10 +160,6 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
     }
   };
 
-  const scrollToTasks = () => {
-    tasksListRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   if (!isOpen) return null;
 
   const filteredTasks = tasks.filter((t) => {
@@ -231,94 +225,8 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
           </div>
         </div>
 
-        {/* Teacher Workflow Landing Banner (3 Clear Action Cards) */}
-        {isTeacher && (
-          <div className="p-4 sm:p-6 bg-white border-b border-[#C9E5E2] shrink-0">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-              
-              {/* Card 1: Create & Assign Task (Primary Teal) */}
-              <div
-                onClick={() => setIsCreateOpen(true)}
-                className="p-4 bg-[#E8F7F5] hover:bg-[#D4EFEC] rounded-2xl border-2 border-[#159A9C] hover:border-[#087477] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#159A9C] text-white flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#087477] transition-all shadow-xs">
-                    <Plus className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
-                      Create & Assign Task
-                    </h3>
-                    <span className="text-[10px] font-bold text-[#36565A]">Online or Written</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
-                  Give students work with instructions, criteria, and optional typed or handwritten responses.
-                </p>
-                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
-                  <span>Start Task</span>
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-              {/* Card 2: Quick Assessment (Secondary Dark Teal) */}
-              <div
-                onClick={() => setIsQuickAssessmentOpen(true)}
-                className="p-4 bg-[#F8FCFB] hover:bg-[#E8F7F5] rounded-2xl border-2 border-[#C9E5E2] hover:border-[#087477] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#087477] text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-all shadow-xs">
-                    <Camera className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
-                      Quick Assessment
-                    </h3>
-                    <span className="text-[10px] font-black text-[#087477] bg-[#E8F7F5] border border-[#C9E5E2] px-2 py-0.5 rounded-full inline-block mt-0.5">
-                      Instant Classroom Assessment
-                    </span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
-                  Immediately photograph or upload student work to evaluate with AI and record evidence.
-                </p>
-                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
-                  <span>Start Assessment</span>
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-              {/* Card 3: View Tasks (Neutral) */}
-              <div
-                onClick={scrollToTasks}
-                className="p-4 bg-white hover:bg-[#F8FCFB] rounded-2xl border-2 border-[#C9E5E2] hover:border-[#159A9C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#F8FCFB] text-[#173B3F] border border-[#C9E5E2] flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-[#159A9C] transition-all">
-                    <ListFilter className="w-5 h-5 text-[#087477]" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#173B3F] group-hover:text-[#087477] transition-colors">
-                      View Tasks
-                    </h3>
-                    <span className="text-[10px] font-bold text-[#36565A]">{tasks.length} active assignments</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[#36565A] font-semibold leading-relaxed">
-                  Review student submissions, view submitted handwritten pages, and adjust grades.
-                </p>
-                <div className="flex items-center justify-between text-xs font-black text-[#087477] pt-1">
-                  <span>Browse Tasks</span>
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
-
         {/* Search Bar & Title Strip */}
-        <div ref={tasksListRef} className="px-6 py-3.5 bg-white border-b border-[#C9E5E2] flex items-center justify-between gap-3 shrink-0">
+        <div className="px-6 py-3.5 bg-white border-b border-[#C9E5E2] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-[#173B3F]">
               Assigned Tasks

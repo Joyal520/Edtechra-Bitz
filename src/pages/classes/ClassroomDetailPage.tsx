@@ -20,8 +20,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Settings,
-  CalendarDays,
-  Camera
+  CalendarDays
 } from 'lucide-react';
 import {
   Classroom,
@@ -73,6 +72,7 @@ import { CreateLiveQuizModal } from '@/components/classes/live-quiz/CreateLiveQu
 import { LiveQuizLaunchDecisionModal } from '@/components/classes/live-quiz/LiveQuizLaunchDecisionModal';
 import { ChallengeListModal } from '@/components/classes/challenges/ChallengeListModal';
 import { TaskDashboardModal } from '@/components/classes/tasks/TaskDashboardModal';
+import { TaskWorkspaceModal } from '@/components/classes/tasks/TaskWorkspaceModal';
 import { QuickAssessmentModal } from '@/components/classes/tasks/QuickAssessmentModal';
 import { StudentAssessmentHistoryModal } from '@/components/classes/StudentAssessmentHistoryModal';
 import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
@@ -117,6 +117,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [activeSubmitAssignment, setActiveSubmitAssignment] = useState<Assignment | null>(null);
   const [activeReviewAssignment, setActiveReviewAssignment] = useState<Assignment | null>(null);
   const [activityHubOpen, setActivityHubOpen] = useState(false);
+  const [taskWorkspaceOpen, setTaskWorkspaceOpen] = useState(false);
   const [taskDashboardOpen, setTaskDashboardOpen] = useState(false);
   const [quickAssessmentOpen, setQuickAssessmentOpen] = useState(false);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
@@ -1149,34 +1150,15 @@ export const ClassroomDetailPage: React.FC = () => {
                 </div>
               </div>
               {isTeacher ? (
-                <div className="space-y-2 pt-1">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setActivityHubOpen(true)}
-                      className="btn-liquid-primary py-2.5 px-2 text-[11px] font-black flex items-center justify-center gap-1.5 shadow-xs"
-                      title="Give students work to complete and submit."
-                    >
-                      <Plus className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Create & Assign</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQuickAssessmentOpen(true)}
-                      className="py-2.5 px-2 text-[11px] font-black text-white bg-[#087477] hover:bg-[#065e60] rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                      title="Assess a student's work immediately in the classroom."
-                    >
-                      <Camera className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Quick Assessment</span>
-                    </button>
-                  </div>
+                <div className="pt-1">
                   <button
                     type="button"
-                    onClick={() => setTaskDashboardOpen(true)}
-                    className="w-full py-1.5 px-3 text-[11px] font-bold text-slate-700 hover:text-[#087477] bg-white/90 hover:bg-white border border-sky-200/90 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                    title="Review existing tasks and submissions."
+                    onClick={() => setTaskWorkspaceOpen(true)}
+                    className="btn-liquid-primary w-full py-2.5 px-4 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs cursor-pointer hover:shadow-md transition-all active:scale-[0.99]"
+                    title="Create, assess, or review student learning tasks."
                   >
-                    <span>View Tasks ({stats.total_assignments || 0}) →</span>
+                    <Plus className="w-4 h-4 shrink-0" />
+                    <span>CREATE TASK</span>
                   </button>
                 </div>
               ) : (
@@ -2013,6 +1995,23 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
+      />
+
+      <TaskWorkspaceModal
+        isOpen={taskWorkspaceOpen}
+        onClose={() => setTaskWorkspaceOpen(false)}
+        onSelectAssignTask={() => {
+          setTaskWorkspaceOpen(false);
+          setActivityHubOpen(true);
+        }}
+        onSelectQuickAssessment={() => {
+          setTaskWorkspaceOpen(false);
+          setQuickAssessmentOpen(true);
+        }}
+        onSelectViewTasks={() => {
+          setTaskWorkspaceOpen(false);
+          setTaskDashboardOpen(true);
+        }}
       />
 
       <TaskDashboardModal
