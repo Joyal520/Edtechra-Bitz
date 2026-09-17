@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   FileEdit,
@@ -23,35 +24,62 @@ export const TaskWorkspaceModal: React.FC<TaskWorkspaceModalProps> = ({
   onSelectQuickAssessment,
   onSelectViewTasks
 }) => {
-  // Handle escape key
+  // Handle escape key and body scroll lock
   useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 pointer-events-auto"
+      style={{ isolation: 'isolate' }}
     >
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[92vh]">
+      {/* Dark translucent backdrop covering entire viewport */}
+      <div
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity animate-in fade-in duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-workspace-title"
+        className="relative z-10 bg-white opacity-100 w-[calc(100vw-24px)] sm:w-full max-w-4xl rounded-3xl shadow-2xl border-2 border-[#C9E5E2] overflow-hidden flex flex-col max-h-[90vh] my-auto pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-6 py-4.5 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] text-white flex items-center justify-center shadow-md shadow-[#159A9C]/25 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#087477] text-white flex items-center justify-center shadow-md shadow-[#159A9C]/25 shrink-0">
               <Layers className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-black tracking-wider uppercase text-white">
+              <h2 id="task-workspace-title" className="text-sm sm:text-base font-black tracking-wider uppercase text-white">
                 TASK WORKSPACE
               </h2>
               <p className="text-xs text-teal-100 font-medium">
@@ -190,6 +218,7 @@ export const TaskWorkspaceModal: React.FC<TaskWorkspaceModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

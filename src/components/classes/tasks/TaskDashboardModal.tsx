@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -160,6 +161,33 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
     }
   };
 
+  // Body scroll lock & Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const filteredTasks = tasks.filter((t) => {
@@ -170,10 +198,25 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
 
   const activeReviewTask = tasks.find((t) => t.id === reviewTaskId) || null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#F8FCFB] w-full max-w-5xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[92vh]">
-        
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 pointer-events-auto"
+      style={{ isolation: 'isolate' }}
+    >
+      {/* Dark translucent backdrop covering entire viewport */}
+      <div
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity animate-in fade-in duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tasks-dashboard-title"
+        className="relative z-10 bg-white opacity-100 w-[calc(100vw-24px)] sm:w-full max-w-5xl rounded-3xl shadow-2xl border-2 border-[#C9E5E2] overflow-hidden flex flex-col max-h-[90vh] my-auto pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
         <div className="px-6 py-4 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
@@ -758,7 +801,7 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
           }}
         />
       )}
-
-    </div>
+    </div>,
+    document.body
   );
 };

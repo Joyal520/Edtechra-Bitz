@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Camera,
@@ -115,6 +116,33 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
       setSelectedStudentId(students[0].profile_id);
     }
   }, [isOpen, students]);
+
+  // Body scroll lock & Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -276,14 +304,30 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
 
   const currentSelectedStudent = students.find((s) => s.profile_id === selectedStudentId);
 
-  return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-[#C9E5E2] overflow-hidden flex flex-col max-h-[92vh]">
-        
-        {/* Sticky Header */}
-        <div className="p-5 sm:p-6 bg-gradient-to-r from-[#071a1c] via-[#0d2a2d] to-[#173B3F] text-white flex items-center justify-between shrink-0">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 pointer-events-auto"
+      style={{ isolation: 'isolate' }}
+    >
+      {/* Dark translucent backdrop covering entire viewport */}
+      <div
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity animate-in fade-in duration-200 cursor-pointer"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Modal Dialog Container - Fully Opaque */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-assessment-modal-title"
+        className="relative z-10 bg-white opacity-100 w-[calc(100vw-24px)] sm:w-full max-w-2xl rounded-3xl shadow-2xl border-2 border-[#C9E5E2] overflow-hidden flex flex-col max-h-[90vh] my-auto pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Sticky Header - Fully Opaque */}
+        <div className="p-5 sm:p-6 bg-gradient-to-r from-[#071a1c] via-[#0d2a2d] to-[#173B3F] text-white flex items-center justify-between shrink-0 border-b border-[#0e3b40]">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-[#087477]/80 border border-teal-400/30 text-teal-200 flex items-center justify-center shadow-xs shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-[#087477] border border-teal-400/30 text-teal-200 flex items-center justify-center shadow-xs shrink-0">
               <Camera className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -295,7 +339,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                   Direct Evidence
                 </span>
               </div>
-              <h2 className="text-base sm:text-lg font-black text-white tracking-tight uppercase">
+              <h2 id="quick-assessment-modal-title" className="text-base sm:text-lg font-black text-white tracking-tight uppercase">
                 QUICK CLASSROOM ASSESSMENT
               </h2>
               <p className="text-xs text-teal-100/90 font-medium mt-0.5">
@@ -307,9 +351,10 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 text-white" />
           </button>
         </div>
 
@@ -330,8 +375,8 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
           className="hidden"
         />
 
-        {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 bg-[#F8FCFB]">
+        {/* Modal Body - Fully Opaque */}
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 bg-white">
           
           {/* Error Banner */}
           {(errorMessage || fileError) && (
@@ -392,7 +437,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                     {evaluationResult.breakdown_json.map((c: any, idx: number) => {
                       const pct = c.max > 0 ? Math.round((c.score / c.max) * 100) : 0;
                       return (
-                        <div key={idx} className="p-3 rounded-2xl bg-[#E8F7F5]/50 border border-[#C9E5E2] space-y-1.5">
+                        <div key={idx} className="p-3 rounded-2xl bg-[#E8F7F5] border border-[#C9E5E2] space-y-1.5">
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-black text-[#173B3F]">{c.criterion}</span>
                             <span className="font-black text-[#087477]">{c.score} / {c.max}</span>
@@ -677,7 +722,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                     <button
                       type="button"
                       onClick={() => cameraInputRef.current?.click()}
-                      className="p-5 rounded-2xl border-2 border-dashed border-[#087477] bg-[#E8F7F5]/60 hover:bg-[#E8F7F5] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
+                      className="p-5 rounded-2xl border-2 border-dashed border-[#087477] bg-[#E8F7F5] hover:bg-[#D4EFEC] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-[#087477] text-white flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
                         <Camera className="w-6 h-6" />
@@ -697,7 +742,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-5 rounded-2xl border-2 border-dashed border-[#C9E5E2] bg-white hover:bg-[#E8F7F5]/30 hover:border-[#159A9C] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
+                      className="p-5 rounded-2xl border-2 border-dashed border-[#C9E5E2] bg-white hover:bg-[#E8F7F5] transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group shadow-2xs"
                     >
                       <div className="w-12 h-12 rounded-2xl bg-white border-2 border-[#C9E5E2] text-[#087477] flex items-center justify-center group-hover:scale-105 group-hover:border-[#159A9C] transition-all shadow-xs">
                         <Upload className="w-6 h-6" />
@@ -751,8 +796,8 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
           )}
 
         </div>
-
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
