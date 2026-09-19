@@ -538,15 +538,33 @@ const StudentDetailView: React.FC<StudentDetailViewProps> = ({
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                 {/* Tasks (includes OCR) */}
-                <div className="p-3 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] text-center space-y-0.5">
-                  <span className="text-[10px] font-black text-[#36565A] block uppercase tracking-wider">Tasks</span>
-                  <span className="text-sm font-black text-[#173B3F] block">
-                    {detail.activityBreakdown.assignment.averageScore != null ? `${detail.activityBreakdown.assignment.averageScore}%` : '—'}
-                  </span>
-                  <span className="text-[10px] font-semibold text-[#36565A]">
-                    {detail.activityBreakdown.assignment.attempts} submitted
-                  </span>
-                </div>
+                {(() => {
+                  const assignAttempts = detail.activityBreakdown.assignment?.attempts || 0;
+                  const ocrAttempts = detail.activityBreakdown.ocr?.attempts || 0;
+                  const totalTaskAttempts = assignAttempts + ocrAttempts;
+
+                  const assignSum = (detail.activityBreakdown.assignment?.averageScore != null && assignAttempts > 0)
+                    ? detail.activityBreakdown.assignment.averageScore * assignAttempts
+                    : 0;
+                  const ocrSum = (detail.activityBreakdown.ocr?.averageScore != null && ocrAttempts > 0)
+                    ? detail.activityBreakdown.ocr.averageScore * ocrAttempts
+                    : 0;
+                  const combinedTaskAvg = totalTaskAttempts > 0
+                    ? Math.round((assignSum + ocrSum) / totalTaskAttempts)
+                    : null;
+
+                  return (
+                    <div className="p-3 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] text-center space-y-0.5">
+                      <span className="text-[10px] font-black text-[#36565A] block uppercase tracking-wider">Tasks & OCR</span>
+                      <span className="text-sm font-black text-[#173B3F] block">
+                        {combinedTaskAvg != null ? `${combinedTaskAvg}%` : '—'}
+                      </span>
+                      <span className="text-[10px] font-semibold text-[#36565A]">
+                        {totalTaskAttempts} submitted {ocrAttempts > 0 ? `(${ocrAttempts} OCR)` : ''}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Live Quizzes */}
                 <div className="p-3 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] text-center space-y-0.5">
@@ -684,8 +702,8 @@ const StudentDetailView: React.FC<StudentDetailViewProps> = ({
                             {ev.activityTitle}
                           </td>
                           <td className="py-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#E8F7F5] text-[#087477] capitalize">
-                              {ev.activityType.replace('_', ' ')}
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#E8F7F5] text-[#087477]">
+                              {ev.activityType === 'ocr' ? 'OCR Worksheet' : ev.activityType.replace('_', ' ')}
                             </span>
                           </td>
                           <td className="py-2.5 text-[#36565A] max-w-[140px] truncate">

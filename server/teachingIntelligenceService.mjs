@@ -280,7 +280,7 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
         task_completion_rate: taskCompletionRate,
         engagement_rate: engagementRate,
         assessments_count: {
-          tasks: analytics.activityBreakdown.assignment?.eventCount || 0,
+          tasks: (analytics.activityBreakdown.assignment?.eventCount || 0) + (analytics.activityBreakdown.ocr?.eventCount || 0),
           quizzes: analytics.activityBreakdown.live_quiz?.eventCount || 0,
           exams: analytics.activityBreakdown.exam?.eventCount || 0,
           ocr_assessments: analytics.activityBreakdown.ocr?.eventCount || 0,
@@ -303,7 +303,8 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       students_needing_attention: analytics.studentsNeedingAttention || [],
       students: analytics.students || [],
       writing_intelligence: writingIntelligence,
-      recent_learning_evidence: analytics.recentLearningEvidence || [],
+      recent_learning_evidence: analytics.recentActivity || [],
+      grouped_evidence: analytics.recentLearningEvidence || [],
       weak_area_visual_data: analytics.weakAreaVisualData || null,
       activity_breakdown: analytics.activityBreakdown || {},
       data_hash: dataHash,
@@ -447,7 +448,15 @@ export async function generateTeachingIntelligence({ metricsSummary, serverOpenA
     class_health: metricsSummary.class_health,
     weak_topics: (metricsSummary.topic_performance || []).filter(t => t.score < 65 || t.change < 0),
     strong_topics: (metricsSummary.topic_performance || []).filter(t => t.score >= 75),
-    attention_cases: metricsSummary.students_needing_attention || []
+    attention_cases: metricsSummary.students_needing_attention || [],
+    recent_evidence_sample: (metricsSummary.recent_learning_evidence || []).slice(0, 15).map(e => ({
+      activity: e.activityTitle,
+      type: e.activityType,
+      topic: e.topic,
+      score: e.score != null && e.maxScore != null ? `${e.score}/${e.maxScore}` : (e.score != null ? `${e.score} pts` : null),
+      percentage: e.percentage != null ? `${e.percentage}%` : null,
+      student: e.studentName
+    }))
   };
 
   const systemPrompt = `You are the lead Pedagogical AI Advisor for EdTechra Digital Classroom.
@@ -478,7 +487,7 @@ RULES:
       taskType: AI_TASK_TYPES.CLASS_ANALYSIS,
       systemPrompt,
       prompt: `CLASSROOM METRICS EVIDENCE:\n${JSON.stringify(compactInput)}`,
-      classroomId,
+      classroomId: metricsSummary.classroom?.id,
       temperature: 0.3
     });
 
@@ -1946,7 +1955,7 @@ RULES:
       taskType: AI_TASK_TYPES.CLASS_ANALYSIS,
       systemPrompt,
       prompt: `STUDENT ASSESSMENT EVIDENCE:\n${JSON.stringify(compactInput)}`,
-      classroomId,
+      classroomId: classroom?.id,
       temperature: 0.2
     });
 

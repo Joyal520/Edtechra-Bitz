@@ -842,17 +842,20 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     studentNameMap.set(sid, m.display_name || m.profile?.full_name || 'Student');
   });
 
-  const recentActivity = events.slice(0, 15).map(e => ({
+  const recentActivity = events.slice(0, 50).map(e => ({
     id: e.id,
+    activityId: e.activity_id || e.id,
     studentId: e.student_id,
     studentName: studentNameMap.get(e.student_id) || 'Student',
     activityType: e.activity_type,
-    activityTitle: e.activity_title || 'Activity',
-    topic: e.topic || e.category || null,
+    rawActivityType: e.activity_type,
+    activityTitle: e.activity_title || (e.activity_type === 'ocr' ? (e.topic || 'Worksheet Assessment') : 'Class Activity'),
+    topic: e.topic || e.category || 'General',
     score: e.score != null ? Number(e.score) : null,
     maxScore: e.max_score != null ? Number(e.max_score) : null,
     percentage: e.percentage != null ? Number(e.percentage) : null,
-    completedAt: e.completed_at
+    completedAt: e.completed_at,
+    metadata: e.metadata || {}
   }));
 
   // 7. Grouped Recent Learning Evidence (Unified across 4 Sources: Tasks, Quizzes, Assessments, Competitions)

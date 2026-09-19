@@ -309,7 +309,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               )}
 
               {activeTab === 'evidence-reports' && (
-                <EvidenceReportsTab classroom={classroom} />
+                <EvidenceReportsTab classroom={classroom} data={data} />
               )}
             </>
           )}

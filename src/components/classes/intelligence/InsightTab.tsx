@@ -20,7 +20,8 @@ import {
   BookOpen,
   Trophy,
   Award,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
@@ -68,8 +69,21 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const learningGapScore = primaryTeachNext?.current_performance ?? fallbackScore ?? null;
   const studentsNeedingSupportForTopic = Math.min(strugglingCount > 0 ? strugglingCount : 1, totalStudents > 0 ? totalStudents : 1);
 
-  // Derive 4-Source Evidence breakdown for this topic or classroom
-  const taskAvg = activityBreakdown.assignment?.averagePercentage ?? null;
+  // Derive 4-Source Evidence breakdown for this topic or classroom (Tasks includes OCR worksheets)
+  const assignCount = activityBreakdown.assignment?.eventCount || 0;
+  const ocrCount = activityBreakdown.ocr?.eventCount || 0;
+  const totalTaskCount = assignCount + ocrCount;
+
+  const assignSum = (activityBreakdown.assignment?.averagePercentage != null && assignCount > 0)
+    ? activityBreakdown.assignment.averagePercentage * assignCount
+    : 0;
+  const ocrSum = (activityBreakdown.ocr?.averagePercentage != null && ocrCount > 0)
+    ? activityBreakdown.ocr.averagePercentage * ocrCount
+    : 0;
+  const taskAvg = totalTaskCount > 0
+    ? (assignSum + ocrSum) / totalTaskCount
+    : null;
+
   const quizAvg = activityBreakdown.live_quiz?.averagePercentage ?? null;
   const examAvg = activityBreakdown.exam?.averagePercentage ?? null;
   const challengeAvg = activityBreakdown.ai_challenge?.averagePercentage ?? null;
@@ -288,7 +302,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       {taskAvg != null ? `${Math.round(taskAvg)}%` : '—'}
                     </span>
                     <span className="text-[9px] text-slate-400 font-medium">
-                      {activityBreakdown.assignment?.eventCount || 0} evaluated
+                      {totalTaskCount} evaluated
                     </span>
                   </div>
 
@@ -467,6 +481,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                 ev.activityType === 'exam' ? <Award className="w-3.5 h-3.5 text-indigo-600" /> :
                 ev.activityType === 'live_quiz' ? <Zap className="w-3.5 h-3.5 text-amber-500" /> :
                 ev.activityType === 'ai_challenge' ? <Trophy className="w-3.5 h-3.5 text-purple-600" /> :
+                ev.activityType === 'ocr' ? <Camera className="w-3.5 h-3.5 text-teal-600" /> :
                 <BookOpen className="w-3.5 h-3.5 text-[#087477]" />;
 
               return (

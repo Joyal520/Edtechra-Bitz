@@ -25,7 +25,8 @@ import {
   RefreshCw,
   Download,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Camera
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import {
@@ -41,25 +42,27 @@ interface EvidenceReportsTabProps {
   classroom: Classroom;
   data?: TeachingIntelligenceResponse | null;
   recentExams?: RecentExamReportCard[];
+  loadingExams?: boolean;
   loadingRecentExams?: boolean;
   selectedExamId?: string | null;
   examAnalysis?: ExamDetailedAnalysisData | null;
   loadingAnalysis?: boolean;
   refreshingAnalysisAi?: boolean;
   onSelectExam?: (examId: string | null) => void;
-  onRefreshExamAi?: () => void;
-  reportResult?: any | null;
+  onRefreshExamAi?: (examId?: string) => void;
+  reportResult?: any;
   reportHistory?: ThirtyDayReportRecord[];
   isGeneratingReport?: boolean;
   onGenerate30DayReport?: () => void;
 }
 
-type EvidenceSourceFilter = 'all' | 'task' | 'live_quiz' | 'exam' | 'ai_challenge';
+type EvidenceSourceFilter = 'all' | 'task' | 'live_quiz' | 'exam' | 'ai_challenge' | 'ocr';
 
 export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   classroom,
   data,
   recentExams,
+  loadingExams,
   loadingRecentExams,
   selectedExamId,
   examAnalysis,
@@ -106,7 +109,7 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   }, [classroom?.id]);
 
   const effectiveRecentExams = recentExams ?? internalRecentExams;
-  const effectiveLoadingRecentExams = loadingRecentExams ?? internalLoadingExams;
+  const effectiveLoadingRecentExams = loadingRecentExams ?? loadingExams ?? internalLoadingExams;
   const effectiveSelectedExamId = selectedExamId !== undefined ? selectedExamId : internalSelectedExamId;
   const effectiveExamAnalysis = examAnalysis ?? internalAnalysis;
   const effectiveLoadingAnalysis = loadingAnalysis ?? internalLoadingAnalysis;
@@ -138,7 +141,7 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
 
   const handleRefreshExamAi = async () => {
     if (onRefreshExamAi) {
-      onRefreshExamAi();
+      onRefreshExamAi(effectiveSelectedExamId || undefined);
       return;
     }
     const currentId = effectiveSelectedExamId;
@@ -176,8 +179,13 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
 
   const filteredEvidence = recentEvidence.filter((ev: any) => {
     if (sourceFilter === 'all') return true;
-    if (sourceFilter === 'task') return ev.activityType === 'assignment' || ev.activityType === 'ocr';
-    return ev.activityType === sourceFilter;
+    const type = ev.rawActivityType || ev.activityType;
+    if (sourceFilter === 'task') return type === 'assignment' || type === 'task' || type === 'ocr';
+    if (sourceFilter === 'ocr') return type === 'ocr';
+    if (sourceFilter === 'live_quiz') return type === 'live_quiz' || type === 'quiz';
+    if (sourceFilter === 'exam') return type === 'exam' || type === 'assessment';
+    if (sourceFilter === 'ai_challenge') return type === 'ai_challenge' || type === 'competition';
+    return type === sourceFilter;
   });
 
   // Filter students in detailed exam analysis
@@ -331,6 +339,19 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
               <Trophy className="w-3.5 h-3.5" />
               <span>Competitions</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setSourceFilter('ocr')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                sourceFilter === 'ocr'
+                  ? 'bg-teal-600 text-white shadow-2xs'
+                  : 'bg-white text-[#36565A] border border-[#C9E5E2] hover:bg-[#E8F7F5]'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>OCR Worksheets</span>
+            </button>
           </div>
 
           {/* Evidence List */}
@@ -353,12 +374,14 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
                     ev.activityType === 'exam' ? <Award className="w-4 h-4 text-indigo-600" /> :
                     ev.activityType === 'live_quiz' ? <Zap className="w-4 h-4 text-amber-500" /> :
                     ev.activityType === 'ai_challenge' ? <Trophy className="w-4 h-4 text-purple-600" /> :
+                    ev.activityType === 'ocr' ? <Camera className="w-4 h-4 text-teal-600" /> :
                     <BookOpen className="w-4 h-4 text-[#087477]" />;
 
                   const typeLabel =
                     ev.activityType === 'exam' ? 'Assessment' :
                     ev.activityType === 'live_quiz' ? 'Live Quiz' :
                     ev.activityType === 'ai_challenge' ? 'Competition' :
+                    ev.activityType === 'ocr' ? 'OCR Worksheet' :
                     'Task';
 
                   return (
