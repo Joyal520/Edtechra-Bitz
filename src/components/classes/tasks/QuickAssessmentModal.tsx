@@ -150,8 +150,11 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
     setFileError(null);
     setErrorMessage(null);
 
-    const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validMimes.includes(file.type)) {
+    const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const ext = file.name?.split('.').pop()?.toLowerCase();
+    const validExts = ['jpg', 'jpeg', 'png', 'webp'];
+
+    if (!validMimes.includes(file.type) && (!ext || !validExts.includes(ext))) {
       setFileError('Please select a valid image (.jpg, .jpeg, .png, or .webp). Document or PDF files are not supported.');
       return;
     }
@@ -165,6 +168,9 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
     const reader = new FileReader();
     reader.onload = () => {
       setImagePreview(reader.result as string);
+    };
+    reader.onerror = () => {
+      setFileError('Failed to read the selected image.');
     };
     reader.readAsDataURL(file);
   };
@@ -212,46 +218,84 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
 
       let tempFileKey: string | undefined;
 
-      // Upload via R2 presigned URL if image is large, or send directly
+      // Detect MIME type accurately for JPG, JPEG, PNG, WEBP
+      const detectedContentType = selectedImage?.type || (
+        imagePreview?.startsWith('data:image/png')
+          ? 'image/png'
+          : imagePreview?.startsWith('data:image/webp')
+            ? 'image/webp'
+            : 'image/jpeg'
+      );
+
+      // Attempt R2 presigned upload if image is selected, with seamless fallback to direct base64
       if (selectedImage) {
         try {
           const presigned = await ocrService.presignTemporaryUpload({
             classroomId,
             filename: selectedImage.name || 'worksheet.jpg',
-            contentType: selectedImage.type || 'image/jpeg',
+            contentType: detectedContentType,
             size: selectedImage.size
           });
 
-          await ocrService.uploadFileToR2(presigned.uploadUrl, selectedImage, selectedImage.type || 'image/jpeg');
+          await ocrService.uploadFileToR2(presigned.uploadUrl, selectedImage, detectedContentType);
           tempFileKey = presigned.objectKey;
         } catch (uploadErr: any) {
-          console.warn('[QuickAssessment] R2 direct upload notice, falling back to base64:', uploadErr.message);
+          console.warn('[QuickAssessment] R2 temporary upload notice, proceeding with direct base64:', uploadErr.message);
         }
       }
 
+      const evalId = crypto.randomUUID();
       const jobPayload: any = {
-        evaluationId: crypto.randomUUID(),
+        evaluationId: evalId,
         classroomId,
         studentId: selectedStudentId,
         studentName,
         category,
         title: effectiveTitle,
-        maxMarks: Number(maxMarks)
+        maxMarks: Number(maxMarks),
+        fileContentType: detectedContentType
       };
 
+      // Ensure base64 is always provided for instantaneous vision processing
+      if (imagePreview) {
+        jobPayload.imageBase64 = imagePreview;
+      }
       if (tempFileKey) {
         jobPayload.temporaryFileKey = tempFileKey;
-      } else if (imagePreview) {
-        jobPayload.imageBase64 = imagePreview;
       }
 
       const result = await ocrService.submitJob(jobPayload);
 
-      if (!result.data) {
-        throw new Error('Evaluation could not be completed. Please try again.');
+      // Handle both unwrapped and wrapped response structures
+      let completedEval: any = (result && (result.data || result)) || null;
+
+      // If job is asynchronously queued or processing, poll until finished
+      if (completedEval && (completedEval.status === 'queued' || completedEval.status === 'processing')) {
+        const pollJobId = completedEval.jobId || completedEval.evaluationId || evalId;
+        const maxPollAttempts = 20;
+        for (let i = 0; i < maxPollAttempts; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const polled = await ocrService.pollJob(pollJobId);
+          if (polled && polled.status === 'completed') {
+            completedEval = polled;
+            break;
+          } else if (polled && polled.status === 'failed') {
+            const pollErr: any = new Error(polled.error_message || 'Evaluation could not be completed.');
+            pollErr.stage = 'vision_evaluation';
+            throw pollErr;
+          }
+        }
       }
 
-      const completedEval = result.data;
+      if (!completedEval || (completedEval.status !== 'completed' && typeof completedEval.score !== 'number' && typeof completedEval.final_score !== 'number')) {
+        const invalidResErr: any = new Error('Evaluation could not be completed. Please try again.');
+        invalidResErr.stage = 'response_parsing';
+        throw invalidResErr;
+      }
+
+      // Guarantee ID is available for teacher score adjustment
+      completedEval.id = completedEval.id || completedEval.evaluationId || evalId;
+
       setEvaluationResult(completedEval);
       setEditScore(completedEval.final_score ?? completedEval.score ?? 0);
       setEditFeedback(completedEval.feedback || '');
@@ -260,7 +304,11 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
         onSuccess();
       }
     } catch (err: any) {
-      console.error('[QuickAssessment] Error:', err);
+      console.error('[QuickAssessment] Evaluation request failed:', {
+        status: err?.status || 500,
+        stage: err?.stage || 'vision_evaluation',
+        error: err?.message || 'Unknown error'
+      });
       const isQualityError = err.message?.toLowerCase().includes('quality') || err.message?.toLowerCase().includes('blur');
       if (isQualityError) {
         setErrorMessage('Image quality is too low for reliable evaluation. Please retake the photo in better lighting.');
@@ -273,10 +321,11 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
   };
 
   const handleSaveAdjustment = async () => {
-    if (!evaluationResult?.id) return;
+    const evalId = evaluationResult?.id || evaluationResult?.evaluationId;
+    if (!evalId) return;
     setIsSavingAdjustment(true);
     try {
-      await ocrService.updateEvaluation(evaluationResult.id, {
+      await ocrService.updateEvaluation(evalId, {
         score: editScore,
         feedback: editFeedback.trim()
       });

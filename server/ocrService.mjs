@@ -115,6 +115,52 @@ const CONCURRENCY_LIMIT = Math.max(
   parseInt(process.env.OCR_AI_CONCURRENCY_LIMIT || `${DEFAULT_CONCURRENCY}`, 10)
 );
 
+/**
+ * Robust JSON extraction and parser handling markdown codeblocks, whitespace,
+ * and conversational lead-in/lead-out wrapper text from LLMs.
+ */
+export function cleanAndParseJson(rawText, fallback = null) {
+  if (!rawText || typeof rawText !== 'string') return fallback;
+  const trimmed = rawText.trim();
+  if (!trimmed) return fallback;
+
+  // 1. Direct JSON parse
+  try {
+    return JSON.parse(trimmed);
+  } catch (_) {}
+
+  // 2. Strip markdown code fences (```json ... ``` or ``` ... ```)
+  try {
+    const withoutBlocks = trimmed
+      .replace(/^```(?:json)?\s*/im, '')
+      .replace(/\s*```$/im, '')
+      .trim();
+    return JSON.parse(withoutBlocks);
+  } catch (_) {}
+
+  // 3. Extract outermost JSON object {...}
+  try {
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+      return JSON.parse(candidate);
+    }
+  } catch (_) {}
+
+  // 4. Extract outermost JSON array [...]
+  try {
+    const firstBracket = trimmed.indexOf('[');
+    const lastBracket = trimmed.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      const candidate = trimmed.slice(firstBracket, lastBracket + 1);
+      return JSON.parse(candidate);
+    }
+  } catch (_) {}
+
+  return fallback;
+}
+
 class OcrEvaluationQueue {
   constructor() {
     this.queue = [];
@@ -124,9 +170,10 @@ class OcrEvaluationQueue {
     this.serverOpenAI = null;
   }
 
-  init({ serverSupabase, serverOpenAI }) {
+  init({ serverSupabase, serverOpenAI, geminiApiKey = null }) {
     this.serverSupabase = serverSupabase;
     this.serverOpenAI = serverOpenAI;
+    this.geminiApiKey = geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     console.log(`[OCR Engine] Initialized with concurrency limit: ${this.concurrencyLimit}`);
   }
 
@@ -377,31 +424,49 @@ class OcrEvaluationQueue {
   }
 
   async evaluateWithAiWithRetry(params, maxRetries = 3) {
-    let delayMs = 1000;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await this.evaluateWithAi(params);
-      } catch (err) {
-        const isRateLimit = err?.status === 429 || (err?.message && err.message.includes('429'));
-        if (isRateLimit && attempt < maxRetries) {
-          console.warn(`[OCR Engine] Rate limited (429). Retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})...`);
-          await new Promise((r) => setTimeout(r, delayMs));
-          delayMs *= 2;
-        } else if (attempt === maxRetries) {
-          console.warn('[OCR Engine] Falling back to intelligent heuristic evaluation rule.');
-          return this.generateHeuristicEvaluation(params);
-        } else {
-          // For non-rate-limit errors, fall back immediately to avoid wasting tokens
-          return this.generateHeuristicEvaluation(params);
+    let lastError = null;
+
+    // 1. PRIMARY: Try OpenAI if configured
+    if (this.serverOpenAI) {
+      let delayMs = 1000;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          return await this.evaluateWithAi(params);
+        } catch (err) {
+          lastError = err;
+          const isRateLimit = err?.status === 429 || (err?.message && err.message.includes('429'));
+          console.warn(`[OCR Engine] OpenAI evaluation attempt ${attempt} notice: ${err.message}`);
+          if (isRateLimit && attempt < maxRetries) {
+            await new Promise((r) => setTimeout(r, delayMs));
+            delayMs *= 2;
+          } else if (!isRateLimit) {
+            // For non-rate-limit errors, break out to allow Gemini fallback
+            break;
+          }
         }
       }
     }
-    return this.generateHeuristicEvaluation(params);
+
+    // 2. TIER 1 / REDUNDANT FALLBACK: Try Gemini if OpenAI failed or unconfigured
+    const geminiKey = this.geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (geminiKey) {
+      try {
+        console.log('[OCR Engine] Attempting evaluation via server Gemini vision fallback...');
+        return await this.evaluateWithGemini({ ...params, geminiApiKey: geminiKey });
+      } catch (gemErr) {
+        console.warn(`[OCR Engine] Gemini fallback evaluation notice: ${gemErr.message}`);
+        lastError = lastError || gemErr;
+      }
+    }
+
+    // If both failed and no AI provider succeeded
+    console.error('[OCR Engine] Both primary and fallback AI vision evaluations failed:', lastError?.message);
+    throw lastError || new Error('AI worksheet evaluation could not be completed on any provider.');
   }
 
   async evaluateWithAi({ category, maxMarks, title, studentName, imageBuffer, fileContentType }) {
     if (!this.serverOpenAI) {
-      return this.generateHeuristicEvaluation({ category, maxMarks, title });
+      throw new Error('OpenAI client is not configured.');
     }
 
     const criteriaList = CATEGORY_CRITERIA_MAP[category] || (title && CATEGORY_CRITERIA_MAP[title]) || CATEGORY_CRITERIA_MAP['Other'];
@@ -468,16 +533,132 @@ Required JSON Schema:
       });
     }
 
-    const completion = await this.serverOpenAI.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-      max_tokens: 500
-    });
+    const model = process.env.OPENAI_OCR_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const isReasoningOrGpt5 = (model || '').includes('gpt-5') || (model || '').startsWith('o1') || (model || '').startsWith('o3');
 
+    const reqPayload = {
+      model,
+      messages,
+      response_format: { type: 'json_object' }
+    };
+
+    if (isReasoningOrGpt5) {
+      reqPayload.max_completion_tokens = 2000;
+    } else {
+      reqPayload.temperature = 0.2;
+      reqPayload.max_tokens = 1000;
+    }
+
+    const completion = await this.serverOpenAI.chat.completions.create(reqPayload);
     const rawContent = completion.choices?.[0]?.message?.content || '{}';
-    return JSON.parse(rawContent);
+    const parsed = cleanAndParseJson(rawContent);
+
+    if (!parsed) {
+      throw new Error('AI returned an unparseable response.');
+    }
+
+    return parsed;
+  }
+
+  async evaluateWithGemini({ category, maxMarks, title, studentName, imageBuffer, fileContentType, geminiApiKey }) {
+    const key = geminiApiKey || this.geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!key) {
+      throw new Error('Gemini API key is not configured.');
+    }
+
+    const criteriaList = CATEGORY_CRITERIA_MAP[category] || (title && CATEGORY_CRITERIA_MAP[title]) || CATEGORY_CRITERIA_MAP['Other'];
+    const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
+
+    const promptText = `You are an educational worksheet evaluator for EdTechra Digital Classroom.
+
+Evaluation Category: ${category}
+Task Title: ${title || 'Classroom Worksheet'}
+Student: ${studentName || 'Student'}
+Maximum Marks: ${maxMarks}
+
+Evaluation Criteria:
+${criteriaSummary}
+
+Special Category Instructions:
+${category === 'Handwritten Neatness' 
+  ? 'Inspect ONLY the visual handwriting presentation qualities (legibility, letter formation, spacing, alignment, consistency, neatness). Do not score based on OCR text content.'
+  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above.'}
+
+CRITICAL RULES:
+1. Return ONLY a single valid JSON object.
+2. "feedback" MUST BE 50 WORDS OR FEWER (concise pedagogical guidance).
+3. Do NOT repeat or transcribe the student answer.
+4. Do NOT include reasoning, thought processes, or extra fields.
+5. "score" must be a number between 0 and ${maxMarks}.
+
+Required JSON Schema:
+{
+  "score": <number between 0 and ${maxMarks}>,
+  "max_score": ${maxMarks},
+  "percentage": <number between 0 and 100>,
+  "performance": <"Excellent" | "Good" | "Satisfactory" | "Needs Improvement">,
+  "breakdown": [
+    ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
+  ],
+  "feedback": "<concise feedback, 50 words maximum>"
+}`;
+
+    const parts = [{ text: promptText }];
+
+    if (imageBuffer && imageBuffer.length > 0) {
+      const mimeType = fileContentType || 'image/jpeg';
+      const base64Data = imageBuffer.toString('base64');
+      parts.push({
+        inline_data: {
+          mime_type: mimeType,
+          data: base64Data
+        }
+      });
+    }
+
+    const candidateModels = [
+      process.env.GEMINI_OCR_MODEL,
+      process.env.GEMINI_MODEL,
+      'gemini-3.6-flash',
+      'gemini-flash-latest'
+    ].filter(Boolean);
+
+    let lastError = null;
+
+    for (const modelName of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.2
+            }
+          })
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => '');
+          throw new Error(`Gemini HTTP ${resp.status}: ${errText.slice(0, 150)}`);
+        }
+
+        const json = await resp.json();
+        const rawContent = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = cleanAndParseJson(rawContent);
+
+        if (parsed) {
+          return parsed;
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`[OCR Engine] Gemini model ${modelName} failed:`, err.message);
+      }
+    }
+
+    throw lastError || new Error('All candidate Gemini models failed for worksheet evaluation.');
   }
 
   validateAndNormalizeAiOutput(raw, maxMarks = 100, category = 'Other') {

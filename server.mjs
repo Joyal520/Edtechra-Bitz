@@ -179,9 +179,10 @@ const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, 
 // Initialize server-side OpenAI client
 const openaiApiKey = cleanEnv(process.env.OPENAI_API_KEY);
 const serverOpenAI = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
+const geminiApiKey = cleanEnv(process.env.GEMINI_API_KEY) || cleanEnv(process.env.VITE_GEMINI_API_KEY);
 
 // Initialize AI OCR Worksheet Grader Engine
-ocrEvaluationQueue.init({ serverSupabase, serverOpenAI });
+ocrEvaluationQueue.init({ serverSupabase, serverOpenAI, geminiApiKey });
 
 // Initialize AI Action Execution Scheduler (Phase 2B)
 actionScheduler.init({ serverSupabase, serverOpenAI });
@@ -190,7 +191,7 @@ actionScheduler.init({ serverSupabase, serverOpenAI });
 aiRouter.init({
   serverSupabase,
   openAiApiKey: openaiApiKey,
-  geminiApiKey: cleanEnv(process.env.GEMINI_API_KEY) || cleanEnv(process.env.VITE_GEMINI_API_KEY),
+  geminiApiKey,
   serverOpenAI
 });
 
@@ -5655,7 +5656,10 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error in /api/classes/ocr-jobs:', error);
+    console.error('Error in /api/classes/ocr-jobs:', {
+      stage: 'ocr_job_pipeline',
+      message: error.message
+    });
     res.status(500).json({ success: false, error: error.message || 'Failed to process OCR evaluation job' });
   }
 });

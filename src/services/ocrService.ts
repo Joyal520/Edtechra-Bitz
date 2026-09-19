@@ -88,7 +88,10 @@ class OcrService {
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || 'Failed to submit AI evaluation job.');
+      const err: any = new Error(errJson.error || 'Failed to submit AI evaluation job.');
+      err.status = res.status;
+      err.stage = 'vision_evaluation';
+      throw err;
     }
 
     const json = await res.json();
