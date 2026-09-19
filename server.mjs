@@ -2806,14 +2806,14 @@ app.get('/api/classes/:id/analytics', async (req, res) => {
   }
 });
 
-// Middleware: Ensure all teaching-intelligence endpoints always respond with application/json
-app.use('/api/classes/:id/teaching-intelligence', (req, res, next) => {
+// Middleware: Ensure all teaching-intelligence and intelligence endpoints always respond with application/json
+app.use(['/api/classes/:id/teaching-intelligence', '/api/classes/:id/intelligence'], (req, res, next) => {
   res.setHeader('Content-Type', 'application/json');
   next();
 });
 
 // GET /api/classes/:id/teaching-intelligence - Retrieve cached or fresh classroom intelligence
-app.get('/api/classes/:id/teaching-intelligence', async (req, res) => {
+app.get(['/api/classes/:id/teaching-intelligence', '/api/classes/:id/intelligence'], async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
@@ -2839,7 +2839,7 @@ app.get('/api/classes/:id/teaching-intelligence', async (req, res) => {
 });
 
 // POST /api/classes/:id/teaching-intelligence/refresh - Explicit teacher trigger for fresh AI analysis
-app.post('/api/classes/:id/teaching-intelligence/refresh', async (req, res) => {
+app.post(['/api/classes/:id/teaching-intelligence/refresh', '/api/classes/:id/intelligence/refresh'], async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
@@ -2847,6 +2847,10 @@ app.post('/api/classes/:id/teaching-intelligence/refresh', async (req, res) => {
     }
 
     const classroomId = req.params.id;
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
+    }
 
     const result = await getClassroomTeachingIntelligence({
       serverSupabase,
@@ -2859,12 +2863,12 @@ app.post('/api/classes/:id/teaching-intelligence/refresh', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error in POST /api/classes/:id/teaching-intelligence/refresh:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to refresh teaching intelligence' });
+    res.status(500).json({ success: false, error: error.message || 'Failed to refresh intelligence' });
   }
 });
 
 // POST /api/classes/:id/teaching-intelligence/generate-report - Generate 30-Day PDF report to Cloudflare R2
-app.post('/api/classes/:id/teaching-intelligence/generate-report', async (req, res) => {
+app.post(['/api/classes/:id/teaching-intelligence/generate-report', '/api/classes/:id/intelligence/generate-report', '/api/classes/:id/teaching-intelligence/reports', '/api/classes/:id/intelligence/reports'], async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
@@ -2890,7 +2894,7 @@ app.post('/api/classes/:id/teaching-intelligence/generate-report', async (req, r
 });
 
 // GET /api/classes/:id/teaching-intelligence/reports - List previous 30-Day reports with R2 links
-app.get('/api/classes/:id/teaching-intelligence/reports', async (req, res) => {
+app.get(['/api/classes/:id/teaching-intelligence/reports', '/api/classes/:id/intelligence/reports'], async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
@@ -2900,7 +2904,7 @@ app.get('/api/classes/:id/teaching-intelligence/reports', async (req, res) => {
     const classroomId = req.params.id;
 
     if (!serverSupabase) {
-      return res.json({ success: true, reports: [] });
+      return res.json({ success: true, reports: [], count: 0 });
     }
 
     const { data: reports, error } = await serverSupabase
@@ -2909,29 +2913,46 @@ app.get('/api/classes/:id/teaching-intelligence/reports', async (req, res) => {
       .eq('classroom_id', classroomId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.warn('[Teaching Intelligence] Supabase query notice on ai_classroom_reports:', error.message);
+      return res.json({ success: true, reports: [], count: 0 });
+    }
 
     const enriched = (reports || []).map(r => {
-      const signed = buildPresignedDownloadUrl({
-        objectKey: r.storage_key,
-        expiresInSeconds: 3600
-      });
+      let download_url = null;
+      let public_url = null;
+      if (r && r.storage_key) {
+        try {
+          const signed = buildPresignedDownloadUrl({
+            objectKey: r.storage_key,
+            expiresInSeconds: 3600
+          });
+          download_url = signed?.downloadUrl || null;
+          public_url = signed?.publicUrl || null;
+        } catch (r2Err) {
+          console.warn('[Teaching Intelligence] Could not sign report URL:', r2Err.message);
+          try {
+            public_url = buildPublicUrl(r.storage_key);
+          } catch (_) { /* R2 not configured, skip gracefully */ }
+        }
+      }
       return {
         ...r,
-        download_url: signed.downloadUrl,
-        public_url: buildPublicUrl(r.storage_key)
+        download_url: download_url || public_url || '',
+        public_url: public_url || ''
       };
     });
 
     res.json({ success: true, reports: enriched, count: enriched.length });
   } catch (error) {
     console.error('Error in GET /api/classes/:id/teaching-intelligence/reports:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to list reports' });
+    // Never return HTTP 500 when reports are missing or unconfigured - return valid empty structure
+    res.json({ success: true, reports: [], count: 0, notice: error.message });
   }
 });
 
 // GET /api/classes/:id/teaching-intelligence/recent-exams - List recent completed/active exams with calculated summary stats
-app.get('/api/classes/:id/teaching-intelligence/recent-exams', async (req, res) => {
+app.get(['/api/classes/:id/teaching-intelligence/recent-exams', '/api/classes/:id/intelligence/recent-exams'], async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
@@ -2949,10 +2970,10 @@ app.get('/api/classes/:id/teaching-intelligence/recent-exams', async (req, res) 
       classroomId
     });
 
-    res.json(result);
+    res.json(result || { success: true, exams: [] });
   } catch (error) {
     console.error('Error in GET /api/classes/:id/teaching-intelligence/recent-exams:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve recent exam reports' });
+    res.json({ success: true, exams: [], error: error.message });
   }
 });
 

@@ -431,9 +431,11 @@ export const ClassroomDetailPage: React.FC = () => {
     }
   }, [id, user, authLoading]);
 
-  const loadAllClassroomData = async () => {
+  const loadAllClassroomData = async (silent = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent && !classroom) {
+      setLoading(true);
+    }
 
     try {
       const [

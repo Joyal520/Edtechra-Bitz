@@ -137,7 +137,7 @@ export function buildCourseCoverObjectKey({ courseId, userId, contentType = 'ima
 
 export function buildPublicUrl(objectKey) {
   const { publicBaseUrl } = getR2Config();
-  const cleanKey = objectKey.replace(/^\/+/, '');
+  const cleanKey = String(objectKey || '').replace(/^\/+/, '').trim();
   return `${publicBaseUrl}/${cleanKey}`;
 }
 

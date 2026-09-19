@@ -68,6 +68,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
   const [editFeedback, setEditFeedback] = useState<string>('');
   const [isSavingAdjustment, setIsSavingAdjustment] = useState(false);
   const [adjustmentSaved, setAdjustmentSaved] = useState(false);
+  const [tiSyncStatus, setTiSyncStatus] = useState<'synced' | 'pending'>('synced');
 
   // File Inputs Refs
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -300,8 +301,15 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
       setEditScore(completedEval.final_score ?? completedEval.score ?? 0);
       setEditFeedback(completedEval.feedback || '');
 
-      if (onSuccess) {
-        onSuccess();
+      // STAGE C & D: Safely propagate evidence to classroom data without blocking or losing student score
+      try {
+        if (onSuccess) {
+          await Promise.resolve(onSuccess());
+        }
+        setTiSyncStatus('synced');
+      } catch (syncErr: any) {
+        console.warn('[QuickAssessment] Notice: Post-evaluation sync pending:', syncErr?.message || syncErr);
+        setTiSyncStatus('pending');
       }
     } catch (err: any) {
       console.error('[QuickAssessment] Evaluation request failed:', {
@@ -309,11 +317,16 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
         stage: err?.stage || 'vision_evaluation',
         error: err?.message || 'Unknown error'
       });
-      const isQualityError = err.message?.toLowerCase().includes('quality') || err.message?.toLowerCase().includes('blur');
+      const msg = err.message || '';
+      const isQualityError = msg.toLowerCase().includes('quality') || msg.toLowerCase().includes('blur');
       if (isQualityError) {
         setErrorMessage('Image quality is too low for reliable evaluation. Please retake the photo in better lighting.');
+      } else if (err.stage === 'image_upload') {
+        setErrorMessage('Failed to upload the worksheet image. Please check your connection and try again.');
+      } else if (err.stage === 'vision_evaluation') {
+        setErrorMessage(msg || 'AI Vision evaluation could not read this worksheet. Please ensure the handwriting is clear.');
       } else {
-        setErrorMessage(err.message || 'Evaluation could not be completed. Please try again.');
+        setErrorMessage(msg || 'Evaluation could not be completed. Please try again.');
       }
     } finally {
       setIsEvaluating(false);
@@ -347,6 +360,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
     setErrorMessage(null);
     setFileError(null);
     setAdjustmentSaved(false);
+    setTiSyncStatus('synced');
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -450,10 +464,17 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                       Assessment Completed
                     </span>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-black tracking-wide bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    Result saved to Teaching Intelligence
-                  </span>
+                  {tiSyncStatus === 'pending' ? (
+                    <span className="px-3 py-1 rounded-full text-xs font-black tracking-wide bg-teal-500/30 text-teal-200 border border-teal-400/40 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                      Teaching Intelligence analysis will update shortly
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 rounded-full text-xs font-black tracking-wide bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-300" />
+                      Result saved to Teaching Intelligence
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-teal-600/40">

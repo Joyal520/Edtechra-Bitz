@@ -818,19 +818,31 @@ export async function compileThirtyDayPdfAndUploadR2({ classroomId, teacherId, r
     await fs.promises.unlink(tempPdfPath);
   } catch {}
 
-  // Generate secure presigned download link
-  const signedDownload = buildPresignedDownloadUrl({
-    objectKey: r2Key,
-    expiresInSeconds: 3600
-  });
+  // Generate secure presigned download link if R2 configured
+  let signedDownload = null;
+  try {
+    signedDownload = buildPresignedDownloadUrl({
+      objectKey: r2Key,
+      expiresInSeconds: 3600
+    });
+  } catch (signErr) {
+    console.warn('[TeachingIntelligence] Notice: Presigned download URL generation skipped:', signErr.message);
+  }
+
+  let publicUrl = uploadRes.publicUrl || '';
+  if (!publicUrl) {
+    try {
+      publicUrl = buildPublicUrl(r2Key);
+    } catch (_) {}
+  }
 
   return {
     storage_provider: 'cloudflare_r2',
     storage_key: r2Key,
     file_name: `classroom_report_${cleanClassId}_${timestamp}.pdf`,
     file_size: fileSize,
-    download_url: signedDownload.downloadUrl,
-    public_url: uploadRes.publicUrl || buildPublicUrl(r2Key)
+    download_url: signedDownload?.downloadUrl || publicUrl || '',
+    public_url: publicUrl || ''
   };
 }
 
