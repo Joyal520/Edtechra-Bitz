@@ -63,6 +63,16 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
 
+  // Reactively synchronize with incoming initialFilter navigation
+  React.useEffect(() => {
+    if (initialFilter?.topic) {
+      setTopicFilter(initialFilter.topic);
+    }
+    if (initialFilter?.studentId) {
+      setStudentFilter(initialFilter.studentId);
+    }
+  }, [initialFilter?.topic, initialFilter?.studentId]);
+
   // Extract all individual evidence events from metrics.students.assessmentHistory
   const allEvidence = useMemo(() => {
     const events: any[] = [];
@@ -94,7 +104,17 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   const filteredEvidence = useMemo(() => {
     return allEvidence.filter((ev) => {
       if (studentFilter !== 'all' && ev.studentId !== studentFilter) return false;
-      if (topicFilter !== 'all' && ev.topic !== topicFilter) return false;
+      
+      if (topicFilter !== 'all') {
+        const filterLower = topicFilter.toLowerCase().trim();
+        const evTopicLower = (ev.topic || '').toLowerCase().trim();
+        const evSkillLower = (ev.skill || '').toLowerCase().trim();
+        const matchesTopic = evTopicLower === filterLower || 
+                             filterLower.includes(evTopicLower) || 
+                             evTopicLower.includes(filterLower) ||
+                             (evSkillLower && filterLower.includes(evSkillLower));
+        if (!matchesTopic) return false;
+      }
       
       if (sourceFilter !== 'all') {
         const type = ev.activityType;

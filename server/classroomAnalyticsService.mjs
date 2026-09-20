@@ -18,13 +18,233 @@ export const ANALYTICS_CONFIG = {
   DEFAULT_PERIOD_DAYS: 30
 };
 
-function normalizeConcept(rawTopic) {
+export function normalizeConcept(rawTopic) {
   if (!rawTopic) return 'General';
   let topic = rawTopic.trim();
   // Remove 'assignment' literal fallback
   if (topic.toLowerCase() === 'assignment' || topic.toLowerCase() === 'task') return 'General Task';
-  // Capitalize first letter of each word
   return topic;
+}
+
+/**
+ * Normalizes an educational activity into Category -> Topic -> Skill hierarchy.
+ * Extracts granular teaching concepts from titles, topics, and rubric metadata.
+ * @param {Object} ev - Learning event object
+ * @returns {{ category: string, topic: string, skill: string, displayName: string, isPlaceholder: boolean }}
+ */
+export function extractConceptHierarchy(ev) {
+  if (!ev) {
+    return { category: 'General', topic: 'General', skill: 'Core Concepts', displayName: 'General', isPlaceholder: true };
+  }
+  const rawTopic = (ev.topic || '').trim();
+  const rawTitle = (ev.activity_title || '').trim();
+  const category = (ev.category || '').trim();
+  const metaText = ev.metadata ? (typeof ev.metadata === 'string' ? ev.metadata : JSON.stringify(ev.metadata)) : '';
+  const combined = `${rawTitle} ${rawTopic} ${metaText}`.trim();
+
+  // 1. Recognized pedagogical topics and concepts (check first before generic colon splitting)
+  if (/simple past/i.test(combined)) {
+    const isNeg = /negative|did\s*not|didn't/i.test(combined);
+    return {
+      category: 'Grammar',
+      topic: 'Simple Past',
+      skill: isNeg ? 'Negative Forms' : 'Past Tense Forms',
+      displayName: isNeg ? 'Simple Past — Negative Forms' : 'Simple Past — Past Tense Forms',
+      isPlaceholder: false
+    };
+  }
+
+  if (/simple present/i.test(combined)) {
+    const isNeg = /negative|does\s*not|doesn't|do\s*not|don't|not\s+like/i.test(combined);
+    return {
+      category: 'Grammar',
+      topic: 'Simple Present',
+      skill: isNeg ? 'Negative Forms' : 'Affirmative & Questions',
+      displayName: isNeg ? 'Simple Present — Negative Forms' : 'Simple Present — Affirmative & Questions',
+      isPlaceholder: false
+    };
+  }
+
+  if (/preposition/i.test(combined) || /at.*in.*on/i.test(combined)) {
+    return {
+      category: 'Grammar',
+      topic: 'Prepositions',
+      skill: 'at / in / on',
+      displayName: 'Prepositions — at / in / on',
+      isPlaceholder: false
+    };
+  }
+
+  if (/conjunction/i.test(combined)) {
+    return {
+      category: 'Grammar',
+      topic: 'Conjunctions',
+      skill: 'Connecting Clauses (and/but/so/or)',
+      displayName: 'Conjunctions — Connecting Clauses',
+      isPlaceholder: false
+    };
+  }
+
+  if (/am,\s*is,\s*are|was,\s*were|be verbs/i.test(combined)) {
+    return {
+      category: 'Grammar',
+      topic: 'Be Verbs',
+      skill: 'am / is / are / was / were',
+      displayName: 'Be Verbs — am / is / are / was / were',
+      isPlaceholder: false
+    };
+  }
+
+  if (/paragraph writing/i.test(combined) || category === 'Paragraph Writing') {
+    return {
+      category: 'Writing',
+      topic: 'Paragraph Writing',
+      skill: 'Organization & Flow',
+      displayName: 'Paragraph Writing — Organization & Flow',
+      isPlaceholder: false
+    };
+  }
+
+  if (/essay writing/i.test(combined) || category === 'Essay Writing') {
+    return {
+      category: 'Writing',
+      topic: 'Essay Writing',
+      skill: 'Structure & Development',
+      displayName: 'Essay Writing — Structure & Development',
+      isPlaceholder: false
+    };
+  }
+
+  if (/story writing/i.test(combined) || /mermaids/i.test(combined) || category === 'Story Writing' || category === 'competition') {
+    return {
+      category: 'Writing',
+      topic: 'Creative Story Writing',
+      skill: 'Narrative Development',
+      displayName: 'Creative Writing — Narrative Development',
+      isPlaceholder: false
+    };
+  }
+
+  if (/animal facts|general knowledge/i.test(combined)) {
+    return {
+      category: 'Reading',
+      topic: 'Reading Comprehension',
+      skill: 'Factual Recall & Context',
+      displayName: 'Reading Comprehension — Factual Recall',
+      isPlaceholder: false
+    };
+  }
+
+  // 2. Explicit separator: "Topic — Skill", "Topic: Skill", "Topic - Skill", "Topic – Skill"
+  for (const sep of [' — ', ' – ', ' : ', ': ', ' - ']) {
+    if (combined.includes(sep)) {
+      const parts = combined.split(sep);
+      if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+        const top = parts[0].trim().replace(/^(Unit Test on the|Unit Test on|Quiz on|Assessment:|Test on)\s*/i, '');
+        const skl = parts[1].trim();
+        let cat = 'Grammar';
+        if (/writing|paragraph|essay|story/i.test(top) || /writing|paragraph|essay|story/i.test(skl)) cat = 'Writing';
+        else if (/reading|comprehension/i.test(top) || /reading|comprehension/i.test(skl)) cat = 'Reading';
+        else if (/vocabulary/i.test(top) || /vocabulary/i.test(skl)) cat = 'Vocabulary';
+        return {
+          category: cat,
+          topic: top,
+          skill: skl,
+          displayName: `${top} — ${skl}`,
+          isPlaceholder: false
+        };
+      }
+    }
+  }
+
+  // Check for placeholder/empty topics to omit
+  const lower = (rawTopic || rawTitle || '').toLowerCase().trim();
+  if (!lower || lower === 'other' || lower === 'general task' || lower === 'assignment' || lower === 'task' || lower === 'science') {
+    return {
+      category: 'General',
+      topic: rawTopic || 'General',
+      skill: 'General Review',
+      displayName: rawTopic || 'General',
+      isPlaceholder: true
+    };
+  }
+
+  const cleanTopic = normalizeConcept(rawTopic || rawTitle);
+  return {
+    category: category || 'General',
+    topic: cleanTopic,
+    skill: 'Core Comprehension',
+    displayName: `${cleanTopic} — Core Concepts`,
+    isPlaceholder: false
+  };
+}
+
+/**
+ * Chronologically aggregates scored assessment events by calendar date.
+ * Collapses multiple activities/attempts on the same date into a single class-average percentage.
+ * Excludes nulls, invalid percentages, and does NOT insert 0 for missing days.
+ * @param {Array} events - Scored learning events
+ * @returns {Array<{ date: string, isoDate: string, timestamp: number, value: number, eventCount: number, sources: string[] }>}
+ */
+export function computePerformanceOverTime(events = []) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return [];
+  }
+
+  // 1. Filter events with valid completed_at and valid percentage
+  const validEvents = events.filter(e => {
+    if (e.percentage == null) return false;
+    const num = Number(e.percentage);
+    if (isNaN(num) || num < 0 || num > 100) return false;
+    if (!e.completed_at) return false;
+    const d = new Date(e.completed_at);
+    return !isNaN(d.getTime());
+  });
+
+  if (validEvents.length === 0) {
+    return [];
+  }
+
+  // 2. Group by calendar date (YYYY-MM-DD)
+  const dateMap = new Map();
+  for (const ev of validEvents) {
+    const d = new Date(ev.completed_at);
+    const dateKey = d.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    if (!dateMap.has(dateKey)) {
+      dateMap.set(dateKey, {
+        dateKey,
+        timestamp: new Date(dateKey + 'T12:00:00Z').getTime(),
+        sumPercentage: 0,
+        count: 0,
+        sources: new Set()
+      });
+    }
+    const bucket = dateMap.get(dateKey);
+    bucket.sumPercentage += Number(ev.percentage);
+    bucket.count += 1;
+    if (ev.activity_type) {
+      bucket.sources.add(ev.activity_type);
+    }
+  }
+
+  // 3. Sort chronologically ascending
+  const sortedDates = Array.from(dateMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+  // 4. Return clean, rounded date points
+  return sortedDates.map(item => {
+    const avg = Number((item.sumPercentage / item.count).toFixed(1));
+    const d = new Date(item.timestamp);
+    const formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    return {
+      date: formattedDate,
+      isoDate: item.dateKey,
+      timestamp: item.timestamp,
+      value: Math.round(avg),
+      count: item.count,
+      eventCount: item.count,
+      sources: Array.from(item.sources)
+    };
+  });
 }
 
 // ----------------------------------------------------------------------------
@@ -481,24 +701,69 @@ export function computeTopicAnalytics(events = [], options = {}) {
     if (!rawTopic || !rawTopic.trim()) {
       continue; // Strictly omit undefined or empty topics
     }
-    const topic = normalizeConcept(rawTopic);
-    if (!topicGroups.has(topic)) {
-      topicGroups.set(topic, {
-        topic,
-        category: ev.category || 'General',
+
+    const hierarchy = extractConceptHierarchy(ev);
+    const key = hierarchy.displayName;
+
+    if (!topicGroups.has(key)) {
+      topicGroups.set(key, {
+        key,
+        topic: hierarchy.topic,
+        skill: hierarchy.skill,
+        displayName: hierarchy.displayName,
+        category: hierarchy.category,
+        isPlaceholder: hierarchy.isPlaceholder,
         events: []
       });
     }
-    topicGroups.get(topic).events.push(ev);
+    topicGroups.get(key).events.push(ev);
+
+    // If event has detailed rubric criteria breakdown (e.g. from OCR or AI challenges)
+    const breakdown = Array.isArray(ev.metadata?.breakdown_json) ? ev.metadata.breakdown_json : [];
+    for (const crit of breakdown) {
+      if (!crit || !crit.criterion || crit.max <= 0 || crit.score == null) continue;
+      const critPct = Number(((crit.score / crit.max) * 100).toFixed(2));
+      const critName = crit.criterion.trim();
+      let parentTopic = hierarchy.topic || 'Writing';
+      let parentCat = hierarchy.category || 'Writing';
+      if (/structure|syntax/i.test(critName)) {
+        parentTopic = 'Sentence Mechanics';
+      } else if (/spelling/i.test(critName)) {
+        parentTopic = 'Writing Mechanics';
+      } else if (/tense|agreement/i.test(critName)) {
+        parentTopic = 'Grammar';
+        parentCat = 'Grammar';
+      } else if (/vocabulary|word choice/i.test(critName)) {
+        parentTopic = 'Vocabulary';
+      }
+
+      const critKey = `${parentTopic} — ${critName}`;
+      if (!topicGroups.has(critKey)) {
+        topicGroups.set(critKey, {
+          key: critKey,
+          topic: parentTopic,
+          skill: critName,
+          displayName: critKey,
+          category: parentCat,
+          isPlaceholder: false,
+          events: []
+        });
+      }
+      topicGroups.get(critKey).events.push({
+        ...ev,
+        percentage: critPct,
+        topic: parentTopic
+      });
+    }
   }
 
   const topicRecords = [];
 
-  for (const [topic, group] of topicGroups.entries()) {
+  for (const [key, group] of topicGroups.entries()) {
     const topicEvents = group.events;
     const scoredEvents = topicEvents.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
-    const eventCount = topicEvents.length;
-    const participatingStudents = new Set(topicEvents.map(e => e.student_id).filter(Boolean));
+    const eventCount = scoredEvents.length;
+    const participatingStudents = new Set(scoredEvents.map(e => e.student_id).filter(Boolean));
 
     let averagePercentage = null;
     if (scoredEvents.length > 0) {
@@ -524,10 +789,19 @@ export function computeTopicAnalytics(events = [], options = {}) {
       scoreChange = Number((curAvg - prevAvg).toFixed(2));
     }
 
-    const distinctDates = new Set(topicEvents.map(e => (e.completed_at || '').substring(0, 10)));
-    const distinctActivities = new Set(topicEvents.map(e => e.activity_id));
-    
-    // Multi-source confidence and evidence breakdown
+    // Friendly source tracking
+    const SOURCE_LABEL_MAP = {
+      assignment: 'Task',
+      task: 'Task',
+      live_quiz: 'Live Quiz',
+      quiz: 'Live Quiz',
+      exam: 'Exam',
+      assessment: 'Exam',
+      ocr: 'OCR',
+      ai_challenge: 'Competition',
+      competition: 'Competition'
+    };
+
     const evidenceBreakdown = {
       assignment: { avg: null, count: 0 },
       exam: { avg: null, count: 0 },
@@ -535,29 +809,64 @@ export function computeTopicAnalytics(events = [], options = {}) {
       ocr: { avg: null, count: 0 },
       ai_challenge: { avg: null, count: 0 }
     };
-    
+
     const distinctSources = new Set();
-    
+    const friendlySourcesSet = new Set();
+
+    // Track affected students (score < 70)
+    const studentScoreSums = new Map();
     for (const ev of scoredEvents) {
       const type = ev.activity_type === 'competition' ? 'ai_challenge' : ev.activity_type;
       distinctSources.add(type);
+      const friendlyName = SOURCE_LABEL_MAP[type] || 'Task';
+      friendlySourcesSet.add(friendlyName);
+
       if (evidenceBreakdown[type]) {
         evidenceBreakdown[type].count += 1;
         evidenceBreakdown[type].avg = evidenceBreakdown[type].avg === null ? Number(ev.percentage) : evidenceBreakdown[type].avg + Number(ev.percentage);
       }
-    }
-    
-    for (const type of Object.keys(evidenceBreakdown)) {
-      if (evidenceBreakdown[type].count > 0) {
-        evidenceBreakdown[type].avg = Number((evidenceBreakdown[type].avg / evidenceBreakdown[type].count).toFixed(2));
+
+      if (ev.student_id) {
+        if (!studentScoreSums.has(ev.student_id)) {
+          studentScoreSums.set(ev.student_id, { sum: 0, count: 0 });
+        }
+        const st = studentScoreSums.get(ev.student_id);
+        st.sum += Number(ev.percentage);
+        st.count += 1;
       }
     }
-    
+
+    const evidenceList = [];
+    for (const type of Object.keys(evidenceBreakdown)) {
+      if (evidenceBreakdown[type].count > 0) {
+        evidenceBreakdown[type].avg = Math.round(evidenceBreakdown[type].avg / evidenceBreakdown[type].count);
+        evidenceList.push({
+          source: SOURCE_LABEL_MAP[type] || type,
+          rawSource: type,
+          accuracy: evidenceBreakdown[type].avg,
+          attempts: evidenceBreakdown[type].count
+        });
+      }
+    }
+
+    // Count distinct students who have average score < 70 on this topic
+    let affectedStudentsCount = 0;
+    for (const [, st] of studentScoreSums.entries()) {
+      if ((st.sum / st.count) < 70) {
+        affectedStudentsCount += 1;
+      }
+    }
+    if (options.totalStudents > 0) {
+      affectedStudentsCount = Math.min(affectedStudentsCount, options.totalStudents);
+    }
+
     const sourcesCount = distinctSources.size;
-    let confidence = 'developing';
-    if (sourcesCount >= 2 && averagePercentage < 70) confidence = 'confirmed_gap';
-    else if (sourcesCount < 2 && averagePercentage < 70) confidence = 'early_signal';
-    else if (averagePercentage >= 75) confidence = 'strong';
+    const sourcesList = Array.from(friendlySourcesSet);
+
+    let confidence = 'DEVELOPING';
+    if (sourcesCount >= 2 && (averagePercentage != null && averagePercentage < 70)) confidence = 'CONFIRMED GAP';
+    else if (sourcesCount < 2 && (averagePercentage != null && averagePercentage < 70)) confidence = 'EARLY SIGNAL';
+    else if (averagePercentage != null && averagePercentage >= 75) confidence = 'STRONG';
 
     // Topic status determination
     let status = 'steady';
@@ -574,15 +883,24 @@ export function computeTopicAnalytics(events = [], options = {}) {
     }
 
     topicRecords.push({
-      topic,
+      topic: group.topic,
+      skill: group.skill,
+      displayName: group.displayName,
       category: group.category,
+      isPlaceholder: group.isPlaceholder,
       eventCount,
       averagePercentage,
+      score: averagePercentage != null ? Math.round(averagePercentage) : 0,
       participatingStudentsCount: participatingStudents.size,
+      affectedStudentsCount,
       scoreChangePercentagePoints: scoreChange,
       status,
       confidence,
+      confidenceLabel: sourcesCount >= 2 ? `CONFIRMED GAP • ${sourcesCount} evidence sources` : 'EARLY SIGNAL • 1 evidence source',
+      sources: sourcesList,
       sourcesCount,
+      sourcesList,
+      evidence: evidenceList,
       evidenceBreakdown
     });
   }
@@ -737,6 +1055,28 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
 
   const events = rawEvents || [];
 
+  // Enrich OCR events with detailed criteria breakdowns for granular skill evidence
+  try {
+    const { data: ocrBreakdowns } = await serverSupabase
+      .from('ocr_evaluations')
+      .select('id, breakdown_json')
+      .eq('class_id', classroomId)
+      .eq('status', 'completed');
+    if (ocrBreakdowns && ocrBreakdowns.length > 0) {
+      const ocrMap = new Map();
+      ocrBreakdowns.forEach(o => {
+        if (o.breakdown_json) ocrMap.set(o.id, o.breakdown_json);
+      });
+      events.forEach(e => {
+        if (e.activity_type === 'ocr' && ocrMap.has(e.id)) {
+          e.metadata = { ...(e.metadata || {}), breakdown_json: ocrMap.get(e.id) };
+        }
+      });
+    }
+  } catch (ocrErr) {
+    console.warn('[Analytics] OCR breakdown enrichment notice:', ocrErr?.message);
+  }
+
   // Sort events chronologically (most recent first)
   events.sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
 
@@ -778,7 +1118,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     totalClassActivities: completedActivitiesCount
   });
   const activityBreakdown = computeActivityAnalytics(events, totalStudents);
-  const topicAnalytics = computeTopicAnalytics(events, options);
+  const topicAnalytics = computeTopicAnalytics(events, { ...options, totalStudents });
   const trendAnalytics = computeTrendAnalytics(events, totalStudents, options);
 
   // Improving and Struggling students
@@ -793,23 +1133,30 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
          (s.scoreChangePercentagePoints != null && s.scoreChangePercentagePoints <= ANALYTICS_CONFIG.DECLINE_DELTA_THRESHOLD)
   );
 
+  // Filter meaningful topics that are not placeholders and have evidence
+  const meaningfulTopics = topicAnalytics.filter(t => !t.isPlaceholder && t.eventCount > 0);
+
   // Top Strengths (Topics >= 75%)
-  const topStrengths = topicAnalytics
+  const topStrengths = meaningfulTopics
     .filter(t => t.averagePercentage != null && t.averagePercentage >= ANALYTICS_CONFIG.STRONG_SCORE_THRESHOLD)
     .slice(0, 5)
     .map(t => ({
-      topic: t.topic,
+      topic: t.displayName || t.topic,
+      baseTopic: t.topic,
+      skill: t.skill,
       averageScore: Math.round(t.averagePercentage),
       eventsCount: t.eventCount,
       status: t.status
     }));
 
   // Top Weaknesses (Topics < 60% or declining)
-  const topWeaknesses = topicAnalytics
+  const topWeaknesses = meaningfulTopics
     .filter(t => t.averagePercentage != null && (t.averagePercentage < ANALYTICS_CONFIG.WEAK_SCORE_THRESHOLD || t.status === 'declining' || t.status === 'weak'))
     .slice(0, 5)
     .map(t => ({
-      topic: t.topic,
+      topic: t.displayName || t.topic,
+      baseTopic: t.topic,
+      skill: t.skill,
       averageScore: Math.round(t.averagePercentage),
       eventsCount: t.eventCount,
       change: t.scoreChangePercentagePoints,
@@ -1032,24 +1379,62 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       : (sortedTopics.length > 0 ? 'Continue regular progressive assessments to track topic growth.' : 'Not enough evidence yet.')
   };
 
-  const activeStudentsCount = activeStudents || 1;
-  const learningGapPriority = topicAnalytics
-    .filter(t => t.averagePercentage != null && t.averagePercentage < 70)
+  // 9. Chronological Performance Over Time Calculation
+  const performanceOverTime = computePerformanceOverTime(events);
+
+  // 10. Granular Learning Gap Priority (Ranked by affected students and multi-source confidence)
+  const learningGapPriority = meaningfulTopics
+    .filter(t => t.averagePercentage != null && (t.averagePercentage < 70 || t.affectedStudentsCount >= 2))
     .map(t => {
-      const strugglingStudentRatio = t.participatingStudentsCount / activeStudentsCount;
+      const affectedRatio = totalStudents > 0 ? (t.affectedStudentsCount / totalStudents) : 0.5;
       const isMultiSource = t.sourcesCount >= 2;
-      const priority = (strugglingStudentRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0);
-      return { ...t, priority };
+      const priority = Number(((affectedRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0)).toFixed(2));
+      return {
+        ...t,
+        topic: t.displayName || t.topic,
+        baseTopic: t.topic,
+        skill: t.skill,
+        displayName: t.displayName || t.topic,
+        accuracy: Math.round(t.averagePercentage),
+        averageAccuracy: Math.round(t.averagePercentage),
+        average_accuracy: Math.round(t.averagePercentage),
+        studentCount: t.affectedStudentsCount,
+        affectedStudentsCount: t.affectedStudentsCount,
+        students_affected: t.affectedStudentsCount,
+        studentsAffected: t.affectedStudentsCount,
+        totalStudents: totalStudents,
+        students_total: totalStudents,
+        studentsTotal: totalStudents,
+        sources: Array.isArray(t.sourcesList) && t.sourcesList.length > 0 ? t.sourcesList : (t.sources || ['Assessment']),
+        sourcesCount: t.sourcesCount,
+        sourcesList: t.sourcesList,
+        evidence_sources: t.sourcesCount,
+        evidenceSources: t.sourcesCount,
+        confidence: isMultiSource ? 'CONFIRMED GAP' : 'EARLY SIGNAL',
+        confidence_label: isMultiSource ? `CONFIRMED GAP • ${t.sourcesCount} evidence sources` : 'EARLY SIGNAL • 1 evidence source',
+        evidence: t.evidence || [],
+        why: `Class accuracy is ${Math.round(t.averagePercentage)}% with ${t.affectedStudentsCount} of ${totalStudents} students affected across ${t.sourcesCount} source(s).`,
+        recommended_action: `Review ${t.topic} (${t.skill}) with structured modeling and guided practice before re-assessing.`
+      };
     })
     .sort((a, b) => b.priority - a.priority);
 
-  const classStrengths = topicAnalytics.filter(t => t.averagePercentage >= 75);
+  const classStrengths = meaningfulTopics.filter(t => t.averagePercentage != null && t.averagePercentage >= 75);
   const studentsNeedingSupport = studentAnalytics.filter(s => s.averagePercentage < 60).map(s => ({
     ...s,
     specificWeakConcepts: s.weakAreas.map(w => w.topic)
   }));
   const recommendedTeachingFocus = learningGapPriority.length > 0 ? {
     topic: learningGapPriority[0].topic,
+    baseTopic: learningGapPriority[0].baseTopic,
+    skill: learningGapPriority[0].skill,
+    displayName: learningGapPriority[0].displayName,
+    accuracy: learningGapPriority[0].averageAccuracy,
+    studentsAffected: learningGapPriority[0].studentsAffected,
+    studentsTotal: totalStudents,
+    sourcesCount: learningGapPriority[0].sourcesCount,
+    why: learningGapPriority[0].why,
+    recommended_action: learningGapPriority[0].recommended_action,
     rationale: `Top priority gap with ${learningGapPriority[0].sourcesCount || 1} sources of evidence.`
   } : null;
 
@@ -1081,13 +1466,16 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     weakAreaVisualData,
     students: studentAnalytics,
     activityBreakdown,
-    topics: topicAnalytics,
+    topics: meaningfulTopics,
     trends: trendAnalytics,
     dataConfidence,
     calculatedAt: new Date().toISOString(),
     learningGapPriority,
     classStrengths,
     studentsNeedingSupport,
-    recommendedTeachingFocus
+    recommendedTeachingFocus,
+    performanceOverTime,
+    performance_over_time: performanceOverTime,
+    trendData: performanceOverTime
   };
 }

@@ -325,7 +325,10 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       learningGapPriority: analytics.learningGapPriority || [],
       classStrengths: analytics.classStrengths || [],
       studentsNeedingSupport: analytics.studentsNeedingSupport || [],
-      recommendedTeachingFocus: analytics.recommendedTeachingFocus || null
+      recommendedTeachingFocus: analytics.recommendedTeachingFocus || null,
+      performance_over_time: analytics.performanceOverTime || [],
+      performanceOverTime: analytics.performanceOverTime || [],
+      trendData: analytics.performanceOverTime || []
     };
   } catch (err) {
     console.error('[TeachingIntelligence] computeClassroomMetrics error:', err);
@@ -463,6 +466,17 @@ export async function generateTeachingIntelligence({ metricsSummary, serverOpenA
     classroom: metricsSummary.classroom,
     summary: metricsSummary.class_summary,
     class_health: metricsSummary.class_health,
+    learning_gaps: (metricsSummary.learningGapPriority || []).slice(0, 5).map(g => ({
+      topic: g.topic,
+      skill: g.skill,
+      displayName: g.displayName,
+      accuracy: g.accuracy,
+      affectedStudentsCount: g.affectedStudentsCount,
+      totalStudents: g.totalStudents,
+      confidence: g.confidence,
+      sources: g.sources
+    })),
+    recommended_focus: metricsSummary.recommendedTeachingFocus,
     weak_topics: (metricsSummary.topic_performance || []).filter(t => t.score < 65 || t.change < 0),
     strong_topics: (metricsSummary.topic_performance || []).filter(t => t.score >= 75),
     attention_cases: metricsSummary.students_needing_attention || [],
@@ -480,15 +494,15 @@ export async function generateTeachingIntelligence({ metricsSummary, serverOpenA
 Analyze the provided classroom performance metrics and generate evidence-grounded teaching intelligence in JSON format.
 
 RULES:
-1. Base "teach_next" directly on the weakest topics in the evidence. Never make up unrelated topics.
+1. Base "teach_next" directly on the specific learning concepts in "learning_gaps" and "weak_topics". If "learning_gaps" are provided, item #1 in "teach_next" MUST target the top gap (combining Topic and Skill, e.g. "Simple Present — Negative Forms").
 2. For each "teach_next" item, provide:
-   - "topic": Topic name from evidence
+   - "topic": Granular topic/skill name from evidence
    - "current_performance": number (percentage)
-   - "why": Exactly why this is urgent based on the metrics (under 25 words).
+   - "why": Exactly why this is urgent based on the metrics and student counts (under 25 words).
    - "recommended_action": Concrete 1-lesson pedagogical action the teacher should take tomorrow (under 30 words).
 3. Identify 2-3 genuine "class_strengths" and 2-3 "areas_to_improve".
 4. For "recommended_actions", separate into structured objects with:
-   - "observation": What was observed in real data (e.g. "X students scored below 60% on [Topic]")
+   - "observation": Exact observation grounded in data (e.g. "5 of 6 students scored below mastery on Simple Present — Negative Forms.")
    - "analysis": Pedagogical diagnosis of why this occurred
    - "recommendation": Concrete teacher action to implement
    - "action_spec": Action definition with:
@@ -530,32 +544,39 @@ RULES:
 }
 
 function normalizeIntelligenceOutput(raw, metrics) {
+  const learningGaps = metrics.learningGapPriority || [];
+  const primaryGap = learningGaps[0];
   const topics = metrics.topic_performance || [];
-  const weakTopic = topics.find(t => t.score < 65) || topics[0] || { topic: 'Fundamental Skills', score: 60 };
+  const weakTopic = primaryGap
+    ? { topic: primaryGap.displayName || `${primaryGap.topic} — ${primaryGap.skill}`, score: primaryGap.accuracy }
+    : (topics.find(t => t.score < 65) || topics[0] || { topic: 'Fundamental Skills', score: 60 });
+  const totalStudents = metrics.class_summary?.total_students || 0;
 
   const rawActions = Array.isArray(raw.recommended_actions) ? raw.recommended_actions : [];
   const normalizedActions = rawActions.map(actionItem => {
     if (typeof actionItem === 'string') {
       return {
-        observation: `Assessment performance indicates student variance in ${weakTopic.topic}.`,
+        observation: primaryGap
+          ? `${primaryGap.affectedStudentsCount} of ${totalStudents} students scored below mastery on ${primaryGap.displayName || primaryGap.topic}.`
+          : `Assessment performance indicates student variance in ${weakTopic.topic}.`,
         analysis: 'Targeted follow-up instruction reinforces rule mastery and reduces test anxiety.',
         recommendation: actionItem,
         action_spec: {
           action_type: 'create_revision_quiz',
           action_label: 'Create Revision Quiz',
-          target_topic: weakTopic.topic,
+          target_topic: primaryGap ? primaryGap.topic : weakTopic.topic,
           target_students: (metrics.students_needing_attention || []).map(s => s.student_ref || s.name).slice(0, 3)
         }
       };
     }
     return {
-      observation: actionItem.observation || `Identified focus area: ${weakTopic.topic}`,
+      observation: actionItem.observation || (primaryGap ? `${primaryGap.affectedStudentsCount} of ${totalStudents} students scored below mastery on ${primaryGap.displayName || primaryGap.topic}.` : `Identified focus area: ${weakTopic.topic}`),
       analysis: actionItem.analysis || 'Foundational concept requires targeted review before advancing.',
       recommendation: actionItem.recommendation || actionItem.action || actionItem.title || 'Review topic with guided examples.',
       action_spec: actionItem.action_spec || {
         action_type: 'create_revision_quiz',
         action_label: 'Create Revision Quiz',
-        target_topic: weakTopic.topic,
+        target_topic: primaryGap ? primaryGap.topic : weakTopic.topic,
         target_students: []
       }
     };
@@ -565,14 +586,21 @@ function normalizeIntelligenceOutput(raw, metrics) {
     summary: raw.summary || `Class performance is at ${metrics.class_summary?.overall_score || 0}% with ${metrics.class_summary?.task_completion_rate || 0}% task completion across ${metrics.class_summary?.total_students || 0} enrolled students.`,
     teach_next: Array.isArray(raw.teach_next) && raw.teach_next.length > 0
       ? raw.teach_next.slice(0, 3)
-      : (topics.length > 0 ? [
+      : (primaryGap ? [
+          {
+            topic: primaryGap.displayName || `${primaryGap.topic} — ${primaryGap.skill}`,
+            current_performance: primaryGap.accuracy,
+            why: `${primaryGap.affectedStudentsCount} of ${totalStudents} students affected across ${primaryGap.sources?.join(', ') || 'assessments'} (${primaryGap.confidence || 'GAP'}).`,
+            recommended_action: `Reteach ${primaryGap.topic} (${primaryGap.skill}) with clear contrast examples, then assign a 5-question check.`
+          }
+        ] : (topics.length > 0 ? [
           {
             topic: weakTopic.topic,
             current_performance: weakTopic.score,
             why: `Students scored ${weakTopic.score}% with lower accuracy on recent assessments.`,
             recommended_action: `Dedicate the first 20 minutes of next lesson to interactive review of ${weakTopic.topic}, followed by a 5-question practice set.`
           }
-        ] : []),
+        ] : [])),
     class_strengths: Array.isArray(raw.class_strengths) && raw.class_strengths.length > 0
       ? raw.class_strengths.slice(0, 3)
       : (metrics.top_strengths || []).map(s => ({
@@ -581,10 +609,15 @@ function normalizeIntelligenceOutput(raw, metrics) {
         })),
     areas_to_improve: Array.isArray(raw.areas_to_improve) && raw.areas_to_improve.length > 0
       ? raw.areas_to_improve.slice(0, 3)
-      : (metrics.top_weaknesses || []).map(w => ({
+      : (primaryGap ? [
+          {
+            title: `${primaryGap.displayName || primaryGap.topic} Reinforcement`,
+            detail: `${primaryGap.affectedStudentsCount} of ${totalStudents} students scored an average of ${primaryGap.accuracy}% on this concept.`
+          }
+        ] : (metrics.top_weaknesses || []).map(w => ({
           title: `${w.topic} Revision`,
           detail: `Class average is ${w.averageScore}% — students need reinforcement on foundational examples.`
-        })),
+        }))),
     students_needing_attention: Array.isArray(raw.students_needing_attention) && raw.students_needing_attention.length > 0
       ? raw.students_needing_attention.slice(0, 5)
       : (metrics.students_needing_attention || []),
@@ -593,13 +626,15 @@ function normalizeIntelligenceOutput(raw, metrics) {
       ? normalizedActions
       : [
           {
-            observation: `${(metrics.students_needing_attention || []).length} students are currently lagging in ${weakTopic.topic}.`,
-            analysis: 'Persistent misconceptions in multi-step questions lower student confidence.',
-            recommendation: `Schedule a targeted 15-minute review session for ${weakTopic.topic}.`,
+            observation: primaryGap
+              ? `${primaryGap.affectedStudentsCount} of ${totalStudents} students are struggling with ${primaryGap.displayName || primaryGap.topic} (${primaryGap.accuracy}% accuracy).`
+              : `${(metrics.students_needing_attention || []).length} students are currently lagging in ${weakTopic.topic}.`,
+            analysis: 'Persistent misconceptions in this concept lower student confidence and impact downstream topics.',
+            recommendation: `Schedule a targeted 15-minute reteach session on ${primaryGap ? primaryGap.displayName : weakTopic.topic}.`,
             action_spec: {
               action_type: 'create_revision_quiz',
               action_label: 'Create Revision Quiz',
-              target_topic: weakTopic.topic,
+              target_topic: primaryGap ? primaryGap.topic : weakTopic.topic,
               target_students: (metrics.students_needing_attention || []).map(s => s.student_ref).slice(0, 3)
             }
           },
@@ -610,7 +645,7 @@ function normalizeIntelligenceOutput(raw, metrics) {
             action_spec: {
               action_type: 'group_students',
               action_label: 'Group Students',
-              target_topic: weakTopic.topic,
+              target_topic: primaryGap ? primaryGap.topic : weakTopic.topic,
               target_students: []
             }
           }
@@ -619,40 +654,65 @@ function normalizeIntelligenceOutput(raw, metrics) {
 }
 
 function synthesizeDeterministicIntelligence(metrics) {
+  const learningGaps = metrics.learningGapPriority || [];
+  const primaryGap = learningGaps[0];
   const topics = metrics.topic_performance || [];
   const weakTopics = topics.filter(t => t.score < 65 || t.change < 0);
-  const primaryWeak = weakTopics[0] || topics[0] || { topic: 'Core Concepts', score: 55 };
+  const primaryWeak = primaryGap
+    ? { topic: primaryGap.displayName || `${primaryGap.topic} — ${primaryGap.skill}`, score: primaryGap.accuracy, rawTopic: primaryGap.topic }
+    : (weakTopics[0] || topics[0] || { topic: 'Core Concepts', score: 55, rawTopic: 'Core Concepts' });
   const strongTopics = topics.filter(t => t.score >= 75);
+  const totalStudents = metrics.class_summary?.total_students || 0;
+
+  const teachNext = primaryGap
+    ? [
+        {
+          topic: primaryGap.displayName || `${primaryGap.topic} — ${primaryGap.skill}`,
+          current_performance: primaryGap.accuracy,
+          why: `${primaryGap.affectedStudentsCount} of ${totalStudents} students affected across ${primaryGap.sources?.join(', ') || 'assessments'} (${primaryGap.confidence || 'CONFIRMED GAP'}).`,
+          recommended_action: `Spend the next class period reviewing ${primaryGap.skill || primaryGap.topic} with contrast examples, followed by a 5-question micro-quiz.`
+        }
+      ]
+    : (topics.length > 0
+        ? [
+            {
+              topic: primaryWeak.topic,
+              current_performance: primaryWeak.score,
+              why: `Average score is ${primaryWeak.score}% across recent evaluations.`,
+              recommended_action: `Spend the next class period reviewing key rules of ${primaryWeak.topic}, followed by immediate practice.`
+            }
+          ]
+        : []);
 
   return {
-    summary: `Classroom performance is currently averaging ${metrics.class_summary?.overall_score || 0}% with an engagement rate of ${metrics.class_summary?.engagement_rate || 0}% across ${metrics.class_summary?.total_students || 0} students.`,
-    teach_next: topics.length > 0 ? [
-      {
-        topic: primaryWeak.topic,
-        current_performance: primaryWeak.score,
-        why: `Average score is ${primaryWeak.score}% across recent evaluations.`,
-        recommended_action: `Spend the next class period reviewing key rules of ${primaryWeak.topic}, followed by immediate practice.`
-      }
-    ] : [],
+    summary: `Classroom performance is currently averaging ${metrics.class_summary?.overall_score || 0}% with an engagement rate of ${metrics.class_summary?.engagement_rate || 0}% across ${totalStudents} students.`,
+    teach_next: teachNext,
     class_strengths: (strongTopics.length > 0 ? strongTopics : topics.slice(0, 2)).map(s => ({
       title: `${s.topic} Mastery`,
       detail: `Students achieved ${s.score}% average accuracy with positive upward momentum.`
     })),
-    areas_to_improve: weakTopics.map(w => ({
-      title: `${w.topic} Revision`,
-      detail: `Scored ${w.score}% — students need reinforcement on foundational examples.`
-    })),
+    areas_to_improve: learningGaps.length > 0
+      ? learningGaps.slice(0, 3).map(g => ({
+          title: `${g.displayName || g.topic} Reinforcement`,
+          detail: `${g.affectedStudentsCount} of ${totalStudents} students affected (${g.accuracy}% accuracy across ${g.sources?.join(', ')}).`
+        }))
+      : weakTopics.map(w => ({
+          title: `${w.topic} Revision`,
+          detail: `Scored ${w.score}% — students need reinforcement on foundational examples.`
+        })),
     students_needing_attention: metrics.students_needing_attention || [],
     writing_intelligence: metrics.writing_intelligence,
     recommended_actions: [
       {
-        observation: `${(metrics.students_needing_attention || []).length} student(s) require intervention in ${primaryWeak.topic}.`,
+        observation: primaryGap
+          ? `${primaryGap.affectedStudentsCount} of ${totalStudents} students require intervention in ${primaryGap.displayName || primaryGap.topic} (${primaryGap.accuracy}% accuracy).`
+          : `${(metrics.students_needing_attention || []).length} student(s) require intervention in ${primaryWeak.topic}.`,
         analysis: 'Early targeted reinforcement prevents cumulative gaps in upcoming units.',
-        recommendation: `Review ${primaryWeak.topic} using guided classroom examples before the next major exam.`,
+        recommendation: `Review ${primaryGap ? primaryGap.displayName : primaryWeak.topic} using guided classroom examples before the next major exam.`,
         action_spec: {
           action_type: 'create_revision_quiz',
           action_label: 'Create Revision Quiz',
-          target_topic: primaryWeak.topic,
+          target_topic: primaryGap ? primaryGap.topic : (primaryWeak.rawTopic || primaryWeak.topic),
           target_students: (metrics.students_needing_attention || []).map(s => s.student_ref).slice(0, 3)
         }
       },
@@ -663,7 +723,7 @@ function synthesizeDeterministicIntelligence(metrics) {
         action_spec: {
           action_type: 'assign_practice',
           action_label: 'Assign Practice Set',
-          target_topic: primaryWeak.topic,
+          target_topic: primaryGap ? primaryGap.topic : (primaryWeak.rawTopic || primaryWeak.topic),
           target_students: (metrics.students_needing_attention || []).map(s => s.student_ref).slice(0, 3)
         }
       }
