@@ -73,8 +73,22 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
     }
   }, [initialFilter?.topic, initialFilter?.studentId]);
 
-  // Extract all individual evidence events from metrics.students.assessmentHistory
+  // Extract all individual evidence events from metrics.all_evidence or students.assessmentHistory
   const allEvidence = useMemo(() => {
+    // Check if unified normalized evidence is directly available from metrics
+    const directEvidence = 
+      metrics?.all_evidence || 
+      metrics?.allEvidence || 
+      (Array.isArray(metrics?.recent_learning_evidence) && metrics.recent_learning_evidence.length > 0 && (metrics.recent_learning_evidence[0]?.sourceLabel || metrics.recent_learning_evidence[0]?.studentName) ? metrics.recent_learning_evidence : null);
+
+    if (Array.isArray(directEvidence) && directEvidence.length > 0) {
+      return [...directEvidence].sort((a, b) => {
+        const timeA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const timeB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return timeB - timeA;
+      });
+    }
+
     const events: any[] = [];
     if (metrics?.students) {
       metrics.students.forEach((student: any) => {
@@ -82,8 +96,8 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
           student.assessmentHistory.forEach((event: any) => {
             events.push({
               ...event,
-              studentId: student.studentId,
-              studentName: student.fullName
+              studentId: student.studentId || event.studentId,
+              studentName: student.fullName || event.studentName || 'Student'
             });
           });
         }
@@ -96,10 +110,14 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   const uniqueTopics = useMemo(() => {
     const topics = new Set<string>();
     allEvidence.forEach((ev) => {
-      if (ev.topic) topics.add(ev.topic);
+      if (ev.displayName) topics.add(ev.displayName);
+      else if (ev.topic) topics.add(ev.topic);
     });
+    if (topicFilter !== 'all' && !topics.has(topicFilter)) {
+      topics.add(topicFilter);
+    }
     return Array.from(topics).sort();
-  }, [allEvidence]);
+  }, [allEvidence, topicFilter]);
 
   const filteredEvidence = useMemo(() => {
     return allEvidence.filter((ev) => {
@@ -109,10 +127,31 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
         const filterLower = topicFilter.toLowerCase().trim();
         const evTopicLower = (ev.topic || '').toLowerCase().trim();
         const evSkillLower = (ev.skill || '').toLowerCase().trim();
-        const matchesTopic = evTopicLower === filterLower || 
-                             filterLower.includes(evTopicLower) || 
-                             evTopicLower.includes(filterLower) ||
-                             (evSkillLower && filterLower.includes(evSkillLower));
+        const evDisplayLower = (ev.displayName || '').toLowerCase().trim();
+        const evRawTopicLower = (ev.rawTopic || '').toLowerCase().trim();
+        const evCategoryLower = (ev.category || '').toLowerCase().trim();
+        const evTitleLower = (ev.activityTitle || '').toLowerCase().trim();
+
+        // Also check inside metadata.breakdown_json criteria if present (e.g. for OCR or rubric criteria)
+        const hasMatchingCriterion = Array.isArray(ev.metadata?.breakdown_json) &&
+          ev.metadata.breakdown_json.some((crit: any) => {
+            const cName = (crit?.criterion || crit?.name || '').toLowerCase().trim();
+            return cName && (filterLower.includes(cName) || cName.includes(filterLower));
+          });
+
+        const matchesTopic = 
+          hasMatchingCriterion ||
+          evTopicLower === filterLower || 
+          evDisplayLower === filterLower ||
+          evSkillLower === filterLower ||
+          evRawTopicLower === filterLower ||
+          evCategoryLower === filterLower ||
+          evTopicLower.includes(filterLower) || 
+          filterLower.includes(evTopicLower) ||
+          (evSkillLower && (filterLower.includes(evSkillLower) || evSkillLower.includes(filterLower))) ||
+          (evDisplayLower && (filterLower.includes(evDisplayLower) || evDisplayLower.includes(filterLower))) ||
+          (evTitleLower && (filterLower.includes(evTitleLower) || evTitleLower.includes(filterLower)));
+
         if (!matchesTopic) return false;
       }
       
@@ -139,6 +178,55 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
     });
   }, [allEvidence, studentFilter, topicFilter, sourceFilter, dateFilter]);
 
+  // Compute focus stats when a specific topic is selected
+  const focusStats = useMemo(() => {
+    if (topicFilter === 'all' || filteredEvidence.length === 0) return null;
+    
+    const scored = filteredEvidence.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
+    const avgScore = scored.length > 0 
+      ? Math.round(scored.reduce((s, e) => s + Number(e.percentage), 0) / scored.length)
+      : null;
+
+    const affectedStudents = new Set(scored.filter(e => Number(e.percentage) < 70).map(e => e.studentId).filter(Boolean));
+    const totalDistinctStudents = new Set(filteredEvidence.map(e => e.studentId).filter(Boolean));
+
+    // Per-source breakdown cards
+    const sourceGroups: Record<string, { count: number; totalPct: number; scoredCount: number }> = {};
+    filteredEvidence.forEach(e => {
+      const src = e.sourceLabel || (
+        e.activityType === 'assignment' || e.activityType === 'task' ? 'Task' :
+        e.activityType === 'live_quiz' || e.activityType === 'quiz' ? 'Live Quiz' :
+        e.activityType === 'exam' || e.activityType === 'assessment' ? 'Assessment' :
+        e.activityType === 'ocr' ? 'OCR' :
+        e.activityType === 'ai_challenge' || e.activityType === 'competition' ? 'Competition' :
+        'Task'
+      );
+      if (!sourceGroups[src]) {
+        sourceGroups[src] = { count: 0, totalPct: 0, scoredCount: 0 };
+      }
+      sourceGroups[src].count++;
+      if (e.percentage != null && !isNaN(Number(e.percentage))) {
+        sourceGroups[src].totalPct += Number(e.percentage);
+        sourceGroups[src].scoredCount++;
+      }
+    });
+
+    const sourcesBreakdown = Object.entries(sourceGroups).map(([source, data]) => ({
+      source,
+      count: data.count,
+      accuracy: data.scoredCount > 0 ? Math.round(data.totalPct / data.scoredCount) : null
+    }));
+
+    return {
+      topic: topicFilter,
+      totalEvidence: filteredEvidence.length,
+      averageScore: avgScore,
+      affectedCount: affectedStudents.size,
+      totalStudentsCount: totalDistinctStudents.size,
+      sourcesBreakdown
+    };
+  }, [topicFilter, filteredEvidence]);
+
   const getSourceBadge = (type: string) => {
     switch (type) {
       case 'assignment':
@@ -162,6 +250,62 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
+      
+      {/* Diagnostic Evidence Focus Header Banner */}
+      {focusStats && (
+        <div className="bg-gradient-to-r from-[#F0FDF4] to-[#F8FCFB] rounded-2xl p-5 border border-[#C9E5E2] shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#087477] text-white">
+                Diagnostic Evidence Focus
+              </span>
+              <h3 className="text-base font-black text-[#173B3F]">{focusStats.topic}</h3>
+            </div>
+            <button
+              onClick={() => setTopicFilter('all')}
+              className="text-xs font-bold text-[#087477] hover:text-[#065e60] underline cursor-pointer"
+            >
+              Clear Focus (View All Topics)
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6 text-xs text-[#36565A]">
+            <div>
+              <span className="font-bold text-[#173B3F]">{focusStats.totalEvidence}</span> total evidence records
+            </div>
+            {focusStats.averageScore != null && (
+              <div>
+                Class accuracy:{' '}
+                <span className={`font-black ${focusStats.averageScore < 50 ? 'text-rose-600' : focusStats.averageScore < 70 ? 'text-amber-600' : 'text-teal-700'}`}>
+                  {focusStats.averageScore}%
+                </span>
+              </div>
+            )}
+            {focusStats.affectedCount > 0 && (
+              <div>
+                <span className="font-bold text-[#173B3F]">{focusStats.affectedCount}</span> of <span className="font-bold text-[#173B3F]">{focusStats.totalStudentsCount}</span> students below mastery
+              </div>
+            )}
+          </div>
+
+          {/* Per-source breakdown cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            {focusStats.sourcesBreakdown.map((sb, idx) => (
+              <div key={idx} className="bg-white rounded-xl border border-[#C9E5E2] p-3 shadow-2xs">
+                <span className="text-[10px] font-black uppercase tracking-wide text-[#36565A] block">{sb.source}</span>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-base font-black text-[#173B3F]">
+                    {sb.accuracy != null ? `${sb.accuracy}%` : '--'}
+                  </span>
+                  <span className="text-[10px] font-bold text-[#36565A]">
+                    {sb.count} sub{sb.count > 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* Filters Bar */}
       <div className="bg-white rounded-2xl p-4 border border-[#C9E5E2] shadow-xs flex flex-wrap items-center gap-4">

@@ -506,19 +506,29 @@ export function computeStudentAnalytics(events = [], studentMembers = [], option
       }
     }
 
-    // Chronological assessment history
-    const assessmentHistory = studentEvents.map(e => ({
-      id: e.id,
-      activityId: e.activity_id,
-      activityType: e.activity_type,
-      activityTitle: e.activity_title || 'Classroom Activity',
-      topic: e.topic || e.category || 'General',
-      score: e.score != null ? Number(e.score) : null,
-      maxScore: e.max_score != null ? Number(e.max_score) : null,
-      percentage: e.percentage != null ? Number(e.percentage) : null,
-      completedAt: e.completed_at,
-      metadata: e.metadata || {}
-    }));
+    // Chronological assessment history with granular concept hierarchy
+    const assessmentHistory = studentEvents.map(e => {
+      const hierarchy = e.displayName && e.skill ? e : extractConceptHierarchy(e);
+      return {
+        id: e.id,
+        activityId: e.activity_id || e.activityId || e.id,
+        activityType: e.activityType || e.activity_type,
+        rawActivityType: e.rawActivityType || e.activity_type,
+        sourceLabel: e.sourceLabel || (e.activity_type === 'live_quiz' ? 'Live Quiz' : e.activity_type === 'ocr' ? 'OCR' : e.activity_type === 'exam' ? 'Assessment' : 'Task'),
+        activityTitle: e.activityTitle || e.activity_title || 'Classroom Activity',
+        topic: hierarchy.topic || e.topic || 'General',
+        baseTopic: hierarchy.topic || e.topic || 'General',
+        skill: hierarchy.skill || null,
+        category: hierarchy.category || 'General',
+        displayName: hierarchy.displayName || e.topic || 'Class Activity',
+        rawTopic: e.rawTopic || e.topic || 'General',
+        score: e.score != null ? Number(e.score) : null,
+        maxScore: e.max_score != null ? Number(e.max_score) : (e.maxScore != null ? Number(e.maxScore) : null),
+        percentage: e.percentage != null ? Number(e.percentage) : null,
+        completedAt: e.completed_at || e.completedAt,
+        metadata: e.metadata || {}
+      };
+    });
 
     // Most recent activity
     const mostRecent = studentEvents[0] || null;
@@ -724,17 +734,26 @@ export function computeTopicAnalytics(events = [], options = {}) {
       if (!crit || !crit.criterion || crit.max <= 0 || crit.score == null) continue;
       const critPct = Number(((crit.score / crit.max) * 100).toFixed(2));
       const critName = crit.criterion.trim();
-      let parentTopic = hierarchy.topic || 'Writing';
-      let parentCat = hierarchy.category || 'Writing';
+      let parentTopic = hierarchy.topic && hierarchy.topic !== 'Other' ? hierarchy.topic : 'Writing';
+      let parentCat = hierarchy.category && hierarchy.category !== 'General' ? hierarchy.category : 'Writing';
       if (/structure|syntax/i.test(critName)) {
         parentTopic = 'Sentence Mechanics';
+        parentCat = 'Grammar';
       } else if (/spelling/i.test(critName)) {
-        parentTopic = 'Writing Mechanics';
+        parentTopic = 'Spelling';
+        parentCat = 'Spelling';
       } else if (/tense|agreement/i.test(critName)) {
         parentTopic = 'Grammar';
         parentCat = 'Grammar';
+      } else if (/punctuation|capitalization/i.test(critName)) {
+        parentTopic = 'Punctuation';
+        parentCat = 'Grammar';
+      } else if (/clarity|flow|organization/i.test(critName)) {
+        parentTopic = 'Paragraph Organization';
+        parentCat = 'Writing';
       } else if (/vocabulary|word choice/i.test(critName)) {
         parentTopic = 'Vocabulary';
+        parentCat = 'Vocabulary';
       }
 
       const critKey = `${parentTopic} — ${critName}`;
@@ -1080,16 +1099,132 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   // Sort events chronologically (most recent first)
   events.sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
 
+  // 3b. Build student name lookup map
+  const studentNameMap = new Map();
+  studentMembers.forEach(m => {
+    const sid = m.profile_id || m.id;
+    studentNameMap.set(sid, m.display_name || m.profile?.full_name || 'Student');
+  });
+
+  const SOURCE_LABEL_MAP = {
+    assignment: 'Task',
+    task: 'Task',
+    live_quiz: 'Live Quiz',
+    quiz: 'Live Quiz',
+    exam: 'Assessment',
+    assessment: 'Assessment',
+    ocr: 'OCR',
+    ai_challenge: 'Competition',
+    competition: 'Competition'
+  };
+
+  // 3c. Normalize all learning events into a unified evidence model
+  const normalizedEvents = events.map(e => {
+    const hierarchy = extractConceptHierarchy(e);
+    const rawType = e.activity_type;
+    const normalizedType = 
+      rawType === 'assignment' || rawType === 'task' ? 'task'
+      : rawType === 'live_quiz' || rawType === 'quiz' ? 'live_quiz'
+      : rawType === 'exam' || rawType === 'assessment' ? 'exam'
+      : rawType === 'ocr' ? 'ocr'
+      : rawType === 'ai_challenge' || rawType === 'competition' ? 'competition'
+      : rawType || 'task';
+
+    const sourceLabel = SOURCE_LABEL_MAP[rawType] || 'Task';
+    const studentName = studentNameMap.get(e.student_id) || 'Student';
+
+    return {
+      ...e,
+      id: e.id,
+      activityId: e.activity_id || e.id,
+      activityTitle: e.activity_title || (normalizedType === 'ocr' ? (e.topic || 'Worksheet Assessment') : 'Class Activity'),
+      activityType: normalizedType,
+      rawActivityType: rawType,
+      sourceLabel,
+      topic: hierarchy.topic,
+      baseTopic: hierarchy.topic,
+      skill: hierarchy.skill,
+      category: hierarchy.category,
+      displayName: hierarchy.displayName,
+      rawTopic: e.topic || e.category || 'General',
+      studentId: e.student_id,
+      studentName,
+      score: e.score != null ? Number(e.score) : null,
+      maxScore: e.max_score != null ? Number(e.max_score) : null,
+      percentage: e.percentage != null ? Number(e.percentage) : null,
+      completedAt: e.completed_at,
+      metadata: e.metadata || {},
+      isPlaceholder: hierarchy.isPlaceholder
+    };
+  });
+
+  // 3d. Analyze Spelling Evidence across OCR and Student Submissions
+  let spellingDiagnosis = null;
+  try {
+    let totalSpellingEarned = 0;
+    let totalSpellingMax = 0;
+    const spellingAffectedStudents = new Set();
+    const recurringSpellingErrors = [];
+
+    events.forEach(e => {
+      const breakdown = Array.isArray(e.metadata?.breakdown_json) ? e.metadata.breakdown_json : [];
+      for (const crit of breakdown) {
+        if (/spelling/i.test(crit.criterion || crit.name)) {
+          const sScore = Number(crit.score) || 0;
+          const sMax = Number(crit.max) || 0;
+          if (sMax > 0) {
+            totalSpellingEarned += sScore;
+            totalSpellingMax += sMax;
+            if ((sScore / sMax) < 0.70 && e.student_id) {
+              spellingAffectedStudents.add(e.student_id);
+            }
+          }
+        }
+      }
+    });
+
+    const spellingAccuracy = totalSpellingMax > 0
+      ? Math.round((totalSpellingEarned / totalSpellingMax) * 100)
+      : null;
+
+    if (totalSpellingMax > 0 && spellingAccuracy != null) {
+      spellingDiagnosis = {
+        category: 'Spelling',
+        topic: 'Spelling',
+        skill: recurringSpellingErrors.length > 0 
+          ? recurringSpellingErrors.map(err => `${err.correct} → ${err.incorrect}`).join(' • ')
+          : 'Common Error Patterns',
+        displayName: 'Spelling — Common Errors',
+        accuracy: spellingAccuracy,
+        studentCount: Math.min(spellingAffectedStudents.size, totalStudents),
+        totalStudents,
+        sources: ['OCR'],
+        sourcesCount: 1,
+        confidence: 'Early signal',
+        commonErrors: recurringSpellingErrors,
+        hasSpecificWords: recurringSpellingErrors.length > 0,
+        why: recurringSpellingErrors.length > 0
+          ? `${spellingAffectedStudents.size} of ${totalStudents} students affected by recurring spelling patterns.`
+          : (spellingAccuracy < 70
+              ? `Spelling accuracy is ${spellingAccuracy}% across ${spellingAffectedStudents.size} of ${totalStudents} students. Not enough spelling samples yet to list recurring words.`
+              : 'Spelling performance is steady. Not enough error samples to report.'),
+        recommended_action: 'Conduct a targeted 10-minute spelling patterns practice with error-contrast flashcards.'
+      };
+    }
+  } catch (err) {
+    console.warn('[Analytics] Spelling diagnosis notice:', err?.message);
+  }
+
   // 4. Scored & Valid Events
-  const scoredEvents = events.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
-  const totalEvents = events.length;
+  const scoredEvents = normalizedEvents.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
+  const totalEvents = normalizedEvents.length;
 
   // Distinct completed activities
-  const completedActivityIds = new Set(events.map(e => e.activity_id).filter(Boolean));
+  const completedActivityIds = new Set(normalizedEvents.map(e => e.activity_id).filter(Boolean));
   const completedActivitiesCount = completedActivityIds.size;
 
   // Active students
-  const activeStudentIds = new Set(events.map(e => e.student_id).filter(Boolean));
+  const activeStudentIds = new Set(normalizedEvents.map(e => e.student_id).filter(Boolean));
   const activeStudents = activeStudentIds.size;
 
   // Classroom-wide average percentage
@@ -1106,20 +1241,20 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   if (totalStudents > 0 && completedActivitiesCount > 0) {
     // If measurable against total student capacity
     const totalPossibleAttempts = completedActivitiesCount * totalStudents;
-    completionRate = Number(Math.min(100, ((events.length / totalPossibleAttempts) * 100)).toFixed(2));
+    completionRate = Number(Math.min(100, ((normalizedEvents.length / totalPossibleAttempts) * 100)).toFixed(2));
   }
 
   // 5. Compute sub-analytics
-  const distinctDates = new Set(events.map(e => (e.completed_at || '').substring(0, 10)));
+  const distinctDates = new Set(normalizedEvents.map(e => (e.completed_at || '').substring(0, 10)));
   const dataConfidence = evaluateDataConfidence(scoredEvents.length, completedActivitiesCount, distinctDates.size);
 
-  const studentAnalytics = computeStudentAnalytics(events, studentMembers, {
+  const studentAnalytics = computeStudentAnalytics(normalizedEvents, studentMembers, {
     ...options,
     totalClassActivities: completedActivitiesCount
   });
-  const activityBreakdown = computeActivityAnalytics(events, totalStudents);
-  const topicAnalytics = computeTopicAnalytics(events, { ...options, totalStudents });
-  const trendAnalytics = computeTrendAnalytics(events, totalStudents, options);
+  const activityBreakdown = computeActivityAnalytics(normalizedEvents, totalStudents);
+  const topicAnalytics = computeTopicAnalytics(normalizedEvents, { ...options, totalStudents });
+  const trendAnalytics = computeTrendAnalytics(normalizedEvents, totalStudents, options);
 
   // Improving and Struggling students
   const improvingStudents = studentAnalytics.filter(
@@ -1224,45 +1359,48 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     }))
   };
 
-  // 6. Recent activity feed (up to 15 latest events with resolved student names)
-  const studentNameMap = new Map();
-  studentMembers.forEach(m => {
-    const sid = m.profile_id || m.id;
-    studentNameMap.set(sid, m.display_name || m.profile?.full_name || 'Student');
-  });
-
-  const recentActivity = events.slice(0, 50).map(e => ({
+  // 6. Recent activity feed (up to 50 latest normalized events)
+  const recentActivity = normalizedEvents.slice(0, 50).map(e => ({
     id: e.id,
-    activityId: e.activity_id || e.id,
-    studentId: e.student_id,
-    studentName: studentNameMap.get(e.student_id) || 'Student',
-    activityType: e.activity_type,
-    rawActivityType: e.activity_type,
-    activityTitle: e.activity_title || (e.activity_type === 'ocr' ? (e.topic || 'Worksheet Assessment') : 'Class Activity'),
-    topic: e.topic || e.category || 'General',
-    score: e.score != null ? Number(e.score) : null,
-    maxScore: e.max_score != null ? Number(e.max_score) : null,
-    percentage: e.percentage != null ? Number(e.percentage) : null,
-    completedAt: e.completed_at,
+    activityId: e.activityId || e.id,
+    studentId: e.studentId,
+    studentName: e.studentName || 'Student',
+    activityType: e.activityType,
+    rawActivityType: e.rawActivityType,
+    sourceLabel: e.sourceLabel,
+    activityTitle: e.activityTitle || 'Class Activity',
+    topic: e.displayName || e.topic || 'General',
+    baseTopic: e.baseTopic || e.topic,
+    skill: e.skill,
+    category: e.category,
+    displayName: e.displayName,
+    rawTopic: e.rawTopic,
+    score: e.score,
+    maxScore: e.maxScore,
+    percentage: e.percentage,
+    completedAt: e.completedAt,
     metadata: e.metadata || {}
   }));
 
   // 7. Grouped Recent Learning Evidence (Unified across 4 Sources: Tasks, Quizzes, Assessments, Competitions)
   const activityMap = new Map();
-  for (const ev of events) {
-    if (!ev.activity_id) continue;
-    const key = `${ev.activity_type}:${ev.activity_id}`;
+  for (const ev of normalizedEvents) {
+    const actId = ev.activityId || ev.activity_id;
+    if (!actId) continue;
+    const actType = ev.activityType || ev.activity_type;
+    const key = `${actType}:${actId}`;
     if (!activityMap.has(key)) {
       activityMap.set(key, {
-        activityId: ev.activity_id,
-        activityType: ev.activity_type === 'assignment' ? 'task'
-          : ev.activity_type === 'live_quiz' ? 'quiz'
-          : ev.activity_type === 'exam' ? 'assessment'
-          : ev.activity_type === 'ai_challenge' || ev.activity_type === 'competition' ? 'competition'
-          : ev.activity_type,
-        rawActivityType: ev.activity_type,
-        activityTitle: ev.activity_title || 'Class Activity',
-        topic: ev.topic || ev.category || 'General',
+        activityId: actId,
+        activityType: actType,
+        rawActivityType: ev.rawActivityType || ev.activity_type,
+        sourceLabel: ev.sourceLabel || 'Task',
+        activityTitle: ev.activityTitle || 'Class Activity',
+        topic: ev.displayName || ev.topic || 'General',
+        baseTopic: ev.baseTopic || ev.topic,
+        skill: ev.skill,
+        category: ev.category,
+        displayName: ev.displayName,
         events: []
       });
     }
@@ -1274,7 +1412,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     const actEvents = grp.events;
     const scored = actEvents.filter(e => e.percentage != null && !isNaN(Number(e.percentage)));
     const totalSubmissions = actEvents.length;
-    const distinctStudents = new Set(actEvents.map(e => e.student_id).filter(Boolean));
+    const distinctStudents = new Set(actEvents.map(e => e.studentId || e.student_id).filter(Boolean));
     const studentsCount = distinctStudents.size;
 
     let averagePercentage = null;
@@ -1300,7 +1438,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       : null;
 
     const latestDate = actEvents
-      .map(e => e.completed_at)
+      .map(e => e.completedAt || e.completed_at)
       .filter(Boolean)
       .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null;
 
@@ -1325,8 +1463,13 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       activityId: grp.activityId,
       activityType: grp.activityType,
       rawActivityType: grp.rawActivityType,
+      sourceLabel: grp.sourceLabel,
       activityTitle: grp.activityTitle,
       topic: grp.topic,
+      baseTopic: grp.baseTopic,
+      skill: grp.skill,
+      category: grp.category,
+      displayName: grp.displayName,
       submissionsCount: totalSubmissions,
       studentsCount,
       averagePercentage,
@@ -1342,11 +1485,11 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       aiShortInsight,
       aiRecommendation,
       studentResults: actEvents.slice(0, 30).map(e => ({
-        studentId: e.student_id,
-        studentName: studentNameMap.get(e.student_id) || 'Student',
+        studentId: e.studentId || e.student_id,
+        studentName: e.studentName || studentNameMap.get(e.studentId || e.student_id) || 'Student',
         score: e.score != null ? Number(e.score) : null,
         percentage: e.percentage != null ? Number(e.percentage) : null,
-        completedAt: e.completed_at
+        completedAt: e.completedAt || e.completed_at
       }))
     });
   }
@@ -1380,7 +1523,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   };
 
   // 9. Chronological Performance Over Time Calculation
-  const performanceOverTime = computePerformanceOverTime(events);
+  const performanceOverTime = computePerformanceOverTime(normalizedEvents);
 
   // 10. Granular Learning Gap Priority (Ranked by affected students and multi-source confidence)
   const learningGapPriority = meaningfulTopics
@@ -1391,6 +1534,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       const priority = Number(((affectedRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0)).toFixed(2));
       return {
         ...t,
+        category: t.category || 'General',
         topic: t.displayName || t.topic,
         baseTopic: t.topic,
         skill: t.skill,
@@ -1410,14 +1554,47 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
         sourcesList: t.sourcesList,
         evidence_sources: t.sourcesCount,
         evidenceSources: t.sourcesCount,
-        confidence: isMultiSource ? 'CONFIRMED GAP' : 'EARLY SIGNAL',
-        confidence_label: isMultiSource ? `CONFIRMED GAP • ${t.sourcesCount} evidence sources` : 'EARLY SIGNAL • 1 evidence source',
+        confidence: isMultiSource ? 'Confirmed gap' : 'Early signal',
+        confidence_label: isMultiSource ? `Confirmed gap • ${t.sourcesCount} evidence sources` : 'Early signal • 1 evidence source',
         evidence: t.evidence || [],
         why: `Class accuracy is ${Math.round(t.averagePercentage)}% with ${t.affectedStudentsCount} of ${totalStudents} students affected across ${t.sourcesCount} source(s).`,
         recommended_action: `Review ${t.topic} (${t.skill}) with structured modeling and guided practice before re-assessing.`
       };
     })
     .sort((a, b) => b.priority - a.priority);
+
+  // Merge spelling diagnosis into learning gaps if accuracy is below mastery (<70%)
+  if (spellingDiagnosis && spellingDiagnosis.accuracy < 70 && !learningGapPriority.some(g => g.category === 'Spelling' || g.topic === 'Spelling' || g.displayName?.includes('Spelling'))) {
+    learningGapPriority.push({
+      category: 'Spelling',
+      topic: spellingDiagnosis.displayName,
+      baseTopic: 'Spelling',
+      skill: spellingDiagnosis.skill,
+      displayName: spellingDiagnosis.displayName,
+      accuracy: spellingDiagnosis.accuracy,
+      averageAccuracy: spellingDiagnosis.accuracy,
+      average_accuracy: spellingDiagnosis.accuracy,
+      studentCount: spellingDiagnosis.studentCount,
+      affectedStudentsCount: spellingDiagnosis.studentCount,
+      students_affected: spellingDiagnosis.studentCount,
+      studentsAffected: spellingDiagnosis.studentCount,
+      totalStudents: totalStudents,
+      students_total: totalStudents,
+      studentsTotal: totalStudents,
+      sources: spellingDiagnosis.sources,
+      sourcesCount: spellingDiagnosis.sourcesCount,
+      sourcesList: spellingDiagnosis.sources,
+      evidence_sources: spellingDiagnosis.sourcesCount,
+      evidenceSources: spellingDiagnosis.sourcesCount,
+      confidence: spellingDiagnosis.confidence,
+      confidence_label: `${spellingDiagnosis.confidence} • ${spellingDiagnosis.sourcesCount} evidence source`,
+      evidence: [],
+      why: spellingDiagnosis.why,
+      recommended_action: spellingDiagnosis.recommended_action,
+      priority: Number(((spellingDiagnosis.studentCount / (totalStudents || 1)) * (100 - spellingDiagnosis.accuracy)).toFixed(2))
+    });
+    learningGapPriority.sort((a, b) => b.priority - a.priority);
+  }
 
   const classStrengths = meaningfulTopics.filter(t => t.averagePercentage != null && t.averagePercentage >= 75);
   const studentsNeedingSupport = studentAnalytics.filter(s => s.averagePercentage < 60).map(s => ({
@@ -1428,6 +1605,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     topic: learningGapPriority[0].topic,
     baseTopic: learningGapPriority[0].baseTopic,
     skill: learningGapPriority[0].skill,
+    category: learningGapPriority[0].category,
     displayName: learningGapPriority[0].displayName,
     accuracy: learningGapPriority[0].averageAccuracy,
     studentsAffected: learningGapPriority[0].studentsAffected,
@@ -1462,7 +1640,13 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     topWeaknesses,
     studentsNeedingAttention,
     recentActivity,
-    recentLearningEvidence,
+    recentLearningEvidence: normalizedEvents,
+    allEvidence: normalizedEvents,
+    all_evidence: normalizedEvents,
+    groupedEvidence: recentLearningEvidence,
+    grouped_evidence: recentLearningEvidence,
+    spellingDiagnosis,
+    spelling_diagnosis: spellingDiagnosis,
     weakAreaVisualData,
     students: studentAnalytics,
     activityBreakdown,
