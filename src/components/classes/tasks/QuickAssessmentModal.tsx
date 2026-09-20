@@ -50,6 +50,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
   // Form State
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [category, setCategory] = useState<OCREvaluationCategory>('Paragraph Writing');
+  const [topicFocus, setTopicFocus] = useState('');
   const [customCategoryTitle, setCustomCategoryTitle] = useState('');
   const [maxMarks, setMaxMarks] = useState<number>(20);
 
@@ -213,9 +214,9 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
     try {
       const targetStudent = students.find((s) => s.profile_id === selectedStudentId);
       const studentName = targetStudent?.display_name || targetStudent?.profile?.full_name || 'Student';
-      const effectiveTitle = category === 'Other' && customCategoryTitle.trim()
+      const effectiveTitle = topicFocus.trim() || (category === 'Other' && customCategoryTitle.trim()
         ? customCategoryTitle.trim()
-        : category;
+        : category);
 
       let tempFileKey: string | undefined;
 
@@ -342,6 +343,7 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
         score: editScore,
         feedback: editFeedback.trim()
       });
+      fetch(`/api/classes/${classroomId}/teaching-intelligence/invalidate`, { method: 'POST' }).catch(() => {});
       setAdjustmentSaved(true);
       setTimeout(() => setAdjustmentSaved(false), 3000);
       if (onSuccess) onSuccess();
@@ -635,6 +637,22 @@ export const QuickAssessmentModal: React.FC<QuickAssessmentModalProps> = ({
                     No enrolled students found in this classroom roster.
                   </p>
                 )}
+              </div>
+
+              {/* Step 2: Learning Topic / Skill Focus */}
+              <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-2">
+                <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-[#087477]" />
+                  <span>Learning Topic / Skill Focus</span>
+                </label>
+                <input
+                  type="text"
+                  value={topicFocus}
+                  onChange={(e) => setTopicFocus(e.target.value)}
+                  placeholder="e.g., Simple Present — Negative Forms"
+                  style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                  className="w-full px-4 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] placeholder:text-[#667085] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all"
+                />
               </div>
 
               {/* Step 2: Choose Evaluation Category / Skill */}

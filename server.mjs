@@ -61,7 +61,8 @@ import {
   getRecentExamReportsForClassroom,
   getExamDetailedAnalysis,
   getStudentTeachingIntelligence,
-  handleTeacherChat
+  handleTeacherChat,
+  invalidateTeachingIntelligenceCache
 } from './server/teachingIntelligenceService.mjs';
 import {
   generateTeachingPlan,
@@ -2864,6 +2865,21 @@ app.post(['/api/classes/:id/teaching-intelligence/refresh', '/api/classes/:id/in
   } catch (error) {
     console.error('Error in POST /api/classes/:id/teaching-intelligence/refresh:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to refresh intelligence' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/invalidate - Invalidate classroom cache
+app.post('/api/classes/:id/teaching-intelligence/invalidate', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const classroomId = req.params.id;
+    await invalidateTeachingIntelligenceCache(serverSupabase, classroomId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/invalidate:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to invalidate cache' });
   }
 });
 

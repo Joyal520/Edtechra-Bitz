@@ -24,6 +24,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const tempReportsDir = path.resolve(__dirname, '../temp_reports');
 
+export async function invalidateTeachingIntelligenceCache(serverSupabase, classroomId) {
+  try {
+    const { error } = await serverSupabase
+      .from('ai_classroom_insights')
+      .delete()
+      .eq('classroom_id', classroomId);
+    if (error) console.warn('[TI] Cache invalidation warning:', error.message);
+    else console.log('[TI] Cache invalidated for classroom:', classroomId);
+  } catch (err) {
+    console.warn('[TI] Cache invalidation failed:', err.message);
+  }
+}
+
 const CANDIDATE_GEMINI_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-3.5-flash',
@@ -308,7 +321,11 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       weak_area_visual_data: analytics.weakAreaVisualData || null,
       activity_breakdown: analytics.activityBreakdown || {},
       data_hash: dataHash,
-      computed_at: new Date().toISOString()
+      computed_at: new Date().toISOString(),
+      learningGapPriority: analytics.learningGapPriority || [],
+      classStrengths: analytics.classStrengths || [],
+      studentsNeedingSupport: analytics.studentsNeedingSupport || [],
+      recommendedTeachingFocus: analytics.recommendedTeachingFocus || null
     };
   } catch (err) {
     console.error('[TeachingIntelligence] computeClassroomMetrics error:', err);

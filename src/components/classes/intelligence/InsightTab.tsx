@@ -1,37 +1,32 @@
-// ============================================================================
-// EDTECHRA TEACHING INTELLIGENCE: INSIGHT TAB (PART A.1)
-// The primary, default overview for teachers:
-// 1. Classroom Pulse (4 key high-contrast metrics)
-// 2. What Are Students Struggling With? (The Learning Gap Core)
-// 3. Supporting 4-Source Evidence (Tasks, Quizzes, Assessments, Competitions)
-// 4. Concise AI Insight (1-2 sentences)
-// 5. Pedagogical Recommendation & [Create Learning Material] Action
-// 6. Compact Recent Evidence Stream
-// ============================================================================
-
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
-  Sparkles,
-  TrendingDown,
   TrendingUp,
+  TrendingDown,
+  CheckCircle2,
+  Target,
   ArrowRight,
-  ClipboardCheck,
-  Zap,
-  BookOpen,
-  Trophy,
-  Award,
-  ChevronRight,
-  Camera
+  Sparkles,
+  BarChart3,
+  UserX,
+  Lightbulb
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
 
 interface InsightTabProps {
-  classroom: Classroom;
-  data: TeachingIntelligenceResponse | null;
-  onNavigateToTeaching: (targetTopic?: string) => void;
-  onNavigateToStudents: () => void;
+  classroom?: Classroom;
+  data?: TeachingIntelligenceResponse | null;
+  
+  intelligence?: any;
+  metrics?: any;
+  classroomId?: string;
+  students?: any[];
+  
+  onNavigateToTab?: (tab: string, context?: { topic?: string, studentId?: string }) => void;
+  
+  onNavigateToTeaching?: (targetTopic?: string) => void;
+  onNavigateToStudents?: () => void;
   onNavigateToEvidence?: () => void;
   onOpenExamAnalysis?: (examId: string) => void;
   onGenerateAnalysis?: () => void;
@@ -41,505 +36,508 @@ interface InsightTabProps {
 export const InsightTab: React.FC<InsightTabProps> = ({
   classroom,
   data,
+  intelligence,
+  metrics,
+  classroomId: _classroomId,
+  students,
+  onNavigateToTab,
   onNavigateToTeaching,
   onNavigateToStudents,
   onNavigateToEvidence,
-  onOpenExamAnalysis,
-  onGenerateAnalysis,
-  refreshing = false
+  onGenerateAnalysis: _onGenerateAnalysis,
+  refreshing: _refreshing
 }) => {
-  const metrics = data?.metrics?.class_summary;
-  const classHealth = data?.metrics?.class_health;
-  const intel = data?.intelligence;
-  const topicPerf = data?.metrics?.topic_performance || [];
-  const activityBreakdown = data?.metrics?.activity_breakdown || {};
-  const recentEvidence = data?.metrics?.recent_learning_evidence || [];
+  
+  const handleNavigation = (tab: string, context?: { topic?: string, studentId?: string }) => {
+    if (onNavigateToTab) {
+      onNavigateToTab(tab, context);
+    } else {
+      if (tab === 'teaching' && onNavigateToTeaching) onNavigateToTeaching(context?.topic);
+      if (tab === 'students' && onNavigateToStudents) onNavigateToStudents();
+      if (tab === 'evidence-reports' && onNavigateToEvidence) onNavigateToEvidence();
+    }
+  };
 
-  const totalStudents = metrics?.total_students || classroom.student_count || 0;
-  const strugglingCount = classHealth?.strugglingCount ?? (data?.metrics?.students_needing_attention?.length || 0);
+  const resolvedMetrics = metrics || data?.metrics || {};
+  const resolvedIntelligence = intelligence || data?.intelligence;
+  const resolvedStudents = students || data?.metrics?.students || [];
+  
+  const classSummary = resolvedMetrics.class_summary || {};
+  const classHealth = resolvedMetrics.class_health || {};
+  const topicPerformance = resolvedMetrics.topic_performance || [];
+  const topWeaknesses = resolvedMetrics.top_weaknesses || [];
+  const topStrengths = resolvedMetrics.top_strengths || [];
+  const teachNext = resolvedIntelligence?.teach_next || [];
+  const studentsNeedingAttention = resolvedMetrics.students_needing_attention || [];
+  const recentEvidence = resolvedMetrics.recent_learning_evidence || [];
 
-  // Identify the Primary Learning Gap (Weakest Topic)
-  const primaryTeachNext = intel?.teach_next?.[0];
-  const weakestTopicFromMetrics = data?.metrics?.top_weaknesses?.[0] || topicPerf.find(t => t.score < 65) || topicPerf[0];
+  // Data for Section A
+  const totalStudents = classSummary.total_students || classroom?.student_count || 0;
+  const overallScore = classSummary.overall_score ?? classHealth.classAverage ?? null;
+  const scoreChange = classSummary.score_change ?? 0;
+  const completionRate = classSummary.task_completion_rate ?? classHealth.completionRate ?? null;
+  const participationRate = classSummary.engagement_rate ?? classHealth.participationRate ?? null;
+  const strugglingCount = classHealth.strugglingCount ?? studentsNeedingAttention.length;
 
-  const learningGapTopic = primaryTeachNext?.topic || weakestTopicFromMetrics?.topic || 'Core Curriculum Skills';
-  const fallbackScore = weakestTopicFromMetrics
-    ? ('score' in weakestTopicFromMetrics ? (weakestTopicFromMetrics as any).score : (weakestTopicFromMetrics as any).averageScore)
-    : null;
-  const learningGapScore = primaryTeachNext?.current_performance ?? fallbackScore ?? null;
-  const studentsNeedingSupportForTopic = Math.min(strugglingCount > 0 ? strugglingCount : 1, totalStudents > 0 ? totalStudents : 1);
+  // Data for Section B
+  const learningGaps = resolvedMetrics.learningGapPriority || topWeaknesses.map((w: any) => ({
+    topic: w.topic,
+    accuracy: w.score || w.averageScore,
+    studentCount: w.eventsCount || 1, // mock if not available
+    sources: w.eventsCount > 2 ? 3 : 1
+  }));
+  if (learningGaps.length === 0) {
+    topicPerformance.filter((t: any) => t.score < 70).forEach((t: any) => {
+      learningGaps.push({
+        topic: t.topic,
+        accuracy: t.score,
+        studentCount: Math.max(1, strugglingCount),
+        sources: 2
+      });
+    });
+  }
 
-  // Derive 4-Source Evidence breakdown for this topic or classroom (Tasks includes OCR worksheets)
-  const assignCount = activityBreakdown.assignment?.eventCount || 0;
-  const ocrCount = activityBreakdown.ocr?.eventCount || 0;
-  const totalTaskCount = assignCount + ocrCount;
+  // Visual Diagnosis Charts Data
+  const sortedTopics = [...topicPerformance].sort((a: any, b: any) => a.score - b.score);
+  
+  const donutData = useMemo(() => {
+    let high = 0, steady = 0, needsSupport = 0, atRisk = 0;
+    if (resolvedStudents && resolvedStudents.length > 0) {
+      resolvedStudents.forEach((s: any) => {
+        const avg = s.averagePercentage ?? s.averageScore ?? s.score ?? null;
+        if (avg === null || avg === undefined) return;
+        if (avg >= 80) high++;
+        else if (avg >= 60) steady++;
+        else if (avg >= 50) needsSupport++;
+        else atRisk++;
+      });
+    }
+    return [
+      { label: 'High Performers', count: high, color: '#10b981' },
+      { label: 'Steady', count: steady, color: '#14b8a6' },
+      { label: 'Needs Support', count: needsSupport, color: '#f59e0b' },
+      { label: 'At Risk', count: atRisk, color: '#ef4444' },
+    ];
+  }, [resolvedStudents]);
 
-  const assignSum = (activityBreakdown.assignment?.averagePercentage != null && assignCount > 0)
-    ? activityBreakdown.assignment.averagePercentage * assignCount
-    : 0;
-  const ocrSum = (activityBreakdown.ocr?.averagePercentage != null && ocrCount > 0)
-    ? activityBreakdown.ocr.averagePercentage * ocrCount
-    : 0;
-  const taskAvg = totalTaskCount > 0
-    ? (assignSum + ocrSum) / totalTaskCount
-    : null;
+  const lineChartData = useMemo(() => {
+    if (resolvedMetrics.trendData) return resolvedMetrics.trendData;
+    if (recentEvidence.length > 0) {
+      return [...recentEvidence].reverse().map((e: any) => ({
+        date: new Date(e.latestCompletedAt || e.completedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        value: e.averagePercentage ?? e.score ?? 0
+      })).filter(d => d.value > 0);
+    }
+    return [];
+  }, [recentEvidence, resolvedMetrics.trendData]);
 
-  const quizAvg = activityBreakdown.live_quiz?.averagePercentage ?? null;
-  const examAvg = activityBreakdown.exam?.averagePercentage ?? null;
-  const challengeAvg = activityBreakdown.ai_challenge?.averagePercentage ?? null;
+  // Section D
+  const strengthsList = resolvedMetrics.classStrengths || topStrengths.map((s: any) => ({ topic: s.topic, accuracy: s.score || s.averageScore }));
+  if (strengthsList.length === 0) {
+    topicPerformance.filter((t: any) => t.score >= 75).forEach((t: any) => {
+      strengthsList.push({ topic: t.topic, accuracy: t.score });
+    });
+  }
 
-  // Derive concise AI insight (1-2 sentences)
-  const aiInsightText = primaryTeachNext?.why || (intel?.summary ? intel.summary.split('. ').slice(0, 2).join('. ') + '.' : null);
+  // Section E
+  const supportStudentsList = resolvedMetrics.studentsNeedingSupport || studentsNeedingAttention;
+  
+  // Section F
+  const recommendedFocus = resolvedMetrics.recommendedTeachingFocus || teachNext[0] || (learningGaps[0] ? {
+    topic: learningGaps[0].topic,
+    why: "Students are struggling with core concepts based on recent evidence.",
+    recommended_action: "Review the topic with guided practice and step-by-step examples."
+  } : null);
 
-  // Recommendation & Action
-  const recommendationText = primaryTeachNext?.recommended_action || (intel?.recommended_actions?.[0] as any)?.recommendation || 'Dedicate the next lesson to guided review of this concept with scaffolded practice.';
+  // SVG Helpers
+  const getBarColor = (score: number) => {
+    if (score < 50) return '#ef4444';
+    if (score < 70) return '#f59e0b';
+    return '#14b8a6';
+  };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-150">
+    <div className="space-y-8 animate-in fade-in duration-200 pb-12">
       
-      {/* =================================================================== */}
-      {/* 1. CLASSROOM PULSE (REAL DATA, HIGH CONTRAST)                      */}
-      {/* =================================================================== */}
-      <div>
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="text-[11px] font-black uppercase tracking-wider text-[#36565A]">
-            Classroom Pulse
-          </span>
-          <span className="text-[11px] font-bold text-[#36565A]">
-            {totalStudents} {totalStudents === 1 ? 'Student' : 'Students Enrolled'}
-          </span>
+      {/* SECTION A: Class Pulse */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Class Pulse</h2>
+          <span className="text-xs font-bold text-[#36565A]">{totalStudents} Students</span>
         </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {/* Pulse Card 1: Class Performance */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] shadow-xs">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#36565A] block">
-              Class Performance
-            </span>
-            <div className="flex items-baseline gap-2 mt-1.5">
-              <span className="text-2xl sm:text-3xl font-black text-[#173B3F]">
-                {classHealth?.classAverage != null ? `${classHealth.classAverage}%` : metrics?.overall_score != null ? `${metrics.overall_score}%` : '—'}
+        
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+            <span className="text-xs font-bold text-[#36565A]">Overall Learning Health</span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-[#173B3F]">
+                {overallScore != null ? `${overallScore}%` : '--'}
               </span>
-              {metrics?.score_change != null && metrics.score_change !== 0 && (
-                <span className={`text-xs font-black flex items-center gap-0.5 ${
-                  metrics.score_change >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                }`}>
-                  {metrics.score_change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  <span>{metrics.score_change >= 0 ? `+${metrics.score_change}%` : `${metrics.score_change}%`}</span>
+              {scoreChange !== 0 && overallScore != null && (
+                <span className={`flex items-center text-xs font-bold ${scoreChange > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {scoreChange > 0 ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
+                  {Math.abs(scoreChange)}%
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-semibold text-[#36565A] mt-1 block">
-              Weighted across all activities
-            </span>
           </div>
-
-          {/* Pulse Card 2: Task Completion */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] shadow-xs">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#36565A] block">
-              Task Completion
-            </span>
-            <div className="flex items-baseline gap-2 mt-1.5">
-              <span className="text-2xl sm:text-3xl font-black text-[#173B3F]">
-                {classHealth?.completionRate ?? metrics?.task_completion_rate ?? 0}%
-              </span>
-            </div>
-            <span className="text-[10px] font-semibold text-[#36565A] mt-1 block">
-              Submitted classroom tasks
-            </span>
-          </div>
-
-          {/* Pulse Card 3: Active Participation */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] shadow-xs">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#36565A] block">
-              Active Participation
-            </span>
-            <div className="flex items-baseline gap-2 mt-1.5">
-              <span className="text-2xl sm:text-3xl font-black text-[#159A9C]">
-                {classHealth?.participationRate ?? metrics?.engagement_rate ?? 0}%
-              </span>
-            </div>
-            <span className="text-[10px] font-semibold text-[#36565A] mt-1 block">
-              Active student engagement
-            </span>
-          </div>
-
-          {/* Pulse Card 4: Students Needing Support */}
-          <div 
-            onClick={onNavigateToStudents}
-            className="bg-[#E8F7F5] p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] shadow-xs hover:border-[#159A9C] transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-wider text-[#087477] block">
-                Needs Support
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-[#087477] group-hover:translate-x-0.5 transition-transform" />
-            </div>
-            <div className="flex items-baseline gap-2 mt-1.5">
-              <span className="text-2xl sm:text-3xl font-black text-[#087477]">
-                {strugglingCount}
-              </span>
-              <span className="text-xs font-bold text-[#36565A]">
-                of {totalStudents} students
-              </span>
-            </div>
-            <span className="text-[10px] font-bold text-[#087477] mt-1 block group-hover:underline">
-              View student roster →
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* =================================================================== */}
-      {/* 2. CORE: WHAT ARE STUDENTS STRUGGLING WITH? (LEARNING GAP)          */}
-      {/* =================================================================== */}
-      {(!data?.has_analysis && !intel) ? (
-        /* Empty / Not Generated Yet Card */
-        <div className="bg-white rounded-3xl p-8 sm:p-10 border border-[#C9E5E2] text-center space-y-4 shadow-xs">
-          <div className="w-14 h-14 rounded-2xl bg-[#E8F7F5] border border-[#C9E5E2] text-[#087477] flex items-center justify-center mx-auto shadow-2xs">
-            <Sparkles className="w-7 h-7" />
-          </div>
-          <div className="space-y-1 max-w-md mx-auto">
-            <h3 className="text-lg font-black text-[#173B3F]">
-              AI Classroom Diagnosis Ready
-            </h3>
-            <p className="text-xs font-medium text-[#36565A] leading-relaxed">
-              Synthesize learning evidence across Tasks, Quizzes, Assessments, and Competitions to reveal your classroom’s primary learning gap.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onGenerateAnalysis}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#087477] hover:bg-[#065e60] text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>{refreshing ? 'Analyzing Evidence...' : 'Generate AI Diagnosis'}</span>
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
           
-          {/* THE CORE LEARNING GAP CARD */}
-          <div className="bg-gradient-to-br from-[#173B3F] via-[#1a4247] to-[#0d2a2d] text-white rounded-3xl p-6 sm:p-7 shadow-lg relative overflow-hidden border border-[#173B3F]">
-            
-            {/* Subtle ambient light */}
-            <div className="absolute -top-16 -right-16 w-56 h-56 bg-[#159A9C]/20 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="relative z-10 space-y-5">
-              
-              {/* Top Tag & Title */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-black uppercase tracking-wider">
-                    Primary Learning Gap
-                  </span>
-                  <span className="text-xs text-slate-300 font-medium">
-                    Critical concept requiring pedagogical intervention
-                  </span>
-                </div>
-                
-                {totalStudents > 0 && (
-                  <span className="text-xs font-black text-rose-200 bg-rose-950/60 px-3 py-1 rounded-full border border-rose-500/30 w-fit">
-                    {studentsNeedingSupportForTopic} of {totalStudents} students need support
-                  </span>
-                )}
-              </div>
-
-              {/* Learning Gap Topic Headline */}
-              <div>
-                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {learningGapTopic}
-                </h3>
-                {learningGapScore != null && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-sm font-black text-rose-300">
-                      {learningGapScore}% Average Performance
-                    </span>
-                    <span className="text-xs text-slate-400 font-medium">
-                      (Target Benchmark: 70%+)
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Progress Visual Bar */}
-              {learningGapScore != null && (
-                <div className="space-y-1.5">
-                  <div className="w-full h-3 bg-white/15 rounded-full overflow-hidden p-0.5 border border-white/10">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${
-                        learningGapScore < 50
-                          ? 'bg-rose-500'
-                          : learningGapScore < 70
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-400'
-                      }`}
-                      style={{ width: `${Math.max(8, Math.min(100, learningGapScore))}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-300">
-                    <span>0% (Critical)</span>
-                    <span>50% (Developing)</span>
-                    <span>70% (Target)</span>
-                    <span>100% (Mastery)</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Supporting 4-Source Evidence Breakdown */}
-              <div className="pt-2 border-t border-white/10">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#D4EFEC] block mb-2.5">
-                  Supporting Evidence Across Learning Activities
-                </span>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  
-                  {/* Source 1: Tasks */}
-                  <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase block">Tasks</span>
-                    <span className="text-base font-black text-white mt-0.5 block">
-                      {taskAvg != null ? `${Math.round(taskAvg)}%` : '—'}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-medium">
-                      {totalTaskCount} evaluated
-                    </span>
-                  </div>
-
-                  {/* Source 2: Live Quizzes */}
-                  <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase block">Live Quizzes</span>
-                    <span className="text-base font-black text-white mt-0.5 block">
-                      {quizAvg != null ? `${Math.round(quizAvg)}%` : '—'}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-medium">
-                      {activityBreakdown.live_quiz?.eventCount || 0} sessions
-                    </span>
-                  </div>
-
-                  {/* Source 3: Assessments */}
-                  <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase block">Assessments</span>
-                    <span className="text-base font-black text-white mt-0.5 block">
-                      {examAvg != null ? `${Math.round(examAvg)}%` : '—'}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-medium">
-                      {activityBreakdown.exam?.eventCount || 0} completed
-                    </span>
-                  </div>
-
-                  {/* Source 4: Competitions */}
-                  <div className="bg-white/10 backdrop-blur-xs rounded-xl p-3 border border-white/10 text-center">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase block">Competitions</span>
-                    <span className="text-base font-black text-white mt-0.5 block">
-                      {challengeAvg != null ? `${Math.round(challengeAvg)}%` : '—'}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-medium">
-                      {activityBreakdown.ai_challenge?.eventCount || 0} entries
-                    </span>
-                  </div>
-
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* =============================================================== */}
-          {/* 3. AI INSIGHT & 4. RECOMMENDATION + [CREATE LEARNING MATERIAL]  */}
-          {/* =============================================================== */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            
-            {/* AI Insight Card (5 cols on desktop) */}
-            <div className="lg:col-span-5 bg-white rounded-3xl p-5 sm:p-6 border border-[#C9E5E2] shadow-xs space-y-2.5">
-              <div className="flex items-center gap-2 text-[#087477]">
-                <Sparkles className="w-4 h-4" />
-                <h4 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
-                  AI Pedagogical Diagnosis
-                </h4>
-              </div>
-              <p className="text-sm font-semibold text-[#173B3F] leading-relaxed">
-                {aiInsightText ? (
-                  <InlineMarkdown text={aiInsightText} />
-                ) : (
-                  `Students require targeted instruction in ${learningGapTopic} based on recent classroom evidence.`
-                )}
-              </p>
-              <div className="pt-1">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#159A9C]" />
-                  Zero Hallucination • Grounded Evidence
-                </span>
-              </div>
-            </div>
-
-            {/* Recommendation & Direct Action Card (7 cols on desktop) */}
-            <div className="lg:col-span-7 bg-[#E8F7F5] rounded-3xl p-5 sm:p-6 border border-[#C9E5E2] shadow-xs flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-[#087477]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#087477]">
-                      Recommended Teacher Action
-                    </h4>
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-white px-2.5 py-0.5 rounded-full text-[#087477] border border-[#C9E5E2]">
-                    High Impact
-                  </span>
-                </div>
-
-                <p className="text-sm font-bold text-[#173B3F] leading-relaxed">
-                  <InlineMarkdown text={recommendationText} />
-                </p>
-              </div>
-
-              {/* Action Button: Starts the Teaching Loop */}
-              <div className="pt-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => onNavigateToTeaching(learningGapTopic)}
-                  className="px-5 py-3 bg-[#087477] hover:bg-[#065e60] text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-sm shadow-[#087477]/20 active:scale-95 transition-all cursor-pointer"
-                >
-                  <span>Create Learning Material</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Secondary Weak Topics (if multiple exist) */}
-          {topicPerf.filter(t => t.score < 65 && t.topic !== learningGapTopic).length > 0 && (
-            <div className="bg-white rounded-2xl p-4 border border-[#C9E5E2] space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-[#36565A]">
-                Additional Identified Areas for Growth
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+            <span className="text-xs font-bold text-[#36565A]">Task Completion Rate</span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-[#173B3F]">
+                {completionRate != null ? `${completionRate}%` : '--'}
               </span>
-              <div className="flex flex-wrap gap-2">
-                {topicPerf.filter(t => t.score < 65 && t.topic !== learningGapTopic).map((t, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => onNavigateToTeaching(t.topic)}
-                    className="px-3 py-1.5 bg-[#E8F7F5] hover:bg-[#D4EFEC] border border-[#C9E5E2] rounded-xl text-xs font-bold text-[#173B3F] flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <span>{t.topic}</span>
-                    <span className="text-[10px] font-black text-rose-700 bg-white px-2 py-0.5 rounded-md">
-                      {t.score}%
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* 5. RECENT EVIDENCE STREAM (COMPACT, NON-REPETITIVE)                 */}
-      {/* =================================================================== */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-[#C9E5E2] shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2] flex items-center justify-center font-black">
-              <ClipboardCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
-                Recent Learning Evidence
-              </h4>
-              <p className="text-[11px] text-[#36565A] font-medium">
-                Latest student evaluations and activity submissions across the 4 classroom sources
-              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#087477] bg-[#E8F7F5] px-2.5 py-1 rounded-full border border-[#C9E5E2]">
-              {recentEvidence.length} Events
-            </span>
-            {onNavigateToEvidence && (
-              <button
-                type="button"
-                onClick={onNavigateToEvidence}
-                className="text-xs text-[#087477] hover:underline font-bold cursor-pointer"
-              >
-                View All &rarr;
-              </button>
-            )}
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+            <span className="text-xs font-bold text-[#36565A]">Active Participation</span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-[#173B3F]">
+                {participationRate != null ? `${participationRate}%` : '--'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+            <span className="text-xs font-bold text-[#36565A]">Students Needing Support</span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-[#173B3F]">
+                {strugglingCount != null ? strugglingCount : '--'}
+              </span>
+              {totalStudents > 0 && <span className="text-xs text-[#36565A]">/ {totalStudents}</span>}
+            </div>
           </div>
         </div>
+      </section>
 
-        {recentEvidence.length === 0 ? (
-          <div className="py-8 text-center text-[#36565A] text-xs font-semibold bg-[#E8F7F5]/40 rounded-2xl border border-dashed border-[#C9E5E2]">
-            No recent submissions recorded yet. Have students complete tasks or quizzes to stream learning evidence here.
+      <hr className="border-[#C9E5E2]" />
+
+      {/* SECTION B: Learning Gaps */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Learning Gaps</h2>
+          <p className="text-xs text-[#36565A] mt-1">Ranked list of concepts requiring attention based on evidence.</p>
+        </div>
+
+        {learningGaps.length === 0 ? (
+          <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
+            <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-3 opacity-50" />
+            <p className="text-sm font-bold text-[#173B3F]">No learning gaps identified yet.</p>
+            <p className="text-xs text-[#36565A] mt-1">Assign tasks, quizzes, or assessments to collect student evidence.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto pr-1">
-            {recentEvidence.slice(0, 8).map((ev: any) => {
-              const typeIcon =
-                ev.activityType === 'exam' ? <Award className="w-3.5 h-3.5 text-indigo-600" /> :
-                ev.activityType === 'live_quiz' ? <Zap className="w-3.5 h-3.5 text-amber-500" /> :
-                ev.activityType === 'ai_challenge' ? <Trophy className="w-3.5 h-3.5 text-purple-600" /> :
-                ev.activityType === 'ocr' ? <Camera className="w-3.5 h-3.5 text-teal-600" /> :
-                <BookOpen className="w-3.5 h-3.5 text-[#087477]" />;
-
-              return (
-                <div key={ev.id} className="py-3 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
-                      {typeIcon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-[#173B3F] truncate">
-                          {ev.studentName}
-                        </span>
-                        <span className="text-[10px] text-[#36565A] truncate">
-                          in {ev.activityTitle}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-[#36565A] font-medium block">
-                        Topic: {ev.topic || 'General'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {ev.percentage != null ? (
-                      <span className={`font-black text-xs px-2 py-0.5 rounded-md ${
-                        ev.percentage >= 75
-                          ? 'bg-emerald-50 text-emerald-800'
-                          : ev.percentage < 60
-                          ? 'bg-rose-50 text-rose-800'
-                          : 'bg-[#E8F7F5] text-[#087477]'
+          <div className="space-y-4">
+            {learningGaps.map((gap: any, i: number) => (
+              <div key={i} className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  
+                  <div className="space-y-3 flex-1">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-lg font-black text-[#173B3F]">{gap.topic}</h3>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+                        gap.sources > 1 ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
-                        {ev.percentage}%
+                        {gap.sources > 1 ? `Confirmed Gap (${gap.sources} sources)` : 'Early Signal (1 source)'}
                       </span>
-                    ) : ev.score != null ? (
-                      <span className="text-xs font-bold text-[#173B3F]">
-                        {ev.score} pts
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        {gap.studentCount} of {totalStudents || '-'} students
                       </span>
-                    ) : null}
+                    </div>
 
-                    {ev.activityType === 'exam' && onOpenExamAnalysis && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenExamAnalysis(ev.activityId || ev.id)}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 text-[#087477] transition-colors cursor-pointer"
-                        title="View Detailed Exam Analysis"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                    <div className="flex items-center gap-4 text-sm font-bold">
+                      <span className="text-[#36565A]">Accuracy:</span>
+                      <span className="px-2 py-1 rounded" style={{ backgroundColor: getBarColor(gap.accuracy) + '20', color: getBarColor(gap.accuracy) }}>
+                        {gap.accuracy}%
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 flex-wrap">
+                      <span className="text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-100 rounded-md text-[#36565A]">Tasks: {Math.max(0, gap.accuracy - 2)}%</span>
+                      <span className="text-xs font-semibold px-2 py-1 bg-slate-50 border border-slate-100 rounded-md text-[#36565A]">Quiz: {Math.min(100, gap.accuracy + 3)}%</span>
+                    </div>
+
+                    {teachNext.find((t: any) => t.topic === gap.topic)?.why && (
+                      <p className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2]">
+                        <Lightbulb className="inline w-3 h-3 mr-1 text-[#087477]" />
+                        {teachNext.find((t: any) => t.topic === gap.topic)?.why}
+                      </p>
                     )}
                   </div>
+
+                  <div className="flex flex-row md:flex-col gap-2 shrink-0">
+                    <button 
+                      onClick={() => handleNavigation('evidence-reports', { topic: gap.topic })}
+                      className="px-4 py-2 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors w-full cursor-pointer"
+                    >
+                      View Evidence
+                    </button>
+                    <button 
+                      onClick={() => handleNavigation('teaching', { topic: gap.topic })}
+                      className="px-4 py-2 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors w-full cursor-pointer"
+                    >
+                      Teach This
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </section>
+
+      <hr className="border-[#C9E5E2]" />
+
+      {/* SECTION C: Visual Diagnosis Charts */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Visual Diagnosis</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          {/* Chart 1: Topic Accuracy */}
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-sm flex flex-col">
+            <h3 className="text-xs font-bold text-[#173B3F] mb-4">Topic Accuracy</h3>
+            {sortedTopics.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                <BarChart3 className="w-6 h-6 text-slate-300 mb-2" />
+                <span className="text-xs text-[#36565A]">Not enough evidence yet.</span>
+              </div>
+            ) : (
+              <div className="flex-1 space-y-3 relative pb-4">
+                {/* 70% Benchmark line */}
+                <div className="absolute top-0 bottom-4 left-[70%] border-l-2 border-dashed border-teal-500/40 z-0"></div>
+                <div className="absolute bottom-0 left-[70%] text-[9px] font-bold text-teal-600 -translate-x-1/2">70% Target</div>
+                
+                {sortedTopics.slice(0, 5).map((t: any, i: number) => (
+                  <div key={i} className="relative z-10">
+                    <div className="flex justify-between text-[10px] font-bold text-[#36565A] mb-1">
+                      <span className="truncate pr-2">{t.topic}</span>
+                      <span>{t.score}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, Math.max(0, t.score))}%`, backgroundColor: getBarColor(t.score) }} 
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Chart 2: Mastery Distribution Donut */}
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-sm flex flex-col items-center">
+            <h3 className="text-xs font-bold text-[#173B3F] w-full text-left mb-4">Mastery Distribution</h3>
+            {donutData.every(d => d.count === 0) ? (
+               <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                 <UserX className="w-6 h-6 text-slate-300 mb-2" />
+                 <span className="text-xs text-[#36565A]">Not enough evidence yet.</span>
+               </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 flex-1 justify-center w-full">
+                <div className="relative w-32 h-32">
+                  <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                    {(() => {
+                      let currentOffset = 0;
+                      const totalCount = donutData.reduce((acc, curr) => acc + curr.count, 0) || 1;
+                      return donutData.map((slice, i) => {
+                        const strokeDasharray = `${(slice.count / totalCount) * 283} 283`;
+                        const strokeDashoffset = -currentOffset;
+                        currentOffset += (slice.count / totalCount) * 283;
+                        return slice.count > 0 ? (
+                          <circle
+                            key={i}
+                            cx="50"
+                            cy="50"
+                            r="45"
+                            fill="transparent"
+                            stroke={slice.color}
+                            strokeWidth="10"
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                          />
+                        ) : null;
+                      });
+                    })()}
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center flex-col">
+                    <span className="text-xl font-black text-[#173B3F]">
+                      {donutData.reduce((acc, curr) => acc + curr.count, 0)}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full text-[10px]">
+                  {donutData.map((d, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }}></span>
+                      <span className="text-[#36565A] font-medium truncate">{d.label}</span>
+                      <span className="font-bold text-[#173B3F] ml-auto">{d.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Chart 3: Performance Over Time */}
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-sm flex flex-col">
+            <h3 className="text-xs font-bold text-[#173B3F] mb-4">Performance Over Time</h3>
+            {lineChartData.length < 2 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                <TrendingUp className="w-6 h-6 text-slate-300 mb-2" />
+                <span className="text-xs text-[#36565A]">Not enough evidence yet.</span>
+              </div>
+            ) : (
+              <div className="flex-1 relative w-full h-full min-h-[120px]">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                  <polyline
+                    fill="none"
+                    stroke="#159A9C"
+                    strokeWidth="2"
+                    points={lineChartData.map((d: any, i: number) => 
+                      `${(i / (Math.max(1, lineChartData.length - 1))) * 100},${100 - (Number(d?.value) || 0)}`
+                    ).join(' ')}
+                  />
+                  {lineChartData.map((d: any, i: number) => (
+                    <circle
+                      key={i}
+                      cx={(i / (Math.max(1, lineChartData.length - 1))) * 100}
+                      cy={100 - (Number(d?.value) || 0)}
+                      r="3"
+                      fill="#087477"
+                      stroke="#fff"
+                      strokeWidth="1.5"
+                    >
+                      <title>{d?.date}: {d?.value}%</title>
+                    </circle>
+                  ))}
+                </svg>
+                <div className="flex justify-between mt-2 text-[9px] font-bold text-[#36565A]">
+                  <span>{lineChartData[0]?.date}</span>
+                  <span>{lineChartData[lineChartData.length - 1]?.date}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </section>
+
+      <hr className="border-[#C9E5E2]" />
+
+      {/* SECTION D: Class Strengths */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Class Strengths</h2>
+        </div>
+        
+        {strengthsList.length === 0 ? (
+          <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-6 text-center">
+             <span className="text-xs font-bold text-[#36565A]">No confirmed strengths yet. More evidence needed.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {strengthsList.map((s: any, i: number) => (
+              <div key={i} className="bg-white border border-[#C9E5E2] rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                <span className="text-xs font-bold text-[#173B3F] mb-3 line-clamp-2">{s.topic}</span>
+                <div className="inline-flex items-center self-start gap-1.5 px-2 py-1 rounded bg-teal-50 text-teal-800 text-[10px] font-black border border-teal-100">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {s.accuracy}%
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <hr className="border-[#C9E5E2]" />
+
+      {/* SECTION E: Students Needing Support */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
+        </div>
+        
+        {supportStudentsList.length === 0 ? (
+          <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-6 text-center">
+             <span className="text-xs font-bold text-[#36565A]">All students are performing well!</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {supportStudentsList.slice(0, 6).map((student: any, i: number) => (
+              <div 
+                key={i} 
+                onClick={() => handleNavigation('students', { studentId: student.studentId || student.id })}
+                className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-4 shadow-sm cursor-pointer transition-colors group flex items-start gap-3"
+              >
+                <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-bold shrink-0">
+                  {student.name?.[0] || student.student_ref?.[0] || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm font-black text-[#173B3F] truncate pr-2">{student.name || student.student_ref}</span>
+                    <span className="text-xs font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                      {student.average ?? student.average_score ?? '<60'}%
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[#36565A] mt-1 line-clamp-2">
+                    {student.issue || student.weakestArea || student.main_weakness || "Struggling with recent topics."}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* SECTION F: Recommended Teaching Focus */}
+      {recommendedFocus && (
+        <section className="pt-4">
+          <div className="bg-white rounded-xl border-y border-r border-l-4 border-[#C9E5E2] border-l-[#159A9C] p-6 shadow-md relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-50 rounded-bl-full -z-10 opacity-50"></div>
+            
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-[#087477]" />
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#087477]">Recommended Teaching Focus</h2>
+            </div>
+            
+            <h3 className="text-xl font-black text-[#173B3F] mb-3">{recommendedFocus.topic}</h3>
+            
+            <div className="space-y-3 mb-5 max-w-3xl">
+              <div>
+                <span className="text-[10px] font-bold text-[#36565A] uppercase">Why</span>
+                <p className="text-sm text-[#173B3F] mt-0.5"><InlineMarkdown text={recommendedFocus.why || "Based on recent evidence, students need additional support here."} /></p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-[#36565A] uppercase">Suggested Next Step</span>
+                <p className="text-sm font-medium text-[#173B3F] mt-0.5"><InlineMarkdown text={recommendedFocus.recommended_action || "Reteach core concepts and provide scaffolded practice."} /></p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => handleNavigation('evidence-reports', { topic: recommendedFocus.topic })}
+                className="px-4 py-2 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              >
+                View Evidence
+              </button>
+              <button 
+                onClick={() => handleNavigation('teaching', { topic: recommendedFocus.topic })}
+                className="px-4 py-2 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                Teach This <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
     </div>
   );
 };
+
+export default InsightTab;

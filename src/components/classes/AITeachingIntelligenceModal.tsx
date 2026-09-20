@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   Sparkles,
@@ -21,6 +21,12 @@ import { StudentsTab } from './intelligence/StudentsTab';
 import { TeachingTab } from './intelligence/TeachingTab';
 import { EvidenceReportsTab } from './intelligence/EvidenceReportsTab';
 import { AskAITeacherModal } from './intelligence/AskAITeacherModal';
+
+/** Cross-tab navigation context for passing topic/student filters between tabs */
+export interface TabNavigationContext {
+  topic?: string;
+  studentId?: string;
+}
 
 export type ModalTab =
   | 'insight'
@@ -66,6 +72,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showAIUsageModal, setShowAIUsageModal] = useState(false);
+
+  /** Context passed between tabs for cross-tab navigation (e.g., pre-filter Evidence by topic) */
+  const [tabContext, setTabContext] = useState<TabNavigationContext>({});
+
+  /** Cross-tab navigation handler — child tabs call this to switch tabs with context */
+  const handleNavigateToTab = useCallback((tab: string, context?: TabNavigationContext) => {
+    const mapped = mapInitialTab(tab as ModalTab);
+    setTabContext(context || {});
+    setActiveTab(mapped);
+  }, []);
 
   // Ask AI Teacher Copilot
   const [isChatOpen, setIsChatOpen] = useState(initialTab === 'chat');
@@ -250,7 +266,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Evidence & Reports</span>
+            <span>Evidence</span>
           </button>
         </nav>
 
@@ -290,6 +306,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 <InsightTab
                   classroom={classroom}
                   data={data}
+                  onNavigateToTab={handleNavigateToTab}
                   onNavigateToTeaching={() => setActiveTab('teaching')}
                   onNavigateToStudents={() => setActiveTab('students')}
                   onNavigateToEvidence={() => setActiveTab('evidence-reports')}
@@ -297,19 +314,27 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
               )}
 
               {activeTab === 'students' && (
-                <StudentsTab classroom={classroom} />
+                <StudentsTab
+                  classroom={classroom}
+                  selectedStudentId={tabContext.studentId || undefined}
+                />
               )}
 
               {activeTab === 'teaching' && (
                 <TeachingTab
                   classroom={classroom}
                   data={data}
+                  targetTopic={tabContext.topic}
                   onOpenChatWithPrompt={handleOpenChatWithPrompt}
                 />
               )}
 
               {activeTab === 'evidence-reports' && (
-                <EvidenceReportsTab classroom={classroom} data={data} />
+                <EvidenceReportsTab
+                  classroom={classroom}
+                  data={data}
+                  initialFilter={tabContext.topic ? { topic: tabContext.topic } : tabContext.studentId ? { studentId: tabContext.studentId } : undefined}
+                />
               )}
             </>
           )}

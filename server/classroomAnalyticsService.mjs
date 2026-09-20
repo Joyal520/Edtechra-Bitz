@@ -18,6 +18,15 @@ export const ANALYTICS_CONFIG = {
   DEFAULT_PERIOD_DAYS: 30
 };
 
+function normalizeConcept(rawTopic) {
+  if (!rawTopic) return 'General';
+  let topic = rawTopic.trim();
+  // Remove 'assignment' literal fallback
+  if (topic.toLowerCase() === 'assignment' || topic.toLowerCase() === 'task') return 'General Task';
+  // Capitalize first letter of each word
+  return topic;
+}
+
 // ----------------------------------------------------------------------------
 // 1. DATA CONFIDENCE EVALUATOR
 // ----------------------------------------------------------------------------
@@ -472,7 +481,7 @@ export function computeTopicAnalytics(events = [], options = {}) {
     if (!rawTopic || !rawTopic.trim()) {
       continue; // Strictly omit undefined or empty topics
     }
-    const topic = rawTopic.trim();
+    const topic = normalizeConcept(rawTopic);
     if (!topicGroups.has(topic)) {
       topicGroups.set(topic, {
         topic,
@@ -517,7 +526,38 @@ export function computeTopicAnalytics(events = [], options = {}) {
 
     const distinctDates = new Set(topicEvents.map(e => (e.completed_at || '').substring(0, 10)));
     const distinctActivities = new Set(topicEvents.map(e => e.activity_id));
-    const confidence = evaluateDataConfidence(scoredEvents.length, distinctActivities.size, distinctDates.size);
+    
+    // Multi-source confidence and evidence breakdown
+    const evidenceBreakdown = {
+      assignment: { avg: null, count: 0 },
+      exam: { avg: null, count: 0 },
+      live_quiz: { avg: null, count: 0 },
+      ocr: { avg: null, count: 0 },
+      ai_challenge: { avg: null, count: 0 }
+    };
+    
+    const distinctSources = new Set();
+    
+    for (const ev of scoredEvents) {
+      const type = ev.activity_type === 'competition' ? 'ai_challenge' : ev.activity_type;
+      distinctSources.add(type);
+      if (evidenceBreakdown[type]) {
+        evidenceBreakdown[type].count += 1;
+        evidenceBreakdown[type].avg = evidenceBreakdown[type].avg === null ? Number(ev.percentage) : evidenceBreakdown[type].avg + Number(ev.percentage);
+      }
+    }
+    
+    for (const type of Object.keys(evidenceBreakdown)) {
+      if (evidenceBreakdown[type].count > 0) {
+        evidenceBreakdown[type].avg = Number((evidenceBreakdown[type].avg / evidenceBreakdown[type].count).toFixed(2));
+      }
+    }
+    
+    const sourcesCount = distinctSources.size;
+    let confidence = 'developing';
+    if (sourcesCount >= 2 && averagePercentage < 70) confidence = 'confirmed_gap';
+    else if (sourcesCount < 2 && averagePercentage < 70) confidence = 'early_signal';
+    else if (averagePercentage >= 75) confidence = 'strong';
 
     // Topic status determination
     let status = 'steady';
@@ -541,7 +581,9 @@ export function computeTopicAnalytics(events = [], options = {}) {
       participatingStudentsCount: participatingStudents.size,
       scoreChangePercentagePoints: scoreChange,
       status,
-      confidence
+      confidence,
+      sourcesCount,
+      evidenceBreakdown
     });
   }
 
@@ -990,6 +1032,27 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       : (sortedTopics.length > 0 ? 'Continue regular progressive assessments to track topic growth.' : 'Not enough evidence yet.')
   };
 
+  const activeStudentsCount = activeStudents || 1;
+  const learningGapPriority = topicAnalytics
+    .filter(t => t.averagePercentage != null && t.averagePercentage < 70)
+    .map(t => {
+      const strugglingStudentRatio = t.participatingStudentsCount / activeStudentsCount;
+      const isMultiSource = t.sourcesCount >= 2;
+      const priority = (strugglingStudentRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0);
+      return { ...t, priority };
+    })
+    .sort((a, b) => b.priority - a.priority);
+
+  const classStrengths = topicAnalytics.filter(t => t.averagePercentage >= 75);
+  const studentsNeedingSupport = studentAnalytics.filter(s => s.averagePercentage < 60).map(s => ({
+    ...s,
+    specificWeakConcepts: s.weakAreas.map(w => w.topic)
+  }));
+  const recommendedTeachingFocus = learningGapPriority.length > 0 ? {
+    topic: learningGapPriority[0].topic,
+    rationale: `Top priority gap with ${learningGapPriority[0].sourcesCount || 1} sources of evidence.`
+  } : null;
+
   return {
     classroom: {
       id: classroom.id,
@@ -1021,6 +1084,10 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     topics: topicAnalytics,
     trends: trendAnalytics,
     dataConfidence,
-    calculatedAt: new Date().toISOString()
+    calculatedAt: new Date().toISOString(),
+    learningGapPriority,
+    classStrengths,
+    studentsNeedingSupport,
+    recommendedTeachingFocus
   };
 }

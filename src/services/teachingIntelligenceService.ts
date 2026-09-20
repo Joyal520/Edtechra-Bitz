@@ -213,6 +213,41 @@ export interface WeakAreaVisualData {
   recommendation: string;
 }
 
+export interface EvidenceBreakdown {
+  assignment?: { avg: number; count: number };
+  exam?: { avg: number; count: number };
+  live_quiz?: { avg: number; count: number };
+  ocr?: { avg: number; count: number };
+  ai_challenge?: { avg: number; count: number };
+}
+
+export interface LearningGap {
+  topic: string;
+  accuracy: number;
+  studentCount: number;
+  totalStudents: number;
+  sourcesCount: number;
+  confidence: 'confirmed_gap' | 'early_signal' | 'strong' | 'developing';
+  evidenceBreakdown: EvidenceBreakdown;
+  priority: number;
+}
+
+export interface StudentNeedingSupport {
+  studentId: string;
+  studentName: string;
+  overallAvg: number;
+  weakConcepts: string[];
+}
+
+export interface RecommendedTeachingFocus {
+  topic: string;
+  accuracy: number;
+  studentCount: number;
+  totalStudents: number;
+  rationale: string;
+  suggestedAction: string;
+}
+
 export interface ClassroomMetricsSummary {
   classroom: {
     id: string;
@@ -236,6 +271,10 @@ export interface ClassroomMetricsSummary {
     };
   };
   class_health?: ClassHealthSummary;
+  learningGapPriority?: LearningGap[];
+  classStrengths?: { topic: string; accuracy: number }[];
+  studentsNeedingSupport?: StudentNeedingSupport[];
+  recommendedTeachingFocus?: RecommendedTeachingFocus;
   top_strengths?: TopTopicItem[];
   top_weaknesses?: TopTopicItem[];
   topic_performance: TopicPerformance[];
@@ -294,6 +333,13 @@ async function parseApiResponse<T = any>(res: Response, fallbackErrorMessage: st
 }
 
 class TeachingIntelligenceService {
+  static async invalidateCache(classroomId: string): Promise<void> {
+    await fetch(`/api/classes/${classroomId}/teaching-intelligence/invalidate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   private async getAuthHeaders(): Promise<Record<string, string>> {
     if (!supabase) return {};
     const { data: { session } } = await supabase.auth.getSession();
