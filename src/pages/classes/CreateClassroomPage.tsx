@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, ArrowLeft } from 'lucide-react';
 import { classroomService } from '@/services/classroomService';
@@ -16,7 +16,7 @@ const THEMES: Array<{ id: ClassroomTheme; name: string; bg: string }> = [
 
 export const CreateClassroomPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, isTeacher, openAuthModal, isLoading } = useAuth();
 
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
@@ -26,10 +26,21 @@ export const CreateClassroomPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isTeacher) {
+      navigate('/classes', { replace: true });
+    }
+  }, [isLoading, isAuthenticated, isTeacher, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAuthenticated) {
       openAuthModal('login', { type: 'action', action: 'create_classroom' });
+      return;
+    }
+
+    if (!isTeacher) {
+      setErrorMessage('Only teachers can create classrooms.');
       return;
     }
 

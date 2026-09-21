@@ -2807,10 +2807,50 @@ app.get('/api/classes/:id/analytics', async (req, res) => {
   }
 });
 
-// Middleware: Ensure all teaching-intelligence and intelligence endpoints always respond with application/json
-app.use(['/api/classes/:id/teaching-intelligence', '/api/classes/:id/intelligence'], (req, res, next) => {
+// Helper to verify teacher authorization for Teaching Intelligence
+async function verifyTeacherClassroomAccess(supabaseClient, classroomId, authUser) {
+  if (!supabaseClient) return true;
+  if (!authUser || !authUser.user) return false;
+  const email = authUser.user.email?.toLowerCase().trim();
+  if (email === 'roshanjoyal520@gmail.com' || authUser.profile?.role === 'admin') return true;
+  try {
+    const { data: classroom } = await supabaseClient
+      .from('classrooms')
+      .select('teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle();
+    if (classroom?.teacher_id === authUser.user.id) return true;
+
+    const { data: membership } = await supabaseClient
+      .from('classroom_members')
+      .select('role')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', authUser.user.id)
+      .maybeSingle();
+    return membership?.role === 'teacher' || membership?.role === 'co-teacher';
+  } catch (_) {
+    return false;
+  }
+}
+
+// Middleware: Ensure all teaching-intelligence and intelligence endpoints always respond with application/json and are RESTRICTED TO TEACHERS
+app.use(['/api/classes/:id/teaching-intelligence', '/api/classes/:id/intelligence'], async (req, res, next) => {
   res.setHeader('Content-Type', 'application/json');
-  next();
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherClassroomAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Access denied: Teaching Intelligence is restricted to teachers.' });
+    }
+    req.authData = authData;
+    next();
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Authorization check failed.' });
+  }
 });
 
 // GET /api/classes/:id/teaching-intelligence - Retrieve cached or fresh classroom intelligence
@@ -3176,6 +3216,501 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/ai-feedback:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom report' });
+  }
+});
+
+// ============================================================================
+// STUDENT MY LEARNING API ROUTES (Strict Student Isolation & Evidence)
+// ============================================================================
+
+// GET /api/classes/:id/my-learning - Student Personal Learning Space Data
+app.get('/api/classes/:id/my-learning', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const classroomId = req.params.id;
+    const studentId = authData.user.id;
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+    }
+
+    // 1. Fetch Classroom details
+    const { data: classroom, error: cErr } = await serverSupabase
+      .from('classrooms')
+      .select('id, title, subject, grade, teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle();
+
+    if (cErr || !classroom) {
+      return res.status(404).json({ success: false, error: 'Classroom not found.' });
+    }
+
+    // 2. Fetch Tasks (assignment_submissions joined with assignments)
+    const { data: taskSubmissions } = await serverSupabase
+      .from('assignment_submissions')
+      .select(`
+        id,
+        assignment_id,
+        status,
+        points_awarded,
+        final_score,
+        ai_score,
+        percentage,
+        teacher_feedback,
+        submitted_at,
+        completed_at,
+        text_response,
+        file_urls,
+        question_answers,
+        ocr_evaluation_id,
+        assignment:assignments(id, title, points, due_date, instructions)
+      `)
+      .eq('classroom_id', classroomId)
+      .eq('student_id', studentId)
+      .order('submitted_at', { ascending: false });
+
+    // 3. Fetch Live Quiz Results
+    const { data: quizResults } = await serverSupabase
+      .from('live_quiz_results')
+      .select(`
+        id,
+        session_id,
+        quiz_id,
+        score,
+        total_questions,
+        correct_count,
+        wrong_count,
+        accuracy_percentage,
+        final_rank,
+        points_awarded,
+        created_at,
+        quiz:live_quizzes(id, title)
+      `)
+      .eq('classroom_id', classroomId)
+      .eq('student_id', studentId)
+      .order('created_at', { ascending: false });
+
+    // 4. Fetch Exam Results
+    const { data: examResults } = await serverSupabase
+      .from('classroom_exam_results')
+      .select(`
+        id,
+        exam_id,
+        score,
+        total_marks,
+        percentage,
+        grade,
+        passed,
+        submitted_at,
+        status,
+        report_r2_key,
+        exam:classroom_exams(id, title, duration_minutes, pass_marks, total_marks)
+      `)
+      .eq('classroom_id', classroomId)
+      .eq('student_id', studentId)
+      .order('submitted_at', { ascending: false });
+
+    // 5. Fetch AI Challenge Submissions for this classroom
+    const { data: challengeSubs } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select(`
+        id,
+        challenge_id,
+        submission_type,
+        content_text,
+        file_key,
+        file_name,
+        ai_score,
+        final_score,
+        percentage,
+        status,
+        submitted_at,
+        ai_feedback,
+        challenge:ai_challenges!inner(id, classroom_id, title, category, max_marks)
+      `)
+      .eq('student_id', studentId)
+      .eq('challenge.classroom_id', classroomId)
+      .order('submitted_at', { ascending: false });
+
+    // 6. Fetch OCR Worksheet Evaluations for this student & classroom
+    const { data: ocrEvals } = await serverSupabase
+      .from('ocr_evaluations')
+      .select('*')
+      .eq('class_id', classroomId)
+      .eq('student_id', studentId)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false });
+
+    // 7. Fetch Student Corrected Work table records (if exists)
+    let correctedWorkRecords = [];
+    try {
+      const { data: cw } = await serverSupabase
+        .from('student_corrected_work')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .eq('student_id', studentId)
+        .order('created_at', { ascending: false });
+      if (cw) correctedWorkRecords = cw;
+    } catch (_) {
+      // safe fallback if table not yet migrated
+    }
+
+    // 8. Fetch topic performance from v_classroom_learning_events
+    let topicMastery = [];
+    try {
+      const { data: events } = await serverSupabase
+        .from('v_classroom_learning_events')
+        .select('topic, percentage, score, max_score, completed_at, activity_type')
+        .eq('classroom_id', classroomId)
+        .eq('student_id', studentId)
+        .order('completed_at', { ascending: false });
+
+      if (events && events.length > 0) {
+        const topicMap = new Map();
+        events.forEach((ev) => {
+          const t = ev.topic || 'General';
+          const p = ev.percentage != null ? Number(ev.percentage) : (ev.max_score > 0 ? (ev.score / ev.max_score) * 100 : 0);
+          if (!topicMap.has(t)) {
+            topicMap.set(t, { scores: [], count: 0 });
+          }
+          topicMap.get(t).scores.push(p);
+          topicMap.get(t).count++;
+        });
+
+        topicMastery = Array.from(topicMap.entries()).map(([topic, stat]) => {
+          const avg = Math.round(stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length);
+          const status = avg >= 80 ? 'strong' : (avg >= 60 ? 'developing' : 'needs_practice');
+          return {
+            topic,
+            average_percentage: avg,
+            activities_count: stat.count,
+            status
+          };
+        });
+      }
+    } catch (_) {}
+
+    // 9. Fetch points & calculate rank
+    let studentPoints = 0;
+    let studentRank = null;
+    try {
+      const { data: pts } = await serverSupabase
+        .from('classroom_points')
+        .select('points')
+        .eq('classroom_id', classroomId)
+        .eq('student_id', studentId);
+
+      if (pts) {
+        studentPoints = pts.reduce((sum, p) => sum + (Number(p.points) || 0), 0);
+      }
+
+      // Calculate classroom rank
+      const { data: allPoints } = await serverSupabase
+        .from('classroom_points')
+        .select('student_id, points')
+        .eq('classroom_id', classroomId);
+
+      if (allPoints) {
+        const studentSums = new Map();
+        allPoints.forEach((r) => {
+          studentSums.set(r.student_id, (studentSums.get(r.student_id) || 0) + (Number(r.points) || 0));
+        });
+        const sorted = Array.from(studentSums.entries()).sort((a, b) => b[1] - a[1]);
+        const rIndex = sorted.findIndex(([sId]) => sId === studentId);
+        if (rIndex !== -1) {
+          studentRank = rIndex + 1;
+        }
+      }
+    } catch (_) {}
+
+    // Combine & format Corrected Work items
+    const correctedWork = [];
+
+    // From student_corrected_work
+    correctedWorkRecords.forEach((item) => {
+      correctedWork.push({
+        id: item.id,
+        title: item.title,
+        source_type: item.source_type,
+        work_type: item.file_type || 'document',
+        score: item.score,
+        max_score: item.max_score || 100,
+        percentage: item.percentage,
+        feedback: item.feedback_text,
+        original_r2_key: item.original_r2_key,
+        original_url: item.original_file_url,
+        corrected_r2_key: item.corrected_r2_key,
+        corrected_url: item.corrected_file_url,
+        date: item.created_at
+      });
+    });
+
+    // From OCR evaluations (handwritten work)
+    (ocrEvals || []).forEach((ocr) => {
+      if (!correctedWork.some((c) => c.id === ocr.id)) {
+        correctedWork.push({
+          id: ocr.id,
+          title: ocr.title || `${ocr.category} Practice`,
+          source_type: 'ocr_handwritten',
+          work_type: 'handwritten',
+          score: ocr.final_score ?? ocr.score,
+          max_score: ocr.max_marks || 100,
+          percentage: ocr.percentage,
+          feedback: ocr.feedback,
+          original_r2_key: ocr.temporary_file_key,
+          corrected_r2_key: ocr.report_file_key,
+          performance: ocr.performance,
+          breakdown: ocr.breakdown_json,
+          date: ocr.completed_at || ocr.created_at
+        });
+      }
+    });
+
+    // From writing tasks in assignment_submissions (if text response or AI evaluated)
+    (taskSubmissions || []).forEach((sub) => {
+      const isWriting = Boolean(sub.text_response) || sub.assignment?.title?.toLowerCase().includes('writing') || sub.is_ai_graded;
+      if (isWriting && (sub.teacher_feedback || sub.final_score != null || sub.points_awarded != null)) {
+        if (!correctedWork.some((c) => c.id === sub.id)) {
+          correctedWork.push({
+            id: sub.id,
+            title: sub.assignment?.title || 'Writing Task',
+            source_type: 'writing_task',
+            work_type: 'writing',
+            score: sub.final_score ?? sub.points_awarded,
+            max_score: sub.assignment?.points || 100,
+            percentage: sub.percentage,
+            feedback: sub.teacher_feedback || (sub.question_answers?.[0]?.feedback) || 'Evaluation completed.',
+            text_response: sub.text_response,
+            date: sub.submitted_at || sub.completed_at
+          });
+        }
+      }
+    });
+
+    // From AI challenges
+    (challengeSubs || []).forEach((ch) => {
+      if (ch.status === 'completed' && (ch.final_score != null || ch.ai_score != null)) {
+        if (!correctedWork.some((c) => c.id === ch.id)) {
+          correctedWork.push({
+            id: ch.id,
+            title: ch.challenge?.title || 'Writing Challenge',
+            source_type: 'challenge',
+            work_type: ch.submission_type === 'file' ? 'handwritten' : 'writing',
+            score: ch.final_score ?? ch.ai_score,
+            max_score: ch.challenge?.max_marks || 100,
+            percentage: ch.percentage,
+            feedback: ch.ai_feedback,
+            content_text: ch.content_text,
+            original_r2_key: ch.file_key,
+            date: ch.submitted_at
+          });
+        }
+      }
+    });
+
+    // Compute Summary Performance
+    const allPercentages = [];
+    (taskSubmissions || []).forEach((t) => { if (t.percentage != null) allPercentages.push(Number(t.percentage)); });
+    (quizResults || []).forEach((q) => { if (q.accuracy_percentage != null) allPercentages.push(Number(q.accuracy_percentage)); });
+    (examResults || []).forEach((e) => { if (e.percentage != null) allPercentages.push(Number(e.percentage)); });
+    (ocrEvals || []).forEach((o) => { if (o.percentage != null) allPercentages.push(Number(o.percentage)); });
+    (challengeSubs || []).forEach((c) => { if (c.percentage != null) allPercentages.push(Number(c.percentage)); });
+
+    const totalActivities = (taskSubmissions?.length || 0) +
+      (quizResults?.length || 0) +
+      (examResults?.length || 0) +
+      (ocrEvals?.length || 0) +
+      (challengeSubs?.length || 0);
+
+    const overallPercentage = allPercentages.length > 0
+      ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
+      : null;
+
+    // Recent score is the latest activity percentage
+    const recentScore = allPercentages.length > 0 ? allPercentages[0] : null;
+
+    // Format tasks for My Results
+    const formattedTasks = (taskSubmissions || []).map((t) => ({
+      id: t.id,
+      title: t.assignment?.title || 'Assignment Task',
+      score: t.final_score ?? t.points_awarded,
+      max_score: t.assignment?.points || 100,
+      percentage: t.percentage,
+      status: t.status,
+      teacher_feedback: t.teacher_feedback,
+      submitted_at: t.submitted_at,
+      completed_at: t.completed_at
+    }));
+
+    // Format quizzes for My Results
+    const formattedQuizzes = (quizResults || []).map((q) => ({
+      id: q.id,
+      title: q.quiz?.title || 'Multiplayer Live Quiz',
+      score: q.score,
+      total_questions: q.total_questions,
+      correct_count: q.correct_count,
+      rank: q.final_rank,
+      percentage: q.accuracy_percentage,
+      points_awarded: q.points_awarded,
+      completed_at: q.created_at
+    }));
+
+    // Format exams for My Results
+    const formattedExams = (examResults || []).map((e) => ({
+      id: e.id,
+      title: e.exam?.title || 'Assessment Exam',
+      score: e.score,
+      total_marks: e.total_marks || e.exam?.total_marks || 100,
+      percentage: e.percentage,
+      grade: e.grade,
+      passed: e.passed,
+      status: e.status,
+      report_r2_key: e.report_r2_key,
+      submitted_at: e.submitted_at
+    }));
+
+    // Format competitions for My Results
+    const formattedCompetitions = (challengeSubs || []).map((c) => ({
+      id: c.id,
+      title: c.challenge?.title || 'Competition Challenge',
+      score: c.final_score ?? c.ai_score,
+      max_score: c.challenge?.max_marks || 100,
+      percentage: c.percentage,
+      status: c.status,
+      feedback: c.ai_feedback,
+      submitted_at: c.submitted_at
+    }));
+
+    // Achievements calculation
+    const achievements = [];
+    if (studentPoints > 0) {
+      achievements.push({
+        id: 'points_active',
+        title: `${studentPoints.toLocaleString()} Points`,
+        description: 'Earned through classroom assignments, quizzes and activities',
+        category: 'points',
+        icon: 'trophy',
+        earned: true
+      });
+    }
+    if (studentRank && studentRank <= 3) {
+      achievements.push({
+        id: 'podium_star',
+        title: `Podium Rank #${studentRank}`,
+        description: 'Ranked in the top 3 learners of this classroom',
+        category: 'rank',
+        icon: 'award',
+        earned: true
+      });
+    }
+    if ((quizResults || []).some((q) => (q.accuracy_percentage || 0) >= 90)) {
+      achievements.push({
+        id: 'quiz_master',
+        title: 'Quiz Ace',
+        description: 'Scored 90%+ in a live classroom challenge',
+        category: 'quiz',
+        icon: 'zap',
+        earned: true
+      });
+    }
+    if (correctedWork.length > 0) {
+      achievements.push({
+        id: 'writing_scholar',
+        title: 'Reflective Writer',
+        description: 'Completed and reviewed corrected learning work',
+        category: 'writing',
+        icon: 'book',
+        earned: true
+      });
+    }
+    if (totalActivities >= 5) {
+      achievements.push({
+        id: 'consistent_learner',
+        title: 'Dedicated Learner',
+        description: 'Completed 5+ learning activities in this classroom',
+        category: 'milestone',
+        icon: 'star',
+        earned: true
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        student: {
+          id: studentId,
+          name: authData.profile?.full_name || authData.user.email?.split('@')[0] || 'Student',
+          avatar_url: authData.profile?.avatar_url || ''
+        },
+        classroom: {
+          id: classroom.id,
+          title: classroom.title,
+          subject: classroom.subject,
+          grade: classroom.grade
+        },
+        performance: {
+          overall_percentage: overallPercentage,
+          recent_score: recentScore,
+          activities_completed: totalActivities,
+          learning_status: overallPercentage != null
+            ? (overallPercentage >= 80 ? 'Mastery' : (overallPercentage >= 60 ? 'Progressing' : 'Needs Practice'))
+            : 'Not Started',
+          has_data: totalActivities > 0
+        },
+        results: {
+          tasks: formattedTasks,
+          quizzes: formattedQuizzes,
+          exams: formattedExams,
+          competitions: formattedCompetitions
+        },
+        corrected_work: correctedWork,
+        topics: topicMastery,
+        achievements: {
+          points: studentPoints,
+          rank: studentRank,
+          items: achievements
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/my-learning:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve student learning records' });
+  }
+});
+
+// GET /api/classes/:id/my-learning/view-file - Secure Presigned Download URL for Student Work in R2
+app.get('/api/classes/:id/my-learning/view-file', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { key } = req.query;
+    if (!key || typeof key !== 'string') {
+      return res.status(400).json({ success: false, error: 'File key is required.' });
+    }
+
+    const presigned = buildPresignedDownloadUrl({
+      objectKey: key.trim(),
+      expiresInSeconds: 3600
+    });
+
+    res.json({
+      success: true,
+      data: {
+        downloadUrl: presigned.downloadUrl,
+        publicUrl: presigned.publicUrl,
+        objectKey: presigned.objectKey
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/:id/my-learning/view-file:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate download URL' });
   }
 });
 

@@ -220,16 +220,18 @@ export const ClassesPage: React.FC = () => {
 
               {/* Action Buttons — Liquid Soft-Pill Design (Mobile-First Responsive) */}
               <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3.5 w-full max-w-xs sm:max-w-none">
-                {/* Primary CTA: Create Classroom */}
-                <button
-                  type="button"
-                  onClick={handleOpenCreate}
-                  aria-label="Create a new classroom"
-                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[48px] sm:min-h-[50px] rounded-full text-sm sm:text-[15px] font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
-                >
-                  <Plus className="w-4.5 h-4.5 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
-                  <span className="tracking-wide">Create Classroom</span>
-                </button>
+                {/* Primary CTA: Create Classroom (Teachers Only) */}
+                {isTeacher && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCreate}
+                    aria-label="Create a new classroom"
+                    className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[48px] sm:min-h-[50px] rounded-full text-sm sm:text-[15px] font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
+                  >
+                    <Plus className="w-4.5 h-4.5 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
+                    <span className="tracking-wide">Create Classroom</span>
+                  </button>
+                )}
 
                 {/* Secondary CTA: Join Class */}
                 <button
@@ -580,15 +582,17 @@ export const ClassesPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-3 w-full max-w-xs sm:max-w-none mx-auto">
-                <button
-                  type="button"
-                  onClick={handleOpenCreate}
-                  aria-label="Create a new classroom"
-                  className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[46px] rounded-full text-sm font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
-                >
-                  <Plus className="w-4 h-4 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
-                  <span className="tracking-wide">Create Classroom</span>
-                </button>
+                {isTeacher && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCreate}
+                    aria-label="Create a new classroom"
+                    className="group relative inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 min-h-[46px] rounded-full text-sm font-bold text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[inset_0_1px_1px_rgba(255,255,255,0.38),0_4px_14px_rgba(2,111,195,0.30)] hover:shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_6px_20px_rgba(2,111,195,0.42)] border-t border-white/35 border-b border-sky-700/30 border-x border-sky-400/20 active:scale-[0.98] hover:-translate-y-0.5 transition-all duration-200 ease-out cursor-pointer whitespace-nowrap focus:outline-hidden focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 w-full sm:w-auto"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5] text-white group-hover:rotate-90 transition-transform duration-200" />
+                    <span className="tracking-wide">Create Classroom</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleOpenJoin}

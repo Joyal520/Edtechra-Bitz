@@ -155,9 +155,6 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400 font-semibold">
-                        {entry.assignments_completed || 0} tasks completed
-                      </div>
                     </div>
                   </div>
 
@@ -231,9 +228,6 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                       <div className="text-xs font-black text-slate-900 truncate">
                         {entry.name}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-semibold truncate">
-                        {entry.assignments_completed || 0} tasks
-                      </div>
                     </div>
                   </div>
 
@@ -305,7 +299,6 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
                             <span className="text-[10px] bg-[#026fc3] text-white px-1.5 py-0.2 rounded font-extrabold">You</span>
                           )}
                         </div>
-                        <div className="text-[10px] text-slate-400">{entry.assignments_completed} tasks completed</div>
                       </div>
                     </div>
 

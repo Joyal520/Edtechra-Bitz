@@ -79,6 +79,7 @@ import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 import { CourseClassroomAssignment } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
+import { StudentMyLearning } from '@/components/classes/student/StudentMyLearning';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -914,7 +915,14 @@ export const ClassroomDetailPage: React.FC = () => {
 
             {/* Card 4: Average Score */}
             <div
-              onClick={() => setAiReportModalOpen(true)}
+              onClick={() => {
+                if (isTeacher) {
+                  setAiReportModalOpen(true);
+                } else {
+                  const el = document.getElementById('my-learning-container');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
               className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-amber-100 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(217,119,6,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
               <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
@@ -1327,127 +1335,136 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 5 — STUDENT PERFORMANCE & AI TEACHING INTELLIGENCE                */}
+        {/* SECTION 5 — STUDENT EXPERIENCE (My Learning) vs TEACHER INTELLIGENCE      */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 border border-slate-200/85 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] relative overflow-hidden">
-          
-          {/* Section Header with Blue Indicator Line */}
-          <div className="space-y-1.5 pb-5 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#026fc3] ring-4 ring-sky-100" />
-              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
-                Student Performance
-              </h2>
-            </div>
-            <div className="w-10 h-1 bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full" />
-          </div>
-
-          <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
-            
-            {/* LEFT: Classroom Leaderboard (Podium + Top Students) (7-8 Cols) */}
-            <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
-              <ClassroomLeaderboard
-                entries={leaderboard}
-                currentUserId={user?.id}
-              />
+        {isTeacher ? (
+          <section className="bg-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 border border-slate-200/85 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] relative overflow-hidden">
+            {/* Section Header with Blue Indicator Line */}
+            <div className="space-y-1.5 pb-5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#026fc3] ring-4 ring-sky-100" />
+                <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
+                  Student Performance & Teaching Intelligence
+                </h2>
+              </div>
+              <div className="w-10 h-1 bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full" />
             </div>
 
-            {/* RIGHT: AI Teaching Intelligence Feature Panel (4-5 Cols) */}
-            <div className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5 border border-purple-900/50 min-h-[320px] bg-gradient-to-br from-[#121033] via-[#1a1848] to-[#0a0e24] group hover:shadow-2xl transition-all duration-300">
+            <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
               
-              {/* Background Artwork Image with Hover Zoom */}
-              <img
-                src="/assets/92697e31-f3ea-46a7-b531-ca18d5725169.png"
-                alt="AI Teaching Intelligence Artwork"
-                className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none group-hover:scale-105 transition-transform duration-500"
-              />
+              {/* LEFT: Classroom Leaderboard (Podium + Top Students) (7-8 Cols) */}
+              <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
+                <ClassroomLeaderboard
+                  entries={leaderboard}
+                  currentUserId={user?.id}
+                />
+              </div>
 
-              {/* Contrast Gradient Overlay for Crystal Clear Text Legibility */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0e0c29] via-[#0e0c29]/75 to-indigo-950/40 pointer-events-none" />
+              {/* RIGHT: AI Teaching Intelligence Feature Panel (4-5 Cols) */}
+              <div className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5 border border-purple-900/50 min-h-[320px] bg-gradient-to-br from-[#121033] via-[#1a1848] to-[#0a0e24] group hover:shadow-2xl transition-all duration-300">
+                
+                {/* Background Artwork Image with Hover Zoom */}
+                <img
+                  src="/assets/92697e31-f3ea-46a7-b531-ca18d5725169.png"
+                  alt="AI Teaching Intelligence Artwork"
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none group-hover:scale-105 transition-transform duration-500"
+                />
 
-              <div className="space-y-3 relative z-10">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/25 border border-purple-400/35 backdrop-blur-xs text-xs font-black text-purple-200 shadow-xs">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-                  <span>AI Teaching Intelligence</span>
+                {/* Contrast Gradient Overlay for Crystal Clear Text Legibility */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0e0c29] via-[#0e0c29]/75 to-indigo-950/40 pointer-events-none" />
+
+                <div className="space-y-3 relative z-10">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/25 border border-purple-400/35 backdrop-blur-xs text-xs font-black text-purple-200 shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                    <span>AI Teaching Intelligence</span>
+                  </div>
+
+                  <h3 className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug">
+                    Understand your classroom. Know what to teach next.
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-purple-200/90 font-medium leading-relaxed max-w-xs drop-shadow-xs">
+                    Real-time student mastery radar, learning gaps analysis, and tailored pedagogical recommendations.
+                  </p>
                 </div>
 
-                <h3 className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug">
-                  Understand your classroom. Know what to teach next.
-                </h3>
+                <div className="pt-4 relative z-10 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiReportInitialTab('planner');
+                      setAiReportModalOpen(true);
+                    }}
+                    className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+                  >
+                    <CalendarDays className="w-4 h-4" />
+                    <span>AI Teaching Planner</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiReportInitialTab('intelligence');
+                      setAiReportModalOpen(true);
+                    }}
+                    className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center"
+                  >
+                    Open Teaching Intelligence
+                  </button>
+                </div>
 
-                <p className="text-xs sm:text-sm text-purple-200/90 font-medium leading-relaxed max-w-xs drop-shadow-xs">
-                  Real-time student mastery radar, learning gaps analysis, and tailored pedagogical recommendations.
-                </p>
-              </div>
-
-              <div className="pt-4 relative z-10 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAiReportInitialTab('planner');
-                    setAiReportModalOpen(true);
-                  }}
-                  className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2"
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  <span>AI Teaching Planner</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAiReportInitialTab('intelligence');
-                    setAiReportModalOpen(true);
-                  }}
-                  className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center"
-                >
-                  Open Teaching Intelligence
-                </button>
               </div>
 
             </div>
 
-          </div>
-
-        </section>
+          </section>
+        ) : (
+          <StudentMyLearning
+            classroomId={classroom.id}
+            classroomTitle={classroom.title}
+            currentUserId={user?.id}
+          />
+        )}
 
         {/* ========================================================================= */}
-        {/* SECTION 6 — CREATE A COURSE (Wide Liquid Surface)                          */}
+        {/* SECTION 6 — CREATE A COURSE (Teacher Only)                                */}
         {/* ========================================================================= */}
-        <section className="bg-gradient-to-r from-sky-50/80 via-white to-indigo-50/50 rounded-2xl sm:rounded-[28px] p-5 sm:p-7 border border-sky-200/80 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.06)] relative overflow-hidden group hover:shadow-[0_8px_30px_-4px_rgba(2,111,195,0.12)] transition-all duration-200">
-          
-          {/* Decorative Corner Leaves on Right Edge */}
-          <CourseCardLeaves />
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
+        {isTeacher && (
+          <section className="bg-gradient-to-r from-sky-50/80 via-white to-indigo-50/50 rounded-2xl sm:rounded-[28px] p-5 sm:p-7 border border-sky-200/80 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.06)] relative overflow-hidden group hover:shadow-[0_8px_30px_-4px_rgba(2,111,195,0.12)] transition-all duration-200">
             
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/90 border border-sky-100 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform duration-200">
-                <CreateCourseIllustration className="w-11 h-10" />
+            {/* Decorative Corner Leaves on Right Edge */}
+            <CourseCardLeaves />
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
+              
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/90 border border-sky-100 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform duration-200">
+                  <CreateCourseIllustration className="w-11 h-10" />
+                </div>
+                <div className="space-y-1 max-w-xl">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                    Create a Course
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+                    Build structured learning experiences with modules, lessons, quizzes and resources for your students.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1 max-w-xl">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                  Create a Course
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-                  Build structured learning experiences with modules, lessons, quizzes and resources for your students.
-                </p>
+
+              <div className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActivityHubOpen(true)}
+                  className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md cursor-pointer inline-flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Create Course</span>
+                </button>
               </div>
+
             </div>
 
-            <div className="shrink-0">
-              <button
-                type="button"
-                onClick={() => setActivityHubOpen(true)}
-                className="btn-liquid-primary px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md cursor-pointer inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-                <span>Create Course</span>
-              </button>
-            </div>
-
-          </div>
-
-        </section>
+          </section>
+        )}
 
 
         {/* ========================================================================= */}
@@ -1959,12 +1976,14 @@ export const ClassroomDetailPage: React.FC = () => {
         onExamRepublished={loadAllClassroomData}
       />
 
-      <AITeachingIntelligenceModal
-        isOpen={aiReportModalOpen}
-        classroom={classroom}
-        initialTab={aiReportInitialTab}
-        onClose={() => setAiReportModalOpen(false)}
-      />
+      {isTeacher && (
+        <AITeachingIntelligenceModal
+          isOpen={aiReportModalOpen}
+          classroom={classroom}
+          initialTab={aiReportInitialTab}
+          onClose={() => setAiReportModalOpen(false)}
+        />
+      )}
 
       <LiveQuizBankModal
         isOpen={liveQuizBankOpen}
