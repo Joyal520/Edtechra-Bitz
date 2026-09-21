@@ -240,6 +240,7 @@ class AssignmentService {
     classroom_id: string;
     student_id: string;
     points_awarded: number;
+    max_points?: number;
     teacher_feedback?: string;
     assignment_title?: string;
   }): Promise<{ error?: string }> {
@@ -247,10 +248,25 @@ class AssignmentService {
     const userId = await this.getUserId();
 
     try {
+      let maxScore: number = payload.max_points || 0;
+      if (maxScore <= 0) {
+        const { data: subData } = await supabase
+          .from('assignment_submissions')
+          .select('assignment:assignments(points)')
+          .eq('id', payload.submission_id)
+          .maybeSingle();
+        maxScore = Number((subData as any)?.assignment?.points) || 100;
+      }
+
+      const finalScore = payload.points_awarded;
+      const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((finalScore / maxScore) * 100))) : 100;
+
       const { error } = await supabase
         .from('assignment_submissions')
         .update({
           points_awarded: payload.points_awarded,
+          final_score: finalScore,
+          percentage: percentage,
           teacher_feedback: (payload.teacher_feedback || '').trim(),
           status: 'graded',
           graded_by: userId,

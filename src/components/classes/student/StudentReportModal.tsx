@@ -12,7 +12,9 @@ import {
   BookOpen,
   AlertCircle,
   Zap,
-  GraduationCap
+  GraduationCap,
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import {
   studentLearningService,
@@ -29,6 +31,7 @@ interface StudentReportModalProps {
   classroomTitle?: string;
   onClose: () => void;
   initialTab?: 'results' | 'corrected' | 'progress' | 'achievements';
+  refreshTrigger?: number;
 }
 
 interface UnifiedResultItem {
@@ -41,6 +44,8 @@ interface UnifiedResultItem {
   date: string;
   status: string;
   feedback?: string | null;
+  isAiGraded?: boolean;
+  writingEvaluation?: any;
 }
 
 export const StudentReportModal: React.FC<StudentReportModalProps> = ({
@@ -48,7 +53,8 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
   classroomId,
   classroomTitle = 'Classroom',
   onClose,
-  initialTab = 'results'
+  initialTab = 'results',
+  refreshTrigger = 0
 }) => {
   const [activeTab, setActiveTab] = useState<'results' | 'corrected' | 'progress' | 'achievements'>(initialTab);
   const [data, setData] = useState<StudentLearningResponse | null>(null);
@@ -64,36 +70,38 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  const fetchReport = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await studentLearningService.getMyLearningData(classroomId);
+      if (res.error) {
+        setError(res.error);
+      } else if (res.data) {
+        setData(res.data);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load your personal learning report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
+    fetchReport();
+  }, [isOpen, classroomId, refreshTrigger]);
 
-    let isMounted = true;
-    const fetchReport = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await studentLearningService.getMyLearningData(classroomId);
-        if (isMounted) {
-          if (res.error) {
-            setError(res.error);
-          } else if (res.data) {
-            setData(res.data);
-          }
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(err.message || 'Failed to load your personal learning report.');
-        }
-      } finally {
-        if (isMounted) setLoading(false);
+  // Auto-refresh when tab becomes visible (handles background evaluation completion)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchReport();
       }
     };
-
-    fetchReport();
-
-    return () => {
-      isMounted = false;
-    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isOpen, classroomId]);
 
   const openWorkModal = (item: StudentCorrectedWorkItem, tab: 'work' | 'feedback' | 'original' = 'work') => {
@@ -107,7 +115,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
 
     const list: UnifiedResultItem[] = [];
 
-    (data.results.tasks || []).forEach((t) => {
+    (data.results.tasks || []).forEach((t: any) => {
       list.push({
         id: `task-${t.id}`,
         title: t.title,
@@ -117,7 +125,9 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
         percentage: t.percentage,
         date: t.completed_at || t.submitted_at,
         status: t.status,
-        feedback: t.teacher_feedback
+        feedback: t.teacher_feedback,
+        isAiGraded: Boolean(t.is_ai_graded || t.writing_evaluation),
+        writingEvaluation: t.writing_evaluation || null
       });
     });
 
@@ -241,6 +251,17 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                 </div>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => fetchReport()}
+              disabled={loading}
+              className="p-2 rounded-full text-slate-400 hover:text-[#026fc3] hover:bg-sky-50 transition-colors cursor-pointer disabled:opacity-50"
+              title="Refresh Report Data"
+              aria-label="Refresh Report Data"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#026fc3]' : ''}`} />
+            </button>
 
             <button
               type="button"
@@ -411,6 +432,12 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                                   <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                                     {result.category}
                                   </span>
+                                  {result.isAiGraded && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      <span>AI Evaluated</span>
+                                    </span>
+                                  )}
                                   {result.date && (
                                     <span className="text-[11px] text-slate-500 font-medium">
                                       {new Date(result.date).toLocaleDateString(undefined, {
@@ -450,6 +477,36 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                                   type="button"
                                   onClick={() => openWorkModal(matchedCorrected, 'work')}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200 transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Review</span>
+                                </button>
+                              ) : result.writingEvaluation ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const w = result.writingEvaluation;
+                                    const synthItem: StudentCorrectedWorkItem = {
+                                      id: result.id,
+                                      title: result.title,
+                                      source_type: 'writing_task',
+                                      work_type: 'writing',
+                                      score: result.score,
+                                      max_score: result.maxScore || 100,
+                                      percentage: result.percentage,
+                                      feedback: w.feedback || result.feedback,
+                                      original_text: w.original_text,
+                                      corrected_work: w.corrected_work,
+                                      mistakes: w.mistakes || [],
+                                      corrections: w.corrections || [],
+                                      strengths: w.strengths || [],
+                                      grammar_errors: w.grammar_errors || [],
+                                      spelling_errors: w.spelling_errors || [],
+                                      date: result.date
+                                    };
+                                    openWorkModal(synthItem, 'work');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
                                   <span>View Review</span>

@@ -99,6 +99,25 @@ export interface QuestionAnswerResult {
   feedback?: string;
   ai_score?: number;
   needs_teacher_review?: boolean;
+  writing_evaluation?: WritingEvaluation | null;
+}
+
+export interface WritingEvaluation {
+  score: number;
+  max_score: number;
+  percentage: number;
+  evaluation_status: string;
+  category?: string;
+  topic?: string;
+  skills?: string[];
+  feedback?: string;
+  strengths?: string[];
+  mistakes?: Array<{ original: string; correction: string; explanation?: string }>;
+  corrections?: string[];
+  corrected_work?: string;
+  grammar_errors?: Array<{ text: string; suggestion: string; rule?: string }>;
+  spelling_errors?: Array<{ text: string; suggestion: string }>;
+  breakdown?: Array<{ criterion: string; score: number; max: number }>;
 }
 
 export interface TaskSubmission {
@@ -124,6 +143,9 @@ export interface TaskSubmission {
   submitted_at: string;
   completed_at?: string | null;
   updated_at: string;
+
+  // Structured AI writing evaluation (returned after task submit)
+  writing_evaluation?: WritingEvaluation | null;
 
   // Joined student profile
   student?: {

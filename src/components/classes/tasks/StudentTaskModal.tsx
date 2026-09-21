@@ -4,6 +4,8 @@ import { ClassroomTask, TaskSubmission } from '@/types/classroomTask';
 import { classroomTaskService } from '@/services/classroomTaskService';
 import { PremiumTaskPage } from './PremiumTaskPage';
 
+export type EvaluationPhase = 'idle' | 'evaluating' | 'evaluated' | 'error';
+
 interface StudentTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -22,6 +24,7 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evaluationPhase, setEvaluationPhase] = useState<EvaluationPhase>('idle');
 
   const loadTask = async () => {
     setLoading(true);
@@ -31,6 +34,10 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
       if (data) {
         setTask(data);
         setSubmission(data.my_submission || null);
+        // If already submitted/graded, reflect that
+        if (data.my_submission && data.my_submission.status !== 'draft') {
+          setEvaluationPhase('evaluated');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load task');
@@ -41,6 +48,7 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
 
   useEffect(() => {
     if (isOpen && taskId) {
+      setEvaluationPhase('idle');
       loadTask();
     }
   }, [isOpen, taskId]);
@@ -54,6 +62,7 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
   ) => {
     setSubmitting(true);
     setError(null);
+    setEvaluationPhase('evaluating');
 
     try {
       const res = await classroomTaskService.submitTask(taskId, {
@@ -64,12 +73,15 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
 
       if (res.error) {
         setError(res.error);
+        setEvaluationPhase('error');
       } else if (res.data) {
         setSubmission(res.data);
+        setEvaluationPhase('evaluated');
         if (onSubmitted) onSubmitted();
       }
     } catch (err: any) {
       setError(err.message || 'Submission error');
+      setEvaluationPhase('error');
     } finally {
       setSubmitting(false);
     }
@@ -123,6 +135,7 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
               submission={submission}
               onSubmit={handleSubmit}
               isSubmitting={submitting}
+              evaluationPhase={evaluationPhase}
             />
           ) : (
             <div className="py-24 text-center text-xs text-slate-500 font-bold">

@@ -3226,6 +3226,7 @@ app.post('/api/classes/ai-feedback', async (req, res) => {
 // GET /api/classes/:id/my-learning - Student Personal Learning Space Data
 app.get('/api/classes/:id/my-learning', async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     const authData = await verifyAuthUser(req);
     if (!authData) {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
@@ -3572,18 +3573,47 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     // Recent score is the latest activity percentage
     const recentScore = allPercentages.length > 0 ? allPercentages[0] : null;
 
-    // Format tasks for My Results
-    const formattedTasks = (taskSubmissions || []).map((t) => ({
-      id: t.id,
-      title: t.assignment?.title || 'Assignment Task',
-      score: t.final_score ?? t.points_awarded,
-      max_score: t.assignment?.points || 100,
-      percentage: t.percentage,
-      status: t.status,
-      teacher_feedback: t.teacher_feedback,
-      submitted_at: t.submitted_at,
-      completed_at: t.completed_at
-    }));
+    // Format tasks for My Results (including writing evaluation metadata)
+    const formattedTasks = (taskSubmissions || []).map((t) => {
+      // Extract writing evaluation from question_answers if present
+      const writingQa = Array.isArray(t.question_answers)
+        ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response')
+        : null;
+      const wEval = writingQa?.writing_evaluation;
+
+      return {
+        id: t.id,
+        title: t.assignment?.title || 'Assignment Task',
+        score: t.final_score ?? t.points_awarded,
+        max_score: t.assignment?.points || 100,
+        percentage: t.percentage,
+        status: t.status,
+        teacher_feedback: t.teacher_feedback,
+        submitted_at: t.submitted_at,
+        completed_at: t.completed_at,
+        is_ai_graded: t.is_ai_graded || false,
+        writing_evaluation: wEval || null
+      };
+    });
+
+    // Include task-linked OCR evaluations that don't have assignment_submissions entries
+    (ocrEvals || []).forEach((ocr) => {
+      if (ocr.assignment_id && !formattedTasks.some((t) => t.id === ocr.id || (taskSubmissions || []).some((s) => s.ocr_evaluation_id === ocr.id))) {
+        formattedTasks.push({
+          id: ocr.id,
+          title: ocr.title || `${ocr.category} Practice`,
+          score: ocr.final_score ?? ocr.score,
+          max_score: ocr.max_marks || 100,
+          percentage: ocr.percentage,
+          status: 'graded',
+          teacher_feedback: ocr.feedback,
+          submitted_at: ocr.created_at,
+          completed_at: ocr.completed_at || ocr.created_at,
+          is_ai_graded: true,
+          writing_evaluation: null
+        });
+      }
+    });
 
     // Format quizzes for My Results
     const formattedQuizzes = (quizResults || []).map((q) => ({
@@ -7614,9 +7644,24 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       }
     }
 
+    // Invalidate Teaching Intelligence cache so new evidence is picked up
+    if (isGraded && task.classroom_id) {
+      try {
+        await serverSupabase
+          .from('ai_classroom_insights')
+          .delete()
+          .eq('classroom_id', task.classroom_id);
+      } catch (_tiErr) {
+        // Non-critical: cache will regenerate on next teacher visit
+      }
+    }
+
     res.json({
       success: true,
-      data: submission
+      data: {
+        ...submission,
+        writing_evaluation: writingEval || null
+      }
     });
   } catch (error) {
     console.error('Error in /api/classes/tasks/:id/submit:', error);
@@ -7712,15 +7757,14 @@ app.post('/api/classes/tasks/submissions/:id/override', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Teacher authorization required to adjust scores.' });
     }
 
-    const maxPoints = submission.assignment?.points || 100;
-    const percentage = Math.round((Math.min(maxPoints, numScore) / maxPoints) * 100);
+    const maxScore = submission.assignment?.points || 100;
 
     const { data: updated, error: updateErr } = await serverSupabase
       .from('assignment_submissions')
       .update({
         final_score: numScore,
         points_awarded: Math.round(numScore),
-        percentage,
+        percentage: maxScore > 0 ? Math.min(100, Math.max(0, Math.round((numScore / maxScore) * 100))) : 100,
         status: 'graded',
         teacher_feedback: teacherFeedback || submission.teacher_feedback,
         teacher_adjusted: true,

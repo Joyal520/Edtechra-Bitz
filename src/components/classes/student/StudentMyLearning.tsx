@@ -43,6 +43,8 @@ interface UnifiedResultItem {
   date: string;
   status: string;
   feedback?: string | null;
+  isAiGraded?: boolean;
+  writingEvaluation?: any;
 }
 
 export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
@@ -79,6 +81,17 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
     fetchLearningData();
   }, [classroomId]);
 
+  // Auto-refresh when tab becomes visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLearningData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [classroomId]);
+
   const openWorkModal = (item: StudentCorrectedWorkItem, tab: 'work' | 'feedback' | 'original' = 'work') => {
     setSelectedWork(item);
     setModalTab(tab);
@@ -90,7 +103,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
 
     const list: UnifiedResultItem[] = [];
 
-    (data.results.tasks || []).forEach((t) => {
+    (data.results.tasks || []).forEach((t: any) => {
       list.push({
         id: `task-${t.id}`,
         title: t.title,
@@ -100,7 +113,9 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
         percentage: t.percentage,
         date: t.completed_at || t.submitted_at,
         status: t.status,
-        feedback: t.teacher_feedback
+        feedback: t.teacher_feedback,
+        isAiGraded: Boolean(t.is_ai_graded || t.writing_evaluation),
+        writingEvaluation: t.writing_evaluation || null
       });
     });
 
@@ -406,6 +421,12 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                         <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                           {result.category}
                         </span>
+                        {result.isAiGraded && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>AI Evaluated</span>
+                          </span>
+                        )}
                         {result.date && (
                           <span className="text-[11px] text-slate-500 font-medium">
                             {new Date(result.date).toLocaleDateString(undefined, {
@@ -445,6 +466,36 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                         type="button"
                         onClick={() => openWorkModal(matchedCorrected, 'work')}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200/80 transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Review</span>
+                      </button>
+                    ) : result.writingEvaluation ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const w = result.writingEvaluation;
+                          const synthItem: StudentCorrectedWorkItem = {
+                            id: result.id,
+                            title: result.title,
+                            source_type: 'writing_task',
+                            work_type: 'writing',
+                            score: result.score,
+                            max_score: result.maxScore || 100,
+                            percentage: result.percentage,
+                            feedback: w.feedback || result.feedback,
+                            original_text: w.original_text,
+                            corrected_work: w.corrected_work,
+                            mistakes: w.mistakes || [],
+                            corrections: w.corrections || [],
+                            strengths: w.strengths || [],
+                            grammar_errors: w.grammar_errors || [],
+                            spelling_errors: w.spelling_errors || [],
+                            date: result.date
+                          };
+                          openWorkModal(synthItem, 'work');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>View Review</span>

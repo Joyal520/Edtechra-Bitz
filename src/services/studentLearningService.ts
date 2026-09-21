@@ -157,7 +157,7 @@ class StudentLearningService {
   async getMyLearningData(classroomId: string): Promise<{ data?: StudentLearningResponse; error?: string }> {
     try {
       const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/${classroomId}/my-learning`, {
+      const res = await fetch(`/api/classes/${classroomId}/my-learning?_t=${Date.now()}`, {
         headers
       });
 

@@ -6,14 +6,20 @@ import {
   Send,
   Loader2,
   Upload,
-  Trash2
+  Trash2,
+  Sparkles,
+  AlertTriangle,
+  PenLine,
+  MessageSquare
 } from 'lucide-react';
 import {
   ClassroomTask,
   TaskQuestion,
   TaskSubmission,
-  QuestionAnswerResult
+  QuestionAnswerResult,
+  WritingEvaluation
 } from '@/types/classroomTask';
+import type { EvaluationPhase } from './StudentTaskModal';
 
 interface PremiumTaskPageProps {
   task: ClassroomTask;
@@ -25,6 +31,7 @@ interface PremiumTaskPageProps {
     handwrittenImageBase64?: string
   ) => Promise<void>;
   isSubmitting?: boolean;
+  evaluationPhase?: EvaluationPhase;
 }
 
 export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
@@ -32,7 +39,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   submission,
   isPreview = false,
   onSubmit,
-  isSubmitting = false
+  isSubmitting = false,
+  evaluationPhase = 'idle'
 }) => {
   // Local student answers state
   const [answers, setAnswers] = useState<Record<string, any>>(() => {
@@ -546,6 +554,236 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
         </div>
 
+        {/* ================================================================= */}
+        {/* AI EVALUATION LIFECYCLE UI                                         */}
+        {/* ================================================================= */}
+
+        {/* EVALUATING STATE: Show while AI is correcting */}
+        {evaluationPhase === 'evaluating' && (
+          <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-sky-50 to-purple-50 text-center space-y-4 animate-in fade-in duration-300">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto animate-pulse">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-slate-900">
+                ✨ AI is checking your work
+              </h3>
+              <p className="text-sm font-semibold text-slate-600 max-w-md mx-auto">
+                Please wait while AI is correcting your work.
+              </p>
+              <p className="text-xs font-medium text-slate-500">
+                Your submission has been received.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-1.5 pt-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        )}
+
+        {/* EVALUATED STATE: Show structured AI result */}
+        {evaluationPhase === 'evaluated' && submission && (() => {
+          // Extract writing evaluation from submission
+          const wEval: WritingEvaluation | null | undefined =
+            submission.writing_evaluation ||
+            (Array.isArray(submission.question_answers)
+              ? submission.question_answers.find((qa: any) => qa.writing_evaluation)?.writing_evaluation
+              : null);
+
+          const hasWritingResult = Boolean(wEval);
+          const scoreVal = wEval?.score ?? submission.final_score ?? submission.points_awarded;
+          const maxVal = wEval?.max_score ?? task.points ?? 100;
+          const pctVal = wEval?.percentage ?? submission.percentage ?? (scoreVal != null && maxVal > 0 ? Math.round((Number(scoreVal) / maxVal) * 100) : null);
+
+          return (
+            <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
+
+              {/* Score Header */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        YOUR RESULT
+                      </span>
+                      {(submission.is_ai_graded || hasWritingResult) && (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                          AI EVALUATED
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">{task.title}</h3>
+                  </div>
+
+                  {pctVal != null && (
+                    <div className="text-center sm:text-right shrink-0">
+                      <div className="text-3xl sm:text-4xl font-black text-emerald-700">{scoreVal} / {maxVal}</div>
+                      <div className="text-lg font-black text-emerald-600">{pctVal}%</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Structured Result Sections (only for writing evaluations) */}
+              {hasWritingResult && wEval && (
+                <>
+                  {/* Original Work */}
+                  {submission.text_response && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center gap-2">
+                        <PenLine className="w-4 h-4 text-slate-500" />
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR WORK</span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                        "{submission.text_response}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Corrected Work */}
+                  {wEval.corrected_work && wEval.corrected_work !== submission.text_response && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="text-xs font-black uppercase tracking-wider text-emerald-800">CORRECTED WORK</span>
+                      </div>
+                      <p className="text-sm font-medium text-emerald-900 leading-relaxed whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-emerald-100">
+                        "{wEval.corrected_work}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* What to Improve */}
+                  <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-800">WHAT TO IMPROVE</span>
+                    </div>
+
+                    {/* Grammar Issues */}
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-black text-slate-800">Grammar</h4>
+                      {wEval.grammar_errors && wEval.grammar_errors.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {wEval.grammar_errors.map((err, i) => (
+                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                              <span className="text-rose-500 font-black shrink-0">•</span>
+                              <span>
+                                <span className="line-through text-rose-600">"{err.text}"</span>
+                                <span className="mx-1.5 text-slate-400">→</span>
+                                <span className="text-emerald-700 font-bold">"{err.suggestion}"</span>
+                                {err.rule && <span className="text-slate-400 ml-1.5 text-[11px]">({err.rule})</span>}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                          ✓ No significant grammar errors
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Spelling Issues */}
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-black text-slate-800">Spelling</h4>
+                      {wEval.spelling_errors && wEval.spelling_errors.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {wEval.spelling_errors.map((err, i) => (
+                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                              <span className="text-rose-500 font-black shrink-0">•</span>
+                              <span>
+                                <span className="line-through text-rose-600">"{err.text}"</span>
+                                <span className="mx-1.5 text-slate-400">→</span>
+                                <span className="text-emerald-700 font-bold">"{err.suggestion}"</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                          ✓ No significant spelling errors
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Other Issues / Mistakes */}
+                    {wEval.mistakes && wEval.mistakes.length > 0 && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-xs font-black text-slate-800">Other</h4>
+                        <ul className="space-y-1.5">
+                          {wEval.mistakes
+                            .filter(m => !wEval.grammar_errors?.some(g => g.text === m.original))
+                            .slice(0, 5)
+                            .map((m, i) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                                <span className="text-amber-500 font-black shrink-0">•</span>
+                                <span>
+                                  "{m.original}" → "{m.correction}"
+                                  {m.explanation && <span className="block text-[11px] text-slate-500 mt-0.5">{m.explanation}</span>}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Strengths */}
+                    {wEval.strengths && wEval.strengths.length > 0 && (
+                      <div className="space-y-1.5">
+                        <h4 className="text-xs font-black text-slate-800">Strengths</h4>
+                        <ul className="space-y-1">
+                          {wEval.strengths.map((s, i) => (
+                            <li key={i} className="text-xs text-emerald-800 font-medium flex items-start gap-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI Feedback */}
+                  {wEval.feedback && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-sky-600" />
+                        <span className="text-xs font-black uppercase tracking-wider text-sky-800">AI FEEDBACK</span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-800 leading-relaxed">
+                        {wEval.feedback}
+                      </p>
+                      {wEval.skills && wEval.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {wEval.skills.map((skill, i) => (
+                            <span key={i} className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Non-writing task simple result */}
+              {!hasWritingResult && scoreVal != null && (
+                <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-black text-emerald-800">
+                    Work Submitted • Score: {scoreVal}/{maxVal}
+                    {submission.teacher_feedback && ` — ${submission.teacher_feedback}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Page Footer & Submission Actions */}
         <div className="pt-8 mt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-xs font-bold text-slate-400">
@@ -554,11 +792,16 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
           {!isPreview && onSubmit && (
             <div className="flex items-center gap-3 no-print w-full sm:w-auto justify-end">
-              {submitted ? (
+              {evaluationPhase === 'evaluating' ? (
+                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-indigo-700 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI is evaluating your work...</span>
+                </div>
+              ) : evaluationPhase === 'evaluated' || submitted ? (
                 <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    Work Submitted {submission?.final_score != null ? `• Score: ${submission.final_score}/${task.points}` : ''}
+                    Evaluation Complete {submission?.final_score != null ? `• ${submission.final_score}/${task.points}` : ''}
                   </span>
                 </div>
               ) : (
@@ -571,7 +814,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Evaluating Submission...</span>
+                      <span>Submitting...</span>
                     </>
                   ) : (
                     <>
