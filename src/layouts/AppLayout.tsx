@@ -142,8 +142,8 @@ export const AppLayout: React.FC = () => {
                 EdTechra
               </span>
               {!isHomePage && (
-                <span className="bg-[#026fc3] text-white text-[10px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-lg shadow-2xs tracking-wide uppercase">
-                  Bitz
+                <span className="bg-[#0284c7] text-white text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs tracking-wider uppercase">
+                  BITZ
                 </span>
               )}
             </div>
@@ -246,14 +246,16 @@ export const AppLayout: React.FC = () => {
           {/* Right Header Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Install App Button (Visible on both Desktop and Mobile Header) */}
+            {/* Install App Button (Hidden on Mobile for Classes page to match reference) */}
             {canInstall && (
               <button
                 onClick={triggerInstall}
-                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer shadow-2xs active:scale-95 group ${
-                  isHomePage || isClassesPage
-                    ? 'bg-sky-500/25 hover:bg-sky-500/40 text-white border border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
-                    : 'bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200 hover:border-brand-300'
+                className={`items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer shadow-2xs active:scale-95 group ${
+                  isClassesPage
+                    ? 'hidden sm:inline-flex bg-sky-500/25 hover:bg-sky-500/40 text-white border border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                    : isHomePage
+                    ? 'inline-flex bg-sky-500/25 hover:bg-sky-500/40 text-white border border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                    : 'inline-flex bg-brand-50 hover:bg-brand-100 text-[#026fc3] border border-brand-200 hover:border-brand-300'
                 }`}
                 title="Install EdTechra-Bitz application"
                 aria-label="Install App"

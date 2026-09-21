@@ -613,36 +613,35 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
-        <section className="relative bg-gradient-to-r from-white/95 via-sky-50/80 to-indigo-50/70 backdrop-blur-xl text-slate-900 rounded-3xl sm:rounded-[32px] p-6 sm:p-7 lg:p-8 shadow-[0_12px_36px_-6px_rgba(2,111,195,0.12),0_2px_8px_rgba(15,23,42,0.04)] overflow-hidden border border-sky-200/80 transition-all">
+        <section className="relative bg-gradient-to-b from-[#edf6fd] via-[#e2f1fc] to-[#9ed1f7] rounded-[32px] sm:rounded-[36px] p-5 sm:p-7 lg:p-8 border border-white/80 shadow-[0_12px_36px_-6px_rgba(2,111,195,0.12)] overflow-hidden transition-all">
           
-          {/* Subtle Organic Background Glow & Liquid Wave Accents */}
+          {/* Subtle Organic Background Glow */}
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute top-1/2 -right-16 w-64 h-64 bg-sky-400/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-16 left-1/3 w-60 h-60 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Top Bar: Back to Classes & Quick Category Tag */}
-          <div className="flex items-center justify-between gap-3 mb-3.5 sm:mb-4 relative z-10 flex-wrap">
+          <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-10 flex-wrap">
             <Link
               to="/classes"
-              className="group inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/80 hover:bg-white backdrop-blur-md px-3.5 py-1.5 rounded-full transition-all duration-200 border border-slate-200/90 shadow-2xs active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white/95 hover:bg-white px-3.5 sm:px-4 py-2 rounded-full transition-all duration-200 border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-95 cursor-pointer"
             >
-              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="w-4 h-4 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
               <span>Back to Classes</span>
             </Link>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100/90 border border-sky-200/90 text-[#026fc3] text-[10px] font-black uppercase tracking-widest shadow-2xs backdrop-blur-xs">
-              <Sparkles className="w-3 h-3 text-[#026fc3]" />
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-100/90 border border-sky-200/80 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs backdrop-blur-xs">
+              <Sparkles className="w-3.5 h-3.5 text-[#0284c7]" />
               <span>CLASSROOM</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-center relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-center relative z-10">
             
-            {/* LEFT: Headline, Details, Tagline & Action (8 cols) */}
-            <div className="lg:col-span-8 space-y-3 sm:space-y-3.5">
+            {/* LEFT: Headline, Details, Tagline & Action */}
+            <div className="lg:col-span-7 space-y-3.5 sm:space-y-4">
               
-              {/* Classroom Title — Clean Two-Tone Styling */}
-              <div className="space-y-2">
+              {/* Classroom Title — Two-Tone Styling */}
+              <div className="space-y-2.5">
                 {(() => {
                   const titleStr = (classroom.title || 'Classroom').trim();
                   const words = titleStr.split(' ');
@@ -650,14 +649,14 @@ export const ClassroomDetailPage: React.FC = () => {
                     const lastWord = words.pop();
                     const firstPart = words.join(' ');
                     return (
-                      <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-slate-900 drop-shadow-xs">
+                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a]">
                         <span>{firstPart} </span>
-                        <span className="text-[#026fc3]">{lastWord}</span>
+                        <span className="text-[#0284c7]">{lastWord}</span>
                       </h1>
                     );
                   }
                   return (
-                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight text-slate-900 drop-shadow-xs">
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a]">
                       {classroom.title}
                     </h1>
                   );
@@ -665,43 +664,44 @@ export const ClassroomDetailPage: React.FC = () => {
 
                 {/* Floating Metadata Pills */}
                 <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
-                    <BookOpen className="w-3.5 h-3.5 text-[#026fc3]" />
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
+                    <BookOpen className="w-4 h-4 text-[#0284c7] stroke-[2]" />
                     <span>{classroom.subject || 'General'}</span>
                   </span>
 
                   {classroom.grade && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md text-xs font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
-                      <span>{classroom.grade}</span>
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
+                      <GraduationCap className="w-4 h-4 text-[#0284c7] stroke-[2]" />
+                      <span>{classroom.grade.toLowerCase().startsWith('grade') ? classroom.grade : `Grade ${classroom.grade}`}</span>
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 backdrop-blur-md text-xs font-bold text-sky-800 border border-sky-200 shadow-2xs">
-                    <Users className="w-3.5 h-3.5 text-[#026fc3]" />
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
+                    <Users className="w-4 h-4 text-[#0284c7] stroke-[2]" />
                     <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
                   </span>
 
                   {isTeacher && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-50 backdrop-blur-md text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-50 text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
                       <span>Teacher Workspace</span>
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Tagline / Motto Quote */}
-              <blockquote className="text-xs sm:text-sm text-slate-600 font-medium italic border-l-2 border-sky-400 pl-3 py-0.5 max-w-xl">
-                &ldquo;Empower your classroom, inspire your students.&rdquo;
-              </blockquote>
+              {/* Tagline / Motto — Clean Italic without Quotation Marks */}
+              <p className="text-sm sm:text-base font-semibold italic text-slate-700 tracking-wide pt-0.5">
+                Learn • Practise • Improve • Grow Together
+              </p>
 
-              {/* Action Buttons: Primary Enter Classroom CTA & Clean Options Button */}
-              <div className="pt-1 flex items-center gap-3 flex-wrap">
+              {/* Action Buttons: Primary Enter Classroom CTA & Options Button */}
+              <div className="pt-1.5 flex items-center gap-3 flex-wrap">
                 
                 {/* Primary Action Button: Enter Classroom */}
                 <button
                   type="button"
                   onClick={handleEnterClassroom}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full font-black text-xs sm:text-sm text-white bg-gradient-to-r from-sky-500 via-cyan-500 to-sky-600 hover:from-sky-400 hover:to-cyan-400 shadow-[0_4px_16px_rgba(14,165,233,0.35)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
+                  className="inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#0091ff] via-[#0084f0] to-[#0070e0] hover:from-[#0084f0] hover:to-[#0060c8] shadow-[0_6px_20px_rgba(0,145,255,0.35)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
                 >
                   <span>Enter Classroom</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform stroke-[2.5]" />
@@ -712,10 +712,10 @@ export const ClassroomDetailPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setOptionsMenuOpen(prev => !prev)}
-                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
+                    className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-pointer active:scale-95 shrink-0 ${
                       optionsMenuOpen
-                        ? 'bg-sky-100 border-sky-300 text-[#026fc3]'
-                        : 'bg-white/90 hover:bg-white border-slate-200/90 text-slate-600 hover:text-slate-900'
+                        ? 'bg-sky-100 border-sky-300 text-[#0284c7]'
+                        : 'bg-white hover:bg-slate-50 border-sky-100 text-slate-600 hover:text-slate-900'
                     }`}
                     title="Classroom Options"
                     aria-label="Classroom Options"
@@ -818,16 +818,45 @@ export const ClassroomDetailPage: React.FC = () => {
 
             </div>
 
-            {/* RIGHT: Compact Educational Illustration (4 cols) */}
-            <div className="lg:col-span-4 flex justify-center lg:justify-end relative">
-              <div className="relative w-full max-w-[170px] sm:max-w-[210px] lg:max-w-[250px] aspect-square flex items-center justify-center p-2 rounded-3xl sm:rounded-[32px] bg-gradient-to-tr from-sky-100/90 via-white to-cyan-100/70 shadow-[0_12px_32px_-6px_rgba(2,111,195,0.18)] border border-sky-200/80 group">
-                <div className="absolute inset-0 bg-cyan-400/20 rounded-3xl sm:rounded-[32px] blur-xl pointer-events-none transform scale-95" />
-                <img
-                  src="/images/classroom/classroom-hero-student.jpg"
-                  alt="Classroom Illustration"
-                  className="w-full h-full object-cover rounded-2xl sm:rounded-[26px] relative z-10 transition-transform duration-300 group-hover:scale-105 select-none pointer-events-none shadow-2xs"
-                />
+            {/* RIGHT on Desktop / LOWER on Mobile: Integrated Educational 3D Illustration */}
+            <div className="lg:col-span-5 relative flex items-end justify-center lg:justify-end -mb-5 sm:-mb-7 lg:-mb-8 mt-2 lg:mt-0 pt-1 select-none pointer-events-none">
+              {/* Decorative Wave & Vector Layer */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+                {/* Subtle Paper Plane & Dashed Flight Path */}
+                <svg className="absolute top-2 sm:top-4 left-4 sm:left-10 w-32 h-20 text-sky-400" viewBox="0 0 120 80" fill="none">
+                  <path d="M 10 65 C 25 35, 55 18, 95 30" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5"/>
+                  <polygon points="95,26 108,31 99,39 97,34" fill="#38bdf8" opacity="0.6" />
+                </svg>
+
+                {/* Left Fluid Wave Arc */}
+                <svg className="absolute -bottom-1 -left-6 w-44 sm:w-56 h-36 sm:h-44 text-sky-400" viewBox="0 0 180 140" fill="none">
+                  <path d="M 0 140 C 35 100, 70 70, 110 100 C 130 115, 110 140, 0 140 Z" fill="url(#heroLeftWaveGrad)" opacity="0.45"/>
+                  <defs>
+                    <linearGradient id="heroLeftWaveGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#0284c7" stopOpacity="0.5"/>
+                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.1"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+
+                {/* Right Fluid Wave Arc */}
+                <svg className="absolute -bottom-1 -right-6 w-44 sm:w-56 h-36 sm:h-44 text-sky-400" viewBox="0 0 180 140" fill="none">
+                  <path d="M 180 140 C 145 105, 110 80, 70 110 C 50 125, 70 140, 180 140 Z" fill="url(#heroRightWaveGrad)" opacity="0.45"/>
+                  <defs>
+                    <linearGradient id="heroRightWaveGrad" x1="100%" y1="100%" x2="0%" y2="0%">
+                      <stop offset="0%" stopColor="#0284c7" stopOpacity="0.4"/>
+                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.1"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
               </div>
+
+              {/* 3D Student Artwork — Blended Seamlessly into Hero Card Background */}
+              <img
+                src="/images/classroom/classroom-hero-student.jpg"
+                alt="Classroom Student Learning"
+                className="relative z-10 w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[440px] object-contain mix-blend-multiply transition-transform duration-300 select-none pointer-events-none"
+              />
             </div>
 
           </div>
@@ -835,24 +864,24 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 2 — 4 SUMMARY STAT CARDS & INSPIRATIONAL BANNER                    */}
+        {/* SECTION 2 — 4 SUMMARY STAT CARDS (2x2 on mobile)                          */}
         {/* ========================================================================= */}
         <section className="space-y-4">
           
-          {/* 4 Clean Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
+          {/* 4 Clean Summary Cards in 2x2 grid on mobile */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
             
             {/* Card 1: Students */}
             <div
               onClick={() => handleSelectTab('roster')}
-              className="bg-white hover:bg-sky-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-sky-100 shadow-[0_4px_16px_-2px_rgba(2,111,195,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(2,111,195,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-sky-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(2,111,195,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-sky-50 text-[#0284c7] border border-sky-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  <Users className="w-5 h-5 stroke-[2.2]" />
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#e0f2fe] text-[#0284c7] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <Users className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-[#0284c7] transition-colors leading-tight">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 group-hover:text-[#0284c7] transition-colors leading-tight">
                     {studentCount}
                   </div>
                   <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
@@ -868,14 +897,14 @@ export const ClassroomDetailPage: React.FC = () => {
             {/* Card 2: Assignments */}
             <div
               onClick={() => handleSelectTab('assignments')}
-              className="bg-white hover:bg-purple-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-purple-100 shadow-[0_4px_16px_-2px_rgba(124,58,237,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(124,58,237,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-purple-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  <BookOpen className="w-5 h-5 stroke-[2.2]" />
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#f3e8ff] text-[#9333ea] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
                     {assignments.length}
                   </div>
                   <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
@@ -898,14 +927,14 @@ export const ClassroomDetailPage: React.FC = () => {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
-              className="bg-white hover:bg-emerald-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-emerald-100 shadow-[0_4px_16px_-2px_rgba(5,150,105,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(5,150,105,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-emerald-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(5,150,105,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#dcfce7] text-[#16a34a] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors leading-tight">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors leading-tight">
                     {stats.total_quizzes || 0}
                   </div>
                   <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
@@ -928,14 +957,14 @@ export const ClassroomDetailPage: React.FC = () => {
                   setStudentReportModalOpen(true);
                 }
               }}
-              className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-amber-100 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(217,119,6,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
+              className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-3.5 sm:p-4 lg:p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_20px_rgba(217,119,6,0.08)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
             >
-              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/70 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  <BarChart3 className="w-5 h-5 stroke-[2.2]" />
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#fef3c7] text-[#d97706] flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-amber-700 transition-colors leading-tight">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 group-hover:text-amber-700 transition-colors leading-tight">
                     {stats.average_score || 0}%
                   </div>
                   <div className="text-xs sm:text-[13px] font-semibold text-slate-500 truncate">
@@ -949,15 +978,17 @@ export const ClassroomDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Inspirational Quote Banner */}
-          <div className="bg-gradient-to-r from-sky-50/80 via-white to-sky-50/80 border border-sky-200/70 rounded-2xl sm:rounded-[24px] px-6 py-3.5 sm:py-4 shadow-xs flex items-center justify-center text-center">
-            <p className="text-xs sm:text-sm font-semibold text-slate-700 tracking-wide">
-              <span className="text-[#0284c7] font-serif text-lg leading-none mr-1.5 select-none">&ldquo;</span>
-              <span>A great classroom today, a brighter tomorrow.</span>
-              <span className="text-[#0284c7] font-serif text-lg leading-none ml-1 mr-1.5 select-none">&rdquo;</span>
-              <span className="text-slate-400 font-bold ml-1">— EdTechra BITZ</span>
-            </p>
-          </div>
+          {/* Inspirational Quote Banner (Teachers only, omitted for students to keep concise) */}
+          {isTeacher && (
+            <div className="bg-gradient-to-r from-sky-50/80 via-white to-sky-50/80 border border-sky-200/70 rounded-2xl sm:rounded-[24px] px-6 py-3.5 sm:py-4 shadow-xs flex items-center justify-center text-center">
+              <p className="text-xs sm:text-sm font-semibold text-slate-700 tracking-wide">
+                <span className="text-[#0284c7] font-serif text-lg leading-none mr-1.5 select-none">&ldquo;</span>
+                <span>A great classroom today, a brighter tomorrow.</span>
+                <span className="text-[#0284c7] font-serif text-lg leading-none ml-1 mr-1.5 select-none">&rdquo;</span>
+                <span className="text-slate-400 font-bold ml-1">— EdTechra BITZ</span>
+              </p>
+            </div>
+          )}
 
         </section>
 
