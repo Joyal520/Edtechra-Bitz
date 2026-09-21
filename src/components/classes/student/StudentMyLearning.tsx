@@ -45,6 +45,7 @@ interface UnifiedResultItem {
   feedback?: string | null;
   isAiGraded?: boolean;
   writingEvaluation?: any;
+  r2ResultPath?: string | null;
 }
 
 export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
@@ -114,8 +115,9 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
         date: t.completed_at || t.submitted_at,
         status: t.status,
         feedback: t.teacher_feedback,
-        isAiGraded: Boolean(t.is_ai_graded || t.writing_evaluation),
-        writingEvaluation: t.writing_evaluation || null
+        isAiGraded: Boolean(t.is_ai_graded || t.writing_evaluation || t.r2_result_path),
+        writingEvaluation: t.writing_evaluation || null,
+        r2ResultPath: t.r2_result_path || null
       });
     });
 
@@ -470,27 +472,28 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                         <Eye className="w-3.5 h-3.5" />
                         <span>View Review</span>
                       </button>
-                    ) : result.writingEvaluation ? (
+                    ) : (result.writingEvaluation || result.r2ResultPath || result.isAiGraded) ? (
                       <button
                         type="button"
                         onClick={() => {
                           const w = result.writingEvaluation;
                           const synthItem: StudentCorrectedWorkItem = {
-                            id: result.id,
+                            id: result.id.replace(/^task-/, ''),
                             title: result.title,
                             source_type: 'writing_task',
                             work_type: 'writing',
                             score: result.score,
                             max_score: result.maxScore || 100,
                             percentage: result.percentage,
-                            feedback: w.feedback || result.feedback,
-                            original_text: w.original_text,
-                            corrected_work: w.corrected_work,
-                            mistakes: w.mistakes || [],
-                            corrections: w.corrections || [],
-                            strengths: w.strengths || [],
-                            grammar_errors: w.grammar_errors || [],
-                            spelling_errors: w.spelling_errors || [],
+                            feedback: w?.feedback || result.feedback,
+                            original_text: w?.original_text,
+                            corrected_work: w?.corrected_work,
+                            mistakes: w?.mistakes || [],
+                            corrections: w?.corrections || [],
+                            strengths: w?.strengths || [],
+                            grammar_errors: w?.grammar_errors || [],
+                            spelling_errors: w?.spelling_errors || [],
+                            r2_result_path: result.r2ResultPath || null,
                             date: result.date
                           };
                           openWorkModal(synthItem, 'work');

@@ -15,6 +15,12 @@ export interface StudentTaskResult {
   teacher_feedback?: string | null;
   submitted_at: string;
   completed_at?: string | null;
+  is_ai_graded?: boolean;
+  r2_result_path?: string | null;
+  skills?: string[];
+  grammar_error_count?: number;
+  spelling_error_count?: number;
+  writing_evaluation?: any | null;
 }
 
 export interface StudentQuizResult {
@@ -79,6 +85,7 @@ export interface StudentCorrectedWorkItem {
   original_url?: string | null;
   corrected_r2_key?: string | null;
   corrected_url?: string | null;
+  r2_result_path?: string | null;
   date: string;
 }
 
@@ -190,6 +197,32 @@ class StudentLearningService {
       return null;
     } catch (err) {
       console.error('[StudentLearning] Error fetching presigned URL:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Retrieves full detailed evaluation JSON document from Cloudflare R2
+   */
+  async getEvaluationJson(classroomId: string, r2KeyOrSubmissionId: { key?: string; submissionId?: string }): Promise<any | null> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const params = new URLSearchParams();
+      if (r2KeyOrSubmissionId.key) params.set('key', r2KeyOrSubmissionId.key);
+      if (r2KeyOrSubmissionId.submissionId) params.set('submissionId', r2KeyOrSubmissionId.submissionId);
+
+      const res = await fetch(
+        `/api/classes/${classroomId}/my-learning/evaluation-json?${params.toString()}`,
+        { headers }
+      );
+
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        return json.data;
+      }
+      return null;
+    } catch (err) {
+      console.error('[StudentLearning] Error fetching evaluation JSON from R2:', err);
       return null;
     }
   }

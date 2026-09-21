@@ -32,11 +32,13 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
   const [activeTab, setActiveTab] = useState<'work' | 'feedback' | 'original'>(defaultTab);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [originalFileUrl, setOriginalFileUrl] = useState<string | null>(null);
+  const [r2Evaluation, setR2Evaluation] = useState<any | null>(null);
   const [loadingFile, setLoadingFile] = useState<boolean>(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab(defaultTab);
+    setR2Evaluation(null);
   }, [defaultTab, item]);
 
   useEffect(() => {
@@ -47,10 +49,22 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
       setLoadingFile(true);
       setFileError(null);
       try {
-        // Direct URLs or R2 signed URLs
+        // 1. Fetch detailed evaluation JSON artifact from R2 if present
+        const r2Key = item.r2_result_path || (item.corrected_r2_key?.endsWith('.json') ? item.corrected_r2_key : null);
+        if (r2Key || item.source_type === 'writing_task') {
+          const evalDoc = await studentLearningService.getEvaluationJson(classroomId, {
+            key: r2Key || undefined,
+            submissionId: item.id
+          });
+          if (isMounted && evalDoc) {
+            setR2Evaluation(evalDoc);
+          }
+        }
+
+        // 2. Direct URLs or R2 signed URLs for images/PDFs
         if (item.corrected_url) {
           if (isMounted) setFileUrl(item.corrected_url);
-        } else if (item.corrected_r2_key) {
+        } else if (item.corrected_r2_key && !item.corrected_r2_key.endsWith('.json')) {
           const downloadUrl = await studentLearningService.getPresignedFileUrl(classroomId, item.corrected_r2_key);
           if (isMounted) {
             if (downloadUrl) {
@@ -107,22 +121,28 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
       })
     : 'Recently';
 
-  // Extract typed writing evaluation metadata
-  const correctedText = item.corrected_work || item.feedback_metadata?.corrected_work || null;
-  const originalText = item.original_text || item.text_response || item.content_text || item.feedback_metadata?.original_text || null;
+  // Extract typed writing evaluation metadata (prioritizing R2 evaluation JSON)
+  const correctedText = r2Evaluation?.corrected_work || item.corrected_work || item.feedback_metadata?.corrected_work || null;
+  const originalText = r2Evaluation?.original_work || item.original_text || item.text_response || item.content_text || item.feedback_metadata?.original_text || null;
   const mistakesList: Array<{ original: string; correction: string; explanation?: string }> = 
-    (Array.isArray(item.mistakes) && item.mistakes.length > 0)
-      ? item.mistakes
-      : (Array.isArray(item.feedback_metadata?.mistakes) ? item.feedback_metadata.mistakes : []);
+    (Array.isArray(r2Evaluation?.other_issues) && r2Evaluation.other_issues.length > 0)
+      ? r2Evaluation.other_issues
+      : (Array.isArray(item.mistakes) && item.mistakes.length > 0)
+        ? item.mistakes
+        : (Array.isArray(item.feedback_metadata?.mistakes) ? item.feedback_metadata.mistakes : []);
   const grammarErrors: Array<{ text: string; suggestion: string; rule?: string }> = 
-    (Array.isArray(item.grammar_errors) && item.grammar_errors.length > 0)
-      ? item.grammar_errors
-      : (Array.isArray(item.feedback_metadata?.grammar_errors) ? item.feedback_metadata.grammar_errors : []);
+    (Array.isArray(r2Evaluation?.grammar_issues) && r2Evaluation.grammar_issues.length > 0)
+      ? r2Evaluation.grammar_issues.map((g: any) => ({ text: g.original, suggestion: g.correction, rule: g.explanation }))
+      : (Array.isArray(item.grammar_errors) && item.grammar_errors.length > 0)
+        ? item.grammar_errors
+        : (Array.isArray(item.feedback_metadata?.grammar_errors) ? item.feedback_metadata.grammar_errors : []);
   const spellingErrors: Array<{ text: string; suggestion: string }> = 
-    (Array.isArray(item.spelling_errors) && item.spelling_errors.length > 0)
-      ? item.spelling_errors
-      : (Array.isArray(item.feedback_metadata?.spelling_errors) ? item.feedback_metadata.spelling_errors : []);
-  const aiMeta = item.ai_evaluation_metadata || {};
+    (Array.isArray(r2Evaluation?.spelling_issues) && r2Evaluation.spelling_issues.length > 0)
+      ? r2Evaluation.spelling_issues.map((s: any) => ({ text: s.original, suggestion: s.correction }))
+      : (Array.isArray(item.spelling_errors) && item.spelling_errors.length > 0)
+        ? item.spelling_errors
+        : (Array.isArray(item.feedback_metadata?.spelling_errors) ? item.feedback_metadata.spelling_errors : []);
+  const aiMeta = r2Evaluation || item.ai_evaluation_metadata || {};
   const rubricBreakdown: Array<{ criterion: string; score: number; max?: number }> = 
     Array.isArray(aiMeta.breakdown) && aiMeta.breakdown.length > 0
       ? aiMeta.breakdown
@@ -130,15 +150,17 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
 
   // Breakdown parsing for strengths, improvements, rubric criteria
   const breakdown = item.breakdown || {};
-  const strengths: string[] = (Array.isArray(item.strengths) && item.strengths.length > 0)
-    ? item.strengths
-    : (Array.isArray(item.feedback_metadata?.strengths) && item.feedback_metadata.strengths.length > 0)
-    ? item.feedback_metadata.strengths
-    : Array.isArray(breakdown.strengths)
-    ? breakdown.strengths
-    : Array.isArray(breakdown.pros)
-    ? breakdown.pros
-    : [];
+  const strengths: string[] = (Array.isArray(r2Evaluation?.strengths) && r2Evaluation.strengths.length > 0)
+    ? r2Evaluation.strengths
+    : (Array.isArray(item.strengths) && item.strengths.length > 0)
+      ? item.strengths
+      : (Array.isArray(item.feedback_metadata?.strengths) && item.feedback_metadata.strengths.length > 0)
+      ? item.feedback_metadata.strengths
+      : Array.isArray(breakdown.strengths)
+      ? breakdown.strengths
+      : Array.isArray(breakdown.pros)
+      ? breakdown.pros
+      : [];
 
   const improvements: string[] = Array.isArray(breakdown.improvements)
     ? breakdown.improvements

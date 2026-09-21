@@ -843,4 +843,16 @@ export function buildTeachingReportObjectKey({ classroomId, period = 'current', 
   return `ai-reports/classrooms/${cleanClassId}/${cleanPeriod}/classroom-report-${timestamp}.pdf`;
 }
 
+/**
+ * Builds canonical Cloudflare R2 object key for detailed Task AI evaluation JSON artifact
+ * Structure: classrooms/{classroomId}/students/{studentId}/tasks/{taskId}/submissions/{submissionId}/evaluation.json
+ */
+export function buildTaskEvaluationKey({ classroomId, studentId, taskId, submissionId }) {
+  const cleanClassId = sanitizeSegment(classroomId) || 'general';
+  const cleanStudentId = sanitizeSegment(studentId) || 'student';
+  const cleanTaskId = sanitizeSegment(taskId) || 'task';
+  const cleanSubId = sanitizeSegment(submissionId) || 'submission';
+  return `classrooms/${cleanClassId}/students/${cleanStudentId}/tasks/${cleanTaskId}/submissions/${cleanSubId}/evaluation.json`;
+}
+
 

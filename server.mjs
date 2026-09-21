@@ -49,6 +49,7 @@ import {
   buildExamSubmissionObjectKey,
   buildExamReportObjectKey,
   buildTeachingReportObjectKey,
+  buildTaskEvaluationKey,
   buildCourseMediaObjectKey,
   buildCourseCoverObjectKey,
   buildTeacherMaterialObjectKey,
@@ -3261,14 +3262,14 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         final_score,
         ai_score,
         percentage,
+        is_ai_graded,
         teacher_feedback,
         submitted_at,
         completed_at,
         text_response,
         file_urls,
         question_answers,
-        ocr_evaluation_id,
-        assignment:assignments(id, title, points, due_date, instructions)
+        assignment:assignments!assignment_id(id, title, points, due_date, instructions)
       `)
       .eq('classroom_id', classroomId)
       .eq('student_id', studentId)
@@ -3489,9 +3490,15 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       if (isWriting && (sub.teacher_feedback || sub.final_score != null || sub.points_awarded != null)) {
         if (!correctedWork.some((c) => c.id === sub.id || (c.title === sub.assignment?.title && sub.text_response))) {
           const writingQa = Array.isArray(sub.question_answers)
-            ? sub.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response')
+            ? sub.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.r2_result_path)
             : null;
           const wEval = writingQa?.writing_evaluation;
+          const r2Path = writingQa?.r2_result_path || wEval?.r2_result_path || buildTaskEvaluationKey({
+            classroomId: sub.classroom_id || classroomId,
+            studentId: sub.student_id || studentId,
+            taskId: sub.assignment_id,
+            submissionId: sub.id
+          });
 
           correctedWork.push({
             id: sub.id,
@@ -3510,6 +3517,7 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             strengths: wEval?.strengths || [],
             grammar_errors: wEval?.grammar_errors || [],
             spelling_errors: wEval?.spelling_errors || [],
+            r2_result_path: r2Path,
             feedback_metadata: wEval ? {
               original_text: sub.text_response,
               corrected_work: wEval.corrected_work,
@@ -3517,8 +3525,9 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
               corrections: wEval.corrections || [],
               strengths: wEval.strengths || [],
               grammar_errors: wEval.grammar_errors || [],
-              spelling_errors: wEval.spelling_errors || []
-            } : null,
+              spelling_errors: wEval.spelling_errors || [],
+              r2_result_path: r2Path
+            } : { r2_result_path: r2Path },
             ai_evaluation_metadata: wEval ? {
               category: wEval.category || 'Grammar',
               topic: wEval.topic || 'Subject-Verb Agreement',
@@ -3573,13 +3582,19 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     // Recent score is the latest activity percentage
     const recentScore = allPercentages.length > 0 ? allPercentages[0] : null;
 
-    // Format tasks for My Results (including writing evaluation metadata)
+    // Format tasks for My Results (including writing evaluation metadata & R2 path)
     const formattedTasks = (taskSubmissions || []).map((t) => {
       // Extract writing evaluation from question_answers if present
       const writingQa = Array.isArray(t.question_answers)
-        ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response')
+        ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.r2_result_path)
         : null;
       const wEval = writingQa?.writing_evaluation;
+      const r2Path = writingQa?.r2_result_path || wEval?.r2_result_path || buildTaskEvaluationKey({
+        classroomId: t.classroom_id || classroomId,
+        studentId: t.student_id || studentId,
+        taskId: t.assignment_id,
+        submissionId: t.id
+      });
 
       return {
         id: t.id,
@@ -3592,13 +3607,17 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         submitted_at: t.submitted_at,
         completed_at: t.completed_at,
         is_ai_graded: t.is_ai_graded || false,
-        writing_evaluation: wEval || null
+        writing_evaluation: wEval || null,
+        r2_result_path: r2Path,
+        skills: writingQa?.skills || wEval?.skills || [],
+        grammar_error_count: writingQa?.grammar_error_count ?? wEval?.grammar_errors?.length ?? 0,
+        spelling_error_count: writingQa?.spelling_error_count ?? wEval?.spelling_errors?.length ?? 0
       };
     });
 
     // Include task-linked OCR evaluations that don't have assignment_submissions entries
     (ocrEvals || []).forEach((ocr) => {
-      if (ocr.assignment_id && !formattedTasks.some((t) => t.id === ocr.id || (taskSubmissions || []).some((s) => s.ocr_evaluation_id === ocr.id))) {
+      if (ocr.assignment_id && !formattedTasks.some((t) => t.id === ocr.id)) {
         formattedTasks.push({
           id: ocr.id,
           title: ocr.title || `${ocr.category} Practice`,
@@ -3610,7 +3629,8 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
           submitted_at: ocr.created_at,
           completed_at: ocr.completed_at || ocr.created_at,
           is_ai_graded: true,
-          writing_evaluation: null
+          writing_evaluation: null,
+          r2_result_path: ocr.report_r2_key || null
         });
       }
     });
@@ -3780,6 +3800,56 @@ app.get('/api/classes/:id/my-learning/view-file', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/:id/my-learning/view-file:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate download URL' });
+  }
+});
+
+// GET /api/classes/:id/my-learning/evaluation-json - Direct Detailed JSON Retrieval from Cloudflare R2
+app.get('/api/classes/:id/my-learning/evaluation-json', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { key, submissionId } = req.query;
+    let targetKey = key ? String(key).trim() : null;
+
+    if (!targetKey && submissionId) {
+      const { data: sub } = await serverSupabase
+        .from('assignment_submissions')
+        .select('id, question_answers, classroom_id, student_id, assignment_id')
+        .eq('id', submissionId)
+        .maybeSingle();
+
+      if (sub) {
+        const writingQa = Array.isArray(sub.question_answers)
+          ? sub.question_answers.find((qa) => qa.r2_result_path || qa.writing_evaluation)
+          : null;
+        targetKey = writingQa?.r2_result_path || buildTaskEvaluationKey({
+          classroomId: sub.classroom_id,
+          studentId: sub.student_id,
+          taskId: sub.assignment_id,
+          submissionId: sub.id
+        });
+      }
+    }
+
+    if (!targetKey) {
+      return res.status(400).json({ success: false, error: 'File key or submission ID is required.' });
+    }
+
+    const evaluationJson = await getJsonContent(targetKey);
+    if (!evaluationJson) {
+      return res.status(404).json({ success: false, error: 'Evaluation document not found in storage.' });
+    }
+
+    res.json({
+      success: true,
+      data: evaluationJson
+    });
+  } catch (error) {
+    console.error('Error in /api/classes/:id/my-learning/evaluation-json:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to retrieve evaluation document' });
   }
 });
 
@@ -7517,11 +7587,91 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     // Determine teacher feedback from writing evaluation or scoring summary
     const feedbackText = writingEval?.feedback || (isGraded ? `Evaluation complete. Score: ${gradingResult.final_score}/${task.points || 100}` : null);
 
-    // Upsert into assignment_submissions (preserving student's original text)
+    // 1. Check existing submission to reuse ID or generate new UUID
+    const { data: existingSub } = await serverSupabase
+      .from('assignment_submissions')
+      .select('id')
+      .eq('assignment_id', taskId)
+      .eq('student_id', authData.user.id)
+      .maybeSingle();
+
+    const submissionId = existingSub?.id || crypto.randomUUID();
+
+    // 2. Upload detailed evaluation JSON artifact to Cloudflare R2 if writing evaluation is present
+    let r2ResultPath = null;
+    if (writingEval) {
+      try {
+        const r2Key = buildTaskEvaluationKey({
+          classroomId: task.classroom_id,
+          studentId: authData.user.id,
+          taskId,
+          submissionId
+        });
+
+        const evaluationArtifact = {
+          submission_id: submissionId,
+          student_id: authData.user.id,
+          classroom_id: task.classroom_id,
+          task_id: taskId,
+          activity_title: (task.title || 'Writing Task').trim(),
+          original_work: textResponse || '',
+          corrected_work: writingEval.corrected_work || textResponse || '',
+          score: writingEval.score ?? gradingResult.final_score,
+          max_score: writingEval.max_score ?? (task.points || 100),
+          percentage: writingEval.percentage ?? gradingResult.percentage,
+          grammar_issues: (writingEval.grammar_errors || []).map((g) => ({
+            original: g.text,
+            correction: g.suggestion,
+            explanation: g.rule || 'Grammar correction'
+          })),
+          spelling_issues: (writingEval.spelling_errors || []).map((s) => ({
+            original: s.text,
+            correction: s.suggestion,
+            explanation: 'Spelling correction'
+          })),
+          other_issues: (writingEval.mistakes || []).filter(
+            (m) => !(writingEval.grammar_errors || []).some((g) => g.text === m.original)
+          ),
+          strengths: writingEval.strengths || [],
+          skills: writingEval.skills || [writingEval.topic || 'Grammar & Mechanics'],
+          topic: writingEval.topic || 'Subject-Verb Agreement',
+          category: writingEval.category || 'Grammar',
+          feedback: feedbackText || 'Evaluation completed.',
+          breakdown: writingEval.breakdown || [],
+          ai_model: 'gpt-4o-mini',
+          evaluated_at: new Date().toISOString()
+        };
+
+        await putJsonContent(r2Key, evaluationArtifact);
+        r2ResultPath = r2Key;
+        writingEval.r2_result_path = r2Key;
+      } catch (r2Err) {
+        console.warn('[TaskSubmit] Notice: Could not store full evaluation JSON in R2:', r2Err.message);
+      }
+    }
+
+    // Attach R2 result path to question_answers for lightweight indexing in Supabase
+    if (Array.isArray(gradingResult.question_answers)) {
+      gradingResult.question_answers = gradingResult.question_answers.map((qa) => {
+        if (qa.writing_evaluation || qa.question_id === 'writing_response') {
+          return {
+            ...qa,
+            r2_result_path: r2ResultPath,
+            skills: writingEval?.skills || [writingEval?.topic || 'Grammar & Mechanics'],
+            grammar_error_count: writingEval?.grammar_errors?.length || 0,
+            spelling_error_count: writingEval?.spelling_errors?.length || 0
+          };
+        }
+        return qa;
+      });
+    }
+
+    // Upsert into assignment_submissions (lightweight index preserving student's original text)
     const { data: submission, error: subErr } = await serverSupabase
       .from('assignment_submissions')
       .upsert(
         {
+          id: submissionId,
           assignment_id: taskId,
           classroom_id: task.classroom_id,
           student_id: authData.user.id,
@@ -7547,7 +7697,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
 
     if (subErr) throw subErr;
 
-    // If writing evaluation is present, upsert into student_corrected_work
+    // If writing evaluation is present, upsert into student_corrected_work if table exists
     if (writingEval && submission) {
       try {
         const { data: existingCw } = await serverSupabase
@@ -7570,6 +7720,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
           percentage: writingEval.percentage,
           status: 'completed',
           feedback_text: writingEval.feedback,
+          corrected_r2_key: r2ResultPath,
           feedback_metadata: {
             original_text: textResponse,
             corrected_work: writingEval.corrected_work,
@@ -7577,7 +7728,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
             corrections: writingEval.corrections || [],
             strengths: writingEval.strengths || [],
             grammar_errors: writingEval.grammar_errors || [],
-            spelling_errors: writingEval.spelling_errors || []
+            spelling_errors: writingEval.spelling_errors || [],
+            r2_result_path: r2ResultPath
           },
           ai_evaluation_metadata: {
             category: writingEval.category || 'Grammar',
@@ -7602,7 +7754,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
             });
         }
       } catch (cwErr) {
-        console.warn('[TaskSubmit] Could not upsert student_corrected_work:', cwErr.message);
+        // Safe catch if table not present
       }
     }
 
@@ -7660,7 +7812,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       success: true,
       data: {
         ...submission,
-        writing_evaluation: writingEval || null
+        writing_evaluation: writingEval || null,
+        r2_result_path: r2ResultPath
       }
     });
   } catch (error) {
