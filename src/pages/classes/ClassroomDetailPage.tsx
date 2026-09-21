@@ -20,7 +20,10 @@ import {
   CheckCircle2,
   ChevronRight,
   Settings,
-  CalendarDays
+  CalendarDays,
+  GraduationCap,
+  Trophy,
+  Flame
 } from 'lucide-react';
 import {
   Classroom,
@@ -79,7 +82,7 @@ import { ClassroomDangerZone } from '@/components/classes/ClassroomDangerZone';
 import { CourseClassroomAssignment } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
-import { StudentMyLearning } from '@/components/classes/student/StudentMyLearning';
+import { StudentReportModal } from '@/components/classes/student/StudentReportModal';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -130,6 +133,8 @@ export const ClassroomDetailPage: React.FC = () => {
   const [aiReportModalOpen, setAiReportModalOpen] = useState(false);
   const [aiReportInitialTab, setAiReportInitialTab] = useState<ModalTab>('intelligence');
   const [studentAssessmentHistoryOpen, setStudentAssessmentHistoryOpen] = useState(false);
+  const [studentReportModalOpen, setStudentReportModalOpen] = useState(false);
+  const [studentReportInitialTab, setStudentReportInitialTab] = useState<'results' | 'corrected' | 'progress' | 'achievements'>('results');
 
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
@@ -919,8 +924,8 @@ export const ClassroomDetailPage: React.FC = () => {
                 if (isTeacher) {
                   setAiReportModalOpen(true);
                 } else {
-                  const el = document.getElementById('my-learning-container');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  setStudentReportInitialTab('results');
+                  setStudentReportModalOpen(true);
                 }
               }}
               className="bg-white hover:bg-amber-50/50 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 border border-amber-100 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.06)] hover:shadow-[0_8px_24px_-4px_rgba(217,119,6,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-between group"
@@ -1335,32 +1340,47 @@ export const ClassroomDetailPage: React.FC = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* SECTION 5 — STUDENT EXPERIENCE (My Learning) vs TEACHER INTELLIGENCE      */}
+        {/* SECTION 5 — STUDENT PERFORMANCE & CLASSROOM LEADERBOARD                   */}
         {/* ========================================================================= */}
-        {isTeacher ? (
-          <section className="bg-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 border border-slate-200/85 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] relative overflow-hidden">
-            {/* Section Header with Blue Indicator Line */}
-            <div className="space-y-1.5 pb-5 border-b border-slate-100">
+        <section className="bg-white rounded-3xl sm:rounded-[32px] p-6 sm:p-8 border border-slate-200/85 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] relative overflow-hidden">
+          
+          {/* Section Header with Blue Indicator Line */}
+          <div className="space-y-1.5 pb-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#026fc3] ring-4 ring-sky-100" />
                 <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-wider uppercase">
-                  Student Performance & Teaching Intelligence
+                  {isTeacher ? 'Student Performance & Teaching Intelligence' : 'Classroom Leaderboard & Rankings'}
                 </h2>
               </div>
               <div className="w-10 h-1 bg-gradient-to-r from-[#026fc3] to-sky-400 rounded-full" />
             </div>
 
-            <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
-              
-              {/* LEFT: Classroom Leaderboard (Podium + Top Students) (7-8 Cols) */}
-              <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
-                <ClassroomLeaderboard
-                  entries={leaderboard}
-                  currentUserId={user?.id}
-                />
-              </div>
+            {/* Quick entry button for students directly in section header */}
+            {!isTeacher && (
+              <button
+                type="button"
+                onClick={() => setStudentReportModalOpen(true)}
+                className="group inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#026fc3] hover:bg-[#025ca5] shadow-xs active:scale-95 transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <span>View My Report</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            )}
+          </div>
 
-              {/* RIGHT: AI Teaching Intelligence Feature Panel (4-5 Cols) */}
+          <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+            
+            {/* LEFT: Classroom Leaderboard (Podium + Top Students) (7-8 Cols for both teachers and students) */}
+            <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
+              <ClassroomLeaderboard
+                entries={leaderboard}
+                currentUserId={user?.id}
+              />
+            </div>
+
+            {/* RIGHT: TEACHER (AI Teaching Intelligence) vs STUDENT (My Report Card) */}
+            {isTeacher ? (
               <div className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-[28px] p-6 sm:p-7 text-white shadow-xl relative overflow-hidden flex flex-col justify-between space-y-5 border border-purple-900/50 min-h-[320px] bg-gradient-to-br from-[#121033] via-[#1a1848] to-[#0a0e24] group hover:shadow-2xl transition-all duration-300">
                 
                 {/* Background Artwork Image with Hover Zoom */}
@@ -1395,7 +1415,7 @@ export const ClassroomDetailPage: React.FC = () => {
                       setAiReportInitialTab('planner');
                       setAiReportModalOpen(true);
                     }}
-                    className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+                    className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <CalendarDays className="w-4 h-4" />
                     <span>AI Teaching Planner</span>
@@ -1406,24 +1426,78 @@ export const ClassroomDetailPage: React.FC = () => {
                       setAiReportInitialTab('intelligence');
                       setAiReportModalOpen(true);
                     }}
-                    className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center"
+                    className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center cursor-pointer"
                   >
                     Open Teaching Intelligence
                   </button>
                 </div>
 
               </div>
+            ) : (
+              /* STUDENT: Compact "My Report" Card */
+              <div className="lg:col-span-5 xl:col-span-4 rounded-2xl sm:rounded-[28px] p-6 sm:p-7 text-slate-900 shadow-lg relative overflow-hidden flex flex-col justify-between space-y-5 border border-sky-200/90 min-h-[320px] bg-gradient-to-br from-sky-50/90 via-white to-blue-50/50 group hover:shadow-xl transition-all duration-300">
+                {/* Subtle background glow */}
+                <div className="absolute top-0 right-0 -mr-12 -mt-12 w-48 h-48 rounded-full bg-sky-200/40 blur-2xl pointer-events-none" />
 
-            </div>
+                <div className="space-y-4 relative z-10">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#026fc3]/10 border border-[#026fc3]/20 text-xs font-black text-[#026fc3]">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    <span>Student Report</span>
+                  </div>
 
-          </section>
-        ) : (
-          <StudentMyLearning
-            classroomId={classroom.id}
-            classroomTitle={classroom.title}
-            currentUserId={user?.id}
-          />
-        )}
+                  <div className="space-y-2">
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
+                      Your Personal Learning Journey
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+                      Check your exam scores, review teacher and AI corrected work, track topic mastery, and view earned achievements.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Class Rank</div>
+                      <div className="text-base font-black text-[#026fc3] flex items-center gap-1 mt-0.5">
+                        <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                        <span>
+                          {leaderboard.findIndex(e => e.student_id === user?.id) >= 0
+                            ? `#${leaderboard.findIndex(e => e.student_id === user?.id) + 1}`
+                            : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Bitz Points</div>
+                      <div className="text-base font-black text-slate-900 flex items-center gap-1 mt-0.5">
+                        <Flame className="w-3.5 h-3.5 text-orange-500" />
+                        <span>
+                          {(leaderboard.find(e => e.student_id === user?.id)?.points || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 relative z-10 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setStudentReportModalOpen(true)}
+                    className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>View My Report</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <p className="text-[11px] text-center text-slate-500 font-medium">
+                    Private to your account • Visible only to you & your teacher
+                  </p>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+        </section>
 
         {/* ========================================================================= */}
         {/* SECTION 6 — CREATE A COURSE (Teacher Only)                                */}
@@ -1984,6 +2058,14 @@ export const ClassroomDetailPage: React.FC = () => {
           onClose={() => setAiReportModalOpen(false)}
         />
       )}
+
+      <StudentReportModal
+        isOpen={studentReportModalOpen}
+        classroomId={classroom.id}
+        classroomTitle={classroom.title}
+        initialTab={studentReportInitialTab}
+        onClose={() => setStudentReportModalOpen(false)}
+      />
 
       <LiveQuizBankModal
         isOpen={liveQuizBankOpen}
