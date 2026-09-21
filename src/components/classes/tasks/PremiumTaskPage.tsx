@@ -130,10 +130,10 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col items-center py-6 px-3 sm:px-6 bg-slate-100/80 min-h-screen">
+    <div className="w-full flex flex-col items-center py-3 px-1.5 sm:py-6 sm:px-6 bg-slate-100/80 min-h-screen">
       
       {/* Action Toolbar (Hidden during print) */}
-      <div className="w-full max-w-[8.5in] mb-4 flex items-center justify-between no-print px-2">
+      <div className="w-full max-w-[8.5in] mb-4 flex items-center justify-between no-print px-1 sm:px-2">
         <div className="flex items-center gap-2">
           <span className="px-3 py-1 bg-teal-50 text-teal-800 border border-teal-200 text-xs font-black rounded-full uppercase tracking-wider">
             TASK
@@ -156,7 +156,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
       </div>
 
       {/* Primary Content Canvas (US Letter Proportion: 8.5in × 11in) */}
-      <div className="w-full max-w-[8.5in] min-h-[11in] bg-white rounded-2xl shadow-xl border border-slate-200/90 p-8 sm:p-12 flex flex-col justify-between relative print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-full">
+      <div className="w-full max-w-[8.5in] min-h-[11in] bg-white rounded-2xl shadow-xl border border-slate-200/90 p-3.5 sm:p-8 lg:p-12 flex flex-col justify-between relative print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-full">
         
         <div className="space-y-6">
           
@@ -289,7 +289,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                       
                       {/* 1. Multiple Choice (MCQ) */}
                       {(q.type === 'mcq' || q.type === 'multiple_choice') && Array.isArray(q.options) && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 pl-8">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 pl-0 sm:pl-8">
                           {q.options.map((opt, oIdx) => {
                             const isSelected = String(currentAns) === String(opt) || String(currentAns) === String(oIdx);
                             return (
@@ -318,7 +318,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                       {/* 2. True / False */}
                       {q.type === 'true_false' && (
-                        <div className="flex items-center gap-3 pt-1 pl-8">
+                        <div className="flex items-center gap-3 pt-1 pl-0 sm:pl-8">
                           {['True', 'False'].map((opt) => {
                             const isSelected = String(currentAns).toLowerCase() === opt.toLowerCase();
                             return (
@@ -342,7 +342,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                       {/* 3. Fill in the Blank */}
                       {q.type === 'fill_blank' && (
-                        <div className="pt-1 pl-8">
+                        <div className="pt-1 pl-0 sm:pl-8">
                           <input
                             type="text"
                             disabled={submitted && !task.settings?.allow_retry}
@@ -357,7 +357,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                       {/* 4. Short Answer / Open-Ended (AI-Evaluated) */}
                       {(q.type === 'short_answer' || q.type === 'paragraph' || q.type === 'essay' || q.type === 'creative_writing' || q.type === 'open_ended') && (
-                        <div className="pt-1 pl-8 space-y-1">
+                        <div className="pt-1 pl-0 sm:pl-8 space-y-1">
                           <textarea
                             rows={3}
                             disabled={submitted && !task.settings?.allow_retry}
@@ -432,7 +432,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
           {/* Submission Box for tasks allowing responses or handwritten work */}
           {task.category !== 'resource' && (
-            <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
+            <div className="p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
@@ -475,15 +475,21 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               </div>
 
               {submissionMode === 'text' ? (
-                <textarea
-                  rows={questions.length > 0 ? 3 : 5}
-                  disabled={submitted}
-                  value={textResponse}
-                  onChange={(e) => setTextResponse(e.target.value)}
-                  placeholder="Type your explanation, summary, or response notes here..."
-                  style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                  className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 leading-relaxed"
-                />
+                <div className="w-full">
+                  <textarea
+                    rows={questions.length > 0 ? 4 : 8}
+                    disabled={submitted}
+                    value={textResponse}
+                    onChange={(e) => setTextResponse(e.target.value)}
+                    placeholder="Type your explanation, summary, or response notes here..."
+                    style={{ color: '#0f172a', backgroundColor: '#FFFFFF' }}
+                    className="w-full block min-h-[200px] sm:min-h-[240px] p-3.5 sm:p-4 bg-white border-2 border-slate-300 rounded-xl text-base sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 leading-relaxed shadow-xs"
+                  />
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500 px-1 font-medium">
+                    <span>{textResponse ? `${textResponse.trim().split(/\s+/).filter(Boolean).length} words` : '0 words'}</span>
+                    <span>AI-Powered Review & Learning Evidence</span>
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-3">
                   {handwrittenPreview ? (
@@ -547,9 +553,9 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           </div>
 
           {!isPreview && onSubmit && (
-            <div className="flex items-center gap-3 no-print">
+            <div className="flex items-center gap-3 no-print w-full sm:w-auto justify-end">
               {submitted ? (
-                <div className="flex items-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200">
+                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     Work Submitted {submission?.final_score != null ? `• Score: ${submission.final_score}/${task.points}` : ''}
@@ -560,7 +566,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   type="button"
                   disabled={isSubmitting || (submissionMode === 'handwritten' && !handwrittenBase64)}
                   onClick={handleSubmit}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-3 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm sm:text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <>

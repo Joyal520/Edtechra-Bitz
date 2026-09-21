@@ -76,8 +76,8 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-slate-100 w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-slate-100 w-full max-w-5xl h-full sm:h-auto rounded-none sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[95vh]">
         
         {/* Top Navbar */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 no-print">
@@ -104,7 +104,7 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="overflow-y-auto flex-1 p-2 sm:p-6">
+        <div className="overflow-y-auto flex-1 p-1 sm:p-6">
           {error && (
             <div className="max-w-[8.5in] mx-auto mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />

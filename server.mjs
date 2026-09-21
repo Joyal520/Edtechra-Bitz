@@ -3432,6 +3432,8 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
 
     // From student_corrected_work
     correctedWorkRecords.forEach((item) => {
+      const fbMeta = item.feedback_metadata || {};
+      const aiMeta = item.ai_evaluation_metadata || {};
       correctedWork.push({
         id: item.id,
         title: item.title,
@@ -3445,6 +3447,16 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         original_url: item.original_file_url,
         corrected_r2_key: item.corrected_r2_key,
         corrected_url: item.corrected_file_url,
+        original_text: fbMeta.original_text || null,
+        text_response: fbMeta.original_text || null,
+        corrected_work: fbMeta.corrected_work || null,
+        mistakes: fbMeta.mistakes || [],
+        corrections: fbMeta.corrections || [],
+        strengths: fbMeta.strengths || [],
+        grammar_errors: fbMeta.grammar_errors || [],
+        spelling_errors: fbMeta.spelling_errors || [],
+        feedback_metadata: fbMeta,
+        ai_evaluation_metadata: aiMeta,
         date: item.created_at
       });
     });
@@ -3474,7 +3486,12 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     (taskSubmissions || []).forEach((sub) => {
       const isWriting = Boolean(sub.text_response) || sub.assignment?.title?.toLowerCase().includes('writing') || sub.is_ai_graded;
       if (isWriting && (sub.teacher_feedback || sub.final_score != null || sub.points_awarded != null)) {
-        if (!correctedWork.some((c) => c.id === sub.id)) {
+        if (!correctedWork.some((c) => c.id === sub.id || (c.title === sub.assignment?.title && sub.text_response))) {
+          const writingQa = Array.isArray(sub.question_answers)
+            ? sub.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response')
+            : null;
+          const wEval = writingQa?.writing_evaluation;
+
           correctedWork.push({
             id: sub.id,
             title: sub.assignment?.title || 'Writing Task',
@@ -3483,8 +3500,30 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             score: sub.final_score ?? sub.points_awarded,
             max_score: sub.assignment?.points || 100,
             percentage: sub.percentage,
-            feedback: sub.teacher_feedback || (sub.question_answers?.[0]?.feedback) || 'Evaluation completed.',
+            feedback: sub.teacher_feedback || writingQa?.feedback || 'Evaluation completed.',
             text_response: sub.text_response,
+            original_text: sub.text_response,
+            corrected_work: wEval?.corrected_work || null,
+            mistakes: wEval?.mistakes || [],
+            corrections: wEval?.corrections || [],
+            strengths: wEval?.strengths || [],
+            grammar_errors: wEval?.grammar_errors || [],
+            spelling_errors: wEval?.spelling_errors || [],
+            feedback_metadata: wEval ? {
+              original_text: sub.text_response,
+              corrected_work: wEval.corrected_work,
+              mistakes: wEval.mistakes || [],
+              corrections: wEval.corrections || [],
+              strengths: wEval.strengths || [],
+              grammar_errors: wEval.grammar_errors || [],
+              spelling_errors: wEval.spelling_errors || []
+            } : null,
+            ai_evaluation_metadata: wEval ? {
+              category: wEval.category || 'Grammar',
+              topic: wEval.topic || 'Subject-Verb Agreement',
+              skills: wEval.skills || ['Grammar & Mechanics'],
+              breakdown: wEval.breakdown || []
+            } : null,
             date: sub.submitted_at || sub.completed_at
           });
         }
@@ -7433,12 +7472,22 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     }
 
     // Execute server-authoritative hybrid auto-grading pipeline
-    const gradingResult = await gradeTaskSubmission(task, studentAnswers, serverOpenAI);
+    const gradingResult = await gradeTaskSubmission(
+      task,
+      studentAnswers,
+      serverOpenAI,
+      textResponse,
+      process.env.GEMINI_API_KEY
+    );
 
     const isGraded = gradingResult.final_score != null;
     const submissionStatus = isGraded ? 'graded' : 'submitted';
+    const writingEval = gradingResult.writing_evaluation;
 
-    // Upsert into assignment_submissions
+    // Determine teacher feedback from writing evaluation or scoring summary
+    const feedbackText = writingEval?.feedback || (isGraded ? `Evaluation complete. Score: ${gradingResult.final_score}/${task.points || 100}` : null);
+
+    // Upsert into assignment_submissions (preserving student's original text)
     const { data: submission, error: subErr } = await serverSupabase
       .from('assignment_submissions')
       .upsert(
@@ -7455,6 +7504,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
           ai_score: gradingResult.ai_score,
           percentage: gradingResult.percentage,
           is_ai_graded: gradingResult.is_ai_graded,
+          teacher_feedback: feedbackText,
           task_version: task.version || 1,
           completed_at: isGraded ? new Date().toISOString() : null,
           submitted_at: new Date().toISOString(),
@@ -7466,6 +7516,103 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       .single();
 
     if (subErr) throw subErr;
+
+    // If writing evaluation is present, upsert into student_corrected_work
+    if (writingEval && submission) {
+      try {
+        const { data: existingCw } = await serverSupabase
+          .from('student_corrected_work')
+          .select('id')
+          .eq('student_id', authData.user.id)
+          .eq('task_id', taskId)
+          .maybeSingle();
+
+        const cwPayload = {
+          student_id: authData.user.id,
+          classroom_id: task.classroom_id,
+          task_id: taskId,
+          submission_id: submission.id,
+          source_type: 'writing_task',
+          title: (task.title || 'Writing Task').trim(),
+          file_type: 'document',
+          score: writingEval.score,
+          max_score: writingEval.max_score,
+          percentage: writingEval.percentage,
+          status: 'completed',
+          feedback_text: writingEval.feedback,
+          feedback_metadata: {
+            original_text: textResponse,
+            corrected_work: writingEval.corrected_work,
+            mistakes: writingEval.mistakes || [],
+            corrections: writingEval.corrections || [],
+            strengths: writingEval.strengths || [],
+            grammar_errors: writingEval.grammar_errors || [],
+            spelling_errors: writingEval.spelling_errors || []
+          },
+          ai_evaluation_metadata: {
+            category: writingEval.category || 'Grammar',
+            topic: writingEval.topic || 'Subject-Verb Agreement',
+            skills: writingEval.skills || ['Grammar & Mechanics'],
+            breakdown: writingEval.breakdown || []
+          },
+          updated_at: new Date().toISOString()
+        };
+
+        if (existingCw?.id) {
+          await serverSupabase
+            .from('student_corrected_work')
+            .update(cwPayload)
+            .eq('id', existingCw.id);
+        } else {
+          await serverSupabase
+            .from('student_corrected_work')
+            .insert({
+              ...cwPayload,
+              created_at: new Date().toISOString()
+            });
+        }
+      } catch (cwErr) {
+        console.warn('[TaskSubmit] Could not upsert student_corrected_work:', cwErr.message);
+      }
+    }
+
+    // Award points to classroom_points ledger
+    if (isGraded && gradingResult.final_score > 0) {
+      try {
+        const pointsToAward = Math.round(gradingResult.final_score);
+        const { data: existingPt } = await serverSupabase
+          .from('classroom_points')
+          .select('id')
+          .eq('classroom_id', task.classroom_id)
+          .eq('student_id', authData.user.id)
+          .eq('source_type', 'assignment')
+          .eq('source_id', taskId)
+          .maybeSingle();
+
+        if (existingPt) {
+          await serverSupabase
+            .from('classroom_points')
+            .update({
+              points: pointsToAward,
+              reason: `Completed task: ${task.title || 'Task'}`
+            })
+            .eq('id', existingPt.id);
+        } else {
+          await serverSupabase
+            .from('classroom_points')
+            .insert({
+              classroom_id: task.classroom_id,
+              student_id: authData.user.id,
+              points: pointsToAward,
+              reason: `Completed task: ${task.title || 'Task'}`,
+              source_type: 'assignment',
+              source_id: taskId
+            });
+        }
+      } catch (ptErr) {
+        console.warn('[TaskSubmit] Could not award classroom points:', ptErr.message);
+      }
+    }
 
     res.json({
       success: true,

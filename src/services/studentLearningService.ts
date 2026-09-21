@@ -66,6 +66,15 @@ export interface StudentCorrectedWorkItem {
   breakdown?: any;
   text_response?: string | null;
   content_text?: string | null;
+  original_text?: string | null;
+  corrected_work?: string | null;
+  mistakes?: Array<{ original: string; correction: string; explanation?: string }>;
+  corrections?: string[];
+  strengths?: string[];
+  grammar_errors?: Array<{ text: string; suggestion: string; rule?: string }>;
+  spelling_errors?: Array<{ text: string; suggestion: string }>;
+  feedback_metadata?: any;
+  ai_evaluation_metadata?: any;
   original_r2_key?: string | null;
   original_url?: string | null;
   corrected_r2_key?: string | null;

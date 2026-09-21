@@ -495,7 +495,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {correctedWork.map((item) => {
-                        const isAi = item.source_type === 'ocr_handwritten' || item.source_type === 'challenge';
+                        const isAi = item.source_type === 'ocr_handwritten' || item.source_type === 'challenge' || item.source_type === 'writing_task' || Boolean(item.corrected_work);
                         return (
                           <div
                             key={item.id}

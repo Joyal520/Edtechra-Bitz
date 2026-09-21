@@ -43,6 +43,26 @@ export function extractConceptHierarchy(ev) {
   const combined = `${rawTitle} ${rawTopic} ${metaText}`.trim();
 
   // 1. Recognized pedagogical topics and concepts (check first before generic colon splitting)
+  if (/subject[- ]verb agreement|subject verb agreement|singular subject|hobby are|it give/i.test(combined)) {
+    return {
+      category: 'Grammar',
+      topic: 'Subject-Verb Agreement',
+      skill: 'Singular & Plural Concord',
+      displayName: 'Subject-Verb Agreement — Singular & Plural Concord',
+      isPlaceholder: false
+    };
+  }
+
+  if (/spelling/i.test(combined)) {
+    return {
+      category: 'Spelling',
+      topic: 'Spelling',
+      skill: 'Accurate Orthography',
+      displayName: 'Spelling — Accurate Orthography',
+      isPlaceholder: false
+    };
+  }
+
   if (/simple past/i.test(combined)) {
     const isNeg = /negative|did\s*not|didn't/i.test(combined);
     return {
@@ -1094,6 +1114,77 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     }
   } catch (ocrErr) {
     console.warn('[Analytics] OCR breakdown enrichment notice:', ocrErr?.message);
+  }
+
+  // Enrich assignment / task events with detailed criteria breakdowns and writing evaluations
+  try {
+    const { data: subBreakdowns } = await serverSupabase
+      .from('assignment_submissions')
+      .select('id, question_answers')
+      .eq('classroom_id', classroomId)
+      .in('status', ['graded', 'submitted', 'completed']);
+
+    if (subBreakdowns && subBreakdowns.length > 0) {
+      const subMap = new Map();
+      subBreakdowns.forEach(sub => {
+        if (Array.isArray(sub.question_answers)) {
+          const writingQa = sub.question_answers.find(qa => qa.writing_evaluation || qa.question_id === 'writing_response');
+          const wEval = writingQa?.writing_evaluation;
+          if (wEval && Array.isArray(wEval.breakdown)) {
+            subMap.set(sub.id, {
+              breakdown_json: wEval.breakdown,
+              topic: wEval.topic,
+              skills: wEval.skills,
+              mistakes: wEval.mistakes
+            });
+          }
+        }
+      });
+
+      events.forEach(e => {
+        if (e.activity_type === 'assignment' && subMap.has(e.id)) {
+          const enriched = subMap.get(e.id);
+          e.metadata = { ...(e.metadata || {}), breakdown_json: enriched.breakdown_json };
+          if (enriched.topic && (!e.topic || e.topic === 'General' || e.topic === 'Assignment' || e.topic === 'Task')) {
+            e.topic = enriched.topic;
+          }
+        }
+      });
+    }
+  } catch (subErr) {
+    console.warn('[Analytics] Assignment breakdown enrichment notice:', subErr?.message);
+  }
+
+  // Enrich from student_corrected_work if available
+  try {
+    const { data: cwList } = await serverSupabase
+      .from('student_corrected_work')
+      .select('submission_id, ai_evaluation_metadata, feedback_metadata')
+      .eq('classroom_id', classroomId);
+
+    if (cwList && cwList.length > 0) {
+      const cwMap = new Map();
+      cwList.forEach(cw => {
+        if (cw.submission_id) {
+          cwMap.set(cw.submission_id, cw);
+        }
+      });
+
+      events.forEach(e => {
+        if (e.activity_type === 'assignment' && cwMap.has(e.id)) {
+          const cwItem = cwMap.get(e.id);
+          const aiMeta = cwItem.ai_evaluation_metadata;
+          if (aiMeta && Array.isArray(aiMeta.breakdown)) {
+            e.metadata = { ...(e.metadata || {}), breakdown_json: aiMeta.breakdown };
+          }
+          if (aiMeta?.topic && (!e.topic || e.topic === 'General' || e.topic === 'Assignment' || e.topic === 'Task')) {
+            e.topic = aiMeta.topic;
+          }
+        }
+      });
+    }
+  } catch (cwErr) {
+    console.warn('[Analytics] Corrected work enrichment notice:', cwErr?.message);
   }
 
   // Sort events chronologically (most recent first)
