@@ -461,9 +461,28 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
                     </span>
                   </div>
                   {ev.topic && (
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-[#475569] mt-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#087477] mt-1 flex-wrap">
                       <Tag className="w-3 h-3" />
-                      {ev.topic}
+                      <span>{ev.displayName || ev.topic}</span>
+                      {ev.category && (
+                        <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[9px] font-bold uppercase">
+                          {ev.category}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Detected Error Snippets if available */}
+                  {Array.isArray(ev.metadata?.detected_errors) && ev.metadata.detected_errors.length > 0 && (
+                    <div className="mt-1.5 text-[11px] bg-amber-50 border border-amber-200 rounded px-2 py-1 space-y-0.5">
+                      <span className="font-bold text-amber-800 text-[10px] uppercase">Detected Errors:</span>
+                      {ev.metadata.detected_errors.slice(0, 2).map((err: any, eIdx: number) => (
+                        <div key={eIdx} className="flex items-center gap-1.5 text-[11px]">
+                          <span className="line-through text-rose-600">{err.student_error || err.text}</span>
+                          <span className="text-slate-400">→</span>
+                          <span className="text-emerald-700 font-bold">{err.correct_form || err.suggestion || err.correction}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

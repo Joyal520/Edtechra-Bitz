@@ -1,8 +1,8 @@
-// ============================================================================
-// EDTECHRA DIGITAL CLASSROOM: DETERMINISTIC CLASSROOM ANALYTICS ENGINE (PHASE 2)
-// High-performance, zero-mock, database-grounded statistical calculation service.
-// Unifies and transforms events from public.v_classroom_learning_events.
-// ============================================================================
+import {
+  CANONICAL_CONCEPTS,
+  normalizeConcept as normalizeCanonicalConcept,
+  extractStructuredErrorsFromEvent
+} from './conceptNormalization.mjs';
 
 export const ANALYTICS_CONFIG = {
   STRONG_SCORE_THRESHOLD: 75,
@@ -20,8 +20,9 @@ export const ANALYTICS_CONFIG = {
 
 export function normalizeConcept(rawTopic) {
   if (!rawTopic) return 'General';
+  const canonical = normalizeCanonicalConcept(rawTopic);
+  if (canonical) return canonical.displayName;
   let topic = rawTopic.trim();
-  // Remove 'assignment' literal fallback
   if (topic.toLowerCase() === 'assignment' || topic.toLowerCase() === 'task') return 'General Task';
   return topic;
 }
@@ -30,154 +31,45 @@ export function normalizeConcept(rawTopic) {
  * Normalizes an educational activity into Category -> Topic -> Skill hierarchy.
  * Extracts granular teaching concepts from titles, topics, and rubric metadata.
  * @param {Object} ev - Learning event object
- * @returns {{ category: string, topic: string, skill: string, displayName: string, isPlaceholder: boolean }}
+ * @returns {{ category: string, topic: string, skill: string, displayName: string, teachAction: string, commonError: any, isPlaceholder: boolean }}
  */
 export function extractConceptHierarchy(ev) {
   if (!ev) {
-    return { category: 'General', topic: 'General', skill: 'Core Concepts', displayName: 'General', isPlaceholder: true };
+    return { category: 'General', topic: 'General', skill: 'Core Concepts', displayName: 'General', teachAction: '', commonError: null, isPlaceholder: true };
   }
+
+  // 1. Check inner diagnostic meta or detected errors from OCR / writing evaluation
+  const meta = ev.metadata || {};
+  let detectedConcept = meta.concept || null;
+  if (!detectedConcept && Array.isArray(meta.breakdown_json)) {
+    const diagMeta = meta.breakdown_json.find(b => b && b.__is_diagnostic_meta);
+    if (diagMeta?.concept) detectedConcept = diagMeta.concept;
+  }
+  if (!detectedConcept && meta.writing_evaluation?.topic) {
+    detectedConcept = meta.writing_evaluation.topic;
+  }
+
   const rawTopic = (ev.topic || '').trim();
-  const rawTitle = (ev.activity_title || '').trim();
+  const rawTitle = (ev.activity_title || ev.activityTitle || '').trim();
   const category = (ev.category || '').trim();
-  const metaText = ev.metadata ? (typeof ev.metadata === 'string' ? ev.metadata : JSON.stringify(ev.metadata)) : '';
-  const combined = `${rawTitle} ${rawTopic} ${metaText}`.trim();
+  const metaText = typeof ev.metadata === 'string' ? ev.metadata : JSON.stringify(ev.metadata || {});
 
-  // 1. Recognized pedagogical topics and concepts (check first before generic colon splitting)
-  if (/subject[- ]verb agreement|subject verb agreement|singular subject|hobby are|it give/i.test(combined)) {
+  const primaryCandidate = detectedConcept || `${rawTitle} ${rawTopic} ${metaText}`;
+  const canonical = normalizeCanonicalConcept(primaryCandidate, category) || normalizeCanonicalConcept(`${rawTitle} ${rawTopic}`, category);
+
+  if (canonical) {
     return {
-      category: 'Grammar',
-      topic: 'Subject-Verb Agreement',
-      skill: 'Singular & Plural Concord',
-      displayName: 'Subject-Verb Agreement — Singular & Plural Concord',
+      category: canonical.category,
+      topic: canonical.topic,
+      skill: canonical.skill,
+      displayName: canonical.displayName,
+      teachAction: canonical.teachAction,
+      commonError: canonical.commonError,
       isPlaceholder: false
     };
   }
 
-  if (/spelling/i.test(combined)) {
-    return {
-      category: 'Spelling',
-      topic: 'Spelling',
-      skill: 'Accurate Orthography',
-      displayName: 'Spelling — Accurate Orthography',
-      isPlaceholder: false
-    };
-  }
-
-  if (/simple past/i.test(combined)) {
-    const isNeg = /negative|did\s*not|didn't/i.test(combined);
-    return {
-      category: 'Grammar',
-      topic: 'Simple Past',
-      skill: isNeg ? 'Negative Forms' : 'Past Tense Forms',
-      displayName: isNeg ? 'Simple Past — Negative Forms' : 'Simple Past — Past Tense Forms',
-      isPlaceholder: false
-    };
-  }
-
-  if (/simple present/i.test(combined)) {
-    const isNeg = /negative|does\s*not|doesn't|do\s*not|don't|not\s+like/i.test(combined);
-    return {
-      category: 'Grammar',
-      topic: 'Simple Present',
-      skill: isNeg ? 'Negative Forms' : 'Affirmative & Questions',
-      displayName: isNeg ? 'Simple Present — Negative Forms' : 'Simple Present — Affirmative & Questions',
-      isPlaceholder: false
-    };
-  }
-
-  if (/preposition/i.test(combined) || /at.*in.*on/i.test(combined)) {
-    return {
-      category: 'Grammar',
-      topic: 'Prepositions',
-      skill: 'at / in / on',
-      displayName: 'Prepositions — at / in / on',
-      isPlaceholder: false
-    };
-  }
-
-  if (/conjunction/i.test(combined)) {
-    return {
-      category: 'Grammar',
-      topic: 'Conjunctions',
-      skill: 'Connecting Clauses (and/but/so/or)',
-      displayName: 'Conjunctions — Connecting Clauses',
-      isPlaceholder: false
-    };
-  }
-
-  if (/am,\s*is,\s*are|was,\s*were|be verbs/i.test(combined)) {
-    return {
-      category: 'Grammar',
-      topic: 'Be Verbs',
-      skill: 'am / is / are / was / were',
-      displayName: 'Be Verbs — am / is / are / was / were',
-      isPlaceholder: false
-    };
-  }
-
-  if (/paragraph writing/i.test(combined) || category === 'Paragraph Writing') {
-    return {
-      category: 'Writing',
-      topic: 'Paragraph Writing',
-      skill: 'Organization & Flow',
-      displayName: 'Paragraph Writing — Organization & Flow',
-      isPlaceholder: false
-    };
-  }
-
-  if (/essay writing/i.test(combined) || category === 'Essay Writing') {
-    return {
-      category: 'Writing',
-      topic: 'Essay Writing',
-      skill: 'Structure & Development',
-      displayName: 'Essay Writing — Structure & Development',
-      isPlaceholder: false
-    };
-  }
-
-  if (/story writing/i.test(combined) || /mermaids/i.test(combined) || category === 'Story Writing' || category === 'competition') {
-    return {
-      category: 'Writing',
-      topic: 'Creative Story Writing',
-      skill: 'Narrative Development',
-      displayName: 'Creative Writing — Narrative Development',
-      isPlaceholder: false
-    };
-  }
-
-  if (/animal facts|general knowledge/i.test(combined)) {
-    return {
-      category: 'Reading',
-      topic: 'Reading Comprehension',
-      skill: 'Factual Recall & Context',
-      displayName: 'Reading Comprehension — Factual Recall',
-      isPlaceholder: false
-    };
-  }
-
-  // 2. Explicit separator: "Topic — Skill", "Topic: Skill", "Topic - Skill", "Topic – Skill"
-  for (const sep of [' — ', ' – ', ' : ', ': ', ' - ']) {
-    if (combined.includes(sep)) {
-      const parts = combined.split(sep);
-      if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
-        const top = parts[0].trim().replace(/^(Unit Test on the|Unit Test on|Quiz on|Assessment:|Test on)\s*/i, '');
-        const skl = parts[1].trim();
-        let cat = 'Grammar';
-        if (/writing|paragraph|essay|story/i.test(top) || /writing|paragraph|essay|story/i.test(skl)) cat = 'Writing';
-        else if (/reading|comprehension/i.test(top) || /reading|comprehension/i.test(skl)) cat = 'Reading';
-        else if (/vocabulary/i.test(top) || /vocabulary/i.test(skl)) cat = 'Vocabulary';
-        return {
-          category: cat,
-          topic: top,
-          skill: skl,
-          displayName: `${top} — ${skl}`,
-          isPlaceholder: false
-        };
-      }
-    }
-  }
-
-  // Check for placeholder/empty topics to omit
+  // Fallback placeholder check
   const lower = (rawTopic || rawTitle || '').toLowerCase().trim();
   if (!lower || lower === 'other' || lower === 'general task' || lower === 'assignment' || lower === 'task' || lower === 'science') {
     return {
@@ -185,16 +77,20 @@ export function extractConceptHierarchy(ev) {
       topic: rawTopic || 'General',
       skill: 'General Review',
       displayName: rawTopic || 'General',
+      teachAction: '',
+      commonError: null,
       isPlaceholder: true
     };
   }
 
-  const cleanTopic = normalizeConcept(rawTopic || rawTitle);
+  const cleanTopic = rawTopic || rawTitle;
   return {
     category: category || 'General',
     topic: cleanTopic,
     skill: 'Core Comprehension',
     displayName: `${cleanTopic} — Core Concepts`,
+    teachAction: `Review foundational concepts for ${cleanTopic} with guided practice.`,
+    commonError: null,
     isPlaceholder: false
   };
 }
@@ -742,6 +638,8 @@ export function computeTopicAnalytics(events = [], options = {}) {
         skill: hierarchy.skill,
         displayName: hierarchy.displayName,
         category: hierarchy.category,
+        teachAction: hierarchy.teachAction || null,
+        defaultCommonError: hierarchy.commonError || null,
         isPlaceholder: hierarchy.isPlaceholder,
         events: []
       });
@@ -752,6 +650,9 @@ export function computeTopicAnalytics(events = [], options = {}) {
     const breakdown = Array.isArray(ev.metadata?.breakdown_json) ? ev.metadata.breakdown_json : [];
     for (const crit of breakdown) {
       if (!crit || !crit.criterion || crit.max <= 0 || crit.score == null) continue;
+      // Skip diagnostic metadata marker
+      if (crit.__is_diagnostic_meta) continue;
+
       const critPct = Number(((crit.score / crit.max) * 100).toFixed(2));
       const critName = crit.criterion.trim();
       let parentTopic = hierarchy.topic && hierarchy.topic !== 'Other' ? hierarchy.topic : 'Writing';
@@ -776,14 +677,22 @@ export function computeTopicAnalytics(events = [], options = {}) {
         parentCat = 'Vocabulary';
       }
 
-      const critKey = `${parentTopic} — ${critName}`;
+      // Check canonical normalization for the criterion
+      const critCanonical = normalizeCanonicalConcept(critName, parentCat);
+      const critKey = critCanonical ? critCanonical.displayName : `${parentTopic} — ${critName}`;
+      const cTopic = critCanonical ? critCanonical.topic : parentTopic;
+      const cSkill = critCanonical ? critCanonical.skill : critName;
+      const cCat = critCanonical ? critCanonical.category : parentCat;
+
       if (!topicGroups.has(critKey)) {
         topicGroups.set(critKey, {
           key: critKey,
-          topic: parentTopic,
-          skill: critName,
+          topic: cTopic,
+          skill: cSkill,
           displayName: critKey,
-          category: parentCat,
+          category: cCat,
+          teachAction: critCanonical?.teachAction || null,
+          defaultCommonError: critCanonical?.commonError || null,
           isPlaceholder: false,
           events: []
         });
@@ -791,7 +700,7 @@ export function computeTopicAnalytics(events = [], options = {}) {
       topicGroups.get(critKey).events.push({
         ...ev,
         percentage: critPct,
-        topic: parentTopic
+        topic: cTopic
       });
     }
   }
@@ -852,6 +761,10 @@ export function computeTopicAnalytics(events = [], options = {}) {
     const distinctSources = new Set();
     const friendlySourcesSet = new Set();
 
+    // Extract structured student errors from all events in this group
+    const extractedErrorsList = [];
+    const seenErrorPairs = new Set();
+
     // Track affected students (score < 70)
     const studentScoreSums = new Map();
     for (const ev of scoredEvents) {
@@ -872,6 +785,16 @@ export function computeTopicAnalytics(events = [], options = {}) {
         const st = studentScoreSums.get(ev.student_id);
         st.sum += Number(ev.percentage);
         st.count += 1;
+      }
+
+      // Collect structured error pairs
+      const errors = extractStructuredErrorsFromEvent(ev);
+      for (const err of errors) {
+        const pairKey = `${err.student_error}->${err.correct_form}`;
+        if (!seenErrorPairs.has(pairKey)) {
+          seenErrorPairs.add(pairKey);
+          extractedErrorsList.push(err);
+        }
       }
     }
 
@@ -902,10 +825,29 @@ export function computeTopicAnalytics(events = [], options = {}) {
     const sourcesCount = distinctSources.size;
     const sourcesList = Array.from(friendlySourcesSet);
 
+    // Determine confidence: Confirmed Gap (>= 2 sources or multi-student) vs Early Signal
     let confidence = 'DEVELOPING';
-    if (sourcesCount >= 2 && (averagePercentage != null && averagePercentage < 70)) confidence = 'CONFIRMED GAP';
-    else if (sourcesCount < 2 && (averagePercentage != null && averagePercentage < 70)) confidence = 'EARLY SIGNAL';
-    else if (averagePercentage != null && averagePercentage >= 75) confidence = 'STRONG';
+    if ((sourcesCount >= 2 || affectedStudentsCount >= 2) && (averagePercentage != null && averagePercentage < 70)) {
+      confidence = 'Confirmed gap';
+    } else if (sourcesCount < 2 && (averagePercentage != null && averagePercentage < 70)) {
+      confidence = 'Early signal';
+    } else if (averagePercentage != null && averagePercentage >= 75) {
+      confidence = 'Strong';
+    }
+
+    // Synthesize structured commonErrors
+    let commonErrors = extractedErrorsList.slice(0, 3).map(e => ({
+      student_error: e.student_error,
+      correct_form: e.correct_form
+    }));
+
+    if (commonErrors.length === 0 && group.defaultCommonError) {
+      commonErrors = [group.defaultCommonError];
+    }
+
+    // Canonical teach action
+    const canonicalObj = normalizeCanonicalConcept(group.displayName) || normalizeCanonicalConcept(group.topic);
+    const teachAction = group.teachAction || canonicalObj?.teachAction || `Review foundational concepts for ${group.displayName} with direct examples and guided sentence practice.`;
 
     // Topic status determination
     let status = 'steady';
@@ -935,12 +877,18 @@ export function computeTopicAnalytics(events = [], options = {}) {
       scoreChangePercentagePoints: scoreChange,
       status,
       confidence,
-      confidenceLabel: sourcesCount >= 2 ? `CONFIRMED GAP • ${sourcesCount} evidence sources` : 'EARLY SIGNAL • 1 evidence source',
+      confidenceLabel: confidence === 'Confirmed gap'
+        ? `Confirmed gap • ${sourcesCount} evidence source${sourcesCount > 1 ? 's' : ''}`
+        : `Early signal • ${sourcesCount} evidence source`,
       sources: sourcesList,
       sourcesCount,
       sourcesList,
       evidence: evidenceList,
-      evidenceBreakdown
+      evidenceBreakdown,
+      commonErrors,
+      teachAction,
+      recommended_action: teachAction,
+      why: `Class accuracy is ${averagePercentage != null ? Math.round(averagePercentage) : 0}% with ${affectedStudentsCount} of ${options.totalStudents || participatingStudents.size} students affected.`
     });
   }
 
@@ -1616,46 +1564,72 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   // 9. Chronological Performance Over Time Calculation
   const performanceOverTime = computePerformanceOverTime(normalizedEvents);
 
-  // 10. Granular Learning Gap Priority (Ranked by affected students and multi-source confidence)
-  const learningGapPriority = meaningfulTopics
+  // 10. Evidence Summary Counts across all 5 Sources
+  const evidenceSummaryCounts = {
+    ocr: normalizedEvents.filter(e => e.activityType === 'ocr' || e.rawActivityType === 'ocr').length,
+    tasks: normalizedEvents.filter(e => e.activityType === 'task' || e.rawActivityType === 'assignment').length,
+    live_quizzes: normalizedEvents.filter(e => e.activityType === 'live_quiz' || e.rawActivityType === 'quiz').length,
+    exams: normalizedEvents.filter(e => e.activityType === 'exam' || e.rawActivityType === 'assessment').length,
+    competitions: normalizedEvents.filter(e => e.activityType === 'competition' || e.rawActivityType === 'ai_challenge').length,
+    total: normalizedEvents.length
+  };
+
+  // 11. Granular Learning Gap Priority (Ranked by affected students and multi-source confidence)
+  // Deduplicate strictly by displayName
+  const gapMap = new Map();
+  meaningfulTopics
     .filter(t => t.averagePercentage != null && (t.averagePercentage < 70 || t.affectedStudentsCount >= 2))
-    .map(t => {
-      const affectedRatio = totalStudents > 0 ? (t.affectedStudentsCount / totalStudents) : 0.5;
-      const isMultiSource = t.sourcesCount >= 2;
-      const priority = Number(((affectedRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0)).toFixed(2));
-      return {
-        ...t,
-        category: t.category || 'General',
-        topic: t.displayName || t.topic,
-        baseTopic: t.topic,
-        skill: t.skill,
-        displayName: t.displayName || t.topic,
-        accuracy: Math.round(t.averagePercentage),
-        averageAccuracy: Math.round(t.averagePercentage),
-        average_accuracy: Math.round(t.averagePercentage),
-        studentCount: t.affectedStudentsCount,
-        affectedStudentsCount: t.affectedStudentsCount,
-        students_affected: t.affectedStudentsCount,
-        studentsAffected: t.affectedStudentsCount,
-        totalStudents: totalStudents,
-        students_total: totalStudents,
-        studentsTotal: totalStudents,
-        sources: Array.isArray(t.sourcesList) && t.sourcesList.length > 0 ? t.sourcesList : (t.sources || ['Assessment']),
-        sourcesCount: t.sourcesCount,
-        sourcesList: t.sourcesList,
-        evidence_sources: t.sourcesCount,
-        evidenceSources: t.sourcesCount,
-        confidence: isMultiSource ? 'Confirmed gap' : 'Early signal',
-        confidence_label: isMultiSource ? `Confirmed gap • ${t.sourcesCount} evidence sources` : 'Early signal • 1 evidence source',
-        evidence: t.evidence || [],
-        why: `Class accuracy is ${Math.round(t.averagePercentage)}% with ${t.affectedStudentsCount} of ${totalStudents} students affected across ${t.sourcesCount} source(s).`,
-        recommended_action: `Review ${t.topic} (${t.skill}) with structured modeling and guided practice before re-assessing.`
-      };
-    })
-    .sort((a, b) => b.priority - a.priority);
+    .forEach(t => {
+      const key = t.displayName || t.topic;
+      if (!gapMap.has(key)) {
+        const affectedRatio = totalStudents > 0 ? (t.affectedStudentsCount / totalStudents) : 0.5;
+        const isMultiSource = (t.sourcesCount >= 2) || (t.affectedStudentsCount >= 2);
+        const priority = Number(((affectedRatio) * (100 - t.averagePercentage) * (isMultiSource ? 1.5 : 1.0)).toFixed(2));
+        const conf = isMultiSource ? 'Confirmed gap' : 'Early signal';
+
+        gapMap.set(key, {
+          ...t,
+          category: t.category || 'General',
+          topic: t.displayName || t.topic,
+          baseTopic: t.topic,
+          skill: t.skill,
+          displayName: t.displayName || t.topic,
+          accuracy: Math.round(t.averagePercentage),
+          averageAccuracy: Math.round(t.averagePercentage),
+          average_accuracy: Math.round(t.averagePercentage),
+          studentCount: t.affectedStudentsCount,
+          affectedStudentsCount: t.affectedStudentsCount,
+          students_affected: t.affectedStudentsCount,
+          studentsAffected: t.affectedStudentsCount,
+          totalStudents: totalStudents,
+          students_total: totalStudents,
+          studentsTotal: totalStudents,
+          sources: Array.isArray(t.sourcesList) && t.sourcesList.length > 0 ? t.sourcesList : (t.sources || ['Assessment']),
+          sourcesCount: t.sourcesCount,
+          sourcesList: t.sourcesList,
+          evidence_sources: t.sourcesCount,
+          evidenceSources: t.sourcesCount,
+          confidence: conf,
+          confidence_label: conf === 'Confirmed gap'
+            ? `Confirmed gap • ${t.sourcesCount} evidence source${t.sourcesCount > 1 ? 's' : ''}`
+            : `Early signal • ${t.sourcesCount} evidence source`,
+          commonErrors: t.commonErrors || [],
+          common_errors: t.commonErrors || [],
+          teachAction: t.teachAction,
+          recommended_action: t.teachAction || t.recommended_action,
+          evidence: t.evidence || [],
+          why: `Class accuracy is ${Math.round(t.averagePercentage)}% with ${t.affectedStudentsCount} of ${totalStudents} students affected across ${t.sourcesCount} source(s).`,
+          priority
+        });
+      }
+    });
+
+  const learningGapPriority = Array.from(gapMap.values()).sort((a, b) => b.priority - a.priority);
 
   // Merge spelling diagnosis into learning gaps if accuracy is below mastery (<70%)
-  if (spellingDiagnosis && spellingDiagnosis.accuracy < 70 && !learningGapPriority.some(g => g.category === 'Spelling' || g.topic === 'Spelling' || g.displayName?.includes('Spelling'))) {
+  if (spellingDiagnosis && spellingDiagnosis.accuracy < 70 && !gapMap.has(spellingDiagnosis.displayName) && !gapMap.has('Spelling — Recurring Word Errors')) {
+    const isMulti = spellingDiagnosis.sourcesCount >= 2 || spellingDiagnosis.studentCount >= 2;
+    const conf = isMulti ? 'Confirmed gap' : 'Early signal';
     learningGapPriority.push({
       category: 'Spelling',
       topic: spellingDiagnosis.displayName,
@@ -1677,21 +1651,72 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       sourcesList: spellingDiagnosis.sources,
       evidence_sources: spellingDiagnosis.sourcesCount,
       evidenceSources: spellingDiagnosis.sourcesCount,
-      confidence: spellingDiagnosis.confidence,
-      confidence_label: `${spellingDiagnosis.confidence} • ${spellingDiagnosis.sourcesCount} evidence source`,
+      confidence: conf,
+      confidence_label: conf === 'Confirmed gap'
+        ? `Confirmed gap • ${spellingDiagnosis.sourcesCount} evidence source${spellingDiagnosis.sourcesCount > 1 ? 's' : ''}`
+        : `Early signal • ${spellingDiagnosis.sourcesCount} evidence source`,
+      commonErrors: spellingDiagnosis.commonErrors || [],
+      common_errors: spellingDiagnosis.commonErrors || [],
+      teachAction: spellingDiagnosis.recommended_action,
+      recommended_action: spellingDiagnosis.recommended_action,
       evidence: [],
       why: spellingDiagnosis.why,
-      recommended_action: spellingDiagnosis.recommended_action,
       priority: Number(((spellingDiagnosis.studentCount / (totalStudents || 1)) * (100 - spellingDiagnosis.accuracy)).toFixed(2))
     });
     learningGapPriority.sort((a, b) => b.priority - a.priority);
   }
 
-  const classStrengths = meaningfulTopics.filter(t => t.averagePercentage != null && t.averagePercentage >= 75);
-  const studentsNeedingSupport = studentAnalytics.filter(s => s.averagePercentage < 60).map(s => ({
-    ...s,
-    specificWeakConcepts: s.weakAreas.map(w => w.topic)
-  }));
+  // Deduplicated Class Strengths (accuracy >= 75%)
+  const strengthMap = new Map();
+  meaningfulTopics
+    .filter(t => t.averagePercentage != null && t.averagePercentage >= 75 && t.eventCount >= 1)
+    .forEach(t => {
+      const key = t.displayName || t.topic;
+      if (!strengthMap.has(key)) {
+        strengthMap.set(key, {
+          topic: t.displayName || t.topic,
+          baseTopic: t.topic,
+          skill: t.skill,
+          category: t.category,
+          displayName: t.displayName || t.topic,
+          accuracy: Math.round(t.averagePercentage),
+          averagePercentage: Math.round(t.averagePercentage),
+          eventCount: t.eventCount,
+          eventsCount: t.eventCount,
+          sourcesCount: t.sourcesCount,
+          sources: t.sourcesList,
+          sourcesList: t.sourcesList
+        });
+      }
+    });
+  const classStrengths = Array.from(strengthMap.values()).sort((a, b) => b.accuracy - a.accuracy);
+
+  // Students Needing Support (Scores < 70%) with real names and specific weak concepts
+  const studentsNeedingSupport = studentAnalytics
+    .filter(s => s.averagePercentage != null && s.averagePercentage < 70)
+    .map(s => {
+      const weakConceptNames = (s.weakAreas && s.weakAreas.length > 0)
+        ? s.weakAreas.map(w => w.displayName || w.topic)
+        : (s.averagePercentage < 50 ? ['Foundational Core Practice'] : ['Targeted Concept Review']);
+      return {
+        studentId: s.studentId,
+        studentName: s.fullName || studentNameMap.get(s.studentId) || 'Student',
+        fullName: s.fullName || studentNameMap.get(s.studentId) || 'Student',
+        email: s.email,
+        avatarUrl: s.avatarUrl,
+        averagePercentage: s.averagePercentage,
+        trend: s.scoreChangePercentagePoints != null
+          ? `${s.scoreChangePercentagePoints >= 0 ? '+' : ''}${s.scoreChangePercentagePoints}%`
+          : (s.trend || 'Steady'),
+        weakAreas: s.weakAreas || [],
+        specificWeakConcepts: weakConceptNames,
+        totalEvents: s.totalEvents,
+        performanceCategory: s.performanceCategory,
+        performanceCategoryLabel: s.performanceCategoryLabel
+      };
+    })
+    .sort((a, b) => (a.averagePercentage ?? 0) - (b.averagePercentage ?? 0));
+
   const recommendedTeachingFocus = learningGapPriority.length > 0 ? {
     topic: learningGapPriority[0].topic,
     baseTopic: learningGapPriority[0].baseTopic,
@@ -1702,8 +1727,12 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     studentsAffected: learningGapPriority[0].studentsAffected,
     studentsTotal: totalStudents,
     sourcesCount: learningGapPriority[0].sourcesCount,
+    sourcesList: learningGapPriority[0].sourcesList,
+    confidence: learningGapPriority[0].confidence,
+    commonErrors: learningGapPriority[0].commonErrors,
+    teachAction: learningGapPriority[0].teachAction || learningGapPriority[0].recommended_action,
     why: learningGapPriority[0].why,
-    recommended_action: learningGapPriority[0].recommended_action,
+    recommended_action: learningGapPriority[0].recommended_action || learningGapPriority[0].teachAction,
     rationale: `Top priority gap with ${learningGapPriority[0].sourcesCount || 1} sources of evidence.`
   } : null;
 
@@ -1736,6 +1765,8 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     all_evidence: normalizedEvents,
     groupedEvidence: recentLearningEvidence,
     grouped_evidence: recentLearningEvidence,
+    evidenceSummaryCounts,
+    evidence_summary_counts: evidenceSummaryCounts,
     spellingDiagnosis,
     spelling_diagnosis: spellingDiagnosis,
     weakAreaVisualData,

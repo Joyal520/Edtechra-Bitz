@@ -319,6 +319,8 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       recent_learning_evidence: analytics.allEvidence || analytics.recentActivity || [],
       all_evidence: analytics.allEvidence || analytics.recentActivity || [],
       allEvidence: analytics.allEvidence || analytics.recentActivity || [],
+      evidence_summary_counts: analytics.evidenceSummaryCounts || analytics.evidence_summary_counts || null,
+      evidenceSummaryCounts: analytics.evidenceSummaryCounts || analytics.evidence_summary_counts || null,
       spelling_diagnosis: analytics.spellingDiagnosis || null,
       spellingDiagnosis: analytics.spellingDiagnosis || null,
       grouped_evidence: analytics.groupedEvidence || analytics.recentLearningEvidence || [],

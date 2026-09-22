@@ -8,7 +8,13 @@ import {
   Sparkles,
   BarChart3,
   Lightbulb,
-  FileText
+  FileText,
+  AlertCircle,
+  Layers,
+  BookOpen,
+  Award,
+  Zap,
+  PenTool
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
@@ -21,7 +27,7 @@ interface InsightTabProps {
   metrics?: any;
   classroomId?: string;
   students?: any[];
-  onNavigateToTab?: (tab: string, context?: { topic?: string, studentId?: string }) => void;
+  onNavigateToTab?: (tab: string, context?: { topic?: string; studentId?: string }) => void;
   onNavigateToTeaching?: (targetTopic?: string) => void;
   onNavigateToStudents?: () => void;
   onNavigateToEvidence?: () => void;
@@ -44,7 +50,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   onGenerateAnalysis: _onGenerateAnalysis,
   refreshing: _refreshing
 }) => {
-  const handleNavigation = (tab: string, context?: { topic?: string, studentId?: string }) => {
+  const handleNavigation = (tab: string, context?: { topic?: string; studentId?: string }) => {
     if (onNavigateToTab) {
       onNavigateToTab(tab, context);
     } else {
@@ -74,19 +80,49 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const participationRate = classSummary.engagement_rate ?? classHealth.participationRate ?? null;
   const strugglingCount = classHealth.strugglingCount ?? studentsNeedingAttention.length;
 
-  // Data for Section 2: Current Learning Gaps
+  // Evidence Counts across 5 sources
+  const evidenceCounts = useMemo(() => {
+    const raw = resolvedMetrics.evidenceSummaryCounts || resolvedMetrics.evidence_summary_counts;
+    if (raw) return raw;
+
+    let ocr = 0, tasks = 0, live_quizzes = 0, exams = 0, competitions = 0;
+    (recentEvidence || []).forEach((e: any) => {
+      const t = e.activityType || e.rawActivityType;
+      if (t === 'ocr') ocr++;
+      else if (t === 'task' || t === 'assignment') tasks++;
+      else if (t === 'live_quiz' || t === 'quiz') live_quizzes++;
+      else if (t === 'exam' || t === 'assessment') exams++;
+      else if (t === 'competition' || t === 'ai_challenge') competitions++;
+    });
+
+    return {
+      ocr,
+      tasks,
+      live_quizzes,
+      exams,
+      competitions,
+      total: ocr + tasks + live_quizzes + exams + competitions
+    };
+  }, [resolvedMetrics.evidenceSummaryCounts, resolvedMetrics.evidence_summary_counts, recentEvidence]);
+
+  // Data for Section 2: What Your Students Are Struggling With (Granular Learning Gaps)
   const learningGaps = useMemo(() => {
     if (resolvedMetrics.learningGapPriority && resolvedMetrics.learningGapPriority.length > 0) {
-      return resolvedMetrics.learningGapPriority.map((g: any) => {
-        const sources = Array.isArray(g.sources) ? g.sources : (g.sources > 1 ? ['Task', 'Live Quiz'] : ['Assessment']);
-        const isMultiSource = sources.length >= 2;
+      return resolvedMetrics.learningGapPriority.map((g: any, index: number) => {
+        const sources = Array.isArray(g.sourcesList) && g.sourcesList.length > 0
+          ? g.sourcesList
+          : (Array.isArray(g.sources) ? g.sources : (g.sourcesCount > 1 ? ['Task', 'Live Quiz'] : ['Assessment']));
+        const isMultiSource = sources.length >= 2 || (g.affectedStudentsCount >= 2);
         const studentCount = g.affectedStudentsCount ?? g.studentCount ?? 1;
         const total = g.totalStudents || totalStudents || 1;
-        const accuracy = g.accuracy != null ? Math.round(g.accuracy) : 0;
+        const accuracy = g.accuracy != null ? Math.round(g.accuracy) : (g.averageAccuracy != null ? Math.round(g.averageAccuracy) : 0);
         const displayName = g.displayName || (g.skill ? `${g.topic} — ${g.skill}` : g.topic);
-        const category = g.category || 'General';
+        const category = g.category || 'Grammar';
+        const commonErrors = g.commonErrors || g.common_errors || [];
+        const teachAction = g.teachAction || g.recommended_action || `Review foundational rules of ${displayName} with contrast examples.`;
 
         return {
+          rank: index + 1,
           category,
           topic: g.topic,
           baseTopic: g.baseTopic || g.topic,
@@ -96,9 +132,12 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           studentCount,
           totalStudents: total,
           sources,
+          sourcesCount: g.sourcesCount || sources.length,
           confidence: g.confidence || (isMultiSource ? 'Confirmed gap' : 'Early signal'),
+          commonErrors,
+          teachAction,
           diagnosis: g.why || `${studentCount} of ${total} students scored below mastery (${accuracy}% accuracy) across ${sources.join(', ')}.`,
-          recommended_action: g.recommended_action || `Review key rules of ${displayName} with guided practice before next assessment.`
+          recommended_action: teachAction
         };
       });
     }
@@ -106,12 +145,13 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     if (topWeaknesses.length > 0) {
       return topWeaknesses
         .filter((w: any) => (w.score ?? w.averageScore ?? 0) > 0)
-        .map((w: any) => {
+        .map((w: any, index: number) => {
           const sources = w.eventsCount > 2 ? ['Task', 'Live Quiz'] : ['Assessment'];
           const studentCount = Math.min(totalStudents, w.eventsCount || strugglingCount || 1);
           const accuracy = Math.round(w.score ?? w.averageScore ?? 0);
           return {
-            category: 'Curriculum',
+            rank: index + 1,
+            category: 'Grammar',
             topic: w.topic,
             baseTopic: w.baseTopic || w.topic,
             skill: w.skill || null,
@@ -120,7 +160,10 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             studentCount,
             totalStudents: totalStudents || 1,
             sources,
+            sourcesCount: sources.length,
             confidence: w.eventsCount > 2 ? 'Confirmed gap' : 'Early signal',
+            commonErrors: [],
+            teachAction: `Review key rules of ${w.topic} with guided practice before the next assessment.`,
             diagnosis: `${studentCount} of ${totalStudents} students scored below mastery (${accuracy}% accuracy) across ${sources.join(', ')}.`,
             recommended_action: `Review key rules of ${w.topic} with guided practice before next assessment.`
           };
@@ -129,10 +172,11 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
     return topicPerformance
       .filter((t: any) => (t.score ?? 0) > 0 && (t.score ?? 0) < 70)
-      .map((t: any) => {
+      .map((t: any, index: number) => {
         const studentCount = Math.max(1, Math.min(totalStudents, strugglingCount));
         const accuracy = Math.round(t.score ?? 0);
         return {
+          rank: index + 1,
           category: 'Curriculum',
           topic: t.topic,
           baseTopic: t.topic,
@@ -142,7 +186,10 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           studentCount,
           totalStudents: totalStudents || 1,
           sources: ['Class Assessments'],
+          sourcesCount: 1,
           confidence: 'Early signal',
+          commonErrors: [],
+          teachAction: `Review key rules of ${t.topic} with guided practice before next assessment.`,
           diagnosis: `${studentCount} of ${totalStudents} students scored below mastery (${accuracy}% accuracy) across assessments.`,
           recommended_action: `Review key rules of ${t.topic} with guided practice before next assessment.`
         };
@@ -211,8 +258,8 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const paddingRight = 24;
   const paddingTop = 20;
   const paddingBottom = 30;
-  const plotWidth = chartWidth - paddingLeft - paddingRight; // 436
-  const plotHeight = chartHeight - paddingTop - paddingBottom; // 130
+  const plotWidth = chartWidth - paddingLeft - paddingRight;
+  const plotHeight = chartHeight - paddingTop - paddingBottom;
 
   const chartPoints = useMemo(() => {
     if (lineChartData.length === 0) return [];
@@ -238,7 +285,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     });
   }, [lineChartData, paddingLeft, plotWidth, paddingTop, plotHeight]);
 
-  const targetY = paddingTop + plotHeight - 0.70 * plotHeight; // 70% Target benchmark line
+  const targetY = paddingTop + plotHeight - 0.70 * plotHeight;
 
   const linePathD = useMemo(() => {
     if (chartPoints.length < 2) return '';
@@ -253,23 +300,48 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     return `M ${firstX},${bottomY} L ${chartPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')} L ${lastX},${bottomY} Z`;
   }, [chartPoints, paddingTop, plotHeight]);
 
-  // Section 5: Teaching Focus (Compact callout for #1 priority concept)
+  // Section 5: Teaching Focus
   const topGap = learningGaps[0] || null;
   const recommendedFocus = resolvedMetrics.recommendedTeachingFocus || teachNext[0] || (topGap ? {
     topic: topGap.topic,
     displayName: topGap.displayName,
     why: topGap.diagnosis,
-    recommended_action: topGap.recommended_action
+    recommended_action: topGap.teachAction || topGap.recommended_action
   } : null);
 
-  // Supporting Data
-  const strengthsList = resolvedMetrics.classStrengths || topStrengths.map((s: any) => ({ topic: s.topic, accuracy: s.score || s.averageScore }));
-  if (strengthsList.length === 0) {
-    topicPerformance.filter((t: any) => t.score >= 75).forEach((t: any) => {
-      strengthsList.push({ topic: t.topic, accuracy: t.score });
-    });
-  }
-  const supportStudentsList = resolvedMetrics.studentsNeedingSupport || studentsNeedingAttention;
+  // Class Strengths (Deduplicated >= 75%)
+  const strengthsList = useMemo(() => {
+    if (resolvedMetrics.classStrengths && resolvedMetrics.classStrengths.length > 0) {
+      return resolvedMetrics.classStrengths;
+    }
+    if (topStrengths && topStrengths.length > 0) {
+      return topStrengths.map((s: any) => ({
+        topic: s.displayName || s.topic,
+        accuracy: s.score || s.averageScore || 0,
+        eventsCount: s.eventsCount || 1
+      }));
+    }
+    return topicPerformance
+      .filter((t: any) => t.score >= 75)
+      .map((t: any) => ({
+        topic: t.displayName || t.topic,
+        accuracy: t.score,
+        eventsCount: t.eventsCount || 1
+      }));
+  }, [resolvedMetrics.classStrengths, topStrengths, topicPerformance]);
+
+  // Students Needing Support (with real names and specific weak concepts)
+  const supportStudentsList = useMemo(() => {
+    if (resolvedMetrics.studentsNeedingSupport && resolvedMetrics.studentsNeedingSupport.length > 0) {
+      return resolvedMetrics.studentsNeedingSupport;
+    }
+    return studentsNeedingAttention.map((s: any) => ({
+      studentId: s.studentId || s.id,
+      studentName: s.student_ref || s.name || s.fullName || 'Student',
+      averagePercentage: s.average_score ?? s.average ?? null,
+      specificWeakConcepts: s.main_weakness ? [s.main_weakness] : (s.specificWeakConcepts || [])
+    }));
+  }, [resolvedMetrics.studentsNeedingSupport, studentsNeedingAttention]);
 
   // Helper colors
   const getBarColor = (score: number) => {
@@ -296,18 +368,20 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     }
   };
 
+  const hasData = totalStudents > 0 && (evidenceCounts.total > 0 || topicPerformance.length > 0);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-200 pb-12">
       
-      {/* 1. CLASSROOM PULSE */}
+      {/* 1. CLASSROOM PULSE & EVIDENCE SUMMARY */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Classroom Pulse</h2>
-          <span className="text-xs font-bold text-[#36565A]">{totalStudents} Students</span>
+          <span className="text-xs font-bold text-[#36565A]">{totalStudents} Enrolled Students</span>
         </div>
         
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Overall Learning Health</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -322,7 +396,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
           
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Task Completion Rate</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -331,7 +405,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Active Participation</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -340,59 +414,116 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-sm flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Students Needing Support</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
-                {strugglingCount != null ? strugglingCount : '--'}
+                {supportStudentsList.length > 0 ? supportStudentsList.length : (strugglingCount || 0)}
               </span>
               {totalStudents > 0 && <span className="text-xs text-[#36565A]">/ {totalStudents}</span>}
             </div>
+          </div>
+        </div>
+
+        {/* Multi-Source Learning Evidence Summary Bar */}
+        <div className="mt-4 bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3.5 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#173B3F]">
+            <Layers className="w-4 h-4 text-[#087477]" />
+            <span>Multi-Source Diagnostic Evidence:</span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+              <PenTool className="w-3 h-3 text-[#087477]" />
+              OCR Worksheets: <strong className="font-black text-[#087477]">{evidenceCounts.ocr}</strong>
+            </span>
+
+            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+              <BookOpen className="w-3 h-3 text-indigo-600" />
+              Typed Tasks: <strong className="font-black text-indigo-700">{evidenceCounts.tasks}</strong>
+            </span>
+
+            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+              <Zap className="w-3 h-3 text-amber-500" />
+              Live Quizzes: <strong className="font-black text-amber-600">{evidenceCounts.live_quizzes}</strong>
+            </span>
+
+            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+              <Award className="w-3 h-3 text-rose-500" />
+              Exams & Assessments: <strong className="font-black text-rose-600">{evidenceCounts.exams}</strong>
+            </span>
+
+            {evidenceCounts.competitions > 0 && (
+              <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+                <Sparkles className="w-3 h-3 text-purple-500" />
+                Competitions: <strong className="font-black text-purple-600">{evidenceCounts.competitions}</strong>
+              </span>
+            )}
+
+            <span className="px-2.5 py-1 rounded-md bg-[#087477] text-white font-bold text-xs shadow-xs">
+              Total Evidence: {evidenceCounts.total}
+            </span>
           </div>
         </div>
       </section>
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 2. CURRENT LEARNING GAPS (WHAT ARE MY STUDENTS STRUGGLING WITH?) */}
+      {/* 2. WHAT YOUR STUDENTS ARE STRUGGLING WITH (ACTIONABLE DIAGNOSTIC CARDS) */}
       <section>
         <div className="mb-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Current Learning Gaps</h2>
-            <span className="text-xs font-bold text-[#087477]">
-              {learningGaps.length} Identified {learningGaps.length === 1 ? 'Gap' : 'Gaps'}
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">
+                What Your Students Are Struggling With
+              </h2>
+              <p className="text-xs text-[#36565A] mt-1">
+                Grounded diagnostic breakdown answering what concepts are weak and what to teach next.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
+              {learningGaps.length} Identified {learningGaps.length === 1 ? 'Weakness' : 'Weaknesses'}
             </span>
           </div>
-          <p className="text-xs text-[#36565A] mt-1">
-            Specific skills and concepts that need attention based on recent student evidence.
-          </p>
         </div>
 
-        {learningGaps.length === 0 ? (
+        {!hasData || learningGaps.length === 0 ? (
           <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
             <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-3 opacity-50" />
-            <p className="text-sm font-bold text-[#173B3F]">No learning gaps identified yet.</p>
-            <p className="text-xs text-[#36565A] mt-1">All assessed concepts currently meet or exceed the 70% mastery threshold.</p>
+            <p className="text-sm font-bold text-[#173B3F]">
+              {!hasData ? "Not enough evidence yet." : "No learning gaps identified yet."}
+            </p>
+            <p className="text-xs text-[#36565A] mt-1">
+              {!hasData 
+                ? "Have students complete worksheets, tasks, or quizzes to unlock diagnostic insights."
+                : "All assessed concepts currently meet or exceed the 70% mastery threshold."}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {learningGaps.map((gap: any, i: number) => (
-              <div key={i} className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs hover:border-[#159A9C]/50 transition-all">
+            {learningGaps.map((gap: any) => (
+              <div 
+                key={gap.rank || gap.displayName} 
+                className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs hover:border-[#159A9C]/60 transition-all space-y-4"
+              >
+                {/* Header Row: Rank + Category + Concept Name + Ratio + Confidence */}
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  
-                  <div className="space-y-3 flex-1">
-                    {/* Header: Category Badge + Concept Name + Stats */}
+                  <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="w-6 h-6 rounded-full bg-[#173B3F] text-white text-xs font-black flex items-center justify-center shrink-0">
+                        {gap.rank}
+                      </span>
+
                       <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(gap.category)}`}>
                         {gap.category}
                       </span>
 
                       <h3 className="text-base font-black text-[#173B3F]">
-                        {gap.displayName || gap.topic}
+                        {gap.displayName}
                       </h3>
                       
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
-                        gap.confidence === 'Confirmed gap' || gap.sources?.length > 1
+                        gap.confidence === 'Confirmed gap'
                           ? 'bg-teal-50 text-teal-800 border-teal-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
@@ -400,10 +531,10 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       </span>
                     </div>
 
-                    {/* Grounded Evidence Details */}
-                    <div className="flex items-center gap-3 text-xs font-semibold text-[#173B3F] flex-wrap">
+                    {/* Ratio & Accuracy Sub-row */}
+                    <div className="flex items-center gap-3 text-xs font-semibold text-[#173B3F] flex-wrap pt-0.5">
                       <span 
-                        className="px-2 py-0.5 rounded text-xs font-black"
+                        className="px-2.5 py-0.5 rounded text-xs font-black"
                         style={{ backgroundColor: getBarColor(gap.accuracy) + '20', color: getBarColor(gap.accuracy) }}
                       >
                         {gap.accuracy}% class accuracy
@@ -412,12 +543,12 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       <span>•</span>
 
                       <span className="text-[#36565A]">
-                        <strong className="text-[#173B3F]">{gap.studentCount}</strong> of <strong className="text-[#173B3F]">{gap.totalStudents}</strong> students affected
+                        <strong className="text-[#173B3F]">{gap.studentCount}</strong> of <strong className="text-[#173B3F]">{gap.totalStudents}</strong> students struggling
                       </span>
 
                       <span>•</span>
 
-                      {/* Evidence Source Badges */}
+                      {/* Evidence Sources */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[11px] text-[#36565A] font-medium">Evidence in:</span>
                         {(gap.sources || []).map((source: string, idx: number) => (
@@ -427,20 +558,9 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                         ))}
                       </div>
                     </div>
-
-                    {/* Diagnosis Statement */}
-                    {gap.diagnosis && (
-                      <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
-                        <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <span className="font-bold text-[#087477]">Diagnosis: </span>
-                          <InlineMarkdown text={gap.diagnosis} />
-                        </div>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Actions */}
+                  {/* Action Buttons */}
                   <div className="flex flex-row md:flex-col gap-2 shrink-0">
                     <button 
                       onClick={() => handleNavigation('evidence-reports', { topic: gap.displayName || gap.topic })}
@@ -458,6 +578,41 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Common Student Errors Box */}
+                {gap.commonErrors && gap.commonErrors.length > 0 && (
+                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-3 text-xs space-y-1.5">
+                    <div className="font-bold text-[#92400E] flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-[#D97706]" />
+                      <span>Common Student Error Patterns:</span>
+                    </div>
+                    <div className="space-y-1 pl-5">
+                      {gap.commonErrors.slice(0, 3).map((err: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs flex-wrap font-sans">
+                          <span className="line-through text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-mono font-medium">
+                            {err.student_error}
+                          </span>
+                          <span className="text-slate-400 font-bold">→</span>
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono font-bold">
+                            {err.correct_form}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Concrete 1-Lesson Teach Next Callout */}
+                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2.5">
+                  <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-0.5">
+                    <span className="font-bold text-[#087477]">Teach next: </span>
+                    <span className="text-[#173B3F] leading-relaxed">
+                      <InlineMarkdown text={gap.teachAction || gap.recommended_action || "Review foundational concepts with guided examples."} />
+                    </span>
+                  </div>
+                </div>
+
               </div>
             ))}
           </div>
@@ -470,7 +625,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
       <section>
         <div className="mb-4">
           <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Class Performance</h2>
-          <p className="text-xs text-[#36565A] mt-1">Class mastery across assessed curriculum topics.</p>
+          <p className="text-xs text-[#36565A] mt-1">Class mastery across assessed curriculum topics against the 70% benchmark.</p>
         </div>
 
         <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs">
@@ -482,13 +637,15 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           ) : (
             <div className="space-y-4 relative pb-4">
               {/* 70% Target Benchmark Line */}
-              <div className="hidden sm:block absolute top-0 bottom-4 left-[70%] border-l-2 border-dashed border-teal-500/40 z-0"></div>
-              <div className="hidden sm:block absolute bottom-0 left-[70%] text-[9px] font-bold text-teal-600 -translate-x-1/2">70% Target</div>
+              <div className="hidden sm:block absolute top-0 bottom-4 left-[70%] border-l-2 border-dashed border-teal-500/40 z-0" />
+              <div className="hidden sm:block absolute bottom-0 left-[70%] text-[9px] font-bold text-teal-600 -translate-x-1/2">
+                70% Target
+              </div>
               
               {sortedTopics.map((t: any, i: number) => (
                 <div key={i} className="relative z-10">
                   <div className="flex justify-between text-xs font-bold text-[#173B3F] mb-1.5">
-                    <span className="truncate pr-2">{t.topic}</span>
+                    <span className="truncate pr-2">{t.displayName || t.topic}</span>
                     <span className="shrink-0" style={{ color: getBarColor(t.score) }}>{t.score}%</span>
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
@@ -530,7 +687,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           ) : chartPoints.length === 1 ? (
             <div className="flex flex-col items-center justify-center p-4">
               <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-auto max-h-[160px] overflow-visible">
-                {/* Horizontal Gridlines */}
                 {[0, 25, 50, 75, 100].map((val) => {
                   const y = paddingTop + plotHeight - (val / 100) * plotHeight;
                   return (
@@ -540,7 +696,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                     </g>
                   );
                 })}
-                {/* Single Data Point */}
                 <circle
                   cx={chartPoints[0].x}
                   cy={chartPoints[0].y}
@@ -570,7 +725,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   </linearGradient>
                 </defs>
 
-                {/* Horizontal Gridlines & Y-Axis Labels */}
                 {[0, 25, 50, 75, 100].map((val) => {
                   const y = paddingTop + plotHeight - (val / 100) * plotHeight;
                   return (
@@ -581,7 +735,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   );
                 })}
 
-                {/* 70% Target Benchmark Line */}
                 <line
                   x1={paddingLeft}
                   y1={targetY}
@@ -596,12 +749,10 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   70% Target
                 </text>
 
-                {/* Gradient Fill Under Trend Line */}
                 {areaPathD && (
                   <path d={areaPathD} fill="url(#performanceAreaGrad)" />
                 )}
 
-                {/* Connected Trend Line */}
                 {linePathD && (
                   <path
                     d={linePathD}
@@ -613,7 +764,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   />
                 )}
 
-                {/* Data Points with Clean Circles and Hover Tooltips */}
                 {chartPoints.map((p, idx) => (
                   <g key={idx} className="cursor-pointer group">
                     <circle
@@ -629,7 +779,6 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   </g>
                 ))}
 
-                {/* X-Axis Date Labels */}
                 {chartPoints.length > 0 && (
                   <g>
                     <text x={chartPoints[0].x} y={chartHeight - 8} textAnchor="start" fontSize="9" fontWeight="600" fill="#36565A">
@@ -653,7 +802,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 5. TEACHING FOCUS (COMPACT CALLOUT FOR #1 CONCEPT) */}
+      {/* 5. TEACHING FOCUS CALLOUT */}
       {recommendedFocus && (
         <section>
           <div className="bg-gradient-to-r from-[#F0FDF4] to-[#F8FCFB] rounded-xl border border-[#C9E5E2] border-l-4 border-l-[#159A9C] p-6 shadow-sm">
@@ -674,7 +823,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
               </h3>
 
               <p className="text-xs text-[#173B3F] leading-relaxed">
-                <InlineMarkdown text={recommendedFocus.recommended_action || recommendedFocus.why || "Spend the next class period reviewing key rules with guided contrast examples, followed by immediate formative practice."} />
+                <InlineMarkdown text={recommendedFocus.recommended_action || recommendedFocus.teachAction || recommendedFocus.why || "Spend the next class period reviewing key rules with guided contrast examples, followed by immediate formative practice."} />
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -700,53 +849,68 @@ export const InsightTab: React.FC<InsightTabProps> = ({
       {/* 6. SUPPORTING PANELS: Students Needing Support & Class Strengths */}
       <section className="space-y-6 pt-2">
         {/* Students Needing Support */}
-        {supportStudentsList.length > 0 && (
-          <div>
-            <div className="mb-3">
-              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {supportStudentsList.slice(0, 6).map((student: any, i: number) => (
-                <div 
-                  key={i} 
-                  onClick={() => handleNavigation('students', { studentId: student.studentId || student.id })}
-                  className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-3.5 shadow-2xs cursor-pointer transition-colors flex items-start gap-3"
-                >
-                  <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs shrink-0">
-                    {student.name?.[0] || student.student_ref?.[0] || '?'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <span className="text-xs font-black text-[#173B3F] truncate pr-2">{student.name || student.student_ref}</span>
-                      <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                        {student.average ?? student.average_score ?? '<60'}%
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-[#36565A] mt-1 line-clamp-1">
-                      {student.issue || student.weakestArea || student.main_weakness || "Needs support in recent topics."}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
+            {supportStudentsList.length > 0 && (
+              <span className="text-[11px] font-bold text-[#087477]">
+                {supportStudentsList.length} {supportStudentsList.length === 1 ? 'student' : 'students'}
+              </span>
+            )}
           </div>
-        )}
+          
+          {supportStudentsList.length === 0 ? (
+            <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-4 text-center">
+              <span className="text-xs font-semibold text-[#36565A]">No students currently flagged for intervention.</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {supportStudentsList.slice(0, 6).map((student: any, i: number) => {
+                const sName = student.studentName || student.fullName || student.name || 'Student';
+                const initial = sName.trim().charAt(0).toUpperCase() || 'S';
+                const weakList = student.specificWeakConcepts || (student.weakestArea ? [student.weakestArea] : []);
+
+                return (
+                  <div 
+                    key={i} 
+                    onClick={() => handleNavigation('students', { studentId: student.studentId || student.id })}
+                    className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-3.5 shadow-2xs cursor-pointer transition-colors flex items-start gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#087477] font-black text-xs shrink-0">
+                      {initial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start">
+                        <span className="text-xs font-black text-[#173B3F] truncate pr-2">{sName}</span>
+                        <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                          {student.averagePercentage ?? student.average ?? student.average_score ?? '<60'}%
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[#36565A] mt-1 line-clamp-1 font-medium">
+                        {weakList.length > 0 ? weakList.join(', ') : "Needs concept review"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Class Strengths */}
         {strengthsList.length > 0 && (
           <div>
             <div className="mb-3">
-              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Strengths</h2>
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Strengths (Mastered Concepts)</h2>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {strengthsList.map((s: any, i: number) => (
                 <div key={i} className="bg-white border border-[#C9E5E2] rounded-xl p-3 shadow-2xs flex flex-col justify-between">
-                  <span className="text-xs font-bold text-[#173B3F] mb-2 truncate">{s.topic}</span>
+                  <span className="text-xs font-bold text-[#173B3F] mb-2 truncate">{s.displayName || s.topic}</span>
                   <div className="inline-flex items-center self-start gap-1 px-2 py-0.5 rounded bg-teal-50 text-teal-800 text-[10px] font-black border border-teal-100">
                     <CheckCircle2 className="w-3 h-3" />
-                    {s.accuracy}%
+                    {s.accuracy || s.averagePercentage || 75}%
                   </div>
                 </div>
               ))}

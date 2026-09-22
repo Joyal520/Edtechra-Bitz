@@ -12,6 +12,7 @@ import {
   buildOcrReportKey
 } from './r2Service.mjs';
 import { generateEvaluationReportPdf } from './pdfReportService.mjs';
+import { normalizeConcept } from './conceptNormalization.mjs';
 
 export const OCR_CATEGORIES = [
   'Paragraph Writing',
@@ -241,13 +242,23 @@ class OcrEvaluationQueue {
 
       // 5. Save structured evaluation data to Supabase
       if (this.serverSupabase) {
+        const enrichedBreakdown = Array.isArray(validated.breakdown) ? [...validated.breakdown] : [];
+        if ((validated.detected_errors && validated.detected_errors.length > 0) || (validated.spelling_errors && validated.spelling_errors.length > 0) || validated.concept) {
+          enrichedBreakdown.push({
+            __is_diagnostic_meta: true,
+            concept: validated.concept || null,
+            detected_errors: validated.detected_errors || [],
+            spelling_errors: validated.spelling_errors || []
+          });
+        }
+
         const updatePayload = {
           score: validated.score,
           ai_original_score: validated.score,
           final_score: validated.score,
           percentage: validated.percentage,
           performance: validated.performance,
-          breakdown_json: validated.breakdown,
+          breakdown_json: enrichedBreakdown,
           feedback: validated.feedback,
           ai_original_feedback: validated.feedback,
           status: 'completed',
@@ -485,7 +496,7 @@ ${criteriaSummary}
 Special Category Instructions:
 ${category === 'Handwritten Neatness' 
   ? 'Inspect ONLY the visual handwriting presentation qualities (legibility, letter formation, spacing, alignment, consistency, neatness). Do not score based on OCR text content.'
-  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above.'}
+  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above. Identify exact concepts and recurring errors (e.g. Simple Present Negative, Subject-Verb Agreement, Prepositions in/on/at, Spelling error pairs).'}
 
 CRITICAL RULES:
 1. Return ONLY a single valid JSON object.
@@ -493,6 +504,7 @@ CRITICAL RULES:
 3. Do NOT repeat or transcribe the student answer.
 4. Do NOT include reasoning, thought processes, or extra fields.
 5. "score" must be a number between 0 and ${maxMarks}.
+6. Identify specific learning concepts and detected error instances in "concept", "detected_errors", and "spelling_errors".
 
 Required JSON Schema:
 {
@@ -500,8 +512,23 @@ Required JSON Schema:
   "max_score": ${maxMarks},
   "percentage": <number between 0 and 100>,
   "performance": <"Excellent" | "Good" | "Satisfactory" | "Needs Improvement">,
+  "concept": "<specific concept tested or primary weakness, e.g. Simple Present — Negative Forms, Prepositions — at / in / on, Subject-Verb Agreement, Paragraph Writing — Organization & Flow>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
+  ],
+  "detected_errors": [
+    {
+      "concept": "<concept name, e.g. Simple Present — Negative Forms>",
+      "error_type": "<grammar | spelling | punctuation | vocabulary | sentence_structure>",
+      "student_error": "<exact incorrect snippet written by student>",
+      "correct_form": "<corrected sentence or phrase>"
+    }
+  ],
+  "spelling_errors": [
+    {
+      "misspelled_word": "<incorrectly spelled word>",
+      "correct_word": "<correct spelling>"
+    }
   ],
   "feedback": "<concise feedback, 50 words maximum>"
 }`;
@@ -582,7 +609,7 @@ ${criteriaSummary}
 Special Category Instructions:
 ${category === 'Handwritten Neatness' 
   ? 'Inspect ONLY the visual handwriting presentation qualities (legibility, letter formation, spacing, alignment, consistency, neatness). Do not score based on OCR text content.'
-  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above.'}
+  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above. Identify exact concepts and recurring errors (e.g. Simple Present Negative, Subject-Verb Agreement, Prepositions in/on/at, Spelling error pairs).'}
 
 CRITICAL RULES:
 1. Return ONLY a single valid JSON object.
@@ -590,6 +617,7 @@ CRITICAL RULES:
 3. Do NOT repeat or transcribe the student answer.
 4. Do NOT include reasoning, thought processes, or extra fields.
 5. "score" must be a number between 0 and ${maxMarks}.
+6. Identify specific learning concepts and detected error instances in "concept", "detected_errors", and "spelling_errors".
 
 Required JSON Schema:
 {
@@ -597,8 +625,23 @@ Required JSON Schema:
   "max_score": ${maxMarks},
   "percentage": <number between 0 and 100>,
   "performance": <"Excellent" | "Good" | "Satisfactory" | "Needs Improvement">,
+  "concept": "<specific concept tested or primary weakness, e.g. Simple Present — Negative Forms, Prepositions — at / in / on, Subject-Verb Agreement, Paragraph Writing — Organization & Flow>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
+  ],
+  "detected_errors": [
+    {
+      "concept": "<concept name, e.g. Simple Present — Negative Forms>",
+      "error_type": "<grammar | spelling | punctuation | vocabulary | sentence_structure>",
+      "student_error": "<exact incorrect snippet written by student>",
+      "correct_form": "<corrected sentence or phrase>"
+    }
+  ],
+  "spelling_errors": [
+    {
+      "misspelled_word": "<incorrectly spelled word>",
+      "correct_word": "<correct spelling>"
+    }
   ],
   "feedback": "<concise feedback, 50 words maximum>"
 }`;
@@ -717,13 +760,32 @@ Required JSON Schema:
       });
     }
 
+    // Parse detected errors and spelling errors
+    const detectedErrors = Array.isArray(raw.detected_errors) ? raw.detected_errors.map(err => ({
+      concept: String(err?.concept || raw.concept || category).trim(),
+      error_type: String(err?.error_type || 'grammar').toLowerCase().trim(),
+      student_error: String(err?.student_error || err?.text || '').trim(),
+      correct_form: String(err?.correct_form || err?.suggestion || err?.correction || '').trim()
+    })).filter(e => e.student_error) : [];
+
+    const spellingErrors = Array.isArray(raw.spelling_errors) ? raw.spelling_errors.map(err => ({
+      misspelled_word: String(err?.misspelled_word || err?.text || '').trim(),
+      correct_word: String(err?.correct_word || err?.suggestion || err?.correction || '').trim()
+    })).filter(e => e.misspelled_word) : [];
+
+    const rawConcept = raw.concept ? String(raw.concept).trim() : null;
+    const canonical = rawConcept ? normalizeConcept(rawConcept, category) : normalizeConcept(title || category, category);
+
     return {
       score,
       max_score: defaultMax,
       percentage,
       performance,
       breakdown,
-      feedback
+      feedback,
+      concept: canonical ? canonical.displayName : (rawConcept || category),
+      detected_errors: detectedErrors,
+      spelling_errors: spellingErrors
     };
   }
 
