@@ -6326,6 +6326,24 @@ app.post('/api/classes/ocr-jobs', async (req, res) => {
 
       if (taskId) {
         initialRecord.assignment_id = taskId;
+        // Pre-save evaluating state in assignment_submissions so task shows active grading
+        try {
+          await serverSupabase
+            .from('assignment_submissions')
+            .upsert(
+              {
+                assignment_id: taskId,
+                classroom_id: classroomId,
+                student_id: studentId,
+                status: 'evaluating',
+                ocr_evaluation_id: targetEvalId,
+                file_urls: temporaryFileKey ? [temporaryFileKey] : (imageBase64 ? [imageBase64] : []),
+                submitted_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'assignment_id,student_id' }
+            );
+        } catch (_) {}
       }
 
       const { error: insertError } = await serverSupabase
@@ -7495,10 +7513,52 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Task not found.' });
     }
 
+    // 1. Check existing submission to reuse ID or check duplicate submission
+    const { data: existingSub } = await serverSupabase
+      .from('assignment_submissions')
+      .select('*')
+      .eq('assignment_id', taskId)
+      .eq('student_id', authData.user.id)
+      .maybeSingle();
+
+    // Prevent duplicate submission if already graded and retries not allowed
+    if (existingSub && existingSub.status === 'graded' && !task.settings?.allow_retry) {
+      return res.json({
+        success: true,
+        data: existingSub,
+        message: 'Task has already been evaluated and graded.'
+      });
+    }
+
+    const submissionId = existingSub?.id || crypto.randomUUID();
     const rawImageBase64 = imageBase64 || handwrittenImageBase64;
     const hasHandwrittenWork = Boolean(rawImageBase64 || temporaryFileKey);
 
-    // WORKFLOW A (Option B): Student submits handwritten work
+    // 2. IMMEDIATE PRE-PERSISTENCE: Save student work in assignment_submissions with status 'evaluating'
+    // This ensures student work is never lost and UI reflects in-progress evaluation even across page refreshes
+    const initialSubPayload = {
+      id: submissionId,
+      assignment_id: taskId,
+      classroom_id: task.classroom_id,
+      student_id: authData.user.id,
+      status: 'evaluating',
+      text_response: textResponse || '',
+      file_urls: fileUrls?.length ? fileUrls : (hasHandwrittenWork ? [temporaryFileKey || rawImageBase64] : []),
+      task_version: task.version || 1,
+      is_ai_graded: false,
+      submitted_at: existingSub?.submitted_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { error: preSaveErr } = await serverSupabase
+      .from('assignment_submissions')
+      .upsert(initialSubPayload, { onConflict: 'assignment_id,student_id' });
+
+    if (preSaveErr) {
+      console.warn('[TaskSubmit] Warning on pre-saving evaluating submission:', preSaveErr.message);
+    }
+
+    // WORKFLOW A: Student submits handwritten work (OCR Vision AI pipeline)
     if (hasHandwrittenWork) {
       const evaluationId = crypto.randomUUID();
       const studentName = authData.profile?.full_name || authData.user.email?.split('@')[0] || 'Student';
@@ -7554,10 +7614,17 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
         .eq('student_id', authData.user.id)
         .maybeSingle();
 
+      // Invalidate Teaching Intelligence cache
+      if (task.classroom_id) {
+        try {
+          await serverSupabase.from('ai_classroom_insights').delete().eq('classroom_id', task.classroom_id);
+        } catch (_) {}
+      }
+
       return res.json({
         success: true,
         data: finalSub || {
-          id: evaluationId,
+          id: submissionId,
           assignment_id: taskId,
           classroom_id: task.classroom_id,
           student_id: authData.user.id,
@@ -7571,14 +7638,41 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       });
     }
 
-    // Execute server-authoritative hybrid auto-grading pipeline
-    const gradingResult = await gradeTaskSubmission(
-      task,
-      studentAnswers,
-      serverOpenAI,
-      textResponse,
-      process.env.GEMINI_API_KEY
-    );
+    // WORKFLOW B: Typed / Structured Task (Server-authoritative AI Auto-Grading)
+    let gradingResult;
+    try {
+      gradingResult = await gradeTaskSubmission(
+        task,
+        studentAnswers,
+        serverOpenAI,
+        textResponse,
+        process.env.GEMINI_API_KEY
+      );
+    } catch (gradeErr) {
+      console.error('[TaskSubmit] Error in gradeTaskSubmission:', gradeErr);
+      // Fallback: Preserve student work as submitted
+      await serverSupabase
+        .from('assignment_submissions')
+        .update({
+          status: 'submitted',
+          teacher_feedback: 'Submission received. Evaluation pending review.',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', submissionId);
+
+      return res.json({
+        success: true,
+        data: {
+          id: submissionId,
+          assignment_id: taskId,
+          classroom_id: task.classroom_id,
+          student_id: authData.user.id,
+          status: 'submitted',
+          text_response: textResponse,
+          teacher_feedback: 'Submission received. Evaluation pending review.'
+        }
+      });
+    }
 
     const isGraded = gradingResult.final_score != null;
     const submissionStatus = isGraded ? 'graded' : 'submitted';
@@ -7587,17 +7681,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     // Determine teacher feedback from writing evaluation or scoring summary
     const feedbackText = writingEval?.feedback || (isGraded ? `Evaluation complete. Score: ${gradingResult.final_score}/${task.points || 100}` : null);
 
-    // 1. Check existing submission to reuse ID or generate new UUID
-    const { data: existingSub } = await serverSupabase
-      .from('assignment_submissions')
-      .select('id')
-      .eq('assignment_id', taskId)
-      .eq('student_id', authData.user.id)
-      .maybeSingle();
-
-    const submissionId = existingSub?.id || crypto.randomUUID();
-
-    // 2. Upload detailed evaluation JSON artifact to Cloudflare R2 if writing evaluation is present
+    // Upload detailed evaluation JSON artifact to Cloudflare R2 if writing evaluation is present
     let r2ResultPath = null;
     if (writingEval) {
       try {
@@ -7666,7 +7750,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       });
     }
 
-    // Upsert into assignment_submissions (lightweight index preserving student's original text)
+    // Update assignment_submissions with graded result
     const { data: submission, error: subErr } = await serverSupabase
       .from('assignment_submissions')
       .upsert(
@@ -7687,7 +7771,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
           teacher_feedback: feedbackText,
           task_version: task.version || 1,
           completed_at: isGraded ? new Date().toISOString() : null,
-          submitted_at: new Date().toISOString(),
+          submitted_at: existingSub?.submitted_at || new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         { onConflict: 'assignment_id,student_id' }
@@ -7697,7 +7781,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
 
     if (subErr) throw subErr;
 
-    // If writing evaluation is present, upsert into student_corrected_work if table exists
+    // If writing evaluation is present, upsert into student_corrected_work
     if (writingEval && submission) {
       try {
         const { data: existingCw } = await serverSupabase

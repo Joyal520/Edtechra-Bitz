@@ -74,6 +74,15 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(Boolean(submission && submission.status !== 'draft'));
 
+  const isTaskEvaluating = evaluationPhase === 'evaluating' || isSubmitting || Boolean(
+    submission && (submission.status === 'evaluating' || (submission.status === 'submitted' && submission.final_score == null) || submission.status === 'processing')
+  );
+
+  const isTaskEvaluated = !isTaskEvaluating && Boolean(
+    evaluationPhase === 'evaluated' ||
+    (submission && (submission.status === 'graded' || submission.final_score != null || submission.points_awarded != null || (submission.status !== 'draft' && submission.teacher_feedback)))
+  );
+
   const questions: TaskQuestion[] = Array.isArray(task.questions) ? task.questions : [];
   const contentBlocks = Array.isArray(task.content_blocks) ? task.content_blocks : [];
 
@@ -559,7 +568,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
         {/* ================================================================= */}
 
         {/* EVALUATING STATE: Show while AI is correcting */}
-        {evaluationPhase === 'evaluating' && (
+        {isTaskEvaluating && (
           <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-sky-50 to-purple-50 text-center space-y-4 animate-in fade-in duration-300">
             <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto animate-pulse">
               <Sparkles className="w-7 h-7" />
@@ -569,10 +578,10 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                 ✨ AI is checking your work
               </h3>
               <p className="text-sm font-semibold text-slate-600 max-w-md mx-auto">
-                Please wait while AI is correcting your work.
+                Please wait while AI is correcting your work and generating feedback.
               </p>
               <p className="text-xs font-medium text-slate-500">
-                Your submission has been received.
+                Your submission has been securely recorded.
               </p>
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-2">
@@ -584,7 +593,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
         )}
 
         {/* EVALUATED STATE: Show structured AI result */}
-        {evaluationPhase === 'evaluated' && submission && (() => {
+        {isTaskEvaluated && submission && (() => {
           // Extract writing evaluation from submission
           const wEval: WritingEvaluation | null | undefined =
             submission.writing_evaluation ||
@@ -792,13 +801,13 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
           {!isPreview && onSubmit && (
             <div className="flex items-center gap-3 no-print w-full sm:w-auto justify-end">
-              {evaluationPhase === 'evaluating' ? (
-                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-indigo-700 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200">
+              {isTaskEvaluating ? (
+                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-indigo-700 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200 shadow-2xs">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>AI is evaluating your work...</span>
                 </div>
-              ) : evaluationPhase === 'evaluated' || submitted ? (
-                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200">
+              ) : isTaskEvaluated ? (
+                <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 shadow-2xs">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     Evaluation Complete {submission?.final_score != null ? `• ${submission.final_score}/${task.points}` : ''}

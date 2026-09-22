@@ -26,9 +26,11 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   onSubmitWork,
   onDeleteAssignment
 }) => {
-  const isSubmitted = Boolean(assignment.my_submission);
-  const isGraded = assignment.my_submission?.status === 'graded';
-  const score = assignment.my_submission?.points_awarded;
+  const sub = assignment.my_submission;
+  const isGraded = sub?.status === 'graded' || sub?.points_awarded != null || (sub && sub.final_score != null);
+  const isEvaluating = !isGraded && (sub?.status === 'evaluating' || sub?.status === 'processing');
+  const isSubmitted = Boolean(sub);
+  const score = sub?.points_awarded ?? sub?.final_score;
 
   const dueDateFormatted = assignment.due_date
     ? new Date(assignment.due_date).toLocaleDateString(undefined, {
@@ -110,7 +112,12 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               {isGraded ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Graded: {score} / {assignment.points}</span>
+                  <span>Graded: {score != null ? score : ''} / {assignment.points}</span>
+                </span>
+              ) : isEvaluating ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <Clock className="w-3.5 h-3.5 animate-spin" />
+                  <span>Evaluating...</span>
                 </span>
               ) : isSubmitted ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black bg-amber-50 text-amber-700 border border-amber-200">
@@ -129,13 +136,23 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 type="button"
                 onClick={() => onSubmitWork(assignment)}
                 className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                  isSubmitted
+                  isGraded
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : isSubmitted
                     ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                     : 'bg-[#026fc3] hover:bg-[#03589e] text-white shadow-xs'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{isSubmitted ? 'Edit Submission' : 'Submit Work'}</span>
+                <span>
+                  {isGraded
+                    ? 'View Result'
+                    : isEvaluating
+                    ? 'View Progress'
+                    : isSubmitted
+                    ? 'View Work'
+                    : 'Submit Work'}
+                </span>
               </button>
             )}
           </>

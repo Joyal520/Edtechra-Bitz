@@ -34,9 +34,16 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
       if (data) {
         setTask(data);
         setSubmission(data.my_submission || null);
-        // If already submitted/graded, reflect that
-        if (data.my_submission && data.my_submission.status !== 'draft') {
-          setEvaluationPhase('evaluated');
+        
+        const sub = data.my_submission;
+        if (sub) {
+          if (sub.status === 'graded' || sub.final_score != null || sub.points_awarded != null) {
+            setEvaluationPhase('evaluated');
+          } else if (sub.status === 'evaluating' || sub.status === 'submitted' || sub.status === 'processing') {
+            setEvaluationPhase('evaluating');
+          } else if (sub.status !== 'draft') {
+            setEvaluationPhase('evaluated');
+          }
         }
       }
     } catch (err: any) {
@@ -45,6 +52,36 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
       setLoading(false);
     }
   };
+
+  // Poll when in evaluating phase to auto-refresh when AI grading completes
+  useEffect(() => {
+    if (!isOpen || evaluationPhase !== 'evaluating' || !taskId) return;
+
+    let pollCount = 0;
+    const maxPolls = 15;
+    const interval = setInterval(async () => {
+      pollCount++;
+      if (pollCount > maxPolls) {
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const freshTask = await classroomTaskService.getTask(taskId);
+        if (freshTask?.my_submission) {
+          const freshSub = freshTask.my_submission;
+          if (freshSub.status === 'graded' || freshSub.final_score != null || freshSub.points_awarded != null) {
+            setTask(freshTask);
+            setSubmission(freshSub);
+            setEvaluationPhase('evaluated');
+            if (onSubmitted) onSubmitted();
+            clearInterval(interval);
+          }
+        }
+      } catch (_) {}
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isOpen, evaluationPhase, taskId, onSubmitted]);
 
   useEffect(() => {
     if (isOpen && taskId) {
