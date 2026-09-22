@@ -1,7 +1,8 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: CONCEPT NORMALIZATION & DIAGNOSTIC ENGINE
 // Normalizes and deduplicates educational topics into canonical pedagogical concepts.
-// Synthesizes multi-source evidence across OCR, Tasks, Quizzes, Exams & Competitions.
+// Strips raw JSON, activity metadata, session IDs, and general trivia quizzes.
+// Synthesizes multi-source evidence across Tasks, OCR, Exams, and Competitions.
 // ============================================================================
 
 /**
@@ -14,10 +15,10 @@ export const CANONICAL_CONCEPTS = {
     topic: 'Simple Present',
     skill: 'Negative Forms',
     displayName: 'Simple Present — Negative Forms',
-    teachAction: 'Teach forming negative sentences in the Simple Present using do/does + not + base verb and give students guided sentence transformation practice.',
+    teachAction: 'Teach forming negative sentences in the Simple Present using do/does + not + base verb and practice sentence transformation drills.',
     commonError: {
-      student_error: "He don't like tea.",
-      correct_form: "He doesn't like tea."
+      student_error: "He don't like football.",
+      correct_form: "He doesn't like football."
     }
   },
   SIMPLE_PRESENT_THIRD_PERSON: {
@@ -36,7 +37,7 @@ export const CANONICAL_CONCEPTS = {
     topic: 'Simple Present',
     skill: 'Affirmative & Question Forms',
     displayName: 'Simple Present — Affirmative & Questions',
-    teachAction: 'Review daily routine verbs and question formation with do/does + subject + verb.',
+    teachAction: 'Review daily routine verbs and question formation with do/does + subject + base verb.',
     commonError: {
       student_error: "Where she live?",
       correct_form: "Where does she live?"
@@ -104,7 +105,7 @@ export const CANONICAL_CONCEPTS = {
     topic: 'Prepositions',
     skill: 'at / in / on',
     displayName: 'Prepositions — at / in / on',
-    teachAction: 'Review at + exact time, on + day/date, and in + month/year/period with a time-preposition anchor chart.',
+    teachAction: 'Teach at + exact time, on + day/date, and in + month/year/period with anchor chart contrast frames.',
     commonError: {
       student_error: "I wake up in 7 o'clock.",
       correct_form: "I wake up at 7 o'clock."
@@ -148,12 +149,12 @@ export const CANONICAL_CONCEPTS = {
   SPELLING_COMMON_ERRORS: {
     category: 'Spelling',
     topic: 'Spelling',
-    skill: 'Recurring Word Errors',
-    displayName: 'Spelling — Recurring Word Errors',
-    teachAction: 'Run a short spelling practice activity using the recurring error words and mnemonic contrasts.',
+    skill: 'Common Word Errors',
+    displayName: 'Spelling — Common Word Errors',
+    teachAction: 'Run targeted spelling practice on high-frequency error words using mnemonic contrasts and visual chunking.',
     commonError: {
-      student_error: "becouse → because, recieve → receive, beautifull → beautiful",
-      correct_form: "because, receive, beautiful"
+      student_error: "becouse → because, recieve → receive",
+      correct_form: "because, receive"
     }
   },
   SPELLING_HOMOPHONES: {
@@ -216,8 +217,8 @@ export const CANONICAL_CONCEPTS = {
   VOCABULARY_CONTEXT: {
     category: 'Vocabulary',
     topic: 'Vocabulary',
-    skill: 'Context & Confused Words',
-    displayName: 'Vocabulary — Context & Commonly Confused Words',
+    skill: 'Commonly Confused Words',
+    displayName: 'Vocabulary — Commonly Confused Words',
     teachAction: 'Clarify pairs of commonly confused words (e.g. borrow vs. lend, accept vs. except) with sentence frames.',
     commonError: {
       student_error: "Can you borrow me your book?",
@@ -249,14 +250,38 @@ export const CANONICAL_CONCEPTS = {
 };
 
 /**
+ * Sanitizes input string to prevent raw JSON, session IDs, final_rank,
+ * and activity result metadata from leaking into concept names.
+ * @param {string} str 
+ * @returns {string} Clean string without JSON or session artifacts
+ */
+export function sanitizeConceptInput(str) {
+  if (!str || typeof str !== 'string') return '';
+
+  let cleaned = str;
+
+  // 1. If string is or contains JSON object/array, strip it
+  cleaned = cleaned.replace(/\{[\s\S]*?\}/g, ' ');
+  cleaned = cleaned.replace(/\[[\s\S]*?\]/g, ' ');
+
+  // 2. Strip common raw metadata field names & values
+  cleaned = cleaned.replace(/"?(?:final_rank|session_id|sessionId|wrong_count|correct_count|total_questions|points_awarded|accuracy_percentage)"?\s*:\s*[^,\}\]]+/gi, ' ');
+
+  // 3. Strip braces, brackets, quotes, escapes
+  cleaned = cleaned.replace(/[{}\[\]\\"]/g, ' ');
+
+  // 4. Strip boilerplate assessment prefixes
+  cleaned = cleaned.replace(/^(?:Unit Test on the|Unit Test on|Quiz on|Assessment:|Test on|Classroom Activity|Live Quiz Session)\s*/gi, ' ');
+
+  // 5. Clean whitespace
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Normalizes any freeform text, activity title, raw topic, or rubric criterion
  * into a single canonical pedagogical concept.
  *
- * Deduplication rules:
- *  - "Simple Present negative", "Present simple negatives", "Don't / doesn't" -> Simple Present — Negative Forms
- *  - "at/in/on", "time prepositions", "prepositions of time" -> Prepositions — at / in / on
- *  - "their/there", "spelling errors", "misspelled words" -> Spelling — Recurring Word Errors
- *  - "subject-verb concord", "it give", "friends likes" -> Subject–Verb Agreement
+ * Excludes raw JSON, session IDs, and general trivia quizzes.
  *
  * @param {string} rawString - Any combination of title, topic, rubric, error text
  * @param {string} [categoryHint] - Optional category hint ('Grammar', 'Spelling', 'Writing', etc.)
@@ -264,8 +289,20 @@ export const CANONICAL_CONCEPTS = {
  */
 export function normalizeConcept(rawString, categoryHint = '') {
   if (!rawString && !categoryHint) return null;
-  const combined = `${rawString || ''} ${categoryHint || ''}`.toLowerCase().trim();
-  if (!combined) return null;
+
+  const sanitized = sanitizeConceptInput(rawString);
+  const combined = `${sanitized} ${categoryHint || ''}`.toLowerCase().trim();
+  if (!combined || combined.length < 2) return null;
+
+  // Reject raw metadata strings or session IDs
+  if (/session[-_]?id|final[-_]?rank|wrong[-_]?count|correct[-_]?count|points[-_]?awarded|[0-9a-f]{8}-[0-9a-f]{4}/i.test(combined)) {
+    return null;
+  }
+
+  // Reject general trivia / non-curriculum quizzes from creating curriculum concepts
+  if (/general\s*knowledge|trivia|entertainment|fun\s*quiz|pub\s*quiz|movie\s*quiz/i.test(combined)) {
+    return null;
+  }
 
   // 1. Prepositions at / in / on
   if (
@@ -275,7 +312,7 @@ export function normalizeConcept(rawString, categoryHint = '') {
     return CANONICAL_CONCEPTS.PREPOSITIONS_TIME_PLACE;
   }
 
-  // 2. Simple Present Negative
+  // 2. Simple Present Negative (Negative Present Tense, Don't / Doesn't)
   if (
     /(?:simple\s*present|present\s*simple).*(?:negative|don'?t|doesn'?t|not\s+like|not\s+play)/i.test(combined) ||
     /(?:don'?t\s*\/\s*doesn'?t|do\s*not\s*\/\s*does\s*not|negative\s*present\s*tense)/i.test(combined) ||
@@ -387,24 +424,25 @@ export function normalizeConcept(rawString, categoryHint = '') {
       : CANONICAL_CONCEPTS.READING_FACTUAL;
   }
 
-  // Skip useless placeholder generic terms
-  if (/^(?:assignment|task|general|other|science|test|unit\s*test)$/i.test(combined)) {
+  // Skip useless generic / placeholder terms
+  if (/^(?:assignment|task|general|other|science|test|unit\s*test|homework|classwork|exam|quiz|live\s*quiz)$/i.test(combined)) {
     return null;
   }
 
-  // Fallback: Capitalize clean topic
-  const cleanTitle = (rawString || categoryHint || '')
-    .replace(/^(?:Unit Test on the|Unit Test on|Quiz on|Assessment:|Test on|Classroom Activity)\s*/i, '')
-    .trim();
+  // Never return bare generic categories as a standalone concept
+  if (/^(?:grammar|spelling|writing|vocabulary|reading)$/i.test(sanitized.toLowerCase().trim())) {
+    return null;
+  }
 
-  if (cleanTitle.length < 2) return null;
+  // Clean fallback: Only accept clean, non-JSON educational titles
+  if (sanitized.length < 3 || sanitized.length > 50) return null;
 
   return {
-    category: categoryHint || 'General',
-    topic: cleanTitle,
+    category: categoryHint || 'Curriculum',
+    topic: sanitized,
     skill: 'Core Comprehension',
-    displayName: `${cleanTitle} — Core Concepts`,
-    teachAction: `Review foundational concepts for ${cleanTitle} with direct examples and guided practice.`,
+    displayName: `${sanitized} — Core Concepts`,
+    teachAction: `Review foundational concepts for ${sanitized} with direct examples and guided practice.`,
     commonError: null
   };
 }

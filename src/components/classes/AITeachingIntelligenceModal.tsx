@@ -153,11 +153,11 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   if (!isOpen || !classroom) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#F8FCFB] rounded-3xl w-full max-w-6xl h-[94vh] max-h-[950px] flex flex-col shadow-2xl border border-[#C9E5E2] overflow-hidden">
+    <div className="fixed inset-0 z-50 w-screen h-screen bg-[#F8FCFB] flex flex-col overflow-hidden animate-in fade-in duration-150">
+      <div className="w-full h-full flex flex-col overflow-hidden">
         
         {/* TOP HEADER BAR (Sticky, always visible) */}
-        <header className="px-5 sm:px-7 py-4 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
+        <header className="px-6 sm:px-8 py-3.5 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] flex items-center justify-center shadow-lg shadow-[#159A9C]/25 text-white">
               <Sparkles className="w-5 h-5 text-white" />
@@ -288,56 +288,58 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
         {/* TAB CONTENTS (Scrollable area) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          {loading && !data ? (
-            <div className="py-24 text-center space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#E8F7F5] flex items-center justify-center mx-auto text-[#087477]">
-                <RefreshCw className="w-6 h-6 animate-spin text-[#159A9C]" />
+          <div className="max-w-6xl mx-auto w-full">
+            {loading && !data ? (
+              <div className="py-24 text-center space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-[#E8F7F5] flex items-center justify-center mx-auto text-[#087477]">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#159A9C]" />
+                </div>
+                <p className="text-sm font-bold text-[#173B3F]">
+                  Synthesizing classroom intelligence...
+                </p>
+                <p className="text-xs text-[#36565A]">
+                  Evaluating tasks, worksheets, assessments, and learning progression.
+                </p>
               </div>
-              <p className="text-sm font-bold text-[#173B3F]">
-                Synthesizing classroom intelligence...
-              </p>
-              <p className="text-xs text-[#36565A]">
-                Evaluating tasks, quizzes, assessments, and learning progression.
-              </p>
-            </div>
-          ) : (
-            <>
-              {activeTab === 'insight' && (
-                <InsightTab
-                  classroom={classroom}
-                  data={data}
-                  onNavigateToTab={handleNavigateToTab}
-                  onNavigateToTeaching={() => setActiveTab('teaching')}
-                  onNavigateToStudents={() => setActiveTab('students')}
-                  onNavigateToEvidence={() => setActiveTab('evidence-reports')}
-                />
-              )}
+            ) : (
+              <>
+                {activeTab === 'insight' && (
+                  <InsightTab
+                    classroom={classroom}
+                    data={data}
+                    onNavigateToTab={handleNavigateToTab}
+                    onNavigateToTeaching={() => setActiveTab('teaching')}
+                    onNavigateToStudents={() => setActiveTab('students')}
+                    onNavigateToEvidence={() => setActiveTab('evidence-reports')}
+                  />
+                )}
 
-              {activeTab === 'students' && (
-                <StudentsTab
-                  classroom={classroom}
-                  selectedStudentId={tabContext.studentId || undefined}
-                />
-              )}
+                {activeTab === 'students' && (
+                  <StudentsTab
+                    classroom={classroom}
+                    selectedStudentId={tabContext.studentId || undefined}
+                  />
+                )}
 
-              {activeTab === 'teaching' && (
-                <TeachingTab
-                  classroom={classroom}
-                  data={data}
-                  targetTopic={tabContext.topic}
-                  onOpenChatWithPrompt={handleOpenChatWithPrompt}
-                />
-              )}
+                {activeTab === 'teaching' && (
+                  <TeachingTab
+                    classroom={classroom}
+                    data={data}
+                    targetTopic={tabContext.topic}
+                    onOpenChatWithPrompt={handleOpenChatWithPrompt}
+                  />
+                )}
 
-              {activeTab === 'evidence-reports' && (
-                <EvidenceReportsTab
-                  classroom={classroom}
-                  data={data}
-                  initialFilter={tabContext.topic ? { topic: tabContext.topic } : tabContext.studentId ? { studentId: tabContext.studentId } : undefined}
-                />
-              )}
-            </>
-          )}
+                {activeTab === 'evidence-reports' && (
+                  <EvidenceReportsTab
+                    classroom={classroom}
+                    data={data}
+                    initialFilter={tabContext.topic ? { topic: tabContext.topic } : tabContext.studentId ? { studentId: tabContext.studentId } : undefined}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Persistent [Ask AI Teacher] Modal */}

@@ -66,13 +66,11 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const classSummary = resolvedMetrics.class_summary || {};
   const classHealth = resolvedMetrics.class_health || {};
   const topicPerformance = resolvedMetrics.topic_performance || [];
-  const topWeaknesses = resolvedMetrics.top_weaknesses || [];
   const topStrengths = resolvedMetrics.top_strengths || [];
   const teachNext = resolvedIntelligence?.teach_next || [];
   const studentsNeedingAttention = resolvedMetrics.students_needing_attention || [];
   const recentEvidence = resolvedMetrics.recent_learning_evidence || [];
 
-  // Data for Section 1: Classroom Pulse
   const totalStudents = classSummary.total_students || classroom?.student_count || 0;
   const overallScore = classSummary.overall_score ?? classHealth.classAverage ?? null;
   const scoreChange = classSummary.score_change ?? 0;
@@ -80,7 +78,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const participationRate = classSummary.engagement_rate ?? classHealth.participationRate ?? null;
   const strugglingCount = classHealth.strugglingCount ?? studentsNeedingAttention.length;
 
-  // Evidence Counts across 5 sources
+  // Multi-source Evidence Summary Counts
   const evidenceCounts = useMemo(() => {
     const raw = resolvedMetrics.evidenceSummaryCounts || resolvedMetrics.evidence_summary_counts;
     if (raw) return raw;
@@ -105,245 +103,158 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     };
   }, [resolvedMetrics.evidenceSummaryCounts, resolvedMetrics.evidence_summary_counts, recentEvidence]);
 
-  // Data for Section 2: What Your Students Are Struggling With (Granular Learning Gaps)
-  const learningGaps = useMemo(() => {
-    if (resolvedMetrics.learningGapPriority && resolvedMetrics.learningGapPriority.length > 0) {
-      return resolvedMetrics.learningGapPriority.map((g: any, index: number) => {
-        const sources = Array.isArray(g.sourcesList) && g.sourcesList.length > 0
-          ? g.sourcesList
-          : (Array.isArray(g.sources) ? g.sources : (g.sourcesCount > 1 ? ['Task', 'Live Quiz'] : ['Assessment']));
-        const isMultiSource = sources.length >= 2 || (g.affectedStudentsCount >= 2);
-        const studentCount = g.affectedStudentsCount ?? g.studentCount ?? 1;
-        const total = g.totalStudents || totalStudents || 1;
-        const accuracy = g.accuracy != null ? Math.round(g.accuracy) : (g.averageAccuracy != null ? Math.round(g.averageAccuracy) : 0);
-        const displayName = g.displayName || (g.skill ? `${g.topic} — ${g.skill}` : g.topic);
-        const category = g.category || 'Grammar';
-        const commonErrors = g.commonErrors || g.common_errors || [];
-        const teachAction = g.teachAction || g.recommended_action || `Review foundational rules of ${displayName} with contrast examples.`;
-
-        return {
-          rank: index + 1,
-          category,
-          topic: g.topic,
-          baseTopic: g.baseTopic || g.topic,
-          skill: g.skill,
-          displayName,
-          accuracy,
-          studentCount,
-          totalStudents: total,
-          sources,
-          sourcesCount: g.sourcesCount || sources.length,
-          confidence: g.confidence || (isMultiSource ? 'Confirmed gap' : 'Early signal'),
-          commonErrors,
-          teachAction,
-          diagnosis: g.why || `${studentCount} of ${total} students scored below mastery (${accuracy}% accuracy) across ${sources.join(', ')}.`,
-          recommended_action: teachAction
-        };
-      });
-    }
-
-    if (topWeaknesses.length > 0) {
-      return topWeaknesses
-        .filter((w: any) => (w.score ?? w.averageScore ?? 0) > 0)
-        .map((w: any, index: number) => {
-          const sources = w.eventsCount > 2 ? ['Task', 'Live Quiz'] : ['Assessment'];
-          const studentCount = Math.min(totalStudents, w.eventsCount || strugglingCount || 1);
-          const accuracy = Math.round(w.score ?? w.averageScore ?? 0);
-          return {
-            rank: index + 1,
-            category: 'Grammar',
-            topic: w.topic,
-            baseTopic: w.baseTopic || w.topic,
-            skill: w.skill || null,
-            displayName: w.topic,
-            accuracy,
-            studentCount,
-            totalStudents: totalStudents || 1,
-            sources,
-            sourcesCount: sources.length,
-            confidence: w.eventsCount > 2 ? 'Confirmed gap' : 'Early signal',
-            commonErrors: [],
-            teachAction: `Review key rules of ${w.topic} with guided practice before the next assessment.`,
-            diagnosis: `${studentCount} of ${totalStudents} students scored below mastery (${accuracy}% accuracy) across ${sources.join(', ')}.`,
-            recommended_action: `Review key rules of ${w.topic} with guided practice before next assessment.`
-          };
-        });
-    }
-
-    return topicPerformance
-      .filter((t: any) => (t.score ?? 0) > 0 && (t.score ?? 0) < 70)
-      .map((t: any, index: number) => {
-        const studentCount = Math.max(1, Math.min(totalStudents, strugglingCount));
-        const accuracy = Math.round(t.score ?? 0);
-        return {
-          rank: index + 1,
-          category: 'Curriculum',
-          topic: t.topic,
-          baseTopic: t.topic,
-          skill: null,
-          displayName: t.topic,
-          accuracy,
-          studentCount,
-          totalStudents: totalStudents || 1,
-          sources: ['Class Assessments'],
-          sourcesCount: 1,
-          confidence: 'Early signal',
-          commonErrors: [],
-          teachAction: `Review key rules of ${t.topic} with guided practice before next assessment.`,
-          diagnosis: `${studentCount} of ${totalStudents} students scored below mastery (${accuracy}% accuracy) across assessments.`,
-          recommended_action: `Review key rules of ${t.topic} with guided practice before next assessment.`
-        };
-      });
-  }, [resolvedMetrics.learningGapPriority, topWeaknesses, topicPerformance, totalStudents, strugglingCount]);
-
-  // Section 3: Topic Accuracy Chart Data
+  // Section 1: Class Performance — Max 10 clean canonical concept bars (No raw JSON, no duplicates)
   const sortedTopics = useMemo(() => {
-    return topicPerformance
-      .filter((t: any) => t.topic && (t.score > 0 || (t.eventsCount && t.eventsCount > 0)))
-      .sort((a: any, b: any) => a.score - b.score);
-  }, [topicPerformance]);
+    const rawTopics = (resolvedMetrics.topics && resolvedMetrics.topics.length > 0)
+      ? resolvedMetrics.topics
+      : topicPerformance;
 
-  // Section 4: Performance Over Time (Date-Aggregated & Chronological)
-  const lineChartData = useMemo(() => {
-    const rawData = resolvedMetrics.performance_over_time || 
-                    resolvedMetrics.performanceOverTime || 
-                    resolvedMetrics.trendData;
-    if (Array.isArray(rawData) && rawData.length > 0) {
-      return rawData.map((d: any) => ({
-        date: d.date || (d.timestamp ? new Date(d.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''),
-        value: typeof d.value === 'number' ? Math.round(d.value) : (typeof d.score === 'number' ? Math.round(d.score) : 0),
-        count: d.count || d.eventCount || 1
-      })).filter((d: any) => Boolean(d.date) && d.value >= 0);
+    const seenNames = new Set<string>();
+    const cleaned = [];
+
+    for (const t of rawTopics) {
+      const name = t.displayName || t.topic || '';
+      // Reject raw JSON, session IDs, generic categories, or placeholders
+      if (!name || name.length < 3 || seenNames.has(name.toLowerCase())) continue;
+      if (/session[-_]?id|final[-_]?rank|\{|\}|\[|\]/i.test(name)) continue;
+      if (/^(?:grammar|spelling|writing|vocabulary|reading|general|other|task|assignment)$/i.test(name.trim())) continue;
+
+      const score = t.averagePercentage != null ? Math.round(t.averagePercentage) : (t.score != null ? Math.round(t.score) : null);
+      if (score === null || isNaN(score)) continue;
+
+      seenNames.add(name.toLowerCase());
+      cleaned.push({
+        displayName: name,
+        topic: t.topic || name,
+        score
+      });
     }
 
-    if (recentEvidence.length > 0) {
-      const dateMap = new Map<string, { totalScore: number; count: number; dateStr: string; time: number }>();
-      
-      recentEvidence.forEach((e: any) => {
-        const rawDate = e.latestCompletedAt || e.completedAt;
-        if (!rawDate) return;
-        const d = new Date(rawDate);
-        if (isNaN(d.getTime())) return;
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const score = e.averagePercentage ?? e.score ?? null;
-        if (score === null || isNaN(score) || score <= 0) return;
+    // Sort by lowest score first, maximum 10 bars
+    return cleaned.sort((a, b) => a.score - b.score).slice(0, 10);
+  }, [resolvedMetrics.topics, topicPerformance]);
 
-        const current = dateMap.get(dateKey) || {
-          totalScore: 0,
-          count: 0,
-          dateStr: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-          time: d.getTime()
-        };
-        current.totalScore += Number(score);
-        current.count += 1;
-        dateMap.set(dateKey, current);
+  // Section 2: What Your Students Are Struggling With — Maximum 5 clean, evidence-backed diagnostic cards
+  const learningGaps = useMemo(() => {
+    const rawGaps = resolvedMetrics.learningGapPriority || [];
+    const seen = new Set<string>();
+    const validGaps = [];
+
+    for (const g of rawGaps) {
+      const name = g.displayName || g.topic;
+      if (!name || seen.has(name.toLowerCase())) continue;
+      if (/session[-_]?id|final[-_]?rank|\{|\}/i.test(name)) continue;
+      if (/^(?:grammar|spelling|writing|vocabulary|reading|general|other|task|assignment)$/i.test(name.trim())) continue;
+
+      seen.add(name.toLowerCase());
+
+      const sources = Array.isArray(g.sourcesList) && g.sourcesList.length > 0
+        ? g.sourcesList
+        : (Array.isArray(g.sources) ? g.sources : ['Task']);
+      const isMultiSource = sources.length >= 2 || (g.affectedStudentsCount >= 2);
+      const studentCount = g.affectedStudentsCount ?? g.studentCount ?? 1;
+      const total = g.totalStudents || totalStudents || 1;
+      const accuracy = g.accuracy != null ? Math.round(g.accuracy) : (g.averageAccuracy != null ? Math.round(g.averageAccuracy) : 0);
+      const category = g.category || 'Grammar';
+      const commonErrors = Array.isArray(g.commonErrors) ? g.commonErrors : (Array.isArray(g.common_errors) ? g.common_errors : []);
+      const teachAction = g.teachAction || g.recommended_action || `Review foundational rules of ${name} with contrast practice.`;
+
+      validGaps.push({
+        rank: validGaps.length + 1,
+        category,
+        topic: g.topic,
+        displayName: name,
+        accuracy,
+        studentCount,
+        totalStudents: total,
+        sources,
+        confidence: g.confidence || (isMultiSource ? 'Confirmed gap' : 'Early signal'),
+        commonErrors,
+        teachAction
       });
 
-      return Array.from(dateMap.entries())
-        .sort((a, b) => a[1].time - b[1].time)
-        .map(([, v]) => ({
-          date: v.dateStr,
-          value: Math.round(v.totalScore / v.count),
-          count: v.count
-        }));
+      if (validGaps.length >= 5) break; // Maximum 5 learning gaps
     }
 
-    return [];
-  }, [resolvedMetrics.performance_over_time, resolvedMetrics.performanceOverTime, resolvedMetrics.trendData, recentEvidence]);
+    return validGaps;
+  }, [resolvedMetrics.learningGapPriority, totalStudents]);
 
-  // Fixed SVG Coordinate Specs for Line Chart
-  const chartWidth = 500;
-  const chartHeight = 180;
-  const paddingLeft = 40;
-  const paddingRight = 24;
-  const paddingTop = 20;
-  const paddingBottom = 30;
-  const plotWidth = chartWidth - paddingLeft - paddingRight;
-  const plotHeight = chartHeight - paddingTop - paddingBottom;
-
-  const chartPoints = useMemo(() => {
-    if (lineChartData.length === 0) return [];
-    if (lineChartData.length === 1) {
-      const val = Math.min(100, Math.max(0, lineChartData[0].value));
-      return [{
-        x: paddingLeft + plotWidth / 2,
-        y: paddingTop + plotHeight - (val / 100) * plotHeight,
-        date: lineChartData[0].date,
-        value: val,
-        count: lineChartData[0].count || 1
-      }];
-    }
-    return lineChartData.map((d: any, i: number) => {
-      const val = Math.min(100, Math.max(0, d.value));
-      return {
-        x: paddingLeft + (i / (lineChartData.length - 1)) * plotWidth,
-        y: paddingTop + plotHeight - (val / 100) * plotHeight,
-        date: d.date,
-        value: val,
-        count: d.count || 1
-      };
-    });
-  }, [lineChartData, paddingLeft, plotWidth, paddingTop, plotHeight]);
-
-  const targetY = paddingTop + plotHeight - 0.70 * plotHeight;
-
-  const linePathD = useMemo(() => {
-    if (chartPoints.length < 2) return '';
-    return `M ${chartPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')}`;
-  }, [chartPoints]);
-
-  const areaPathD = useMemo(() => {
-    if (chartPoints.length < 2) return '';
-    const bottomY = paddingTop + plotHeight;
-    const firstX = chartPoints[0].x.toFixed(1);
-    const lastX = chartPoints[chartPoints.length - 1].x.toFixed(1);
-    return `M ${firstX},${bottomY} L ${chartPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')} L ${lastX},${bottomY} Z`;
-  }, [chartPoints, paddingTop, plotHeight]);
-
-  // Section 5: Teaching Focus
+  // Section 3: Teaching Focus — Single #1 Highest Priority Specific Concept
   const topGap = learningGaps[0] || null;
-  const recommendedFocus = resolvedMetrics.recommendedTeachingFocus || teachNext[0] || (topGap ? {
-    topic: topGap.topic,
-    displayName: topGap.displayName,
-    why: topGap.diagnosis,
-    recommended_action: topGap.teachAction || topGap.recommended_action
-  } : null);
-
-  // Class Strengths (Deduplicated >= 75%)
-  const strengthsList = useMemo(() => {
-    if (resolvedMetrics.classStrengths && resolvedMetrics.classStrengths.length > 0) {
-      return resolvedMetrics.classStrengths;
+  const recommendedFocus = useMemo(() => {
+    if (topGap) {
+      return {
+        displayName: topGap.displayName,
+        topic: topGap.topic,
+        accuracy: topGap.accuracy,
+        studentCount: topGap.studentCount,
+        totalStudents: topGap.totalStudents,
+        teachAction: topGap.teachAction
+      };
     }
-    if (topStrengths && topStrengths.length > 0) {
-      return topStrengths.map((s: any) => ({
-        topic: s.displayName || s.topic,
-        accuracy: s.score || s.averageScore || 0,
-        eventsCount: s.eventsCount || 1
-      }));
+    const focus = resolvedMetrics.recommendedTeachingFocus || teachNext[0];
+    if (focus && focus.displayName && !/^(?:grammar|spelling|writing|vocabulary|reading|general)$/i.test(focus.displayName.trim())) {
+      return {
+        displayName: focus.displayName || focus.topic,
+        topic: focus.topic,
+        accuracy: focus.accuracy || focus.averageAccuracy || 50,
+        studentCount: focus.studentsAffected || focus.studentCount || 1,
+        totalStudents: focus.studentsTotal || totalStudents || 1,
+        teachAction: focus.teachAction || focus.recommended_action || "Spend the next class period reviewing key rules with guided practice."
+      };
     }
-    return topicPerformance
-      .filter((t: any) => t.score >= 75)
-      .map((t: any) => ({
-        topic: t.displayName || t.topic,
-        accuracy: t.score,
-        eventsCount: t.eventsCount || 1
-      }));
-  }, [resolvedMetrics.classStrengths, topStrengths, topicPerformance]);
+    return null;
+  }, [topGap, resolvedMetrics.recommendedTeachingFocus, teachNext, totalStudents]);
 
-  // Students Needing Support (with real names and specific weak concepts)
+  // Section 4: Students Needing Support (with real names and specific weak concepts)
   const supportStudentsList = useMemo(() => {
-    if (resolvedMetrics.studentsNeedingSupport && resolvedMetrics.studentsNeedingSupport.length > 0) {
-      return resolvedMetrics.studentsNeedingSupport;
+    const list = resolvedMetrics.studentsNeedingSupport || [];
+    if (list.length > 0) {
+      return list.map((s: any) => ({
+        studentId: s.studentId,
+        studentName: s.studentName || s.fullName || 'Student',
+        averagePercentage: s.averagePercentage != null ? Math.round(s.averagePercentage) : null,
+        specificWeakConcepts: Array.isArray(s.specificWeakConcepts) && s.specificWeakConcepts.length > 0
+          ? s.specificWeakConcepts
+          : (s.weakAreas?.map((w: any) => w.displayName || w.topic) || ['Targeted Concept Review'])
+      })).slice(0, 6);
     }
+
     return studentsNeedingAttention.map((s: any) => ({
       studentId: s.studentId || s.id,
       studentName: s.student_ref || s.name || s.fullName || 'Student',
-      averagePercentage: s.average_score ?? s.average ?? null,
-      specificWeakConcepts: s.main_weakness ? [s.main_weakness] : (s.specificWeakConcepts || [])
-    }));
+      averagePercentage: s.average_score != null ? Math.round(s.average_score) : null,
+      specificWeakConcepts: s.main_weakness ? [s.main_weakness] : ['Core Concept Review']
+    })).slice(0, 6);
   }, [resolvedMetrics.studentsNeedingSupport, studentsNeedingAttention]);
 
-  // Helper colors
+  // Section 5: Class Strengths (Deduplicated concepts >= 75%)
+  const strengthsList = useMemo(() => {
+    const raw = resolvedMetrics.classStrengths || topStrengths || [];
+    const seen = new Set<string>();
+    const cleaned = [];
+
+    for (const s of raw) {
+      const name = s.displayName || s.topic;
+      if (!name || seen.has(name.toLowerCase())) continue;
+      if (/session[-_]?id|final[-_]?rank|\{|\}/i.test(name)) continue;
+      if (/^(?:grammar|spelling|writing|vocabulary|reading|general|other|task|assignment)$/i.test(name.trim())) continue;
+
+      const acc = s.accuracy != null ? Math.round(s.accuracy) : (s.averagePercentage != null ? Math.round(s.averagePercentage) : (s.averageScore != null ? Math.round(s.averageScore) : null));
+      if (acc == null || acc < 75) continue;
+
+      seen.add(name.toLowerCase());
+      cleaned.push({
+        displayName: name,
+        accuracy: acc
+      });
+
+      if (cleaned.length >= 4) break;
+    }
+
+    return cleaned;
+  }, [resolvedMetrics.classStrengths, topStrengths]);
+
   const getBarColor = (score: number) => {
     if (score < 50) return '#ef4444';
     if (score < 70) return '#f59e0b';
@@ -368,20 +279,20 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     }
   };
 
-  const hasData = totalStudents > 0 && (evidenceCounts.total > 0 || topicPerformance.length > 0);
+  const hasEvidence = totalStudents > 0 && (evidenceCounts.total > 0 || sortedTopics.length > 0);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-200 pb-12">
+    <div className="space-y-8 animate-in fade-in duration-200 pb-16">
       
-      {/* 1. CLASSROOM PULSE & EVIDENCE SUMMARY */}
+      {/* 1. CLASSROOM PULSE & MULTI-SOURCE EVIDENCE SUMMARY */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Classroom Pulse</h2>
+        <div className="flex items-center justify-between mb-3.5">
+          <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Classroom Pulse</h2>
           <span className="text-xs font-bold text-[#36565A]">{totalStudents} Enrolled Students</span>
         </div>
         
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Overall Learning Health</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -396,7 +307,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
           
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Task Completion Rate</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -405,7 +316,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Active Participation</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -414,7 +325,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-xs flex flex-col justify-between">
+          <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs flex flex-col justify-between">
             <span className="text-xs font-bold text-[#36565A]">Students Needing Support</span>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-2xl font-black text-[#173B3F]">
@@ -425,42 +336,44 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           </div>
         </div>
 
-        {/* Multi-Source Learning Evidence Summary Bar */}
-        <div className="mt-4 bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3.5 flex items-center justify-between flex-wrap gap-3">
+        {/* Evidence Sources Badges */}
+        <div className="mt-3.5 bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3 flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2 text-xs font-bold text-[#173B3F]">
-            <Layers className="w-4 h-4 text-[#087477]" />
-            <span>Multi-Source Diagnostic Evidence:</span>
+            <Layers className="w-3.5 h-3.5 text-[#087477]" />
+            <span>Diagnostic Learning Evidence:</span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap text-xs">
-            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
               <PenTool className="w-3 h-3 text-[#087477]" />
               OCR Worksheets: <strong className="font-black text-[#087477]">{evidenceCounts.ocr}</strong>
             </span>
 
-            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
               <BookOpen className="w-3 h-3 text-indigo-600" />
               Typed Tasks: <strong className="font-black text-indigo-700">{evidenceCounts.tasks}</strong>
             </span>
 
-            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
-              <Zap className="w-3 h-3 text-amber-500" />
-              Live Quizzes: <strong className="font-black text-amber-600">{evidenceCounts.live_quizzes}</strong>
-            </span>
-
-            <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
               <Award className="w-3 h-3 text-rose-500" />
               Exams & Assessments: <strong className="font-black text-rose-600">{evidenceCounts.exams}</strong>
             </span>
 
             {evidenceCounts.competitions > 0 && (
-              <span className="px-2.5 py-1 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1.5 shadow-2xs">
+              <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
                 <Sparkles className="w-3 h-3 text-purple-500" />
                 Competitions: <strong className="font-black text-purple-600">{evidenceCounts.competitions}</strong>
               </span>
             )}
 
-            <span className="px-2.5 py-1 rounded-md bg-[#087477] text-white font-bold text-xs shadow-xs">
+            {evidenceCounts.live_quizzes > 0 && (
+              <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
+                <Zap className="w-3 h-3 text-amber-500" />
+                Live Quizzes: <strong className="font-black text-amber-600">{evidenceCounts.live_quizzes}</strong>
+              </span>
+            )}
+
+            <span className="px-2.5 py-0.5 rounded-md bg-[#087477] text-white font-bold text-xs shadow-2xs">
               Total Evidence: {evidenceCounts.total}
             </span>
           </div>
@@ -469,186 +382,34 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 2. WHAT YOUR STUDENTS ARE STRUGGLING WITH (ACTIONABLE DIAGNOSTIC CARDS) */}
+      {/* 2. CLASS PERFORMANCE (MAX 10 CLEAN BARS AGAINST 70% TARGET) */}
       <section>
-        <div className="mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">
-                What Your Students Are Struggling With
-              </h2>
-              <p className="text-xs text-[#36565A] mt-1">
-                Grounded diagnostic breakdown answering what concepts are weak and what to teach next.
-              </p>
-            </div>
-            <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
-              {learningGaps.length} Identified {learningGaps.length === 1 ? 'Weakness' : 'Weaknesses'}
-            </span>
-          </div>
+        <div className="mb-3.5">
+          <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Performance</h2>
+          <p className="text-xs text-[#36565A] mt-0.5">Assessed concept accuracy against the 70% curriculum mastery benchmark.</p>
         </div>
 
-        {!hasData || learningGaps.length === 0 ? (
-          <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
-            <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-3 opacity-50" />
-            <p className="text-sm font-bold text-[#173B3F]">
-              {!hasData ? "Not enough evidence yet." : "No learning gaps identified yet."}
-            </p>
-            <p className="text-xs text-[#36565A] mt-1">
-              {!hasData 
-                ? "Have students complete worksheets, tasks, or quizzes to unlock diagnostic insights."
-                : "All assessed concepts currently meet or exceed the 70% mastery threshold."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {learningGaps.map((gap: any) => (
-              <div 
-                key={gap.rank || gap.displayName} 
-                className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs hover:border-[#159A9C]/60 transition-all space-y-4"
-              >
-                {/* Header Row: Rank + Category + Concept Name + Ratio + Confidence */}
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="w-6 h-6 rounded-full bg-[#173B3F] text-white text-xs font-black flex items-center justify-center shrink-0">
-                        {gap.rank}
-                      </span>
-
-                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(gap.category)}`}>
-                        {gap.category}
-                      </span>
-
-                      <h3 className="text-base font-black text-[#173B3F]">
-                        {gap.displayName}
-                      </h3>
-                      
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
-                        gap.confidence === 'Confirmed gap'
-                          ? 'bg-teal-50 text-teal-800 border-teal-200'
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}>
-                        {gap.confidence}
-                      </span>
-                    </div>
-
-                    {/* Ratio & Accuracy Sub-row */}
-                    <div className="flex items-center gap-3 text-xs font-semibold text-[#173B3F] flex-wrap pt-0.5">
-                      <span 
-                        className="px-2.5 py-0.5 rounded text-xs font-black"
-                        style={{ backgroundColor: getBarColor(gap.accuracy) + '20', color: getBarColor(gap.accuracy) }}
-                      >
-                        {gap.accuracy}% class accuracy
-                      </span>
-
-                      <span>•</span>
-
-                      <span className="text-[#36565A]">
-                        <strong className="text-[#173B3F]">{gap.studentCount}</strong> of <strong className="text-[#173B3F]">{gap.totalStudents}</strong> students struggling
-                      </span>
-
-                      <span>•</span>
-
-                      {/* Evidence Sources */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] text-[#36565A] font-medium">Evidence in:</span>
-                        {(gap.sources || []).map((source: string, idx: number) => (
-                          <span key={idx} className="text-[11px] font-bold px-2 py-0.5 bg-[#F8FCFB] border border-[#C9E5E2] rounded text-[#173B3F]">
-                            {source}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-row md:flex-col gap-2 shrink-0">
-                    <button 
-                      onClick={() => handleNavigation('evidence-reports', { topic: gap.displayName || gap.topic })}
-                      className="px-4 py-2 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors w-full cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-[#087477]" />
-                      View Evidence
-                    </button>
-                    <button 
-                      onClick={() => handleNavigation('teaching', { topic: gap.topic })}
-                      className="px-4 py-2 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors w-full cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-                    >
-                      Teach This
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Common Student Errors Box */}
-                {gap.commonErrors && gap.commonErrors.length > 0 && (
-                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-3 text-xs space-y-1.5">
-                    <div className="font-bold text-[#92400E] flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-[#D97706]" />
-                      <span>Common Student Error Patterns:</span>
-                    </div>
-                    <div className="space-y-1 pl-5">
-                      {gap.commonErrors.slice(0, 3).map((err: any, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs flex-wrap font-sans">
-                          <span className="line-through text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-mono font-medium">
-                            {err.student_error}
-                          </span>
-                          <span className="text-slate-400 font-bold">→</span>
-                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono font-bold">
-                            {err.correct_form}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Concrete 1-Lesson Teach Next Callout */}
-                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2.5">
-                  <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
-                  <div className="flex-1 space-y-0.5">
-                    <span className="font-bold text-[#087477]">Teach next: </span>
-                    <span className="text-[#173B3F] leading-relaxed">
-                      <InlineMarkdown text={gap.teachAction || gap.recommended_action || "Review foundational concepts with guided examples."} />
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <hr className="border-[#C9E5E2]" />
-
-      {/* 3. CLASS PERFORMANCE (TOPIC ACCURACY HORIZONTAL BAR CHART) */}
-      <section>
-        <div className="mb-4">
-          <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Class Performance</h2>
-          <p className="text-xs text-[#36565A] mt-1">Class mastery across assessed curriculum topics against the 70% benchmark.</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs">
+        <div className="bg-white rounded-xl border border-[#C9E5E2] p-4.5 shadow-2xs">
           {sortedTopics.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-8">
-              <BarChart3 className="w-8 h-8 text-slate-300 mb-2" />
+            <div className="flex flex-col items-center justify-center text-center p-6">
+              <BarChart3 className="w-7 h-7 text-slate-300 mb-1.5" />
               <span className="text-xs text-[#36565A] font-bold">No topic assessment data available yet.</span>
             </div>
           ) : (
-            <div className="space-y-4 relative pb-4">
-              {/* 70% Target Benchmark Line */}
+            <div className="space-y-3.5 relative pb-4">
+              {/* 70% Target Benchmark Marker */}
               <div className="hidden sm:block absolute top-0 bottom-4 left-[70%] border-l-2 border-dashed border-teal-500/40 z-0" />
               <div className="hidden sm:block absolute bottom-0 left-[70%] text-[9px] font-bold text-teal-600 -translate-x-1/2">
                 70% Target
               </div>
               
-              {sortedTopics.map((t: any, i: number) => (
+              {sortedTopics.map((t, i) => (
                 <div key={i} className="relative z-10">
-                  <div className="flex justify-between text-xs font-bold text-[#173B3F] mb-1.5">
-                    <span className="truncate pr-2">{t.displayName || t.topic}</span>
-                    <span className="shrink-0" style={{ color: getBarColor(t.score) }}>{t.score}%</span>
+                  <div className="flex justify-between text-xs font-bold text-[#173B3F] mb-1">
+                    <span className="truncate pr-2">{t.displayName}</span>
+                    <span className="shrink-0 font-mono font-black" style={{ color: getBarColor(t.score) }}>{t.score}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div 
                       className="h-full rounded-full transition-all duration-500" 
                       style={{ width: `${Math.min(100, Math.max(0, t.score))}%`, backgroundColor: getBarColor(t.score) }} 
@@ -663,194 +424,216 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 4. PERFORMANCE OVER TIME (CHRONOLOGICAL SVG LINE CHART) */}
+      {/* 3. WHAT YOUR STUDENTS ARE STRUGGLING WITH (MAXIMUM 5 CLEAN DIAGNOSTIC CARDS) */}
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-3.5 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#173B3F]">Performance Over Time</h2>
-            <p className="text-xs text-[#36565A] mt-1">Class assessment trend across chronological checkpoints.</p>
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
+              What Your Students Are Struggling With
+            </h2>
+            <p className="text-xs text-[#36565A] mt-0.5">
+              Specific, evidence-backed learning gaps and target 1-lesson teaching actions.
+            </p>
           </div>
-          {lineChartData.length > 1 && (
-            <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded border border-teal-200">
-              {lineChartData.length} checkpoints
+          {learningGaps.length > 0 && (
+            <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-0.5 rounded-full border border-teal-200">
+              {learningGaps.length} Priority {learningGaps.length === 1 ? 'Gap' : 'Gaps'}
             </span>
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-[#C9E5E2] p-5 shadow-xs">
-          {chartPoints.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-8 bg-[#F8FCFB] rounded-lg border border-dashed border-[#C9E5E2]">
-              <TrendingUp className="w-8 h-8 text-[#159A9C] mb-2 opacity-50" />
-              <span className="text-xs font-bold text-[#173B3F]">Not enough historical data yet.</span>
-              <span className="text-[11px] text-[#36565A] mt-0.5">Complete assessments to track class progress over time.</span>
-            </div>
-          ) : chartPoints.length === 1 ? (
-            <div className="flex flex-col items-center justify-center p-4">
-              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-auto max-h-[160px] overflow-visible">
-                {[0, 25, 50, 75, 100].map((val) => {
-                  const y = paddingTop + plotHeight - (val / 100) * plotHeight;
-                  return (
-                    <g key={val}>
-                      <line x1={paddingLeft} y1={y} x2={paddingLeft + plotWidth} y2={y} stroke="#E2E8F0" strokeWidth="1" strokeDasharray="2 2" />
-                      <text x={paddingLeft - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#36565A" fontWeight="600">{val}%</text>
-                    </g>
-                  );
-                })}
-                <circle
-                  cx={chartPoints[0].x}
-                  cy={chartPoints[0].y}
-                  r="6"
-                  fill="#087477"
-                  stroke="#FFFFFF"
-                  strokeWidth="2.5"
-                />
-                <text x={chartPoints[0].x} y={chartPoints[0].y - 10} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#087477">
-                  {chartPoints[0].value}%
-                </text>
-                <text x={chartPoints[0].x} y={chartHeight - 8} textAnchor="middle" fontSize="9" fontWeight="600" fill="#36565A">
-                  {chartPoints[0].date}
-                </text>
-              </svg>
-              <p className="text-[11px] text-[#36565A] text-center mt-2">
-                1 checkpoint recorded ({chartPoints[0].date}: {chartPoints[0].value}%). More activity is needed to show a trend line.
-              </p>
-            </div>
-          ) : (
-            <div>
-              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-auto max-h-[160px] overflow-visible">
-                <defs>
-                  <linearGradient id="performanceAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#159A9C" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#159A9C" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
+        {!hasEvidence || learningGaps.length === 0 ? (
+          <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
+            <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-2 opacity-50" />
+            <p className="text-sm font-bold text-[#173B3F]">
+              {!hasEvidence ? "Not enough evidence yet." : "No learning gaps identified yet."}
+            </p>
+            <p className="text-xs text-[#36565A] mt-1">
+              {!hasEvidence 
+                ? "Have students complete worksheets, tasks, or exams to unlock diagnostic insights."
+                : "All assessed concepts currently meet or exceed the 70% mastery threshold."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {learningGaps.map((gap) => (
+              <div 
+                key={gap.rank || gap.displayName} 
+                className="bg-white rounded-xl border border-[#C9E5E2] p-4.5 shadow-2xs hover:border-[#159A9C]/60 transition-all space-y-3"
+              >
+                {/* Header Row: Rank + Category + Concept Name + Ratio + Confidence */}
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="w-5 h-5 rounded-full bg-[#173B3F] text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                        {gap.rank}
+                      </span>
 
-                {[0, 25, 50, 75, 100].map((val) => {
-                  const y = paddingTop + plotHeight - (val / 100) * plotHeight;
-                  return (
-                    <g key={val}>
-                      <line x1={paddingLeft} y1={y} x2={paddingLeft + plotWidth} y2={y} stroke="#E2E8F0" strokeWidth="1" strokeDasharray="2 2" />
-                      <text x={paddingLeft - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#36565A" fontWeight="600">{val}%</text>
-                    </g>
-                  );
-                })}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(gap.category)}`}>
+                        {gap.category}
+                      </span>
 
-                <line
-                  x1={paddingLeft}
-                  y1={targetY}
-                  x2={paddingLeft + plotWidth}
-                  y2={targetY}
-                  stroke="#14b8a6"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 3"
-                  opacity="0.8"
-                />
-                <text x={paddingLeft + plotWidth - 4} y={targetY - 3} textAnchor="end" fontSize="9" fill="#0d9488" fontWeight="700">
-                  70% Target
-                </text>
+                      <h3 className="text-sm sm:text-base font-black text-[#173B3F]">
+                        {gap.displayName}
+                      </h3>
+                      
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
+                        gap.confidence === 'Confirmed gap'
+                          ? 'bg-teal-50 text-teal-800 border-teal-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        {gap.confidence}
+                      </span>
+                    </div>
 
-                {areaPathD && (
-                  <path d={areaPathD} fill="url(#performanceAreaGrad)" />
+                    {/* Ratio & Accuracy */}
+                    <div className="flex items-center gap-2.5 text-xs font-semibold text-[#173B3F] flex-wrap">
+                      <span 
+                        className="px-2 py-0.5 rounded text-xs font-black"
+                        style={{ backgroundColor: getBarColor(gap.accuracy) + '20', color: getBarColor(gap.accuracy) }}
+                      >
+                        {gap.accuracy}% accuracy
+                      </span>
+
+                      <span>•</span>
+
+                      <span className="text-[#36565A]">
+                        <strong className="text-[#173B3F]">{gap.studentCount}</strong> of <strong className="text-[#173B3F]">{gap.totalStudents}</strong> students
+                      </span>
+
+                      <span>•</span>
+
+                      {/* Evidence in */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[11px] text-[#36565A] font-medium">Evidence in:</span>
+                        {(gap.sources || []).map((source: string, idx: number) => (
+                          <span key={idx} className="text-[10px] font-bold px-1.5 py-0.2 bg-[#F8FCFB] border border-[#C9E5E2] rounded text-[#173B3F]">
+                            {source}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-row md:flex-col gap-2 shrink-0">
+                    <button 
+                      onClick={() => handleNavigation('evidence-reports', { topic: gap.displayName || gap.topic })}
+                      className="px-3 py-1.5 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-[#087477]" />
+                      View Evidence
+                    </button>
+                    <button 
+                      onClick={() => handleNavigation('teaching', { topic: gap.topic })}
+                      className="px-3 py-1.5 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      Teach This
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Common Student Errors Box */}
+                {gap.commonErrors && gap.commonErrors.length > 0 && (
+                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-2.5 text-xs space-y-1">
+                    <div className="font-bold text-[#92400E] flex items-center gap-1.5 text-[11px]">
+                      <AlertCircle className="w-3 h-3 text-[#D97706]" />
+                      <span>Common error:</span>
+                    </div>
+                    <div className="space-y-0.5 pl-4">
+                      {gap.commonErrors.slice(0, 2).map((err: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs flex-wrap font-sans">
+                          <span className="line-through text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-mono font-medium text-[11px]">
+                            {err.student_error}
+                          </span>
+                          <span className="text-slate-400 font-bold">→</span>
+                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-mono font-bold text-[11px]">
+                            {err.correct_form}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
-                {linePathD && (
-                  <path
-                    d={linePathD}
-                    fill="none"
-                    stroke="#087477"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                )}
+                {/* Teach Callout */}
+                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-2.5 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
+                  <Lightbulb className="w-3.5 h-3.5 text-[#087477] shrink-0 mt-0.5" />
+                  <div className="flex-1 text-[11px] leading-relaxed">
+                    <span className="font-bold text-[#087477]">Teach: </span>
+                    <InlineMarkdown text={gap.teachAction || "Review core concept with guided examples."} />
+                  </div>
+                </div>
 
-                {chartPoints.map((p, idx) => (
-                  <g key={idx} className="cursor-pointer group">
-                    <circle
-                      cx={p.x}
-                      cy={p.y}
-                      r="4.5"
-                      fill="#087477"
-                      stroke="#FFFFFF"
-                      strokeWidth="2"
-                      className="transition-all duration-150 group-hover:scale-125"
-                    />
-                    <title>{`${p.date}: ${p.value}% (${p.count} assessment${p.count > 1 ? 's' : ''})`}</title>
-                  </g>
-                ))}
-
-                {chartPoints.length > 0 && (
-                  <g>
-                    <text x={chartPoints[0].x} y={chartHeight - 8} textAnchor="start" fontSize="9" fontWeight="600" fill="#36565A">
-                      {chartPoints[0].date}
-                    </text>
-                    {chartPoints.length >= 3 && (
-                      <text x={chartPoints[Math.floor(chartPoints.length / 2)].x} y={chartHeight - 8} textAnchor="middle" fontSize="9" fontWeight="600" fill="#36565A">
-                        {chartPoints[Math.floor(chartPoints.length / 2)].date}
-                      </text>
-                    )}
-                    <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 8} textAnchor="end" fontSize="9" fontWeight="600" fill="#36565A">
-                      {chartPoints[chartPoints.length - 1].date}
-                    </text>
-                  </g>
-                )}
-              </svg>
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 5. TEACHING FOCUS CALLOUT */}
-      {recommendedFocus && (
-        <section>
-          <div className="bg-gradient-to-r from-[#F0FDF4] to-[#F8FCFB] rounded-xl border border-[#C9E5E2] border-l-4 border-l-[#159A9C] p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#087477]" />
-                <h2 className="text-xs font-black uppercase tracking-wider text-[#087477]">Teaching Focus</h2>
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
-                Recommended Next Step
-              </span>
+      {/* 4. TEACHING FOCUS (ONE CLEAR PRIORITY) */}
+      <section>
+        <div className="bg-gradient-to-r from-[#F0FDF4] to-[#F8FCFB] rounded-xl border border-[#C9E5E2] border-l-4 border-l-[#159A9C] p-5 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#087477]" />
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#087477]">Teaching Focus</h2>
             </div>
+            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
+              #1 Priority
+            </span>
+          </div>
 
-            <div className="space-y-3">
-              <h3 className="text-base font-black text-[#173B3F]">
+          {recommendedFocus ? (
+            <div className="space-y-2.5">
+              <h3 className="text-sm sm:text-base font-black text-[#173B3F]">
                 Your class currently needs support with:{' '}
-                <span className="text-[#087477]">{recommendedFocus.displayName || recommendedFocus.topic}</span>
+                <span className="text-[#087477]">{recommendedFocus.displayName}</span>
               </h3>
 
+              <div className="flex items-center gap-3 text-xs text-[#36565A]">
+                <span>{recommendedFocus.studentCount} of {recommendedFocus.totalStudents} students affected</span>
+                <span>•</span>
+                <span className="font-bold text-rose-600">{recommendedFocus.accuracy}% accuracy</span>
+              </div>
+
               <p className="text-xs text-[#173B3F] leading-relaxed">
-                <InlineMarkdown text={recommendedFocus.recommended_action || recommendedFocus.teachAction || recommendedFocus.why || "Spend the next class period reviewing key rules with guided contrast examples, followed by immediate formative practice."} />
+                <strong className="text-[#087477]">Teach next: </strong>
+                <InlineMarkdown text={recommendedFocus.teachAction} />
               </p>
 
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-2.5 pt-1.5">
                 <button 
                   onClick={() => handleNavigation('teaching', { topic: recommendedFocus.topic })}
-                  className="px-4 py-2 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
                 >
                   Teach This Concept <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <button 
-                  onClick={() => handleNavigation('evidence-reports', { topic: recommendedFocus.displayName || recommendedFocus.topic })}
-                  className="px-4 py-2 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  onClick={() => handleNavigation('evidence-reports', { topic: recommendedFocus.displayName })}
+                  className="px-3.5 py-1.5 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
                 >
                   <FileText className="w-3.5 h-3.5 text-[#087477]" />
                   View Diagnostic Evidence
                 </button>
               </div>
             </div>
-          </div>
-        </section>
-      )}
+          ) : (
+            <p className="text-xs text-[#36565A] font-semibold">
+              No clear teaching priority yet. Complete student assessments to identify focal areas.
+            </p>
+          )}
+        </div>
+      </section>
 
-      {/* 6. SUPPORTING PANELS: Students Needing Support & Class Strengths */}
-      <section className="space-y-6 pt-2">
+      {/* 5. SUPPORTING PANELS: Students Needing Support & Class Strengths */}
+      <section className="space-y-6 pt-1">
         {/* Students Needing Support */}
         <div>
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-2.5 flex items-center justify-between">
             <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
             {supportStudentsList.length > 0 && (
               <span className="text-[11px] font-bold text-[#087477]">
@@ -865,29 +648,30 @@ export const InsightTab: React.FC<InsightTabProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {supportStudentsList.slice(0, 6).map((student: any, i: number) => {
-                const sName = student.studentName || student.fullName || student.name || 'Student';
+              {supportStudentsList.map((student: any, i: number) => {
+                const sName = student.studentName || 'Student';
                 const initial = sName.trim().charAt(0).toUpperCase() || 'S';
-                const weakList = student.specificWeakConcepts || (student.weakestArea ? [student.weakestArea] : []);
 
                 return (
                   <div 
                     key={i} 
-                    onClick={() => handleNavigation('students', { studentId: student.studentId || student.id })}
-                    className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-3.5 shadow-2xs cursor-pointer transition-colors flex items-start gap-3"
+                    onClick={() => handleNavigation('students', { studentId: student.studentId })}
+                    className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-3 shadow-2xs cursor-pointer transition-colors flex items-start gap-2.5"
                   >
-                    <div className="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#087477] font-black text-xs shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#087477] font-black text-xs shrink-0">
                       {initial}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <span className="text-xs font-black text-[#173B3F] truncate pr-2">{sName}</span>
-                        <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                          {student.averagePercentage ?? student.average ?? student.average_score ?? '<60'}%
-                        </span>
+                        {student.averagePercentage != null && (
+                          <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                            {student.averagePercentage}%
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[10px] text-[#36565A] mt-1 line-clamp-1 font-medium">
-                        {weakList.length > 0 ? weakList.join(', ') : "Needs concept review"}
+                      <p className="text-[10px] text-[#36565A] mt-0.5 line-clamp-1 font-medium">
+                        {student.specificWeakConcepts?.join(', ') || "Needs concept review"}
                       </p>
                     </div>
                   </div>
@@ -900,17 +684,17 @@ export const InsightTab: React.FC<InsightTabProps> = ({
         {/* Class Strengths */}
         {strengthsList.length > 0 && (
           <div>
-            <div className="mb-3">
-              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Strengths (Mastered Concepts)</h2>
+            <div className="mb-2.5">
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Strengths</h2>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {strengthsList.map((s: any, i: number) => (
                 <div key={i} className="bg-white border border-[#C9E5E2] rounded-xl p-3 shadow-2xs flex flex-col justify-between">
-                  <span className="text-xs font-bold text-[#173B3F] mb-2 truncate">{s.displayName || s.topic}</span>
+                  <span className="text-xs font-bold text-[#173B3F] mb-1.5 truncate">{s.displayName}</span>
                   <div className="inline-flex items-center self-start gap-1 px-2 py-0.5 rounded bg-teal-50 text-teal-800 text-[10px] font-black border border-teal-100">
                     <CheckCircle2 className="w-3 h-3" />
-                    {s.accuracy || s.averagePercentage || 75}%
+                    {s.accuracy}%
                   </div>
                 </div>
               ))}

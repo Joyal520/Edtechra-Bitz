@@ -1,7 +1,8 @@
 import {
   CANONICAL_CONCEPTS,
   normalizeConcept as normalizeCanonicalConcept,
-  extractStructuredErrorsFromEvent
+  extractStructuredErrorsFromEvent,
+  sanitizeConceptInput
 } from './conceptNormalization.mjs';
 
 export const ANALYTICS_CONFIG = {
@@ -22,14 +23,15 @@ export function normalizeConcept(rawTopic) {
   if (!rawTopic) return 'General';
   const canonical = normalizeCanonicalConcept(rawTopic);
   if (canonical) return canonical.displayName;
-  let topic = rawTopic.trim();
-  if (topic.toLowerCase() === 'assignment' || topic.toLowerCase() === 'task') return 'General Task';
+  let topic = sanitizeConceptInput(rawTopic);
+  if (!topic || topic.toLowerCase() === 'assignment' || topic.toLowerCase() === 'task') return 'General Task';
   return topic;
 }
 
 /**
  * Normalizes an educational activity into Category -> Topic -> Skill hierarchy.
  * Extracts granular teaching concepts from titles, topics, and rubric metadata.
+ * Strips raw JSON, session IDs, and general knowledge trivia.
  * @param {Object} ev - Learning event object
  * @returns {{ category: string, topic: string, skill: string, displayName: string, teachAction: string, commonError: any, isPlaceholder: boolean }}
  */
@@ -49,13 +51,13 @@ export function extractConceptHierarchy(ev) {
     detectedConcept = meta.writing_evaluation.topic;
   }
 
-  const rawTopic = (ev.topic || '').trim();
-  const rawTitle = (ev.activity_title || ev.activityTitle || '').trim();
+  const rawTopic = sanitizeConceptInput(ev.topic || '');
+  const rawTitle = sanitizeConceptInput(ev.activity_title || ev.activityTitle || '');
   const category = (ev.category || '').trim();
-  const metaText = typeof ev.metadata === 'string' ? ev.metadata : JSON.stringify(ev.metadata || {});
 
-  const primaryCandidate = detectedConcept || `${rawTitle} ${rawTopic} ${metaText}`;
-  const canonical = normalizeCanonicalConcept(primaryCandidate, category) || normalizeCanonicalConcept(`${rawTitle} ${rawTopic}`, category);
+  // Try canonical concept normalization strictly on clean concept strings without metadata JSON
+  const canonical = normalizeCanonicalConcept(detectedConcept || rawTopic || rawTitle, category) ||
+                    normalizeCanonicalConcept(`${rawTitle} ${rawTopic}`, category);
 
   if (canonical) {
     return {
@@ -69,27 +71,28 @@ export function extractConceptHierarchy(ev) {
     };
   }
 
-  // Fallback placeholder check
-  const lower = (rawTopic || rawTitle || '').toLowerCase().trim();
-  if (!lower || lower === 'other' || lower === 'general task' || lower === 'assignment' || lower === 'task' || lower === 'science') {
+  // If not matching a canonical concept, check if it's a valid clean curriculum topic
+  const cleanTopic = rawTopic || rawTitle;
+  const lower = cleanTopic.toLowerCase();
+
+  if (!cleanTopic || cleanTopic.length < 3 || /^(?:assignment|task|general|other|science|test|unit\s*test|homework|classwork|exam|quiz|live\s*quiz|grammar|spelling|writing|reading|vocabulary)$/i.test(lower) || /general\s*knowledge|trivia|entertainment|fun\s*quiz|pub\s*quiz|movie\s*quiz/i.test(lower)) {
     return {
       category: 'General',
-      topic: rawTopic || 'General',
+      topic: cleanTopic || 'Class Activity',
       skill: 'General Review',
-      displayName: rawTopic || 'General',
+      displayName: cleanTopic || 'Class Activity',
       teachAction: '',
       commonError: null,
       isPlaceholder: true
     };
   }
 
-  const cleanTopic = rawTopic || rawTitle;
   return {
-    category: category || 'General',
+    category: category || 'Curriculum',
     topic: cleanTopic,
     skill: 'Core Comprehension',
     displayName: `${cleanTopic} — Core Concepts`,
-    teachAction: `Review foundational concepts for ${cleanTopic} with guided practice.`,
+    teachAction: `Review foundational concepts for ${cleanTopic} with direct examples and guided practice.`,
     commonError: null,
     isPlaceholder: false
   };
@@ -631,20 +634,22 @@ export function computeTopicAnalytics(events = [], options = {}) {
     const hierarchy = extractConceptHierarchy(ev);
     const key = hierarchy.displayName;
 
-    if (!topicGroups.has(key)) {
-      topicGroups.set(key, {
-        key,
-        topic: hierarchy.topic,
-        skill: hierarchy.skill,
-        displayName: hierarchy.displayName,
-        category: hierarchy.category,
-        teachAction: hierarchy.teachAction || null,
-        defaultCommonError: hierarchy.commonError || null,
-        isPlaceholder: hierarchy.isPlaceholder,
-        events: []
-      });
+    if (!hierarchy.isPlaceholder) {
+      if (!topicGroups.has(key)) {
+        topicGroups.set(key, {
+          key,
+          topic: hierarchy.topic,
+          skill: hierarchy.skill,
+          displayName: hierarchy.displayName,
+          category: hierarchy.category,
+          teachAction: hierarchy.teachAction || null,
+          defaultCommonError: hierarchy.commonError || null,
+          isPlaceholder: false,
+          events: []
+        });
+      }
+      topicGroups.get(key).events.push(ev);
     }
-    topicGroups.get(key).events.push(ev);
 
     // If event has detailed rubric criteria breakdown (e.g. from OCR or AI challenges)
     const breakdown = Array.isArray(ev.metadata?.breakdown_json) ? ev.metadata.breakdown_json : [];
@@ -1307,8 +1312,14 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
          (s.scoreChangePercentagePoints != null && s.scoreChangePercentagePoints <= ANALYTICS_CONFIG.DECLINE_DELTA_THRESHOLD)
   );
 
-  // Filter meaningful topics that are not placeholders and have evidence
-  const meaningfulTopics = topicAnalytics.filter(t => !t.isPlaceholder && t.eventCount > 0);
+  // Filter meaningful topics that are not placeholders, not raw metadata, and have valid evidence
+  const meaningfulTopics = topicAnalytics.filter(t => 
+    !t.isPlaceholder && 
+    t.eventCount > 0 && 
+    t.displayName && 
+    !/^(?:general|other|general task|task|assignment|grammar|spelling|writing|reading|vocabulary)$/i.test(t.displayName.trim()) &&
+    !/session[-_]?id|final[-_]?rank|\{|\}/i.test(t.displayName)
+  );
 
   // Top Strengths (Topics >= 75%)
   const topStrengths = meaningfulTopics
@@ -1541,7 +1552,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   });
 
   // 8. Visual Weak Area Identification (Example: Simple Past Negative 38% vs Positive 76%)
-  const sortedTopics = [...(topicAnalytics || [])].sort((a, b) => (a.averagePercentage ?? 100) - (b.averagePercentage ?? 100));
+  const sortedTopics = [...(meaningfulTopics || [])].sort((a, b) => (a.averagePercentage ?? 100) - (b.averagePercentage ?? 100));
   const identifiedWeakArea = sortedTopics.find(t => t.averagePercentage != null && t.averagePercentage < 65) || null;
 
   const weakAreaVisualData = {
@@ -1549,15 +1560,15 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     weakestTopic: identifiedWeakArea ? identifiedWeakArea.topic : null,
     weakestScore: identifiedWeakArea ? Math.round(identifiedWeakArea.averagePercentage) : null,
     topicsComparison: sortedTopics.slice(0, 6).map(t => ({
-      topic: t.topic,
+      topic: t.displayName || t.topic,
       score: t.averagePercentage != null ? Math.round(t.averagePercentage) : 0,
       isWeak: identifiedWeakArea ? t.topic === identifiedWeakArea.topic : false
     })),
     shortAnalysis: identifiedWeakArea
-      ? `Your students are struggling with ${identifiedWeakArea.topic} (${Math.round(identifiedWeakArea.averagePercentage)}% accuracy).`
+      ? `Your students are struggling with ${identifiedWeakArea.displayName || identifiedWeakArea.topic} (${Math.round(identifiedWeakArea.averagePercentage)}% accuracy).`
       : (sortedTopics.length > 0 ? 'All assessed topic areas are currently performing at or above baseline.' : 'Not enough evidence yet.'),
     recommendation: identifiedWeakArea
-      ? `Review core principles of ${identifiedWeakArea.topic} with direct modeling, then give students a focused practice task.`
+      ? `Review core principles of ${identifiedWeakArea.displayName || identifiedWeakArea.topic} with direct modeling, then give students a focused practice task.`
       : (sortedTopics.length > 0 ? 'Continue regular progressive assessments to track topic growth.' : 'Not enough evidence yet.')
   };
 
@@ -1575,7 +1586,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   };
 
   // 11. Granular Learning Gap Priority (Ranked by affected students and multi-source confidence)
-  // Deduplicate strictly by displayName
+  // Deduplicate strictly by displayName and limit to MAXIMUM 5 learning gaps
   const gapMap = new Map();
   meaningfulTopics
     .filter(t => t.averagePercentage != null && (t.averagePercentage < 70 || t.affectedStudentsCount >= 2))
@@ -1624,13 +1635,11 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       }
     });
 
-  const learningGapPriority = Array.from(gapMap.values()).sort((a, b) => b.priority - a.priority);
-
   // Merge spelling diagnosis into learning gaps if accuracy is below mastery (<70%)
-  if (spellingDiagnosis && spellingDiagnosis.accuracy < 70 && !gapMap.has(spellingDiagnosis.displayName) && !gapMap.has('Spelling — Recurring Word Errors')) {
+  if (spellingDiagnosis && spellingDiagnosis.accuracy < 70 && !gapMap.has(spellingDiagnosis.displayName) && !gapMap.has('Spelling — Common Word Errors') && !gapMap.has('Spelling — Recurring Word Errors')) {
     const isMulti = spellingDiagnosis.sourcesCount >= 2 || spellingDiagnosis.studentCount >= 2;
     const conf = isMulti ? 'Confirmed gap' : 'Early signal';
-    learningGapPriority.push({
+    gapMap.set(spellingDiagnosis.displayName, {
       category: 'Spelling',
       topic: spellingDiagnosis.displayName,
       baseTopic: 'Spelling',
@@ -1663,8 +1672,12 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       why: spellingDiagnosis.why,
       priority: Number(((spellingDiagnosis.studentCount / (totalStudents || 1)) * (100 - spellingDiagnosis.accuracy)).toFixed(2))
     });
-    learningGapPriority.sort((a, b) => b.priority - a.priority);
   }
+
+  // Strictly cap at MAXIMUM 5 Learning Gaps
+  const learningGapPriority = Array.from(gapMap.values())
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 5);
 
   // Deduplicated Class Strengths (accuracy >= 75%)
   const strengthMap = new Map();
@@ -1689,7 +1702,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
         });
       }
     });
-  const classStrengths = Array.from(strengthMap.values()).sort((a, b) => b.accuracy - a.accuracy);
+  const classStrengths = Array.from(strengthMap.values()).sort((a, b) => b.accuracy - a.accuracy).slice(0, 6);
 
   // Students Needing Support (Scores < 70%) with real names and specific weak concepts
   const studentsNeedingSupport = studentAnalytics
@@ -1772,11 +1785,11 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     weakAreaVisualData,
     students: studentAnalytics,
     activityBreakdown,
-    topics: meaningfulTopics,
+    topics: meaningfulTopics.slice(0, 10), // Maximum 10 bars for Class Performance
     trends: trendAnalytics,
     dataConfidence,
     calculatedAt: new Date().toISOString(),
-    learningGapPriority,
+    learningGapPriority, // Maximum 5 learning gaps
     classStrengths,
     studentsNeedingSupport,
     recommendedTeachingFocus,

@@ -1,4 +1,4 @@
-import { normalizeConcept, CANONICAL_CONCEPTS, extractStructuredErrorsFromEvent } from './server/conceptNormalization.mjs';
+import { normalizeConcept, CANONICAL_CONCEPTS, extractStructuredErrorsFromEvent, sanitizeConceptInput } from './server/conceptNormalization.mjs';
 import { computeTopicAnalytics, computeStudentAnalytics, extractConceptHierarchy } from './server/classroomAnalyticsService.mjs';
 
 function runTests() {
@@ -34,10 +34,25 @@ function runTests() {
   assert(t1_d?.displayName === 'Subject–Verb Agreement', `normalize "Subject-Verb Concord" -> ${t1_d?.displayName}`);
 
   const t1_e = normalizeConcept("Spelling mistakes");
-  assert(t1_e?.displayName === 'Spelling — Recurring Word Errors', `normalize "Spelling mistakes" -> ${t1_e?.displayName}`);
+  assert(t1_e?.displayName === 'Spelling — Common Word Errors', `normalize "Spelling mistakes" -> ${t1_e?.displayName}`);
 
-  // TEST 2: Structured Error Extraction from OCR & Writing
-  console.log('\n--- TEST 2: Structured Error Extraction ---');
+  // TEST 2: Rejection of Raw JSON, Session IDs, and Trivia Quizzes
+  console.log('\n--- TEST 2: Rejection of Raw JSON and General Trivia ---');
+  const rawQuizString = 'The general knowledge 1 The general knowledge 1 Grammar {"final_rank":2,"session_id":"7c896a5c","wrong_count":10}';
+  const cleanSanitized = sanitizeConceptInput(rawQuizString);
+  assert(!cleanSanitized.includes('final_rank') && !cleanSanitized.includes('{'), `Sanitizer strips JSON metadata: "${cleanSanitized}"`);
+
+  const t2_norm = normalizeConcept(rawQuizString);
+  assert(t2_norm === null, `Raw JSON/trivia quiz correctly rejected from becoming a concept: ${t2_norm}`);
+
+  const triviaOnly = normalizeConcept('The general knowledge 1');
+  assert(triviaOnly === null, `General knowledge quiz rejected from curriculum concept: ${triviaOnly}`);
+
+  const bareGrammar = normalizeConcept('Grammar');
+  assert(bareGrammar === null, `Bare category "Grammar" without skill is rejected: ${bareGrammar}`);
+
+  // TEST 3: Structured Error Extraction from OCR & Writing
+  console.log('\n--- TEST 3: Structured Error Extraction ---');
   const mockOcrEvent = {
     activity_type: 'ocr',
     topic: 'Handwritten Worksheet',
@@ -54,8 +69,8 @@ function runTests() {
   assert(extractedErrors[0].correct_form === "He doesn't like football", `Captured correct_form: "${extractedErrors[0].correct_form}"`);
   assert(extractedErrors[1].student_error === "becouse", `Captured spelling error: "${extractedErrors[1].student_error}"`);
 
-  // TEST 3: Multi-Source Evidence Synthesis & Topic Grouping
-  console.log('\n--- TEST 3: Multi-Source Evidence Synthesis ---');
+  // TEST 4: Multi-Source Evidence Synthesis & Hierarchy Extraction
+  console.log('\n--- TEST 4: Multi-Source Evidence Synthesis ---');
   const mockMultiSourceEvents = [
     // OCR Event on Simple Present Negative (Score 40%)
     {
@@ -83,7 +98,25 @@ function runTests() {
       topic: 'Don\'t / Doesn\'t Forms',
       percentage: 50,
       completed_at: new Date().toISOString(),
-      metadata: {}
+      metadata: {
+        session_id: 'abc-123',
+        final_rank: 1
+      }
+    },
+    // Raw Trivia Quiz (Should be excluded from curriculum concepts)
+    {
+      id: 'e_trivia',
+      student_id: 's_alex',
+      activity_id: 'act_trivia_1',
+      activity_type: 'live_quiz',
+      activity_title: 'The general knowledge 1',
+      topic: 'The general knowledge 1',
+      percentage: 20,
+      completed_at: new Date().toISOString(),
+      metadata: {
+        session_id: 'trivia-123',
+        final_rank: 5
+      }
     },
     // Exam on Prepositions (Score 90%)
     {
@@ -109,6 +142,10 @@ function runTests() {
   assert(presentNegativeGroup?.confidence === 'Confirmed gap', `Assigned confidence "Confirmed gap" due to multi-source failure (found "${presentNegativeGroup?.confidence}")`);
   assert(presentNegativeGroup?.commonErrors?.length > 0, `Contains structured common errors (found ${presentNegativeGroup?.commonErrors?.length})`);
   assert(presentNegativeGroup?.teachAction?.length > 10, `Contains actionable teachAction ("${presentNegativeGroup?.teachAction?.slice(0, 40)}...")`);
+
+  // Verify trivia quiz did NOT leak as a concept
+  const triviaLeaked = topicAnalytics.some(t => t.displayName.includes('final_rank') || t.displayName.includes('session_id') || t.displayName.includes('general knowledge'));
+  assert(!triviaLeaked, 'No raw JSON or trivia quiz leaked into topic analytics concepts');
 
   // Prepositions should be recognized as a strength
   const prepGroup = topicAnalytics.find(t => t.displayName === 'Prepositions — at / in / on');
