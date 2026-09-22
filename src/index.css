@@ -908,52 +908,57 @@
 /* Guarantees pure white typed text (#FFFFFF), visible caret, and light gray  */
 /* placeholders on all dark surfaces and browser autofill.                    */
 /* ========================================================================== */
+/* DARK THEME & COURSE PLAYER INPUT CONTRAST SYSTEM                           */
+/* Guarantees pure white typed text (#FFFFFF), visible caret, and light gray  */
+/* placeholders on dark surfaces and browser autofill.                        */
+/* Explicitly excludes light backgrounds and light surface containers.        */
+/* ========================================================================== */
 
-.dark input:not([type="checkbox"]):not([type="radio"]),
-.dark textarea,
-.dark [contenteditable="true"],
-[data-theme-mode="dark"] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme-mode="dark"] textarea,
-[data-theme="midnight-navy"] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme="midnight-navy"] textarea,
-[data-theme="night-dark"] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme="night-dark"] textarea,
-[data-theme="ocean-blue"] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme="ocean-blue"] textarea,
-[data-theme="aurora-blue"] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme="aurora-blue"] textarea {
+.dark input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+.dark textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+.dark [contenteditable="true"]:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100),
+[data-theme-mode="dark"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme-mode="dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="midnight-navy"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="midnight-navy"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="night-dark"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="night-dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="ocean-blue"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="ocean-blue"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="aurora-blue"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light),
+[data-theme="aurora-blue"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light) {
   color: #ffffff !important;
   caret-color: #38bdf8 !important;
 }
 
-.dark input::placeholder,
-.dark textarea::placeholder,
-[data-theme-mode="dark"] input::placeholder,
-[data-theme-mode="dark"] textarea::placeholder,
-[data-theme="midnight-navy"] input::placeholder,
-[data-theme="midnight-navy"] textarea::placeholder,
-[data-theme="night-dark"] input::placeholder,
-[data-theme="night-dark"] textarea::placeholder,
-[data-theme="ocean-blue"] input::placeholder,
-[data-theme="ocean-blue"] textarea::placeholder,
-[data-theme="aurora-blue"] input::placeholder,
-[data-theme="aurora-blue"] textarea::placeholder {
+.dark input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+.dark textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme-mode="dark"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme-mode="dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="midnight-navy"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="midnight-navy"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="night-dark"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="night-dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="ocean-blue"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="ocean-blue"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="aurora-blue"] input:not([type="checkbox"]):not([type="radio"]):not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder,
+[data-theme="aurora-blue"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):not(.bg-slate-200):not(.bg-gray-50):not(.bg-gray-100):not(.bg-zinc-50):not(.bg-neutral-50):not([data-color-scheme="light"]):not(.input-theme-light)::placeholder {
   color: rgba(255, 255, 255, 0.55) !important;
 }
 
 /* Chrome / Safari / Edge Autofill Dark Mode Correction */
-.dark input:-webkit-autofill,
-.dark textarea:-webkit-autofill,
-[data-theme-mode="dark"] input:-webkit-autofill,
-[data-theme-mode="dark"] textarea:-webkit-autofill,
-[data-theme="midnight-navy"] input:-webkit-autofill,
-[data-theme="midnight-navy"] textarea:-webkit-autofill,
-[data-theme="night-dark"] input:-webkit-autofill,
-[data-theme="night-dark"] textarea:-webkit-autofill,
-.dark input:-webkit-autofill:hover,
-.dark input:-webkit-autofill:focus,
-.dark textarea:-webkit-autofill:hover,
-.dark textarea:-webkit-autofill:focus {
+.dark input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+.dark textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme-mode="dark"] input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme-mode="dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme="midnight-navy"] input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme="midnight-navy"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme="night-dark"] input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+[data-theme="night-dark"] textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill,
+.dark input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill:hover,
+.dark input:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill:focus,
+.dark textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill:hover,
+.dark textarea:not(.bg-white):not(.bg-slate-50):not(.bg-slate-100):-webkit-autofill:focus {
   -webkit-text-fill-color: #ffffff !important;
   -webkit-box-shadow: 0 0 0px 1000px #182232 inset !important;
   box-shadow: 0 0 0px 1000px #182232 inset !important;
@@ -964,7 +969,7 @@
 /* ========================================================================== */
 /* LIGHT SURFACES, LIGHT MODALS & LIGHT INPUT CONTRAST SYSTEM                 */
 /* Prevents global dark-theme input inversion from leaking onto light cards,  */
-/* modals, white inputs, and native date/time pickers.                        */
+/* modals, white/slate inputs, comboboxes, and native date/time pickers.       */
 /* ========================================================================== */
 
 .light,
@@ -986,11 +991,46 @@
 .edtechra-light-surface textarea,
 .edtechra-light-surface select,
 .edtechra-light-surface [contenteditable="true"],
+[data-light-surface="true"] input:not([type="checkbox"]):not([type="radio"]),
+[data-light-surface="true"] textarea,
+[data-light-surface="true"] select,
+[data-light-surface="true"] [contenteditable="true"],
+.bg-white input:not([type="checkbox"]):not([type="radio"]),
+.bg-white textarea,
+.bg-white select,
+.bg-slate-50 input:not([type="checkbox"]):not([type="radio"]),
+.bg-slate-50 textarea,
+.bg-slate-50 select,
+.bg-slate-100 input:not([type="checkbox"]):not([type="radio"]),
+.bg-slate-100 textarea,
+.bg-slate-100 select,
 input.bg-white:not([type="checkbox"]):not([type="radio"]),
+input.bg-slate-50:not([type="checkbox"]):not([type="radio"]),
+input.bg-slate-100:not([type="checkbox"]):not([type="radio"]),
+input.bg-slate-200:not([type="checkbox"]):not([type="radio"]),
+input.bg-gray-50:not([type="checkbox"]):not([type="radio"]),
+input.bg-gray-100:not([type="checkbox"]):not([type="radio"]),
+input.bg-zinc-50:not([type="checkbox"]):not([type="radio"]),
+input.bg-neutral-50:not([type="checkbox"]):not([type="radio"]),
 textarea.bg-white,
+textarea.bg-slate-50,
+textarea.bg-slate-100,
+textarea.bg-slate-200,
+textarea.bg-gray-50,
+textarea.bg-gray-100,
+textarea.bg-zinc-50,
+textarea.bg-neutral-50,
 select.bg-white,
+select.bg-slate-50,
+select.bg-slate-100,
+select.bg-gray-50,
+select.bg-gray-100,
 input[data-color-scheme="light"],
-textarea[data-color-scheme="light"] {
+textarea[data-color-scheme="light"],
+select[data-color-scheme="light"],
+input.input-theme-light,
+textarea.input-theme-light,
+select.input-theme-light {
   color: #0f172a !important;
   -webkit-text-fill-color: #0f172a !important;
   caret-color: #026fc3 !important;
@@ -1003,8 +1043,32 @@ textarea[data-color-scheme="light"] {
 [data-theme-mode="light"] textarea::placeholder,
 .edtechra-light-surface input::placeholder,
 .edtechra-light-surface textarea::placeholder,
+[data-light-surface="true"] input::placeholder,
+[data-light-surface="true"] textarea::placeholder,
+.bg-white input::placeholder,
+.bg-white textarea::placeholder,
+.bg-slate-50 input::placeholder,
+.bg-slate-50 textarea::placeholder,
+.bg-slate-100 input::placeholder,
+.bg-slate-100 textarea::placeholder,
 input.bg-white::placeholder,
-textarea.bg-white::placeholder {
+input.bg-slate-50::placeholder,
+input.bg-slate-100::placeholder,
+input.bg-slate-200::placeholder,
+input.bg-gray-50::placeholder,
+input.bg-gray-100::placeholder,
+input.bg-zinc-50::placeholder,
+input.bg-neutral-50::placeholder,
+textarea.bg-white::placeholder,
+textarea.bg-slate-50::placeholder,
+textarea.bg-slate-100::placeholder,
+textarea.bg-slate-200::placeholder,
+textarea.bg-gray-50::placeholder,
+textarea.bg-gray-100::placeholder,
+textarea.bg-zinc-50::placeholder,
+textarea.bg-neutral-50::placeholder,
+input.input-theme-light::placeholder,
+textarea.input-theme-light::placeholder {
   color: #64748b !important;
   -webkit-text-fill-color: #64748b !important;
   opacity: 1 !important;
@@ -1017,8 +1081,18 @@ textarea.bg-white::placeholder {
 [data-theme-mode="light"] textarea:-webkit-autofill,
 .edtechra-light-surface input:-webkit-autofill,
 .edtechra-light-surface textarea:-webkit-autofill,
+[data-light-surface="true"] input:-webkit-autofill,
+[data-light-surface="true"] textarea:-webkit-autofill,
+.bg-white input:-webkit-autofill,
+.bg-white textarea:-webkit-autofill,
+.bg-slate-50 input:-webkit-autofill,
+.bg-slate-50 textarea:-webkit-autofill,
 input.bg-white:-webkit-autofill,
-textarea.bg-white:-webkit-autofill {
+input.bg-slate-50:-webkit-autofill,
+input.bg-slate-100:-webkit-autofill,
+textarea.bg-white:-webkit-autofill,
+textarea.bg-slate-50:-webkit-autofill,
+textarea.bg-slate-100:-webkit-autofill {
   -webkit-text-fill-color: #0f172a !important;
   -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
   box-shadow: 0 0 0px 1000px #ffffff inset !important;

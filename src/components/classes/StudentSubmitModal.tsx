@@ -134,7 +134,11 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200">
+      <div 
+        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200 edtechra-light-surface text-slate-900"
+        data-light-surface="true"
+        data-theme-mode="light"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -148,7 +152,8 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -177,7 +182,7 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+            <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
               Your Response / Notes
             </label>
             <textarea
@@ -185,7 +190,7 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
               value={textResponse}
               onChange={(e) => setTextResponse(e.target.value)}
               placeholder="Type your answer, summary, or response here..."
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all resize-none"
+              className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all resize-none shadow-2xs select-text"
             />
           </div>
 

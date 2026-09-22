@@ -68,12 +68,16 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200">
+      <div 
+        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200 edtechra-light-surface text-slate-900"
+        data-light-surface="true"
+        data-theme-mode="light"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-brand-50 text-[#026fc3] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-2xl bg-blue-50 text-[#026fc3] flex items-center justify-center">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
@@ -83,7 +87,8 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -99,7 +104,7 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+            <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
               Classroom Name / Title *
             </label>
             <input
@@ -108,13 +113,13 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Grade 10 English Literature"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all"
+              className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all shadow-2xs select-text"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+              <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                 Subject *
               </label>
               <input
@@ -123,12 +128,12 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="e.g. English, Science"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all shadow-2xs select-text"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+              <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
                 Grade / Level *
               </label>
               <input
@@ -137,13 +142,13 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                 value={grade}
                 onChange={(e) => setGrade(e.target.value)}
                 placeholder="e.g. Grade 10, Advanced"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all shadow-2xs select-text"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+            <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
               Description (Optional)
             </label>
             <textarea
@@ -151,13 +156,13 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What will students learn in this classroom?"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#026fc3] focus:bg-white transition-all resize-none"
+              className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all resize-none shadow-2xs select-text"
             />
           </div>
 
           {/* Theme selection */}
           <div>
-            <label className="block text-xs font-extrabold text-slate-700 mb-2">
+            <label className="block text-xs font-extrabold text-slate-800 mb-2">
               Select Theme Banner
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -166,13 +171,13 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
                   type="button"
                   key={t.id}
                   onClick={() => setTheme(t.id)}
-                  className={`flex items-center gap-2 p-2 rounded-xl border text-left text-xs font-bold transition-all ${
+                  className={`flex items-center gap-2 p-2 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
                     theme === t.id
-                      ? 'border-[#026fc3] bg-brand-50/70 text-[#026fc3] shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                      ? 'border-[#026fc3] bg-blue-50/80 text-[#026fc3] ring-1 ring-[#026fc3]/30 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
-                  <span className={`w-3.5 h-3.5 rounded-full ${t.bg} shrink-0`} />
+                  <span className={`w-3.5 h-3.5 rounded-full ${t.bg} shrink-0 shadow-2xs`} />
                   <span className="truncate">{t.name}</span>
                 </button>
               ))}
@@ -184,14 +189,14 @@ export const CreateClassroomModal: React.FC<CreateClassroomModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#02599c] text-white rounded-xl text-xs font-extrabold shadow-md hover:shadow-lg active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? 'Creating...' : 'Create Classroom'}
             </button>
