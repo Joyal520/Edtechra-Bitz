@@ -364,3 +364,57 @@ export function formatBytes(bytes: number): string {
   const val = bytes / Math.pow(1024, i);
   return `${val.toFixed(i === 0 || val >= 10 ? 0 : 1)} ${units[i]}`;
 }
+
+/**
+ * Optimizes an uploaded student/teacher worksheet photo specifically for OCR Vision AI.
+ * Scales down large camera photos (e.g. 12MP/5MB) to max 1600px width/height and 85% JPEG quality,
+ * yielding a crisp ~200-350KB base64 string that never hits Vercel / proxy payload limits.
+ */
+export async function optimizeImageForOCR(
+  file: File,
+  maxDimension = 1600,
+  quality = 0.85
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to load image for optimization.'));
+      img.onload = () => {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        // Scale down if larger than maxDimension
+        if (width > maxDimension || height > maxDimension) {
+          if (width >= height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return resolve(dataUrl); // Fallback to raw data URL
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+

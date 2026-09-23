@@ -218,8 +218,13 @@ class OcrEvaluationQueue {
     try {
       // 2. Fetch or decode temporary file buffer
       let imageBuffer = null;
+      let effectiveContentType = job.fileContentType || 'image/jpeg';
       if (job.imageBase64) {
-        const cleanBase64 = job.imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const mimeMatch = job.imageBase64.match(/^data:([^;]+);base64,/);
+        if (mimeMatch && mimeMatch[1]) {
+          effectiveContentType = mimeMatch[1];
+        }
+        const cleanBase64 = job.imageBase64.replace(/^data:[^;]+;base64,/, '');
         imageBuffer = Buffer.from(cleanBase64, 'base64');
       } else if (job.temporaryFileKey) {
         try {
@@ -232,6 +237,7 @@ class OcrEvaluationQueue {
       // 3. Perform Category-Specific AI Evaluation with Exponential Backoff
       const evaluationResult = await this.evaluateWithAiWithRetry({
         ...job,
+        fileContentType: effectiveContentType,
         imageBuffer
       });
 
@@ -270,12 +276,24 @@ class OcrEvaluationQueue {
           updatePayload.assignment_id = job.taskId || job.assignmentId;
         }
 
-        const { data: savedData, error: dbError } = await this.serverSupabase
+        let { data: savedData, error: dbError } = await this.serverSupabase
           .from('ocr_evaluations')
           .update(updatePayload)
           .eq('id', evaluationId)
           .select('*')
           .maybeSingle();
+
+        if (dbError && dbError.message && dbError.message.includes('assignment_id')) {
+          delete updatePayload.assignment_id;
+          const retry = await this.serverSupabase
+            .from('ocr_evaluations')
+            .update(updatePayload)
+            .eq('id', evaluationId)
+            .select('*')
+            .maybeSingle();
+          if (retry.data) savedData = retry.data;
+          dbError = retry.error;
+        }
 
         if (dbError) {
           console.error(`[OCR Engine] Persist warning: ${dbError.message}`);
@@ -336,45 +354,55 @@ class OcrEvaluationQueue {
               ? [job.temporaryFileKey]
               : (job.imageBase64 ? [job.imageBase64] : []);
 
-            const { error: taskSubErr } = await this.serverSupabase
-              .from('assignment_submissions')
-              .upsert(
+            const subUpsertPayload = {
+              assignment_id: effectiveTaskId,
+              classroom_id: job.classroomId,
+              student_id: job.studentId,
+              status: 'graded',
+              ocr_evaluation_id: evaluationId,
+              file_urls: permanentFileUrls,
+              text_response: validated.ocr_text || '',
+              question_answers: [
                 {
-                  assignment_id: effectiveTaskId,
-                  classroom_id: job.classroomId,
-                  student_id: job.studentId,
-                  status: 'graded',
-                  ocr_evaluation_id: evaluationId,
-                  file_urls: permanentFileUrls,
-                  text_response: validated.ocr_text || '',
-                  question_answers: [
-                    {
-                      question_id: 'ocr_handwritten_response',
-                      student_answer: validated.ocr_text || '',
-                      is_correct: validated.percentage >= 60,
-                      score: validated.score,
-                      max_score: job.maxMarks,
-                      grading_method: 'ai',
-                      feedback: validated.feedback,
-                      writing_evaluation: writingEval
-                    }
-                  ],
-                  points_awarded: Math.round(validated.score),
-                  final_score: validated.score,
-                  ai_score: validated.score,
-                  percentage: validated.percentage,
-                  teacher_feedback: validated.feedback,
-                  is_ai_graded: true,
-                  task_version: taskData?.version || 1,
-                  completed_at: new Date().toISOString(),
-                  submitted_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                },
-                { onConflict: 'assignment_id,student_id' }
-              );
+                  question_id: 'ocr_handwritten_response',
+                  student_answer: validated.ocr_text || '',
+                  is_correct: validated.percentage >= 60,
+                  score: validated.score,
+                  max_score: job.maxMarks,
+                  grading_method: 'ai',
+                  feedback: validated.feedback,
+                  writing_evaluation: writingEval
+                }
+              ],
+              points_awarded: Math.round(validated.score),
+              final_score: validated.score,
+              ai_score: validated.score,
+              percentage: validated.percentage,
+              teacher_feedback: validated.feedback,
+              is_ai_graded: true,
+              task_version: taskData?.version || 1,
+              completed_at: new Date().toISOString(),
+              submitted_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+
+            let { error: taskSubErr } = await this.serverSupabase
+              .from('assignment_submissions')
+              .upsert(subUpsertPayload, { onConflict: 'assignment_id,student_id' });
 
             if (taskSubErr) {
-              console.warn('[OCR Engine] Notice: Could not sync to assignment_submissions:', taskSubErr.message);
+              console.warn('[OCR Engine] Notice: assignment_submissions upsert notice:', taskSubErr.message);
+              if (taskSubErr.message.includes('ocr_evaluation_id') || taskSubErr.message.includes('ai_score') || taskSubErr.message.includes('final_score') || taskSubErr.message.includes('percentage') || taskSubErr.message.includes('is_ai_graded') || taskSubErr.message.includes('question_answers')) {
+                delete subUpsertPayload.ocr_evaluation_id;
+                delete subUpsertPayload.ai_score;
+                delete subUpsertPayload.final_score;
+                delete subUpsertPayload.percentage;
+                delete subUpsertPayload.is_ai_graded;
+                delete subUpsertPayload.question_answers;
+                await this.serverSupabase
+                  .from('assignment_submissions')
+                  .upsert(subUpsertPayload, { onConflict: 'assignment_id,student_id' });
+              }
             } else {
               console.log(`[OCR Engine] Successfully unified with Task submission (${effectiveTaskId}) for student ${job.studentId}`);
             }
@@ -804,9 +832,10 @@ Required JSON Schema:
     const candidateModels = [
       process.env.GEMINI_OCR_MODEL,
       process.env.GEMINI_MODEL,
-      'gemini-3.6-flash',
-      'gemini-3.5-flash',
-      'gemini-flash-latest'
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro'
     ].filter(Boolean);
 
     let lastError = null;

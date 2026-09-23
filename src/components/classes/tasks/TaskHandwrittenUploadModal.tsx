@@ -13,6 +13,7 @@ import { ClassroomTask, TaskSubmission } from '@/types/classroomTask';
 import { ClassroomMember } from '@/types/classroom';
 import { classroomTaskService } from '@/services/classroomTaskService';
 import { ocrService } from '@/services/ocrService';
+import { optimizeImageForOCR } from '@/utils/imageOptimizer';
 
 interface TaskHandwrittenUploadModalProps {
   isOpen: boolean;
@@ -120,7 +121,7 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
 
   if (!isOpen) return null;
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const file = files[0];
@@ -138,9 +139,14 @@ export const TaskHandwrittenUploadModal: React.FC<TaskHandwrittenUploadModalProp
     }
 
     setSelectedImage(file);
-    const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    try {
+      const optimizedBase64 = await optimizeImageForOCR(file, 1600, 0.85);
+      setImagePreview(optimizedBase64);
+    } catch (_) {
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveImage = () => {

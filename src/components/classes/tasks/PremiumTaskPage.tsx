@@ -19,6 +19,7 @@ import {
   QuestionAnswerResult
 } from '@/types/classroomTask';
 import type { EvaluationPhase } from './StudentTaskModal';
+import { optimizeImageForOCR } from '@/utils/imageOptimizer';
 
 interface PremiumTaskPageProps {
   task: ClassroomTask;
@@ -93,7 +94,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
     }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError(null);
     const file = e.target.files?.[0];
     if (!file) return;
@@ -104,18 +105,26 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setFileError('Image size exceeds 10MB limit. Please choose a smaller photo.');
+    if (file.size > 15 * 1024 * 1024) {
+      setFileError('Image size exceeds 15MB limit. Please choose a smaller photo.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setHandwrittenPreview(result);
-      setHandwrittenBase64(result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Auto-compress and scale down client-side for rapid upload & pristine OCR accuracy
+      const optimizedBase64 = await optimizeImageForOCR(file, 1600, 0.85);
+      setHandwrittenPreview(optimizedBase64);
+      setHandwrittenBase64(optimizedBase64);
+    } catch (err: any) {
+      console.warn('Fallback reading image:', err.message);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setHandwrittenPreview(result);
+        setHandwrittenBase64(result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
