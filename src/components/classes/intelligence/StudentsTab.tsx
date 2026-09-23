@@ -23,6 +23,7 @@ import {
 import { Classroom } from '@/types/classroom';
 import { StudentIntelligenceDetail, teachingIntelligenceService } from '@/services/teachingIntelligenceService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
+import { EvidenceDetailModal, EvidenceDetailItem } from './EvidenceDetailModal';
 
 export interface StudentListItem {
   studentId: string;
@@ -403,6 +404,8 @@ const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   refreshingStudentAi,
   onRefreshStudentAi
 }) => {
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceDetailItem | null>(null);
+
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
       
@@ -697,8 +700,16 @@ const StudentDetailView: React.FC<StudentDetailViewProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-semibold text-[#173B3F]">
                       {detail.assessmentHistory.map((ev) => (
-                        <tr key={ev.id} className="hover:bg-[#E8F7F5]/30">
-                          <td className="py-2.5 font-bold text-[#173B3F] max-w-[180px] truncate">
+                        <tr
+                          key={ev.id}
+                          onClick={() => setSelectedEvidence({
+                            ...ev,
+                            studentName: detail.fullName || 'Student',
+                            studentId: detail.studentId
+                          })}
+                          className="hover:bg-[#E8F7F5] cursor-pointer transition-colors group"
+                        >
+                          <td className="py-2.5 font-bold text-[#173B3F] group-hover:text-[#087477] max-w-[180px] truncate">
                             {ev.activityTitle}
                           </td>
                           <td className="py-2.5">
@@ -732,6 +743,15 @@ const StudentDetailView: React.FC<StudentDetailViewProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Evidence Detail Modal */}
+            {selectedEvidence && (
+              <EvidenceDetailModal
+                item={selectedEvidence}
+                isOpen={Boolean(selectedEvidence)}
+                onClose={() => setSelectedEvidence(null)}
+              />
+            )}
           </div>
   );
 };

@@ -120,12 +120,23 @@ export interface WritingEvaluation {
   breakdown?: Array<{ criterion: string; score: number; max: number }>;
 }
 
+export type TaskSubmissionStatus =
+  | 'draft'
+  | 'submitted'
+  | 'evaluating'
+  | 'evaluation_failed'
+  | 'processing'
+  | 'graded'
+  | 'returned'
+  | 'resubmitted'
+  | 'completed';
+
 export interface TaskSubmission {
   id: string;
   assignment_id: string;
   classroom_id: string;
   student_id: string;
-  status: 'draft' | 'submitted' | 'graded' | 'returned' | 'resubmitted';
+  status: TaskSubmissionStatus;
   text_response?: string;
   file_urls?: string[];
   question_answers: QuestionAnswerResult[];

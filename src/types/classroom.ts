@@ -6,7 +6,7 @@ export type ClassroomRole = 'teacher' | 'co-teacher' | 'student';
 export type MemberStatus = 'active' | 'invited' | 'removed' | 'blocked';
 export type AssignmentType = 'task' | 'quiz' | 'exam' | 'competition' | 'activity_spree';
 export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'deleted';
-export type SubmissionStatus = 'draft' | 'submitted' | 'graded' | 'returned' | 'resubmitted';
+export type SubmissionStatus = 'draft' | 'submitted' | 'evaluating' | 'evaluation_failed' | 'processing' | 'graded' | 'returned' | 'resubmitted' | 'completed';
 export type ExamStatus = 'draft' | 'scheduled' | 'published' | 'active' | 'closed';
 export type BucketItemType = 'lesson' | 'worksheet' | 'video' | 'reading' | 'quiz' | 'document' | 'link';
 
@@ -111,10 +111,16 @@ export interface AssignmentSubmission {
   text_response: string;
   file_urls: AssignmentAttachment[];
   points_awarded?: number | null;
+  final_score?: number | null;
+  ai_score?: number | null;
+  percentage?: number | null;
+  is_ai_graded?: boolean;
+  ocr_evaluation_id?: string | null;
   teacher_feedback?: string | null;
   graded_by?: string | null;
   graded_at?: string | null;
   submitted_at: string;
+  completed_at?: string | null;
   updated_at: string;
 
   // Joined student info

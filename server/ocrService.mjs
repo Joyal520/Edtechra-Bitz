@@ -236,21 +236,21 @@ class OcrEvaluationQueue {
       });
 
       // 4. Validate and sanitize AI Output
-      const validated = this.validateAndNormalizeAiOutput(evaluationResult, job.maxMarks, job.category);
-
-      let updatedEvalRecord = null;
+      const validated = this.validateAndNormalizeAiOutput(evaluationResult, job.maxMarks, job.category, job.title || '');
 
       // 5. Save structured evaluation data to Supabase
       if (this.serverSupabase) {
         const enrichedBreakdown = Array.isArray(validated.breakdown) ? [...validated.breakdown] : [];
-        if ((validated.detected_errors && validated.detected_errors.length > 0) || (validated.spelling_errors && validated.spelling_errors.length > 0) || validated.concept) {
-          enrichedBreakdown.push({
-            __is_diagnostic_meta: true,
-            concept: validated.concept || null,
-            detected_errors: validated.detected_errors || [],
-            spelling_errors: validated.spelling_errors || []
-          });
-        }
+        enrichedBreakdown.push({
+          __is_diagnostic_meta: true,
+          concept: validated.concept || null,
+          ocr_text: validated.ocr_text || '',
+          corrected_work: validated.corrected_work || '',
+          detected_errors: validated.detected_errors || [],
+          spelling_errors: validated.spelling_errors || [],
+          strengths: validated.strengths || [],
+          weaknesses: validated.weaknesses || []
+        });
 
         const updatePayload = {
           score: validated.score,
@@ -283,7 +283,7 @@ class OcrEvaluationQueue {
           updatedEvalRecord = savedData;
         }
 
-        // 5b. UNIFY WITH TASK SUBMISSIONS: If associated with a Task, upsert into assignment_submissions
+        // 5b. UNIFY WITH TASK SUBMISSIONS: If associated with a Task, upsert into assignment_submissions & student_corrected_work
         if (job.taskId || job.assignmentId) {
           const effectiveTaskId = job.taskId || job.assignmentId;
           try {
@@ -292,6 +292,49 @@ class OcrEvaluationQueue {
               .select('id, version, points, title')
               .eq('id', effectiveTaskId)
               .maybeSingle();
+
+            const mistakesList = (validated.detected_errors || []).map((d) => ({
+              original: d.student_error,
+              correction: d.correct_form,
+              explanation: d.explanation || d.concept || 'Grammar correction'
+            }));
+
+            const grammarErrors = (validated.detected_errors || [])
+              .filter((d) => d.error_type === 'grammar' || d.error_type === 'sentence_structure' || d.error_type === 'punctuation')
+              .map((g) => ({
+                text: g.student_error,
+                suggestion: g.correct_form,
+                rule: g.concept || 'Grammar'
+              }));
+
+            const spellingErrors = (validated.spelling_errors || []).map((s) => ({
+              text: s.misspelled_word,
+              suggestion: s.correct_word
+            }));
+
+            const writingEval = {
+              ocr_text: validated.ocr_text || '',
+              original_work: validated.ocr_text || '',
+              corrected_work: validated.corrected_work || validated.ocr_text || '',
+              score: validated.score,
+              max_score: job.maxMarks,
+              percentage: validated.percentage,
+              category: job.category,
+              topic: validated.concept || job.category,
+              skills: [validated.concept || job.category],
+              feedback: validated.feedback,
+              strengths: validated.strengths || [],
+              weaknesses: validated.weaknesses || [],
+              mistakes: mistakesList,
+              corrections: mistakesList.map((m) => `${m.original} → ${m.correction}`),
+              grammar_errors: grammarErrors,
+              spelling_errors: spellingErrors,
+              breakdown: validated.breakdown || []
+            };
+
+            const permanentFileUrls = job.temporaryFileKey
+              ? [job.temporaryFileKey]
+              : (job.imageBase64 ? [job.imageBase64] : []);
 
             const { error: taskSubErr } = await this.serverSupabase
               .from('assignment_submissions')
@@ -302,7 +345,20 @@ class OcrEvaluationQueue {
                   student_id: job.studentId,
                   status: 'graded',
                   ocr_evaluation_id: evaluationId,
-                  file_urls: job.temporaryFileKey ? [job.temporaryFileKey] : (job.imageBase64 ? [job.imageBase64] : []),
+                  file_urls: permanentFileUrls,
+                  text_response: validated.ocr_text || '',
+                  question_answers: [
+                    {
+                      question_id: 'ocr_handwritten_response',
+                      student_answer: validated.ocr_text || '',
+                      is_correct: validated.percentage >= 60,
+                      score: validated.score,
+                      max_score: job.maxMarks,
+                      grading_method: 'ai',
+                      feedback: validated.feedback,
+                      writing_evaluation: writingEval
+                    }
+                  ],
                   points_awarded: Math.round(validated.score),
                   final_score: validated.score,
                   ai_score: validated.score,
@@ -321,6 +377,66 @@ class OcrEvaluationQueue {
               console.warn('[OCR Engine] Notice: Could not sync to assignment_submissions:', taskSubErr.message);
             } else {
               console.log(`[OCR Engine] Successfully unified with Task submission (${effectiveTaskId}) for student ${job.studentId}`);
+            }
+
+            // Sync with student_corrected_work
+            try {
+              const { data: existingCw } = await this.serverSupabase
+                .from('student_corrected_work')
+                .select('id')
+                .eq('student_id', job.studentId)
+                .eq('task_id', effectiveTaskId)
+                .maybeSingle();
+
+              const cwPayload = {
+                student_id: job.studentId,
+                classroom_id: job.classroomId,
+                task_id: effectiveTaskId,
+                submission_id: evaluationId,
+                source_type: 'ocr_handwritten',
+                title: (job.title || taskData?.title || 'Handwritten Task').trim(),
+                file_type: 'image',
+                original_r2_key: job.temporaryFileKey || null,
+                original_file_url: (job.temporaryFileKey && !job.temporaryFileKey.startsWith('data:')) ? job.temporaryFileKey : (job.imageBase64 || null),
+                score: validated.score,
+                max_score: job.maxMarks,
+                percentage: validated.percentage,
+                status: 'completed',
+                feedback_text: validated.feedback,
+                feedback_metadata: {
+                  ocr_text: validated.ocr_text,
+                  original_text: validated.ocr_text,
+                  corrected_work: validated.corrected_work,
+                  mistakes: mistakesList,
+                  corrections: mistakesList.map((m) => `${m.original} → ${m.correction}`),
+                  strengths: validated.strengths,
+                  grammar_errors: grammarErrors,
+                  spelling_errors: spellingErrors,
+                  breakdown: validated.breakdown
+                },
+                ai_evaluation_metadata: {
+                  category: job.category,
+                  topic: validated.concept || job.category,
+                  skills: [validated.concept || job.category],
+                  breakdown: validated.breakdown
+                },
+                updated_at: new Date().toISOString()
+              };
+
+              if (existingCw?.id) {
+                await this.serverSupabase.from('student_corrected_work').update(cwPayload).eq('id', existingCw.id);
+              } else {
+                await this.serverSupabase.from('student_corrected_work').insert({ ...cwPayload, created_at: new Date().toISOString() });
+              }
+            } catch (cwErr) {
+              console.warn('[OCR Engine] Notice: Could not sync student_corrected_work:', cwErr.message);
+            }
+
+            // Invalidate Teaching Intelligence Insights Cache
+            if (job.classroomId) {
+              try {
+                await this.serverSupabase.from('ai_classroom_insights').delete().eq('classroom_id', job.classroomId);
+              } catch (_) {}
             }
           } catch (syncErr) {
             console.warn('[OCR Engine] Warning on task submission sync:', syncErr.message);
@@ -388,16 +504,7 @@ class OcrEvaluationQueue {
         }
       }
 
-      // 10. SUCCESS CONFIRMED — Delete temporary source image from Cloudflare R2 if it was used
-      if (job.temporaryFileKey) {
-        try {
-          await deleteObjects([job.temporaryFileKey]);
-          console.log(`[OCR Engine] Cleaned up temporary image: ${job.temporaryFileKey}`);
-        } catch (delErr) {
-          console.warn(`[OCR Engine] Notice: Failed to delete temporary image ${job.temporaryFileKey}:`, delErr.message);
-        }
-      }
-
+      // 10. Image is preserved permanently for student & teacher review (no deletion)
       console.log(`[OCR Engine] Successfully completed evaluation job: ${evaluationId}`);
 
       return updatedEvalRecord || {
@@ -419,7 +526,7 @@ class OcrEvaluationQueue {
       };
     } catch (err) {
       console.error(`[OCR Engine] Evaluation job ${evaluationId} failed:`, err);
-      // Mark evaluation as failed in Supabase
+      // Mark evaluation as failed in Supabase without deleting the student submission
       if (this.serverSupabase) {
         await this.serverSupabase
           .from('ocr_evaluations')
@@ -429,6 +536,21 @@ class OcrEvaluationQueue {
             updated_at: new Date().toISOString()
           })
           .eq('id', evaluationId);
+
+        if (job.taskId || job.assignmentId) {
+          const effectiveTaskId = job.taskId || job.assignmentId;
+          try {
+            await this.serverSupabase
+              .from('assignment_submissions')
+              .update({
+                status: 'evaluation_failed',
+                teacher_feedback: 'Your work has been submitted, but AI correction is temporarily unavailable. The evaluation will be processed automatically.',
+                updated_at: new Date().toISOString()
+              })
+              .eq('assignment_id', effectiveTaskId)
+              .eq('student_id', job.studentId);
+          } catch (_) {}
+        }
       }
       throw err;
     }
@@ -483,7 +605,8 @@ class OcrEvaluationQueue {
     const criteriaList = CATEGORY_CRITERIA_MAP[category] || (title && CATEGORY_CRITERIA_MAP[title]) || CATEGORY_CRITERIA_MAP['Other'];
     const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
 
-    const promptText = `You are an educational worksheet evaluator for EdTechra Digital Classroom.
+    const promptText = `You are the EdTechra Master Educational Evaluator and Vision OCR Grader.
+Evaluate the student's handwritten worksheet image objectively, thoroughly, and encouragingly.
 
 Evaluation Category: ${category}
 Task Title: ${title || 'Classroom Worksheet'}
@@ -493,44 +616,53 @@ Maximum Marks: ${maxMarks}
 Evaluation Criteria:
 ${criteriaSummary}
 
-Special Category Instructions:
-${category === 'Handwritten Neatness' 
-  ? 'Inspect ONLY the visual handwriting presentation qualities (legibility, letter formation, spacing, alignment, consistency, neatness). Do not score based on OCR text content.'
-  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above. Identify exact concepts and recurring errors (e.g. Simple Present Negative, Subject-Verb Agreement, Prepositions in/on/at, Spelling error pairs).'}
-
-CRITICAL RULES:
-1. Return ONLY a single valid JSON object.
-2. "feedback" MUST BE 50 WORDS OR FEWER (concise pedagogical guidance).
-3. Do NOT repeat or transcribe the student answer.
-4. Do NOT include reasoning, thought processes, or extra fields.
-5. "score" must be a number between 0 and ${maxMarks}.
-6. Identify specific learning concepts and detected error instances in "concept", "detected_errors", and "spelling_errors".
+CRITICAL INSTRUCTIONS:
+1. "ocr_text": Transcribe ALL student handwritten text accurately and verbatim from the image. If empty/unreadable, note that clearly.
+2. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
+3. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
+4. "breakdown": Score each criterion objectively out of its max marks.
+5. "detected_errors": List all grammar, punctuation, sentence structure, and vocabulary errors with original student snippet, corrected form, error type, and brief explanation.
+6. "spelling_errors": List misspelled words and their corrections.
+7. "strengths": 1 to 3 evidence-backed strengths in the student's work.
+8. "weaknesses": 1 to 3 specific areas for improvement.
+9. "feedback": Pedagogical feedback <= 60 words for the student.
+10. Return ONLY a single valid JSON object matching the required schema.
 
 Required JSON Schema:
 {
+  "ocr_text": "<verbatim transcribed student text from image>",
+  "corrected_work": "<complete corrected version of the student work>",
   "score": <number between 0 and ${maxMarks}>,
   "max_score": ${maxMarks},
   "percentage": <number between 0 and 100>,
   "performance": <"Excellent" | "Good" | "Satisfactory" | "Needs Improvement">,
-  "concept": "<specific concept tested or primary weakness, e.g. Simple Present — Negative Forms, Prepositions — at / in / on, Subject-Verb Agreement, Paragraph Writing — Organization & Flow>",
+  "concept": "<e.g. Subject–Verb Agreement | Paragraph Writing — Organization & Flow | Simple Past — Past Tense Forms | Prepositions — at / in / on>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
   ],
   "detected_errors": [
     {
-      "concept": "<concept name, e.g. Simple Present — Negative Forms>",
+      "concept": "<concept name>",
       "error_type": "<grammar | spelling | punctuation | vocabulary | sentence_structure>",
       "student_error": "<exact incorrect snippet written by student>",
-      "correct_form": "<corrected sentence or phrase>"
+      "correct_form": "<corrected snippet or sentence>",
+      "explanation": "<brief reason for correction>"
     }
   ],
   "spelling_errors": [
     {
-      "misspelled_word": "<incorrectly spelled word>",
-      "correct_word": "<correct spelling>"
+      "misspelled_word": "<incorrect word>",
+      "correct_word": "<correct word>"
     }
   ],
-  "feedback": "<concise feedback, 50 words maximum>"
+  "strengths": [
+    "<strength 1>",
+    "<strength 2>"
+  ],
+  "weaknesses": [
+    "<area to improve 1>"
+  ],
+  "feedback": "<concise pedagogical guidance <= 60 words>"
 }`;
 
     const messages = [];
@@ -570,10 +702,10 @@ Required JSON Schema:
     };
 
     if (isReasoningOrGpt5) {
-      reqPayload.max_completion_tokens = 2000;
+      reqPayload.max_completion_tokens = 2500;
     } else {
       reqPayload.temperature = 0.2;
-      reqPayload.max_tokens = 1000;
+      reqPayload.max_tokens = 2000;
     }
 
     const completion = await this.serverOpenAI.chat.completions.create(reqPayload);
@@ -596,7 +728,8 @@ Required JSON Schema:
     const criteriaList = CATEGORY_CRITERIA_MAP[category] || (title && CATEGORY_CRITERIA_MAP[title]) || CATEGORY_CRITERIA_MAP['Other'];
     const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
 
-    const promptText = `You are an educational worksheet evaluator for EdTechra Digital Classroom.
+    const promptText = `You are the EdTechra Master Educational Evaluator and Vision OCR Grader.
+Evaluate the student's handwritten worksheet image objectively, thoroughly, and encouragingly.
 
 Evaluation Category: ${category}
 Task Title: ${title || 'Classroom Worksheet'}
@@ -606,44 +739,53 @@ Maximum Marks: ${maxMarks}
 Evaluation Criteria:
 ${criteriaSummary}
 
-Special Category Instructions:
-${category === 'Handwritten Neatness' 
-  ? 'Inspect ONLY the visual handwriting presentation qualities (legibility, letter formation, spacing, alignment, consistency, neatness). Do not score based on OCR text content.'
-  : 'Evaluate the student writing directly from the worksheet image based on the predefined criteria above. Identify exact concepts and recurring errors (e.g. Simple Present Negative, Subject-Verb Agreement, Prepositions in/on/at, Spelling error pairs).'}
-
-CRITICAL RULES:
-1. Return ONLY a single valid JSON object.
-2. "feedback" MUST BE 50 WORDS OR FEWER (concise pedagogical guidance).
-3. Do NOT repeat or transcribe the student answer.
-4. Do NOT include reasoning, thought processes, or extra fields.
-5. "score" must be a number between 0 and ${maxMarks}.
-6. Identify specific learning concepts and detected error instances in "concept", "detected_errors", and "spelling_errors".
+CRITICAL INSTRUCTIONS:
+1. "ocr_text": Transcribe ALL student handwritten text accurately and verbatim from the image. If empty/unreadable, note that clearly.
+2. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
+3. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
+4. "breakdown": Score each criterion objectively out of its max marks.
+5. "detected_errors": List all grammar, punctuation, sentence structure, and vocabulary errors with original student snippet, corrected form, error type, and brief explanation.
+6. "spelling_errors": List misspelled words and their corrections.
+7. "strengths": 1 to 3 evidence-backed strengths in the student's work.
+8. "weaknesses": 1 to 3 specific areas for improvement.
+9. "feedback": Pedagogical feedback <= 60 words for the student.
+10. Return ONLY a single valid JSON object matching the required schema.
 
 Required JSON Schema:
 {
+  "ocr_text": "<verbatim transcribed student text from image>",
+  "corrected_work": "<complete corrected version of the student work>",
   "score": <number between 0 and ${maxMarks}>,
   "max_score": ${maxMarks},
   "percentage": <number between 0 and 100>,
   "performance": <"Excellent" | "Good" | "Satisfactory" | "Needs Improvement">,
-  "concept": "<specific concept tested or primary weakness, e.g. Simple Present — Negative Forms, Prepositions — at / in / on, Subject-Verb Agreement, Paragraph Writing — Organization & Flow>",
+  "concept": "<e.g. Subject–Verb Agreement | Paragraph Writing — Organization & Flow | Simple Past — Past Tense Forms | Prepositions — at / in / on>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
   ],
   "detected_errors": [
     {
-      "concept": "<concept name, e.g. Simple Present — Negative Forms>",
+      "concept": "<concept name>",
       "error_type": "<grammar | spelling | punctuation | vocabulary | sentence_structure>",
       "student_error": "<exact incorrect snippet written by student>",
-      "correct_form": "<corrected sentence or phrase>"
+      "correct_form": "<corrected snippet or sentence>",
+      "explanation": "<brief reason for correction>"
     }
   ],
   "spelling_errors": [
     {
-      "misspelled_word": "<incorrectly spelled word>",
-      "correct_word": "<correct spelling>"
+      "misspelled_word": "<incorrect word>",
+      "correct_word": "<correct word>"
     }
   ],
-  "feedback": "<concise feedback, 50 words maximum>"
+  "strengths": [
+    "<strength 1>",
+    "<strength 2>"
+  ],
+  "weaknesses": [
+    "<area to improve 1>"
+  ],
+  "feedback": "<concise pedagogical guidance <= 60 words>"
 }`;
 
     const parts = [{ text: promptText }];
@@ -663,6 +805,7 @@ Required JSON Schema:
       process.env.GEMINI_OCR_MODEL,
       process.env.GEMINI_MODEL,
       'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-flash-latest'
     ].filter(Boolean);
 
@@ -704,7 +847,7 @@ Required JSON Schema:
     throw lastError || new Error('All candidate Gemini models failed for worksheet evaluation.');
   }
 
-  validateAndNormalizeAiOutput(raw, maxMarks = 100, category = 'Other') {
+  validateAndNormalizeAiOutput(raw, maxMarks = 100, category = 'Other', title = '') {
     const defaultMax = Number(maxMarks) > 0 ? Number(maxMarks) : 100;
     let score = typeof raw.score === 'number' && !isNaN(raw.score) ? raw.score : Math.round(defaultMax * 0.82);
     score = Math.min(defaultMax, Math.max(0, Math.round(score * 10) / 10));
@@ -722,14 +865,21 @@ Required JSON Schema:
       else performance = 'Needs Improvement';
     }
 
-    // Feedback word count limit enforcement (max 50 words)
+    // Extracted OCR text & Corrected text
+    const ocrText = String(raw.ocr_text || raw.transcription || raw.student_text || '').trim();
+    let correctedWork = String(raw.corrected_work || raw.corrected_text || raw.correction || '').trim();
+    if (!correctedWork && ocrText) {
+      correctedWork = ocrText;
+    }
+
+    // Feedback word count limit enforcement (max 60 words)
     let feedback = String(raw.feedback || '').trim();
     if (!feedback) {
       feedback = 'Clear effort shown. Focus on strengthening grammar, organization, and sentence flow to enhance your overall writing quality.';
     }
     const words = feedback.split(/\s+/);
-    if (words.length > 50) {
-      feedback = words.slice(0, 50).join(' ') + '.';
+    if (words.length > 60) {
+      feedback = words.slice(0, 60).join(' ') + '.';
     }
 
     // Validate Criteria Breakdown
@@ -764,8 +914,9 @@ Required JSON Schema:
     const detectedErrors = Array.isArray(raw.detected_errors) ? raw.detected_errors.map(err => ({
       concept: String(err?.concept || raw.concept || category).trim(),
       error_type: String(err?.error_type || 'grammar').toLowerCase().trim(),
-      student_error: String(err?.student_error || err?.text || '').trim(),
-      correct_form: String(err?.correct_form || err?.suggestion || err?.correction || '').trim()
+      student_error: String(err?.student_error || err?.text || err?.original || '').trim(),
+      correct_form: String(err?.correct_form || err?.suggestion || err?.correction || '').trim(),
+      explanation: String(err?.explanation || err?.rule || '').trim()
     })).filter(e => e.student_error) : [];
 
     const spellingErrors = Array.isArray(raw.spelling_errors) ? raw.spelling_errors.map(err => ({
@@ -773,16 +924,28 @@ Required JSON Schema:
       correct_word: String(err?.correct_word || err?.suggestion || err?.correction || '').trim()
     })).filter(e => e.misspelled_word) : [];
 
+    const strengths = Array.isArray(raw.strengths) && raw.strengths.length > 0
+      ? raw.strengths.map(String).filter(Boolean)
+      : ['Clear handwriting submission and good effort'];
+
+    const weaknesses = Array.isArray(raw.weaknesses) && raw.weaknesses.length > 0
+      ? raw.weaknesses.map(String).filter(Boolean)
+      : [];
+
     const rawConcept = raw.concept ? String(raw.concept).trim() : null;
     const canonical = rawConcept ? normalizeConcept(rawConcept, category) : normalizeConcept(title || category, category);
 
     return {
+      ocr_text: ocrText,
+      corrected_work: correctedWork,
       score,
       max_score: defaultMax,
       percentage,
       performance,
       breakdown,
       feedback,
+      strengths,
+      weaknesses,
       concept: canonical ? canonical.displayName : (rawConcept || category),
       detected_errors: detectedErrors,
       spelling_errors: spellingErrors

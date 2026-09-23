@@ -16,8 +16,7 @@ import {
   ClassroomTask,
   TaskQuestion,
   TaskSubmission,
-  QuestionAnswerResult,
-  WritingEvaluation
+  QuestionAnswerResult
 } from '@/types/classroomTask';
 import type { EvaluationPhase } from './StudentTaskModal';
 
@@ -595,77 +594,136 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
         {/* EVALUATED STATE: Show structured AI result */}
         {isTaskEvaluated && submission && (() => {
           // Extract writing evaluation from submission
-          const wEval: WritingEvaluation | null | undefined =
+          const wEval: any =
             submission.writing_evaluation ||
             (Array.isArray(submission.question_answers)
-              ? submission.question_answers.find((qa: any) => qa.writing_evaluation)?.writing_evaluation
+              ? submission.question_answers.find((qa: any) => qa.writing_evaluation || qa.question_id === 'ocr_handwritten_response' || qa.question_id === 'writing_response')?.writing_evaluation
               : null);
 
           const hasWritingResult = Boolean(wEval);
           const scoreVal = wEval?.score ?? submission.final_score ?? submission.points_awarded;
           const maxVal = wEval?.max_score ?? task.points ?? 100;
           const pctVal = wEval?.percentage ?? submission.percentage ?? (scoreVal != null && maxVal > 0 ? Math.round((Number(scoreVal) / maxVal) * 100) : null);
+          const studentImage = submission.file_urls?.[0] || handwrittenPreview;
+          const originalText = submission.text_response || wEval?.ocr_text || '';
+          const correctedText = wEval?.corrected_work || '';
+          const rubricBreakdown: any[] = Array.isArray(wEval?.breakdown) ? wEval.breakdown.filter((b: any) => !b?.__is_diagnostic_meta) : [];
 
           return (
             <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
 
               {/* Score Header */}
-              <div className="p-5 sm:p-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 space-y-3">
+              <div className="p-5 sm:p-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 space-y-3 shadow-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                        YOUR RESULT
+                        EVALUATION COMPLETE
                       </span>
                       {(submission.is_ai_graded || hasWritingResult) && (
-                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                          AI EVALUATED
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          AI OCR GRADED
                         </span>
                       )}
                     </div>
                     <h3 className="text-base sm:text-lg font-black text-slate-900">{task.title}</h3>
+                    {wEval?.concept && (
+                      <div className="text-xs font-bold text-teal-800">
+                        Topic: <span className="text-teal-900">{wEval.concept}</span>
+                      </div>
+                    )}
                   </div>
 
                   {pctVal != null && (
-                    <div className="text-center sm:text-right shrink-0">
-                      <div className="text-3xl sm:text-4xl font-black text-emerald-700">{scoreVal} / {maxVal}</div>
-                      <div className="text-lg font-black text-emerald-600">{pctVal}%</div>
+                    <div className="text-left sm:text-right shrink-0 bg-white/80 backdrop-blur-xs p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
+                      <div className="text-2xl sm:text-3xl font-black text-emerald-700">{scoreVal} / {maxVal}</div>
+                      <div className="text-sm font-black text-emerald-600">{pctVal}% Score</div>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Structured Result Sections (only for writing evaluations) */}
-              {hasWritingResult && wEval && (
+              {/* Structured Result Sections */}
+              {(hasWritingResult || studentImage || originalText) && (
                 <>
-                  {/* Original Work */}
-                  {submission.text_response && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-2">
+                  {/* Original Student Work (Image + Text) */}
+                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-3">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <PenLine className="w-4 h-4 text-slate-500" />
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR WORK</span>
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR SUBMITTED WORK</span>
                       </div>
-                      <p className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                        "{submission.text_response}"
+                      {studentImage && (
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Handwritten Sheet</span>
+                      )}
+                    </div>
+
+                    {studentImage && (
+                      <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5 p-2 flex flex-col items-center">
+                        <img
+                          src={studentImage}
+                          alt="Submitted Handwritten Work"
+                          className="max-h-72 sm:max-h-96 object-contain rounded-lg shadow-xs"
+                        />
+                      </div>
+                    )}
+
+                    {originalText && (
+                      <div className="space-y-1">
+                        {studentImage && (
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                            Transcribed Text
+                          </span>
+                        )}
+                        <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                          {originalText}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Complete Corrected Work */}
+                  {correctedText && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="text-xs font-black uppercase tracking-wider text-emerald-800">COMPLETE CORRECTED WORK</span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-medium text-emerald-950 leading-relaxed whitespace-pre-wrap bg-white p-4 rounded-xl border border-emerald-200 shadow-2xs">
+                        {correctedText}
                       </p>
                     </div>
                   )}
 
-                  {/* Corrected Work */}
-                  {wEval.corrected_work && wEval.corrected_work !== submission.text_response && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-emerald-800">CORRECTED WORK</span>
+                  {/* Rubric Criteria Breakdown if available */}
+                  {rubricBreakdown.length > 0 && (
+                    <div className="p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] bg-white space-y-3">
+                      <span className="text-xs font-black uppercase tracking-wider text-[#173B3F] block">
+                        CRITERIA BREAKDOWN
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {rubricBreakdown.map((crit: any, cIdx: number) => (
+                          <div key={cIdx} className="p-3 rounded-xl bg-[#E8F7F5]/40 border border-[#C9E5E2] flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold text-[#173B3F] block">{crit.criterion || crit.name}</span>
+                              {crit.feedback && (
+                                <span className="text-[11px] text-[#36565A] font-medium block mt-0.5">{crit.feedback}</span>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 ml-3">
+                              <span className="text-xs font-black text-[#087477]">
+                                {crit.score}{crit.max != null ? ` / ${crit.max}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-sm font-medium text-emerald-900 leading-relaxed whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-emerald-100">
-                        "{wEval.corrected_work}"
-                      </p>
                     </div>
                   )}
 
                   {/* What to Improve */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-4">
+                  <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/30 space-y-4">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-600" />
                       <span className="text-xs font-black uppercase tracking-wider text-amber-800">WHAT TO IMPROVE</span>
@@ -673,24 +731,24 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                     {/* Grammar Issues */}
                     <div className="space-y-1.5">
-                      <h4 className="text-xs font-black text-slate-800">Grammar</h4>
-                      {wEval.grammar_errors && wEval.grammar_errors.length > 0 ? (
+                      <h4 className="text-xs font-black text-slate-800">Grammar & Syntax</h4>
+                      {wEval?.grammar_errors && wEval.grammar_errors.length > 0 ? (
                         <ul className="space-y-1.5">
-                          {wEval.grammar_errors.map((err, i) => (
-                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                          {wEval.grammar_errors.map((err: any, i: number) => (
+                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
                               <span className="text-rose-500 font-black shrink-0">•</span>
                               <span>
-                                <span className="line-through text-rose-600">"{err.text}"</span>
+                                <span className="line-through text-rose-600">"{err.text || err.original}"</span>
                                 <span className="mx-1.5 text-slate-400">→</span>
-                                <span className="text-emerald-700 font-bold">"{err.suggestion}"</span>
-                                {err.rule && <span className="text-slate-400 ml-1.5 text-[11px]">({err.rule})</span>}
+                                <span className="text-emerald-700 font-bold">"{err.suggestion || err.correction}"</span>
+                                {err.rule && <span className="text-slate-500 ml-1.5 text-[11px]">({err.rule})</span>}
                               </span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                          ✓ No significant grammar errors
+                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          ✓ No significant grammar errors found
                         </p>
                       )}
                     </div>
@@ -698,39 +756,39 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     {/* Spelling Issues */}
                     <div className="space-y-1.5">
                       <h4 className="text-xs font-black text-slate-800">Spelling</h4>
-                      {wEval.spelling_errors && wEval.spelling_errors.length > 0 ? (
+                      {wEval?.spelling_errors && wEval.spelling_errors.length > 0 ? (
                         <ul className="space-y-1.5">
-                          {wEval.spelling_errors.map((err, i) => (
-                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                          {wEval.spelling_errors.map((err: any, i: number) => (
+                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
                               <span className="text-rose-500 font-black shrink-0">•</span>
                               <span>
-                                <span className="line-through text-rose-600">"{err.text}"</span>
+                                <span className="line-through text-rose-600">"{err.text || err.original}"</span>
                                 <span className="mx-1.5 text-slate-400">→</span>
-                                <span className="text-emerald-700 font-bold">"{err.suggestion}"</span>
+                                <span className="text-emerald-700 font-bold">"{err.suggestion || err.correction}"</span>
                               </span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                          ✓ No significant spelling errors
+                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          ✓ No spelling mistakes detected
                         </p>
                       )}
                     </div>
 
                     {/* Other Issues / Mistakes */}
-                    {wEval.mistakes && wEval.mistakes.length > 0 && (
+                    {wEval?.mistakes && wEval.mistakes.length > 0 && (
                       <div className="space-y-1.5">
-                        <h4 className="text-xs font-black text-slate-800">Other</h4>
+                        <h4 className="text-xs font-black text-slate-800">Other Adjustments</h4>
                         <ul className="space-y-1.5">
                           {wEval.mistakes
-                            .filter(m => !wEval.grammar_errors?.some(g => g.text === m.original))
+                            .filter((m: any) => !wEval.grammar_errors?.some((g: any) => (g.text || g.original) === (m.original || m.text)))
                             .slice(0, 5)
-                            .map((m, i) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                            .map((m: any, i: number) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
                                 <span className="text-amber-500 font-black shrink-0">•</span>
                                 <span>
-                                  "{m.original}" → "{m.correction}"
+                                  "{m.original || m.text}" → "{m.correction || m.suggestion}"
                                   {m.explanation && <span className="block text-[11px] text-slate-500 mt-0.5">{m.explanation}</span>}
                                 </span>
                               </li>
@@ -740,11 +798,11 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     )}
 
                     {/* Strengths */}
-                    {wEval.strengths && wEval.strengths.length > 0 && (
+                    {wEval?.strengths && wEval.strengths.length > 0 && (
                       <div className="space-y-1.5">
-                        <h4 className="text-xs font-black text-slate-800">Strengths</h4>
+                        <h4 className="text-xs font-black text-slate-800">Key Strengths</h4>
                         <ul className="space-y-1">
-                          {wEval.strengths.map((s, i) => (
+                          {wEval.strengths.map((s: string, i: number) => (
                             <li key={i} className="text-xs text-emerald-800 font-medium flex items-start gap-2">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
                               <span>{s}</span>
@@ -756,18 +814,18 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   </div>
 
                   {/* AI Feedback */}
-                  {wEval.feedback && (
+                  {(wEval?.feedback || submission.teacher_feedback) && (
                     <div className="p-4 sm:p-5 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-2">
                       <div className="flex items-center gap-2">
                         <MessageSquare className="w-4 h-4 text-sky-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-sky-800">AI FEEDBACK</span>
+                        <span className="text-xs font-black uppercase tracking-wider text-sky-800">PEDAGOGICAL FEEDBACK</span>
                       </div>
-                      <p className="text-sm font-medium text-slate-800 leading-relaxed">
-                        {wEval.feedback}
+                      <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+                        {wEval?.feedback || submission.teacher_feedback}
                       </p>
-                      {wEval.skills && wEval.skills.length > 0 && (
+                      {wEval?.skills && wEval.skills.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {wEval.skills.map((skill, i) => (
+                          {wEval.skills.map((skill: string, i: number) => (
                             <span key={i} className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200">
                               {skill}
                             </span>
@@ -779,12 +837,12 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                 </>
               )}
 
-              {/* Non-writing task simple result */}
-              {!hasWritingResult && scoreVal != null && (
+              {/* Simple fallback result if no detailed writing breakdown */}
+              {!hasWritingResult && !studentImage && !originalText && scoreVal != null && (
                 <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50 flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span className="text-sm font-black text-emerald-800">
-                    Work Submitted • Score: {scoreVal}/{maxVal}
+                    Work Evaluated • Score: {scoreVal}/{maxVal}
                     {submission.teacher_feedback && ` — ${submission.teacher_feedback}`}
                   </span>
                 </div>

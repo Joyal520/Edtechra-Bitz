@@ -8,10 +8,12 @@ import {
   Filter,
   Calendar,
   User,
-  Tag
+  Tag,
+  Eye
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { TeachingIntelligenceData, ClassroomMetricsSummary } from '@/services/teachingIntelligenceService';
+import { EvidenceDetailModal, EvidenceDetailItem } from './EvidenceDetailModal';
 
 interface Student {
   id: string;
@@ -62,6 +64,7 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   const [topicFilter, setTopicFilter] = useState<string>(initialFilter?.topic || 'all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceDetailItem | null>(null);
 
   // Reactively synchronize with incoming initialFilter navigation
   React.useEffect(() => {
@@ -440,10 +443,16 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
           filteredEvidence.map((ev, idx) => {
             const badge = getSourceBadge(ev.activityType);
             return (
-              <div key={ev.id || idx} className="bg-white rounded-xl border border-[#C9E5E2] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-xs transition-shadow">
-                <div className="space-y-1.5">
+              <div
+                key={ev.id || idx}
+                onClick={() => setSelectedEvidence(ev)}
+                className="bg-white rounded-xl border border-[#C9E5E2] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#087477] hover:shadow-md transition-all cursor-pointer group"
+              >
+                <div className="space-y-1.5 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-black text-[#111827]">{ev.activityTitle}</h4>
+                    <h4 className="text-sm font-black text-[#111827] group-hover:text-[#087477] transition-colors">
+                      {ev.activityTitle}
+                    </h4>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border ${badge.color}`}>
                       {badge.icon}
                       {badge.label}
@@ -487,31 +496,46 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
                   )}
                 </div>
 
-                <div className="shrink-0 text-right">
-                  {ev.percentage != null ? (
-                    <div className="flex flex-col items-end">
-                      <span className="text-lg font-black text-[#111827]">
-                        {ev.percentage}%
-                      </span>
-                      {ev.score != null && ev.maxScore != null && (
-                        <span className="text-[10px] font-bold text-[#667085]">
-                          {ev.score}/{ev.maxScore} pts
+                <div className="shrink-0 flex items-center gap-3 self-end sm:self-center">
+                  <div className="text-right">
+                    {ev.percentage != null ? (
+                      <div className="flex flex-col items-end">
+                        <span className="text-lg font-black text-[#111827]">
+                          {ev.percentage}%
                         </span>
-                      )}
-                    </div>
-                  ) : ev.score != null ? (
-                    <span className="text-sm font-black text-[#111827]">
-                      {ev.score} {ev.maxScore ? `/ ${ev.maxScore}` : ''} pts
-                    </span>
-                  ) : (
-                    <span className="text-xs font-bold text-[#667085]">Completed</span>
-                  )}
+                        {ev.score != null && ev.maxScore != null && (
+                          <span className="text-[10px] font-bold text-[#667085]">
+                            {ev.score}/{ev.maxScore} pts
+                          </span>
+                        )}
+                      </div>
+                    ) : ev.score != null ? (
+                      <span className="text-sm font-black text-[#111827]">
+                        {ev.score} {ev.maxScore ? `/ ${ev.maxScore}` : ''} pts
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold text-[#667085]">Completed</span>
+                    )}
+                  </div>
+
+                  <div className="w-8 h-8 rounded-lg bg-[#E8F7F5] group-hover:bg-[#087477] text-[#087477] group-hover:text-white flex items-center justify-center transition-colors">
+                    <Eye className="w-4 h-4" />
+                  </div>
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      {/* Evidence Detail Modal */}
+      {selectedEvidence && (
+        <EvidenceDetailModal
+          item={selectedEvidence}
+          isOpen={Boolean(selectedEvidence)}
+          onClose={() => setSelectedEvidence(null)}
+        />
+      )}
 
     </div>
   );

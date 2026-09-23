@@ -1051,17 +1051,24 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   try {
     const { data: ocrBreakdowns } = await serverSupabase
       .from('ocr_evaluations')
-      .select('id, breakdown_json')
+      .select('id, breakdown_json, feedback, category, title, temporary_file_key, report_file_key')
       .eq('class_id', classroomId)
       .eq('status', 'completed');
     if (ocrBreakdowns && ocrBreakdowns.length > 0) {
       const ocrMap = new Map();
       ocrBreakdowns.forEach(o => {
-        if (o.breakdown_json) ocrMap.set(o.id, o.breakdown_json);
+        ocrMap.set(o.id, o);
       });
       events.forEach(e => {
         if (e.activity_type === 'ocr' && ocrMap.has(e.id)) {
-          e.metadata = { ...(e.metadata || {}), breakdown_json: ocrMap.get(e.id) };
+          const ocr = ocrMap.get(e.id);
+          e.metadata = {
+            ...(e.metadata || {}),
+            breakdown_json: ocr.breakdown_json,
+            feedback: ocr.feedback,
+            original_r2_key: ocr.temporary_file_key,
+            report_r2_key: ocr.report_file_key
+          };
         }
       });
     }
@@ -1073,31 +1080,53 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   try {
     const { data: subBreakdowns } = await serverSupabase
       .from('assignment_submissions')
-      .select('id, question_answers')
+      .select('id, question_answers, text_response, file_urls, teacher_feedback, ocr_evaluation_id')
       .eq('classroom_id', classroomId)
       .in('status', ['graded', 'submitted', 'completed']);
 
     if (subBreakdowns && subBreakdowns.length > 0) {
       const subMap = new Map();
       subBreakdowns.forEach(sub => {
+        let wEval = null;
         if (Array.isArray(sub.question_answers)) {
-          const writingQa = sub.question_answers.find(qa => qa.writing_evaluation || qa.question_id === 'writing_response');
-          const wEval = writingQa?.writing_evaluation;
-          if (wEval && Array.isArray(wEval.breakdown)) {
-            subMap.set(sub.id, {
-              breakdown_json: wEval.breakdown,
-              topic: wEval.topic,
-              skills: wEval.skills,
-              mistakes: wEval.mistakes
-            });
-          }
+          const writingQa = sub.question_answers.find(qa => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.question_id === 'ocr_handwritten_response');
+          wEval = writingQa?.writing_evaluation;
         }
+        subMap.set(sub.id, {
+          sub,
+          wEval,
+          breakdown_json: wEval?.breakdown || [],
+          topic: wEval?.topic,
+          skills: wEval?.skills,
+          mistakes: wEval?.mistakes,
+          grammar_errors: wEval?.grammar_errors,
+          spelling_errors: wEval?.spelling_errors,
+          strengths: wEval?.strengths,
+          corrected_work: wEval?.corrected_work,
+          ocr_text: wEval?.ocr_text,
+          feedback: sub.teacher_feedback || wEval?.feedback
+        });
       });
 
       events.forEach(e => {
         if (e.activity_type === 'assignment' && subMap.has(e.id)) {
           const enriched = subMap.get(e.id);
-          e.metadata = { ...(e.metadata || {}), breakdown_json: enriched.breakdown_json };
+          e.metadata = {
+            ...(e.metadata || {}),
+            breakdown_json: enriched.breakdown_json,
+            writing_evaluation: enriched.wEval,
+            text_response: enriched.sub.text_response,
+            file_urls: enriched.sub.file_urls,
+            teacher_feedback: enriched.feedback,
+            ocr_evaluation_id: enriched.sub.ocr_evaluation_id,
+            corrected_work: enriched.corrected_work,
+            ocr_text: enriched.ocr_text,
+            grammar_errors: enriched.grammar_errors,
+            spelling_errors: enriched.spelling_errors,
+            mistakes: enriched.mistakes,
+            strengths: enriched.strengths,
+            feedback: enriched.feedback
+          };
           if (enriched.topic && (!e.topic || e.topic === 'General' || e.topic === 'Assignment' || e.topic === 'Task')) {
             e.topic = enriched.topic;
           }
@@ -1112,7 +1141,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   try {
     const { data: cwList } = await serverSupabase
       .from('student_corrected_work')
-      .select('submission_id, ai_evaluation_metadata, feedback_metadata')
+      .select('submission_id, ai_evaluation_metadata, feedback_metadata, original_file_url, original_r2_key, corrected_file_url, corrected_r2_key, feedback_text')
       .eq('classroom_id', classroomId);
 
     if (cwList && cwList.length > 0) {
@@ -1126,10 +1155,25 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       events.forEach(e => {
         if (e.activity_type === 'assignment' && cwMap.has(e.id)) {
           const cwItem = cwMap.get(e.id);
-          const aiMeta = cwItem.ai_evaluation_metadata;
-          if (aiMeta && Array.isArray(aiMeta.breakdown)) {
-            e.metadata = { ...(e.metadata || {}), breakdown_json: aiMeta.breakdown };
-          }
+          const aiMeta = cwItem.ai_evaluation_metadata || {};
+          const fbMeta = cwItem.feedback_metadata || {};
+          e.metadata = {
+            ...(e.metadata || {}),
+            breakdown_json: aiMeta.breakdown || e.metadata?.breakdown_json,
+            original_file_url: cwItem.original_file_url || e.metadata?.file_urls?.[0],
+            original_r2_key: cwItem.original_r2_key,
+            corrected_file_url: cwItem.corrected_file_url,
+            corrected_r2_key: cwItem.corrected_r2_key,
+            feedback_text: cwItem.feedback_text,
+            feedback: cwItem.feedback_text || e.metadata?.feedback,
+            corrected_work: fbMeta.corrected_work || e.metadata?.corrected_work,
+            ocr_text: fbMeta.ocr_text || e.metadata?.ocr_text,
+            original_text: fbMeta.original_text || e.metadata?.text_response,
+            mistakes: fbMeta.mistakes || e.metadata?.mistakes,
+            grammar_errors: fbMeta.grammar_errors || e.metadata?.grammar_errors,
+            spelling_errors: fbMeta.spelling_errors || e.metadata?.spelling_errors,
+            strengths: fbMeta.strengths || e.metadata?.strengths
+          };
           if (aiMeta?.topic && (!e.topic || e.topic === 'General' || e.topic === 'Assignment' || e.topic === 'Task')) {
             e.topic = aiMeta.topic;
           }
@@ -1176,6 +1220,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
 
     const sourceLabel = SOURCE_LABEL_MAP[rawType] || 'Task';
     const studentName = studentNameMap.get(e.student_id) || 'Student';
+    const meta = e.metadata || {};
 
     return {
       ...e,
@@ -1197,7 +1242,23 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
       maxScore: e.max_score != null ? Number(e.max_score) : null,
       percentage: e.percentage != null ? Number(e.percentage) : null,
       completedAt: e.completed_at,
-      metadata: e.metadata || {},
+      metadata: meta,
+      feedback: meta.feedback || meta.teacher_feedback || meta.feedback_text || null,
+      feedback_text: meta.feedback || meta.teacher_feedback || meta.feedback_text || null,
+      teacher_feedback: meta.teacher_feedback || meta.feedback || null,
+      original_work: meta.ocr_text || meta.original_text || meta.text_response || meta.content_text || null,
+      original_text: meta.ocr_text || meta.original_text || meta.text_response || meta.content_text || null,
+      text_response: meta.text_response || null,
+      ocr_text: meta.ocr_text || null,
+      corrected_work: meta.corrected_work || null,
+      original_url: meta.original_file_url || (meta.file_urls && meta.file_urls[0]) || null,
+      original_r2_key: meta.original_r2_key || meta.temporary_file_key || null,
+      file_urls: meta.file_urls || [],
+      grammar_errors: meta.grammar_errors || [],
+      spelling_errors: meta.spelling_errors || [],
+      mistakes: meta.mistakes || [],
+      strengths: meta.strengths || [],
+      breakdown: meta.breakdown_json || meta.breakdown || [],
       isPlaceholder: hierarchy.isPlaceholder
     };
   });

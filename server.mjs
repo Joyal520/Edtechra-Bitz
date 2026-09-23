@@ -3484,15 +3484,23 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       }
     });
 
-    // From writing tasks in assignment_submissions (if text response or AI evaluated)
+    // From writing and OCR tasks in assignment_submissions (if text response, handwritten upload, or AI evaluated)
     (taskSubmissions || []).forEach((sub) => {
-      const isWriting = Boolean(sub.text_response) || sub.assignment?.title?.toLowerCase().includes('writing') || sub.is_ai_graded;
-      if (isWriting && (sub.teacher_feedback || sub.final_score != null || sub.points_awarded != null)) {
+      const isWritingOrOcr = Boolean(sub.text_response) || 
+        (sub.file_urls && sub.file_urls.length > 0) || 
+        sub.is_ai_graded || 
+        sub.ocr_evaluation_id ||
+        sub.assignment?.title?.toLowerCase().includes('writing') ||
+        sub.assignment?.title?.toLowerCase().includes('essay') ||
+        sub.assignment?.title?.toLowerCase().includes('worksheet');
+
+      if (isWritingOrOcr && (sub.teacher_feedback || sub.final_score != null || sub.points_awarded != null)) {
         if (!correctedWork.some((c) => c.id === sub.id || (c.title === sub.assignment?.title && sub.text_response))) {
           const writingQa = Array.isArray(sub.question_answers)
-            ? sub.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.r2_result_path)
+            ? sub.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.question_id === 'ocr_handwritten_response' || qa.r2_result_path)
             : null;
           const wEval = writingQa?.writing_evaluation;
+          const isOcr = Boolean(sub.ocr_evaluation_id || (writingQa && writingQa.question_id === 'ocr_handwritten_response') || (sub.file_urls && sub.file_urls.length > 0));
           const r2Path = writingQa?.r2_result_path || wEval?.r2_result_path || buildTaskEvaluationKey({
             classroomId: sub.classroom_id || classroomId,
             studentId: sub.student_id || studentId,
@@ -3500,17 +3508,21 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             submissionId: sub.id
           });
 
+          const origUrl = sub.file_urls?.[0] || null;
+
           correctedWork.push({
             id: sub.id,
-            title: sub.assignment?.title || 'Writing Task',
-            source_type: 'writing_task',
-            work_type: 'writing',
+            title: sub.assignment?.title || (isOcr ? 'Handwritten Task' : 'Writing Task'),
+            source_type: isOcr ? 'ocr_handwritten' : 'writing_task',
+            work_type: isOcr ? 'handwritten' : 'writing',
             score: sub.final_score ?? sub.points_awarded,
             max_score: sub.assignment?.points || 100,
             percentage: sub.percentage,
             feedback: sub.teacher_feedback || writingQa?.feedback || 'Evaluation completed.',
             text_response: sub.text_response,
-            original_text: sub.text_response,
+            original_text: sub.text_response || wEval?.ocr_text || null,
+            original_url: origUrl,
+            original_r2_key: origUrl && !origUrl.startsWith('data:') && !origUrl.startsWith('http') ? origUrl : null,
             corrected_work: wEval?.corrected_work || null,
             mistakes: wEval?.mistakes || [],
             corrections: wEval?.corrections || [],
@@ -3518,8 +3530,9 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             grammar_errors: wEval?.grammar_errors || [],
             spelling_errors: wEval?.spelling_errors || [],
             r2_result_path: r2Path,
+            breakdown: wEval?.breakdown || [],
             feedback_metadata: wEval ? {
-              original_text: sub.text_response,
+              original_text: sub.text_response || wEval.ocr_text,
               corrected_work: wEval.corrected_work,
               mistakes: wEval.mistakes || [],
               corrections: wEval.corrections || [],
@@ -3529,7 +3542,7 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
               r2_result_path: r2Path
             } : { r2_result_path: r2Path },
             ai_evaluation_metadata: wEval ? {
-              category: wEval.category || 'Grammar',
+              category: wEval.category || (isOcr ? 'Paragraph Writing' : 'Grammar'),
               topic: wEval.topic || 'Subject-Verb Agreement',
               skills: wEval.skills || ['Grammar & Mechanics'],
               breakdown: wEval.breakdown || []
@@ -3586,7 +3599,7 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     const formattedTasks = (taskSubmissions || []).map((t) => {
       // Extract writing evaluation from question_answers if present
       const writingQa = Array.isArray(t.question_answers)
-        ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.r2_result_path)
+        ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.question_id === 'ocr_handwritten_response' || qa.r2_result_path)
         : null;
       const wEval = writingQa?.writing_evaluation;
       const r2Path = writingQa?.r2_result_path || wEval?.r2_result_path || buildTaskEvaluationKey({
@@ -3599,11 +3612,16 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       return {
         id: t.id,
         title: t.assignment?.title || 'Assignment Task',
+        assignment_id: t.assignment_id,
         score: t.final_score ?? t.points_awarded,
         max_score: t.assignment?.points || 100,
         percentage: t.percentage,
         status: t.status,
         teacher_feedback: t.teacher_feedback,
+        text_response: t.text_response,
+        file_urls: t.file_urls,
+        question_answers: t.question_answers,
+        ocr_evaluation_id: t.ocr_evaluation_id,
         submitted_at: t.submitted_at,
         completed_at: t.completed_at,
         is_ai_graded: t.is_ai_graded || false,
@@ -7383,7 +7401,23 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
       .select(`
         *,
         creator:profiles!created_by (id, full_name, avatar_url),
-        submissions:assignment_submissions (id, student_id, status, points_awarded, final_score, submitted_at, completed_at)
+        submissions:assignment_submissions (
+          id,
+          student_id,
+          status,
+          points_awarded,
+          final_score,
+          ai_score,
+          percentage,
+          is_ai_graded,
+          teacher_feedback,
+          text_response,
+          file_urls,
+          question_answers,
+          ocr_evaluation_id,
+          submitted_at,
+          completed_at
+        )
       `)
       .eq('classroom_id', classroomId)
       .eq('is_deleted', false)
