@@ -15,7 +15,7 @@ const VOCABULARY_CACHE_FILE = path.resolve(__dirname, 'data/words_of_the_day_cac
 const IMPORT_BATCHES_CACHE_FILE = path.resolve(__dirname, 'data/vocabulary_import_batches_cache.json');
 const USER_SAVED_WORDS_CACHE_FILE = path.resolve(__dirname, 'data/user_saved_words_cache.json');
 const WORD_LIKES_CACHE_FILE = path.resolve(__dirname, 'data/word_likes_cache.json');
-export const DEFAULT_VOCABULARY_IMAGE = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
+export const DEFAULT_VOCABULARY_IMAGE = null;
 
 const PHRASAL_VERB_PARTICLES = new Set([
   'about', 'across', 'ahead', 'along', 'apart', 'around', 'aside', 'away',

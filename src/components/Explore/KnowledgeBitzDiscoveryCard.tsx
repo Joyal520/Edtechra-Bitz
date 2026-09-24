@@ -4,7 +4,7 @@
 // Premium Dark Blue Theme default (Tokens: #020817, #081B35, #1677FF, #36D1FF).
 // ============================================================================
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Heart,
   Bookmark,
@@ -43,7 +43,21 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
   const [savesCount, setSavesCount] = useState<number>(bitz.saves_count || 0);
   const [showDoubleTapFeedback, setShowDoubleTapFeedback] = useState<boolean>(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [imgLoaded, setImgLoaded] = useState<boolean>(false);
   const [imgLoadError, setImgLoadError] = useState<boolean>(false);
+
+  // Reset image loading states when bitz ID or visual URL changes
+  useEffect(() => {
+    setImgLoaded(false);
+    setImgLoadError(false);
+  }, [bitz.id, bitz.visual_url]);
+
+  // Feed Image Debugging Log (Section 13 requirement)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Feed Image Debug] KnowledgeBitzDiscoveryCard: id=${bitz.id}, bitz_code=${bitz.bitz_code}, visual_url=${bitz.visual_url}, category=${bitz.category}`);
+    }
+  }, [bitz.id, bitz.bitz_code, bitz.visual_url, bitz.category]);
 
   const category = getCategoryById(bitz.category || bitz.topic_id);
   // Strict Image Priority: If visual_url exists and hasn't failed to load, it ALWAYS wins
@@ -164,13 +178,26 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
       {/* 1:1 Square Media Container (Section 3: aspect-ratio: 1/1, width: 100%, object-fit: cover) */}
       <div className="relative w-full aspect-square bg-[#020817] overflow-hidden">
         {hasImage ? (
-          <img
-            src={bitz.visual_url!}
-            alt={bitz.title}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-            onError={() => setImgLoadError(true)}
-          />
+          <>
+            {/* Shimmer loading skeleton */}
+            {!imgLoaded && (
+              <div className="absolute inset-0 bg-[#06152B] animate-pulse flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full border-2 border-blue-900 border-t-[#36D1FF] animate-spin" />
+              </div>
+            )}
+
+            <img
+              src={bitz.visual_url!}
+              alt={bitz.title}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgLoadError(true)}
+              className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-[1.03] ${
+                imgLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          </>
         ) : (
           /* Premium animated visual preview for facts without images (Section 19) */
           <div className="w-full h-full relative flex flex-col items-center justify-center p-8 text-center overflow-hidden bg-gradient-to-br from-[#020817] via-[#06152B] to-[#081B35]">

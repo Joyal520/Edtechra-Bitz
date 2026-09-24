@@ -35,8 +35,6 @@ interface VocabularyCardProps {
   onSavedChanged?: (itemId: string, isSaved: boolean) => void;
 }
 
-const DEFAULT_VOCAB_ASSET = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
-
 export const VocabularyCard: React.FC<VocabularyCardProps> = ({
   item: propItem,
   word: propWord,
@@ -68,14 +66,21 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [imageModalOpen, setImageModalOpen] = useState<boolean>(false);
+  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
+
+  // Reset image loading states when item changes
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [item.id, item.image_url]);
 
   // Check if this vocabulary record has a valid administrator-uploaded visual
   const hasCustomImage = Boolean(
     !imageError &&
     item.image_url &&
+    typeof item.image_url === 'string' &&
     item.image_url.trim() !== '' &&
-    item.image_url !== DEFAULT_VOCAB_ASSET &&
     !item.image_url.includes('ChatGPT Image') &&
     !item.image_url.startsWith('blob:')
   );
@@ -296,13 +301,23 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
               onClick={() => setImageModalOpen(true)}
               className="relative w-full aspect-square bg-slate-900 rounded-none sm:rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-2xs"
             >
+              {/* Shimmer loading skeleton */}
+              {!imageLoaded && !imageError && (
+                <div className="absolute inset-0 bg-slate-800 animate-pulse flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-full border-2 border-slate-700 border-t-amber-400 animate-spin" />
+                </div>
+              )}
+
               <img
                 src={item.image_url || ''}
                 alt={`Visual learning graphic for ${titleText}`}
                 loading="lazy"
                 decoding="async"
+                onLoad={() => setImageLoaded(true)}
                 onError={() => setImageError(true)}
-                className="w-full h-full object-contain sm:object-cover group-hover:scale-102 transition-transform duration-300"
+                className={`w-full h-full object-contain sm:object-cover group-hover:scale-102 transition-all duration-300 ${
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
               />
 
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -407,15 +422,15 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
               )}
             </div>
 
-            {/* Mobile Illustration */}
-            <div className="block md:hidden w-full max-w-[130px] sm:max-w-[150px] mx-auto my-0.5">
-              <div className="relative aspect-[4/3] sm:aspect-square rounded-2xl overflow-hidden bg-gradient-to-b from-amber-50/60 to-orange-50/30 border border-amber-200/60 shadow-2xs flex items-center justify-center p-1.5">
-                <img
-                  src={DEFAULT_VOCAB_ASSET}
-                  alt={`Illustration for ${titleText}`}
-                  className="w-full h-full object-contain"
-                  loading="lazy"
-                />
+            {/* Mobile Visual Badge */}
+            <div className="block md:hidden w-full max-w-[140px] sm:max-w-[160px] mx-auto my-1">
+              <div className={`relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br ${theme.badgeGradient} border ${theme.cardBorder} shadow-2xs flex flex-col items-center justify-center p-3 text-center`}>
+                <div className="w-10 h-10 rounded-xl bg-white/90 shadow-xs flex items-center justify-center mb-1.5">
+                  {theme.icon}
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 leading-tight">
+                  {theme.label}
+                </span>
               </div>
             </div>
 
@@ -441,15 +456,18 @@ export const VocabularyCard: React.FC<VocabularyCardProps> = ({
 
           </div>
 
-          {/* Right Column: Illustration (Desktop) */}
+          {/* Right Column: Educational Visual Badge (Desktop) */}
           <div className="hidden md:flex md:col-span-5 items-center justify-center p-1">
-            <div className="relative w-full max-w-[240px] lg:max-w-[260px] aspect-square rounded-3xl overflow-hidden bg-gradient-to-b from-amber-50/60 to-orange-50/30 border border-amber-200/60 shadow-2xs flex items-center justify-center p-3 group-hover:scale-[1.01] transition-transform duration-300">
-              <img
-                src={DEFAULT_VOCAB_ASSET}
-                alt={`Illustration for ${titleText}`}
-                className="w-full h-full object-contain"
-                loading="lazy"
-              />
+            <div className={`relative w-full max-w-[240px] lg:max-w-[260px] aspect-square rounded-3xl overflow-hidden bg-gradient-to-br ${theme.badgeGradient} border ${theme.cardBorder} shadow-2xs flex flex-col items-center justify-center p-6 text-center group-hover:scale-[1.01] transition-transform duration-300`}>
+              <div className="w-16 h-16 rounded-2xl bg-white/90 shadow-sm flex items-center justify-center mb-3">
+                {theme.iconLarge}
+              </div>
+              <span className="text-xs font-black uppercase tracking-widest text-slate-700 mb-1">
+                {theme.label}
+              </span>
+              <span className="text-[11px] font-bold text-slate-500">
+                EdTechra Daily Vocabulary
+              </span>
             </div>
           </div>
 
@@ -577,7 +595,9 @@ function getThemeConfig(type: VocabularyContentType) {
         headerGradient: 'from-blue-600 via-indigo-600 to-sky-600',
         cardBorder: 'border-blue-200/80',
         cardBorderHover: 'border-blue-300',
-        icon: <Link2 className="w-3.5 h-3.5 text-white" />,
+        badgeGradient: 'from-blue-500/10 via-indigo-500/10 to-sky-500/10',
+        icon: <Link2 className="w-5 h-5 text-blue-600" />,
+        iconLarge: <Link2 className="w-8 h-8 text-blue-600" />,
         pronounceBtnBg: 'bg-blue-100 hover:bg-blue-200',
         meaningBg: 'bg-blue-50/80',
         meaningBorder: 'border-blue-200/70',
@@ -589,7 +609,9 @@ function getThemeConfig(type: VocabularyContentType) {
         headerGradient: 'from-purple-600 via-violet-600 to-indigo-600',
         cardBorder: 'border-purple-200/80',
         cardBorderHover: 'border-purple-300',
-        icon: <Layers className="w-3.5 h-3.5 text-white" />,
+        badgeGradient: 'from-purple-500/10 via-violet-500/10 to-indigo-500/10',
+        icon: <Layers className="w-5 h-5 text-purple-600" />,
+        iconLarge: <Layers className="w-8 h-8 text-purple-600" />,
         pronounceBtnBg: 'bg-purple-100 hover:bg-purple-200',
         meaningBg: 'bg-purple-50/80',
         meaningBorder: 'border-purple-200/70',
@@ -601,7 +623,9 @@ function getThemeConfig(type: VocabularyContentType) {
         headerGradient: 'from-teal-600 via-emerald-600 to-teal-700',
         cardBorder: 'border-teal-200/80',
         cardBorderHover: 'border-teal-300',
-        icon: <Lightbulb className="w-3.5 h-3.5 text-white" />,
+        badgeGradient: 'from-teal-500/10 via-emerald-500/10 to-teal-500/10',
+        icon: <Lightbulb className="w-5 h-5 text-teal-600" />,
+        iconLarge: <Lightbulb className="w-8 h-8 text-teal-600" />,
         pronounceBtnBg: 'bg-teal-100 hover:bg-teal-200',
         meaningBg: 'bg-teal-50/80',
         meaningBorder: 'border-teal-200/70',
@@ -614,7 +638,9 @@ function getThemeConfig(type: VocabularyContentType) {
         headerGradient: 'from-amber-500 via-orange-500 to-amber-600',
         cardBorder: 'border-amber-200/80',
         cardBorderHover: 'border-amber-300',
-        icon: <BookA className="w-3.5 h-3.5 text-white" />,
+        badgeGradient: 'from-amber-500/10 via-orange-500/10 to-amber-500/10',
+        icon: <BookA className="w-5 h-5 text-amber-600" />,
+        iconLarge: <BookA className="w-8 h-8 text-amber-600" />,
         pronounceBtnBg: 'bg-amber-100 hover:bg-amber-200',
         meaningBg: 'bg-amber-50/80',
         meaningBorder: 'border-amber-200/70',

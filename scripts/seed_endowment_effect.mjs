@@ -45,9 +45,9 @@ const ENDOWMENT_BITZ = {
   difficulty: 'Easy',
   cefr_level: 'A2',
   reading_time_sec: 30,
-  visual_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80',
-  visual_status: 'ready',
-  image_source: 'admin',
+  visual_url: null,
+  visual_status: 'missing',
+  image_source: 'none',
   source_citation: 'American Psychological Association, Endowment Effect',
   quiz: [
     {

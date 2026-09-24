@@ -57,6 +57,21 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
   const [copiedToast, setCopiedToast] = useState<boolean>(false);
   const [imageModalOpen, setImageModalOpen] = useState<boolean>(false);
   const [commentOpen, setCommentOpen] = useState<boolean>(false);
+  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<boolean>(false);
+
+  // Reset image loading states when post ID or image URL changes
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [post.id, post.image_url]);
+
+  // Feed Image Debugging Log (Section 13 requirement)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Feed Image Debug] PostCard: id=${post.id}, image_url=${post.image_url}, author=${post.author?.full_name || post.user_id}`);
+    }
+  }, [post.id, post.image_url, post.author, post.user_id]);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -211,22 +226,56 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
       {/* 3. FULL-BLEED EDGE-TO-EDGE 1:1 SQUARE MEDIA CONTAINER ON MOBILE */}
       <div className="w-full sm:px-4 sm:pb-3">
         <div
-          onClick={() => setImageModalOpen(true)}
-          className="relative w-full aspect-square bg-slate-900 rounded-none sm:rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer group shadow-2xs"
+          onClick={() => {
+            if (post.image_url && !imageError) {
+              setImageModalOpen(true);
+            }
+          }}
+          className={`relative w-full aspect-square bg-slate-900 rounded-none sm:rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xs ${
+            post.image_url && !imageError ? 'cursor-pointer group' : ''
+          }`}
         >
-          <img
-            src={post.image_url}
-            alt={post.caption || 'Student learning post image'}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
-          />
+          {post.image_url && !imageError ? (
+            <>
+              {/* Shimmer skeleton while loading */}
+              {!imageLoaded && (
+                <div className="absolute inset-0 bg-slate-800 animate-pulse flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-[#1677FF] animate-spin" />
+                </div>
+              )}
 
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-            <div className="p-2 rounded-full bg-white/80 backdrop-blur-md text-slate-900 shadow-md">
-              <Maximize2 className="w-4 h-4" />
+              <img
+                src={post.image_url}
+                alt={post.caption || 'Student learning post image'}
+                loading="lazy"
+                decoding="async"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+                className={`w-full h-full object-cover group-hover:scale-102 transition-all duration-300 ${
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <div className="p-2 rounded-full bg-white/80 backdrop-blur-md text-slate-900 shadow-md">
+                  <Maximize2 className="w-4 h-4" />
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Neutral educational fallback when no image was uploaded or failed to load */
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white select-none">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center mb-3 shadow-md border border-white/10">
+                <Sparkles className="w-6 h-6 text-[#36D1FF]" />
+              </div>
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
+                Student Learning Post
+              </span>
+              <p className="text-xs text-slate-400 max-w-xs line-clamp-2">
+                {post.caption || 'Interactive learning reflection'}
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -298,7 +347,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPostDeleted }) => {
       )}
 
       {/* Fullscreen 1:1 Image Preview Modal */}
-      {imageModalOpen && (
+      {imageModalOpen && post.image_url && !imageError && (
         <div
           onClick={() => setImageModalOpen(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in"

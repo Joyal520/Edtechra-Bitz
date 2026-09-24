@@ -52,8 +52,6 @@ import { CollapsibleCatalogue } from './CollapsibleCatalogue';
 import { cleanImageTitle, optimizeImageFile } from '@/utils/imageOptimizer';
 import { adminPostQueueService } from '@/services/adminPostQueueService';
 
-const DEFAULT_VOCAB_ASSET = '/assets/ChatGPT Image Aug 22, 2026, 05_39_51 PM.png';
-
 const SAMPLE_TEMPLATES: Record<string, string> = {
   word: JSON.stringify(
     {
@@ -779,7 +777,7 @@ export const AdminVocabularySection: React.FC = () => {
     status: singleForm.status || 'published',
     validation_status: 'manually_approved',
     validation_provider: 'manual',
-    image_url: singleImagePreview || singleForm.image_url || DEFAULT_VOCAB_ASSET,
+    image_url: singleImagePreview || singleForm.image_url || undefined,
     likes_count: 0,
     published_at: new Date().toISOString(),
     created_at: new Date().toISOString(),

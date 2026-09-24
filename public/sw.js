@@ -1,13 +1,20 @@
-const CACHE_NAME = 'edtechra-bitz-v12';
+const CACHE_NAME = 'edtechra-bitz-v13';
 
 const STATIC_PRECACHE = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/manifest.json',
   '/favicon.png',
+  '/apple-touch-icon.png',
   '/logo.png',
+  '/logo-emblem.png',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
+  '/icons/icon-maskable-192x192.png',
+  '/icons/icon-maskable-512x512.png',
+  '/icons/apple-touch-icon.png',
+  '/icons/favicon-32x32.png',
   '/assets/hero-papercraft.jpg'
 ];
 
@@ -37,7 +44,7 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => {
-      console.log('[SW] Cache updated to v9 and clients claimed');
+      console.log('[SW] Cache updated to v13 and clients claimed');
       return self.clients.claim();
     })
   );
