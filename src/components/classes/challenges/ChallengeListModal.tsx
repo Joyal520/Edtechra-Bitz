@@ -20,13 +20,15 @@ interface ChallengeListModalProps {
   onClose: () => void;
   classroomId: string;
   isTeacher?: boolean;
+  onUpdated?: () => void;
 }
 
 export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
   isOpen,
   onClose,
   classroomId,
-  isTeacher: isTeacherProp
+  isTeacher: isTeacherProp,
+  onUpdated
 }) => {
   const classroomAuth = useClassroomAuth(classroomId);
   const isTeacher = isTeacherProp ?? classroomAuth.isTeacher;
@@ -229,6 +231,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           classroomId={classroomId}
           onChallengeCreated={() => {
             loadChallenges();
+            onUpdated?.();
           }}
         />
       )}
@@ -256,6 +259,7 @@ export const ChallengeListModal: React.FC<ChallengeListModalProps> = ({
           challenge={selectedForSubmit}
           onSubmitted={() => {
             loadChallenges();
+            onUpdated?.();
           }}
         />
       )}

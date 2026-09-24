@@ -45,6 +45,7 @@ import { classroomMessageService } from '@/services/classroomMessageService';
 import { classroomResourceService } from '@/services/classroomResourceService';
 import { classroomExamService } from '@/services/classroomExamService';
 import { liveQuizService } from '@/services/liveQuizService';
+import { aiChallengeService } from '@/services/aiChallengeService';
 import { useAuth } from '@/context/AuthContext';
 
 import {
@@ -98,6 +99,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [messages, setMessages] = useState<ClassroomMessage[]>([]);
   const [buckets, setBuckets] = useState<ContentBucket[]>([]);
   const [exams, setExams] = useState<ClassroomExam[]>([]);
+  const [challenges, setChallenges] = useState<any[]>([]);
   const [classroomCourses, setClassroomCourses] = useState<CourseClassroomAssignment[]>([]);
   const [leaderboard, setLeaderboard] = useState<ClassroomLeaderboardEntry[]>([]);
   const [stats, setStats] = useState<IClassroomStats>({
@@ -335,6 +337,62 @@ export const ClassroomDetailPage: React.FC = () => {
     }
   };
 
+  const loadAllClassroomData = async (silent = false) => {
+    if (!id) return;
+    if (!silent && !classroom) {
+      setLoading(true);
+    }
+
+    try {
+      const [
+        classData,
+        inviteData,
+        membersData,
+        assignmentsData,
+        messagesData,
+        bucketsData,
+        examsData,
+        leaderboardData,
+        statsData,
+        coursesData,
+        challengesData
+      ] = await Promise.all([
+        classroomService.getClassroomById(id),
+        classroomService.getOrCreateInvite(id),
+        classroomService.getClassroomMembers(id),
+        assignmentService.getAssignmentsByClassroom(id),
+        classroomMessageService.getMessages(id),
+        classroomResourceService.getBucketsByClassroom(id),
+        classroomExamService.getExamsByClassroom(id),
+        classroomPointsService.getClassroomLeaderboard(id),
+        classroomService.getClassroomStats(id),
+        user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([]),
+        aiChallengeService.getChallenges(id).catch(() => [])
+      ]);
+
+      if (!classData) {
+        navigate('/classes');
+        return;
+      }
+
+      setClassroom(classData);
+      setInvite(inviteData);
+      setMembers(membersData);
+      setAssignments(assignmentsData);
+      setMessages(messagesData);
+      setBuckets(bucketsData);
+      setExams(examsData);
+      setLeaderboard(leaderboardData);
+      setStats(statsData);
+      setClassroomCourses(coursesData || []);
+      setChallenges(challengesData || []);
+    } catch (err) {
+      console.error('Error loading classroom:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     let isMounted = true;
@@ -361,10 +419,10 @@ export const ClassroomDetailPage: React.FC = () => {
     // Periodic safety poll
     const interval = setInterval(refreshActiveQuiz, 5000);
 
-    // Realtime postgres_changes subscription on live_quiz_sessions for this classroom
+    // Realtime postgres_changes subscription on all classroom activities
     const channel = supabase
       ? supabase
-          .channel(`classroom_live_quiz_${id}`)
+          .channel(`classroom_realtime_${id}`)
           .on(
             'postgres_changes',
             {
@@ -383,6 +441,7 @@ export const ClassroomDetailPage: React.FC = () => {
               ) {
                 // Immediately remove panel
                 if (isMounted) setActiveLiveQuizSession(null);
+                if (isMounted) loadAllClassroomData(true);
               } else if (
                 row?.status === 'in_progress' &&
                 payload.eventType === 'UPDATE' &&
@@ -417,9 +476,59 @@ export const ClassroomDetailPage: React.FC = () => {
                     }
                   }
                 });
+                if (isMounted) loadAllClassroomData(true);
               } else {
                 refreshActiveQuiz();
+                if (isMounted) loadAllClassroomData(true);
               }
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'assignments',
+              filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'classroom_exams',
+              filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'classroom_messages',
+              filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'ai_challenges',
+              filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
             }
           )
           .subscribe()
@@ -432,66 +541,13 @@ export const ClassroomDetailPage: React.FC = () => {
         supabase.removeChannel(channel);
       }
     };
-  }, [id]);
+  }, [id, classroom?.teacher_id, isTeacher, authIsTeacher, profile, user, navigate]);
 
   useEffect(() => {
     if (id && !authLoading) {
       loadAllClassroomData();
     }
   }, [id, user, authLoading]);
-
-  const loadAllClassroomData = async (silent = false) => {
-    if (!id) return;
-    if (!silent && !classroom) {
-      setLoading(true);
-    }
-
-    try {
-      const [
-        classData,
-        inviteData,
-        membersData,
-        assignmentsData,
-        messagesData,
-        bucketsData,
-        examsData,
-        leaderboardData,
-        statsData,
-        coursesData
-      ] = await Promise.all([
-        classroomService.getClassroomById(id),
-        classroomService.getOrCreateInvite(id),
-        classroomService.getClassroomMembers(id),
-        assignmentService.getAssignmentsByClassroom(id),
-        classroomMessageService.getMessages(id),
-        classroomResourceService.getBucketsByClassroom(id),
-        classroomExamService.getExamsByClassroom(id),
-        classroomPointsService.getClassroomLeaderboard(id),
-        classroomService.getClassroomStats(id),
-        user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([])
-      ]);
-
-      if (!classData) {
-        navigate('/classes');
-        return;
-      }
-
-      setClassroom(classData);
-      setInvite(inviteData);
-      setMembers(membersData);
-      setAssignments(assignmentsData);
-      setMessages(messagesData);
-      setBuckets(bucketsData);
-      setExams(examsData);
-      setLeaderboard(leaderboardData);
-      setStats(statsData);
-      setClassroomCourses(coursesData || []);
-    } catch (err) {
-      console.error('Error loading classroom:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const myMemberRecord = members.find((m) => m.profile_id === user?.id) || null;
 
@@ -1235,9 +1291,45 @@ export const ClassroomDetailPage: React.FC = () => {
 
           <ClassroomMessages
             classroomId={classroom.id}
+            classroom={classroom}
             messages={messages}
+            assignments={assignments}
+            exams={exams}
+            activeLiveQuizSession={activeLiveQuizSession}
+            challenges={challenges}
             isTeacher={isTeacher}
             onMessageUpdated={loadAllClassroomData}
+            onOpenTask={(task) => {
+              if (isTeacher) {
+                setActiveReviewAssignment(task);
+                setTaskWorkspaceOpen(true);
+              } else {
+                setActiveSubmitAssignment(task);
+              }
+            }}
+            onOpenExam={(exam) => {
+              setSelectedExam(exam);
+              setExamModalOpen(true);
+            }}
+            onOpenLiveQuiz={(session) => {
+              const isHostUser = session?.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
+              if (isHostUser) {
+                if (session?.pin && (effectiveLiveQuizState === 'live' || effectiveLiveQuizState === 'scheduled')) {
+                  if (session.status === 'in_progress' || session.status === 'reveal') {
+                    navigate(`/classes/${id}/live-quiz/host/${session.id}`);
+                  } else {
+                    navigate(`/classes/${id}/live-quiz/lobby/${session.pin}`);
+                  }
+                } else {
+                  setLiveQuizBankOpen(true);
+                }
+              } else {
+                handleStudentJoinLiveQuiz();
+              }
+            }}
+            onOpenChallenge={(_challenge) => {
+              setChallengeListModalOpen(true);
+            }}
           />
         </section>
 
@@ -2211,6 +2303,7 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         isTeacher={isTeacher}
         onClose={() => setChallengeListModalOpen(false)}
+        onUpdated={loadAllClassroomData}
       />
 
       <TaskWorkspaceModal

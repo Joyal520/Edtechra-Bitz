@@ -74,6 +74,56 @@ class ClassroomMessageService {
   }
 
   /**
+   * Posts an activity notification announcement idempotently
+   */
+  async postActivityNotification(payload: {
+    classroom_id: string;
+    activity_type: 'task' | 'exam' | 'live_quiz' | 'competition';
+    activity_id: string;
+    title: string;
+    description?: string;
+  }): Promise<{ data?: ClassroomMessage; error?: string }> {
+    if (!supabase) return { error: 'Supabase is not configured' };
+    const userId = await this.getUserId();
+    if (!userId) return { error: 'Authentication required' };
+
+    try {
+      const typeLabel =
+        payload.activity_type === 'task'
+          ? 'TASK'
+          : payload.activity_type === 'exam'
+          ? 'EXAM'
+          : payload.activity_type === 'live_quiz'
+          ? 'LIVE QUIZ'
+          : 'COMPETITION';
+
+      const announcementText = `[${typeLabel}] ${payload.title}${payload.description ? ` — ${payload.description}` : ''}`;
+
+      // Check for existing announcement
+      const { data: existing } = await supabase
+        .from('classroom_messages')
+        .select('id')
+        .eq('classroom_id', payload.classroom_id)
+        .ilike('message', `%[${typeLabel}] ${payload.title}%`)
+        .eq('is_deleted', false)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        return { data: existing[0] as any };
+      }
+
+      return this.postMessage({
+        classroom_id: payload.classroom_id,
+        message: announcementText,
+        is_pinned: false
+      });
+    } catch (err: any) {
+      console.error('[ClassroomMessageService] postActivityNotification error:', err);
+      return { error: err.message || 'Failed to post activity announcement.' };
+    }
+  }
+
+  /**
    * Soft-deletes a message
    */
   async deleteMessage(messageId: string): Promise<{ error?: string }> {
