@@ -124,24 +124,51 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
   // Extract typed writing evaluation metadata (prioritizing R2 evaluation JSON)
   const correctedText = r2Evaluation?.corrected_work || item.corrected_work || item.feedback_metadata?.corrected_work || null;
   const originalText = r2Evaluation?.original_work || item.original_text || item.text_response || item.content_text || item.feedback_metadata?.original_text || null;
+  
+  const grammarIssues: Array<{ original: string; correction: string; explanation?: string }> = 
+    (Array.isArray(r2Evaluation?.grammar_issues) && r2Evaluation.grammar_issues.length > 0)
+      ? r2Evaluation.grammar_issues.map((g: any) => ({ original: g.original || g.text, correction: g.correction || g.suggestion, explanation: g.explanation || g.rule }))
+      : (Array.isArray(item.grammar_issues) && item.grammar_issues.length > 0)
+        ? item.grammar_issues
+        : (Array.isArray(item.grammar_errors) && item.grammar_errors.length > 0)
+          ? item.grammar_errors.map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation }))
+          : (Array.isArray(item.feedback_metadata?.grammar_issues) ? item.feedback_metadata.grammar_issues : []);
+
+  const spellingIssues: Array<{ original: string; correction: string; explanation?: string }> = 
+    (Array.isArray(r2Evaluation?.spelling_issues) && r2Evaluation.spelling_issues.length > 0)
+      ? r2Evaluation.spelling_issues.map((s: any) => ({ original: s.original || s.text, correction: s.correction || s.suggestion, explanation: s.explanation || 'Spelling correction' }))
+      : (Array.isArray(item.spelling_issues) && item.spelling_issues.length > 0)
+        ? item.spelling_issues
+        : (Array.isArray(item.spelling_errors) && item.spelling_errors.length > 0)
+          ? item.spelling_errors.map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' }))
+          : (Array.isArray(item.feedback_metadata?.spelling_issues) ? item.feedback_metadata.spelling_issues : []);
+
+  const vocabIssues: Array<{ original: string; correction: string; explanation?: string }> =
+    (Array.isArray(r2Evaluation?.vocabulary_issues) && r2Evaluation.vocabulary_issues.length > 0)
+      ? r2Evaluation.vocabulary_issues
+      : (Array.isArray(item.vocabulary_issues) && item.vocabulary_issues.length > 0)
+        ? item.vocabulary_issues
+        : (Array.isArray(item.feedback_metadata?.vocabulary_issues) ? item.feedback_metadata.vocabulary_issues : []);
+
+  const structureIssues: Array<{ original: string; correction: string; explanation?: string }> =
+    (Array.isArray(r2Evaluation?.sentence_structure_issues) && r2Evaluation.sentence_structure_issues.length > 0)
+      ? r2Evaluation.sentence_structure_issues
+      : (Array.isArray(item.sentence_structure_issues) && item.sentence_structure_issues.length > 0)
+        ? item.sentence_structure_issues
+        : (Array.isArray(item.feedback_metadata?.sentence_structure_issues) ? item.feedback_metadata.sentence_structure_issues : []);
+
+  const nextStepText: string = r2Evaluation?.next_step || item.next_step || item.feedback_metadata?.next_step || '';
+
   const mistakesList: Array<{ original: string; correction: string; explanation?: string }> = 
     (Array.isArray(r2Evaluation?.other_issues) && r2Evaluation.other_issues.length > 0)
       ? r2Evaluation.other_issues
       : (Array.isArray(item.mistakes) && item.mistakes.length > 0)
         ? item.mistakes
         : (Array.isArray(item.feedback_metadata?.mistakes) ? item.feedback_metadata.mistakes : []);
-  const grammarErrors: Array<{ text: string; suggestion: string; rule?: string }> = 
-    (Array.isArray(r2Evaluation?.grammar_issues) && r2Evaluation.grammar_issues.length > 0)
-      ? r2Evaluation.grammar_issues.map((g: any) => ({ text: g.original, suggestion: g.correction, rule: g.explanation }))
-      : (Array.isArray(item.grammar_errors) && item.grammar_errors.length > 0)
-        ? item.grammar_errors
-        : (Array.isArray(item.feedback_metadata?.grammar_errors) ? item.feedback_metadata.grammar_errors : []);
-  const spellingErrors: Array<{ text: string; suggestion: string }> = 
-    (Array.isArray(r2Evaluation?.spelling_issues) && r2Evaluation.spelling_issues.length > 0)
-      ? r2Evaluation.spelling_issues.map((s: any) => ({ text: s.original, suggestion: s.correction }))
-      : (Array.isArray(item.spelling_errors) && item.spelling_errors.length > 0)
-        ? item.spelling_errors
-        : (Array.isArray(item.feedback_metadata?.spelling_errors) ? item.feedback_metadata.spelling_errors : []);
+
+  const grammarErrors = grammarIssues.map((g) => ({ text: g.original, suggestion: g.correction, rule: g.explanation }));
+  const spellingErrors = spellingIssues.map((s) => ({ text: s.original, suggestion: s.correction }));
+
   const aiMeta = r2Evaluation || item.ai_evaluation_metadata || {};
   const rubricBreakdown: Array<{ criterion: string; score: number; max?: number }> = 
     Array.isArray(aiMeta.breakdown) && aiMeta.breakdown.length > 0
@@ -296,69 +323,219 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
               {/* Scenario A: Typed Task with AI Corrected Text */}
               {correctedText ? (
                 <div className="space-y-6">
-                  {/* Corrected Text Card */}
-                  <div className="p-5 sm:p-6 bg-emerald-50/50 border-2 border-emerald-200/80 rounded-2xl space-y-3 shadow-2xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-emerald-900">
-                          AI Corrected & Polished Version
-                        </span>
+                  {/* Side-by-Side Comparison on Desktop, Stacked on Mobile */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: Original Submission */}
+                    <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-2.5 flex flex-col justify-between shadow-2xs">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                            YOUR ORIGINAL WORK
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-100 px-2 py-0.5 rounded-full">
+                            Student Draft
+                          </span>
+                        </div>
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                          {originalText || 'No original text recorded.'}
+                        </div>
                       </div>
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full">
-                        Grammar & Syntax Polished
-                      </span>
                     </div>
-                    <div className="p-4 bg-white rounded-xl border border-emerald-100 text-slate-900 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-wrap selection:bg-emerald-100">
-                      {correctedText}
+
+                    {/* Right: AI Corrected & Polished Version */}
+                    <div className="p-5 bg-emerald-50/50 border-2 border-emerald-200/80 rounded-2xl space-y-2.5 flex flex-col justify-between shadow-2xs">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                              CORRECTED WORK
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            Polished English
+                          </span>
+                        </div>
+                        <div className="p-3.5 bg-white rounded-xl border border-emerald-100 text-emerald-950 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap selection:bg-emerald-100 shadow-2xs">
+                          {correctedText}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Mistakes & Corrections Breakdown */}
-                  {mistakesList.length > 0 && (
-                    <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-500" />
-                          <span>Detected Mistakes & Explanations ({mistakesList.length})</span>
-                        </h4>
-                        <span className="text-[11px] font-semibold text-slate-500">
-                          Click Original Submission tab to compare drafts
-                        </span>
+                  {/* 14-Point English Inspection Breakdown */}
+                  <div className="p-5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-500" />
+                        <span>14-Point English Analysis</span>
+                      </h4>
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        Detailed feedback & explanations
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Grammar & Syntax */}
+                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-800">Grammar & Syntax</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {grammarIssues.length} issue{grammarIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {grammarIssues.length > 0 ? (
+                          <ul className="space-y-2">
+                            {grammarIssues.map((err, i) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                            ✓ No grammar errors detected
+                          </p>
+                        )}
                       </div>
 
-                      <div className="space-y-3">
-                        {mistakesList.map((m, idx) => (
-                          <div key={idx} className="p-3.5 bg-slate-50/80 border border-slate-200 rounded-xl space-y-2">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shrink-0">
-                                  Original
-                                </span>
-                                <span className="text-slate-700 line-through truncate font-medium">
-                                  "{m.original}"
-                                </span>
-                              </div>
-                              <span className="hidden sm:inline text-slate-400 font-bold">→</span>
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
-                                  Corrected
-                                </span>
-                                <span className="text-emerald-900 font-bold truncate">
-                                  "{m.correction}"
-                                </span>
-                              </div>
-                            </div>
-                            {m.explanation && (
-                              <p className="text-[11px] text-slate-600 pl-1 border-l-2 border-indigo-200 leading-relaxed font-medium">
-                                <strong className="text-slate-800">Rule:</strong> {m.explanation}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                      {/* Spelling */}
+                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-800">Spelling</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {spellingIssues.length} issue{spellingIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {spellingIssues.length > 0 ? (
+                          <ul className="space-y-2">
+                            {spellingIssues.map((err, i) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                            ✓ No spelling mistakes detected
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Vocabulary */}
+                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-800">Vocabulary</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {vocabIssues.length} issue{vocabIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {vocabIssues.length > 0 ? (
+                          <ul className="space-y-2">
+                            {vocabIssues.map((err, i) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                            ✓ Vocabulary is appropriate
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sentence Structure */}
+                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-800">Sentence Structure</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {structureIssues.length} issue{structureIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {structureIssues.length > 0 ? (
+                          <ul className="space-y-2">
+                            {structureIssues.map((err, i) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                            ✓ Sentence structure is clear
+                          </p>
+                        )}
                       </div>
                     </div>
-                  )}
+
+                    {/* What You Did Well (Strengths) */}
+                    {strengths.length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                        <h4 className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WHAT YOU DID WELL</span>
+                        </h4>
+                        <ul className="space-y-1 pl-1">
+                          {strengths.map((s, i) => (
+                            <li key={i} className="text-xs text-emerald-950 font-medium flex items-start gap-2">
+                              <span className="text-emerald-600 font-black">•</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Next Step */}
+                    {nextStepText && (
+                      <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1">
+                        <h4 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>NEXT STEP</span>
+                        </h4>
+                        <p className="text-xs text-indigo-950 font-medium leading-relaxed">
+                          {nextStepText}
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Practiced Rules and Skills Chips */}
                   {(grammarErrors.length > 0 || spellingErrors.length > 0) && (

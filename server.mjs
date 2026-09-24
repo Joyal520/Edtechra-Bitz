@@ -3240,194 +3240,233 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
-    // 1. Fetch Classroom details
-    const { data: classroom, error: cErr } = await serverSupabase
-      .from('classrooms')
-      .select('id, title, subject, grade, teacher_id')
-      .eq('id', classroomId)
-      .maybeSingle();
+    // Helper to safely execute queries without failing the entire batch
+    const safeQuery = async (queryPromise) => {
+      try {
+        const res = await queryPromise;
+        return res || { data: null, error: null };
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    };
 
-    if (cErr || !classroom) {
+    // Execute all independent data queries in parallel for ultra-fast response
+    const [
+      classroomRes,
+      taskSubmissionsRes,
+      quizResultsRes,
+      examResultsRes,
+      challengeSubsRes,
+      ocrEvalsRes,
+      correctedWorkRes,
+      eventsRes,
+      studentPointsRes,
+      allPointsRes
+    ] = await Promise.all([
+      // 1. Classroom details
+      safeQuery(
+        serverSupabase
+          .from('classrooms')
+          .select('id, title, subject, grade, teacher_id')
+          .eq('id', classroomId)
+          .maybeSingle()
+      ),
+      // 2. Tasks (assignment_submissions joined with assignments)
+      safeQuery(
+        serverSupabase
+          .from('assignment_submissions')
+          .select(`
+            id,
+            assignment_id,
+            classroom_id,
+            student_id,
+            status,
+            points_awarded,
+            final_score,
+            ai_score,
+            percentage,
+            is_ai_graded,
+            teacher_feedback,
+            submitted_at,
+            completed_at,
+            text_response,
+            file_urls,
+            question_answers,
+            assignment:assignments!assignment_id(id, title, points, due_date, instructions)
+          `)
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+          .order('submitted_at', { ascending: false })
+      ),
+      // 3. Live Quiz Results
+      safeQuery(
+        serverSupabase
+          .from('live_quiz_results')
+          .select(`
+            id,
+            session_id,
+            quiz_id,
+            score,
+            total_questions,
+            correct_count,
+            wrong_count,
+            accuracy_percentage,
+            final_rank,
+            points_awarded,
+            created_at,
+            quiz:live_quizzes(id, title)
+          `)
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false })
+      ),
+      // 4. Exam Results
+      safeQuery(
+        serverSupabase
+          .from('classroom_exam_results')
+          .select(`
+            id,
+            exam_id,
+            score,
+            total_marks,
+            percentage,
+            grade,
+            passed,
+            submitted_at,
+            status,
+            report_r2_key,
+            exam:classroom_exams(id, title, duration_minutes, pass_marks, total_marks)
+          `)
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+          .order('submitted_at', { ascending: false })
+      ),
+      // 5. AI Challenge Submissions
+      safeQuery(
+        serverSupabase
+          .from('ai_challenge_submissions')
+          .select(`
+            id,
+            challenge_id,
+            submission_type,
+            content_text,
+            file_key,
+            file_name,
+            ai_score,
+            final_score,
+            percentage,
+            status,
+            submitted_at,
+            ai_feedback,
+            challenge:ai_challenges!inner(id, classroom_id, title, category, max_marks)
+          `)
+          .eq('student_id', studentId)
+          .eq('challenge.classroom_id', classroomId)
+          .order('submitted_at', { ascending: false })
+      ),
+      // 6. OCR Worksheet Evaluations
+      safeQuery(
+        serverSupabase
+          .from('ocr_evaluations')
+          .select('*')
+          .eq('class_id', classroomId)
+          .eq('student_id', studentId)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+      ),
+      // 7. Student Corrected Work records
+      safeQuery(
+        serverSupabase
+          .from('student_corrected_work')
+          .select('*')
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+          .order('created_at', { ascending: false })
+      ),
+      // 8. Topic performance from learning events
+      safeQuery(
+        serverSupabase
+          .from('v_classroom_learning_events')
+          .select('topic, percentage, score, max_score, completed_at, activity_type')
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+          .order('completed_at', { ascending: false })
+      ),
+      // 9. Student points
+      safeQuery(
+        serverSupabase
+          .from('classroom_points')
+          .select('points')
+          .eq('classroom_id', classroomId)
+          .eq('student_id', studentId)
+      ),
+      // 10. All classroom points for rank
+      safeQuery(
+        serverSupabase
+          .from('classroom_points')
+          .select('student_id, points')
+          .eq('classroom_id', classroomId)
+      )
+    ]);
+
+    const classroom = classroomRes?.data;
+    if (!classroom) {
       return res.status(404).json({ success: false, error: 'Classroom not found.' });
     }
 
-    // 2. Fetch Tasks (assignment_submissions joined with assignments)
-    const { data: taskSubmissions } = await serverSupabase
-      .from('assignment_submissions')
-      .select(`
-        id,
-        assignment_id,
-        status,
-        points_awarded,
-        final_score,
-        ai_score,
-        percentage,
-        is_ai_graded,
-        teacher_feedback,
-        submitted_at,
-        completed_at,
-        text_response,
-        file_urls,
-        question_answers,
-        assignment:assignments!assignment_id(id, title, points, due_date, instructions)
-      `)
-      .eq('classroom_id', classroomId)
-      .eq('student_id', studentId)
-      .order('submitted_at', { ascending: false });
+    const taskSubmissions = taskSubmissionsRes?.data || [];
+    const quizResults = quizResultsRes?.data || [];
+    const examResults = examResultsRes?.data || [];
+    const challengeSubs = challengeSubsRes?.data || [];
+    const ocrEvals = ocrEvalsRes?.data || [];
+    const correctedWorkRecords = correctedWorkRes?.data || [];
+    const events = eventsRes?.data || [];
+    const pts = studentPointsRes?.data || [];
+    const allPoints = allPointsRes?.data || [];
 
-    // 3. Fetch Live Quiz Results
-    const { data: quizResults } = await serverSupabase
-      .from('live_quiz_results')
-      .select(`
-        id,
-        session_id,
-        quiz_id,
-        score,
-        total_questions,
-        correct_count,
-        wrong_count,
-        accuracy_percentage,
-        final_rank,
-        points_awarded,
-        created_at,
-        quiz:live_quizzes(id, title)
-      `)
-      .eq('classroom_id', classroomId)
-      .eq('student_id', studentId)
-      .order('created_at', { ascending: false });
+    // Calculate Topic Mastery
+    let topicMastery = [];
+    if (events && events.length > 0) {
+      const topicMap = new Map();
+      events.forEach((ev) => {
+        const t = ev.topic || 'General';
+        const p = ev.percentage != null ? Number(ev.percentage) : (ev.max_score > 0 ? (ev.score / ev.max_score) * 100 : 0);
+        if (!topicMap.has(t)) {
+          topicMap.set(t, { scores: [], count: 0 });
+        }
+        topicMap.get(t).scores.push(p);
+        topicMap.get(t).count++;
+      });
 
-    // 4. Fetch Exam Results
-    const { data: examResults } = await serverSupabase
-      .from('classroom_exam_results')
-      .select(`
-        id,
-        exam_id,
-        score,
-        total_marks,
-        percentage,
-        grade,
-        passed,
-        submitted_at,
-        status,
-        report_r2_key,
-        exam:classroom_exams(id, title, duration_minutes, pass_marks, total_marks)
-      `)
-      .eq('classroom_id', classroomId)
-      .eq('student_id', studentId)
-      .order('submitted_at', { ascending: false });
-
-    // 5. Fetch AI Challenge Submissions for this classroom
-    const { data: challengeSubs } = await serverSupabase
-      .from('ai_challenge_submissions')
-      .select(`
-        id,
-        challenge_id,
-        submission_type,
-        content_text,
-        file_key,
-        file_name,
-        ai_score,
-        final_score,
-        percentage,
-        status,
-        submitted_at,
-        ai_feedback,
-        challenge:ai_challenges!inner(id, classroom_id, title, category, max_marks)
-      `)
-      .eq('student_id', studentId)
-      .eq('challenge.classroom_id', classroomId)
-      .order('submitted_at', { ascending: false });
-
-    // 6. Fetch OCR Worksheet Evaluations for this student & classroom
-    const { data: ocrEvals } = await serverSupabase
-      .from('ocr_evaluations')
-      .select('*')
-      .eq('class_id', classroomId)
-      .eq('student_id', studentId)
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false });
-
-    // 7. Fetch Student Corrected Work table records (if exists)
-    let correctedWorkRecords = [];
-    try {
-      const { data: cw } = await serverSupabase
-        .from('student_corrected_work')
-        .select('*')
-        .eq('classroom_id', classroomId)
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false });
-      if (cw) correctedWorkRecords = cw;
-    } catch (_) {
-      // safe fallback if table not yet migrated
+      topicMastery = Array.from(topicMap.entries()).map(([topic, stat]) => {
+        const avg = Math.round(stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length);
+        const status = avg >= 80 ? 'strong' : (avg >= 60 ? 'developing' : 'needs_practice');
+        return {
+          topic,
+          average_percentage: avg,
+          activities_count: stat.count,
+          status
+        };
+      });
     }
 
-    // 8. Fetch topic performance from v_classroom_learning_events
-    let topicMastery = [];
-    try {
-      const { data: events } = await serverSupabase
-        .from('v_classroom_learning_events')
-        .select('topic, percentage, score, max_score, completed_at, activity_type')
-        .eq('classroom_id', classroomId)
-        .eq('student_id', studentId)
-        .order('completed_at', { ascending: false });
-
-      if (events && events.length > 0) {
-        const topicMap = new Map();
-        events.forEach((ev) => {
-          const t = ev.topic || 'General';
-          const p = ev.percentage != null ? Number(ev.percentage) : (ev.max_score > 0 ? (ev.score / ev.max_score) * 100 : 0);
-          if (!topicMap.has(t)) {
-            topicMap.set(t, { scores: [], count: 0 });
-          }
-          topicMap.get(t).scores.push(p);
-          topicMap.get(t).count++;
-        });
-
-        topicMastery = Array.from(topicMap.entries()).map(([topic, stat]) => {
-          const avg = Math.round(stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length);
-          const status = avg >= 80 ? 'strong' : (avg >= 60 ? 'developing' : 'needs_practice');
-          return {
-            topic,
-            average_percentage: avg,
-            activities_count: stat.count,
-            status
-          };
-        });
-      }
-    } catch (_) {}
-
-    // 9. Fetch points & calculate rank
+    // Calculate Points & Rank
     let studentPoints = 0;
     let studentRank = null;
-    try {
-      const { data: pts } = await serverSupabase
-        .from('classroom_points')
-        .select('points')
-        .eq('classroom_id', classroomId)
-        .eq('student_id', studentId);
-
-      if (pts) {
-        studentPoints = pts.reduce((sum, p) => sum + (Number(p.points) || 0), 0);
+    if (pts && pts.length > 0) {
+      studentPoints = pts.reduce((sum, p) => sum + (Number(p.points) || 0), 0);
+    }
+    if (allPoints && allPoints.length > 0) {
+      const studentSums = new Map();
+      allPoints.forEach((r) => {
+        studentSums.set(r.student_id, (studentSums.get(r.student_id) || 0) + (Number(r.points) || 0));
+      });
+      const sorted = Array.from(studentSums.entries()).sort((a, b) => b[1] - a[1]);
+      const rIndex = sorted.findIndex(([sId]) => sId === studentId);
+      if (rIndex !== -1) {
+        studentRank = rIndex + 1;
       }
-
-      // Calculate classroom rank
-      const { data: allPoints } = await serverSupabase
-        .from('classroom_points')
-        .select('student_id, points')
-        .eq('classroom_id', classroomId);
-
-      if (allPoints) {
-        const studentSums = new Map();
-        allPoints.forEach((r) => {
-          studentSums.set(r.student_id, (studentSums.get(r.student_id) || 0) + (Number(r.points) || 0));
-        });
-        const sorted = Array.from(studentSums.entries()).sort((a, b) => b[1] - a[1]);
-        const rIndex = sorted.findIndex(([sId]) => sId === studentId);
-        if (rIndex !== -1) {
-          studentRank = rIndex + 1;
-        }
-      }
-    } catch (_) {}
+    }
 
     // Combine & format Corrected Work items
     const correctedWork = [];
@@ -3436,14 +3475,18 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     correctedWorkRecords.forEach((item) => {
       const fbMeta = item.feedback_metadata || {};
       const aiMeta = item.ai_evaluation_metadata || {};
+      const score = item.score;
+      const maxScore = item.max_score || 100;
+      const percentage = item.percentage ?? (score != null && maxScore > 0 ? Math.round((Number(score) / maxScore) * 100) : null);
+
       correctedWork.push({
         id: item.id,
         title: item.title,
         source_type: item.source_type,
         work_type: item.file_type || 'document',
-        score: item.score,
-        max_score: item.max_score || 100,
-        percentage: item.percentage,
+        score,
+        max_score: maxScore,
+        percentage,
         feedback: item.feedback_text,
         original_r2_key: item.original_r2_key,
         original_url: item.original_file_url,
@@ -3457,6 +3500,19 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         strengths: fbMeta.strengths || [],
         grammar_errors: fbMeta.grammar_errors || [],
         spelling_errors: fbMeta.spelling_errors || [],
+        grammar_issues: fbMeta.grammar_issues || (fbMeta.grammar_errors || []).map((g) => ({
+          original: g.text || g.original,
+          correction: g.suggestion || g.correction,
+          explanation: g.rule || g.explanation || 'Grammar correction'
+        })),
+        spelling_issues: fbMeta.spelling_issues || (fbMeta.spelling_errors || []).map((s) => ({
+          original: s.text || s.original,
+          correction: s.suggestion || s.correction,
+          explanation: 'Spelling correction'
+        })),
+        sentence_structure_issues: fbMeta.sentence_structure_issues || [],
+        vocabulary_issues: fbMeta.vocabulary_issues || [],
+        next_step: fbMeta.next_step || '',
         feedback_metadata: fbMeta,
         ai_evaluation_metadata: aiMeta,
         date: item.created_at
@@ -3466,19 +3522,37 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     // From OCR evaluations (handwritten work)
     (ocrEvals || []).forEach((ocr) => {
       if (!correctedWork.some((c) => c.id === ocr.id)) {
+        const score = ocr.final_score ?? ocr.score;
+        const maxScore = ocr.max_marks || 100;
+        const percentage = ocr.percentage ?? (score != null && maxScore > 0 ? Math.round((Number(score) / maxScore) * 100) : null);
+
         correctedWork.push({
           id: ocr.id,
           title: ocr.title || `${ocr.category} Practice`,
           source_type: 'ocr_handwritten',
           work_type: 'handwritten',
-          score: ocr.final_score ?? ocr.score,
-          max_score: ocr.max_marks || 100,
-          percentage: ocr.percentage,
+          score,
+          max_score: maxScore,
+          percentage,
           feedback: ocr.feedback,
           original_r2_key: ocr.temporary_file_key,
           corrected_r2_key: ocr.report_file_key,
           performance: ocr.performance,
           breakdown: ocr.breakdown_json,
+          grammar_issues: ocr.breakdown_json?.grammar_issues || (ocr.breakdown_json?.grammar_errors || []).map((g) => ({
+            original: g.text || g.original,
+            correction: g.suggestion || g.correction,
+            explanation: g.rule || g.explanation || 'Grammar correction'
+          })),
+          spelling_issues: ocr.breakdown_json?.spelling_issues || (ocr.breakdown_json?.spelling_errors || []).map((s) => ({
+            original: s.text || s.original,
+            correction: s.suggestion || s.correction,
+            explanation: 'Spelling correction'
+          })),
+          sentence_structure_issues: ocr.breakdown_json?.sentence_structure_issues || [],
+          vocabulary_issues: ocr.breakdown_json?.vocabulary_issues || [],
+          next_step: ocr.breakdown_json?.next_step || '',
+          strengths: ocr.breakdown_json?.strengths || [],
           date: ocr.completed_at || ocr.created_at
         });
       }
@@ -3509,16 +3583,19 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
           });
 
           const origUrl = sub.file_urls?.[0] || null;
+          const score = sub.final_score ?? sub.points_awarded ?? wEval?.score;
+          const maxScore = sub.assignment?.points || wEval?.max_score || 100;
+          const percentage = sub.percentage ?? (score != null && maxScore > 0 ? Math.round((Number(score) / maxScore) * 100) : null);
 
           correctedWork.push({
             id: sub.id,
             title: sub.assignment?.title || (isOcr ? 'Handwritten Task' : 'Writing Task'),
             source_type: isOcr ? 'ocr_handwritten' : 'writing_task',
             work_type: isOcr ? 'handwritten' : 'writing',
-            score: sub.final_score ?? sub.points_awarded,
-            max_score: sub.assignment?.points || 100,
-            percentage: sub.percentage,
-            feedback: sub.teacher_feedback || writingQa?.feedback || 'Evaluation completed.',
+            score,
+            max_score: maxScore,
+            percentage,
+            feedback: sub.teacher_feedback || writingQa?.feedback || wEval?.feedback || 'Evaluation completed.',
             text_response: sub.text_response,
             original_text: sub.text_response || wEval?.ocr_text || null,
             original_url: origUrl,
@@ -3529,6 +3606,19 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             strengths: wEval?.strengths || [],
             grammar_errors: wEval?.grammar_errors || [],
             spelling_errors: wEval?.spelling_errors || [],
+            grammar_issues: wEval?.grammar_issues || (wEval?.grammar_errors || []).map((g) => ({
+              original: g.text || g.original,
+              correction: g.suggestion || g.correction,
+              explanation: g.rule || g.explanation || 'Grammar correction'
+            })),
+            spelling_issues: wEval?.spelling_issues || (wEval?.spelling_errors || []).map((s) => ({
+              original: s.text || s.original,
+              correction: s.suggestion || s.correction,
+              explanation: 'Spelling correction'
+            })),
+            sentence_structure_issues: wEval?.sentence_structure_issues || [],
+            vocabulary_issues: wEval?.vocabulary_issues || [],
+            next_step: wEval?.next_step || '',
             r2_result_path: r2Path,
             breakdown: wEval?.breakdown || [],
             feedback_metadata: wEval ? {
@@ -3539,6 +3629,11 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
               strengths: wEval.strengths || [],
               grammar_errors: wEval.grammar_errors || [],
               spelling_errors: wEval.spelling_errors || [],
+              grammar_issues: wEval.grammar_issues || [],
+              spelling_issues: wEval.spelling_issues || [],
+              sentence_structure_issues: wEval.sentence_structure_issues || [],
+              vocabulary_issues: wEval.vocabulary_issues || [],
+              next_step: wEval.next_step || '',
               r2_result_path: r2Path
             } : { r2_result_path: r2Path },
             ai_evaluation_metadata: wEval ? {
@@ -3557,14 +3652,18 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     (challengeSubs || []).forEach((ch) => {
       if (ch.status === 'completed' && (ch.final_score != null || ch.ai_score != null)) {
         if (!correctedWork.some((c) => c.id === ch.id)) {
+          const score = ch.final_score ?? ch.ai_score;
+          const maxScore = ch.challenge?.max_marks || 100;
+          const percentage = ch.percentage ?? (score != null && maxScore > 0 ? Math.round((Number(score) / maxScore) * 100) : null);
+
           correctedWork.push({
             id: ch.id,
             title: ch.challenge?.title || 'Writing Challenge',
             source_type: 'challenge',
             work_type: ch.submission_type === 'file' ? 'handwritten' : 'writing',
-            score: ch.final_score ?? ch.ai_score,
-            max_score: ch.challenge?.max_marks || 100,
-            percentage: ch.percentage,
+            score,
+            max_score: maxScore,
+            percentage,
             feedback: ch.ai_feedback,
             content_text: ch.content_text,
             original_r2_key: ch.file_key,
@@ -3574,27 +3673,6 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       }
     });
 
-    // Compute Summary Performance
-    const allPercentages = [];
-    (taskSubmissions || []).forEach((t) => { if (t.percentage != null) allPercentages.push(Number(t.percentage)); });
-    (quizResults || []).forEach((q) => { if (q.accuracy_percentage != null) allPercentages.push(Number(q.accuracy_percentage)); });
-    (examResults || []).forEach((e) => { if (e.percentage != null) allPercentages.push(Number(e.percentage)); });
-    (ocrEvals || []).forEach((o) => { if (o.percentage != null) allPercentages.push(Number(o.percentage)); });
-    (challengeSubs || []).forEach((c) => { if (c.percentage != null) allPercentages.push(Number(c.percentage)); });
-
-    const totalActivities = (taskSubmissions?.length || 0) +
-      (quizResults?.length || 0) +
-      (examResults?.length || 0) +
-      (ocrEvals?.length || 0) +
-      (challengeSubs?.length || 0);
-
-    const overallPercentage = allPercentages.length > 0
-      ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
-      : null;
-
-    // Recent score is the latest activity percentage
-    const recentScore = allPercentages.length > 0 ? allPercentages[0] : null;
-
     // Format tasks for My Results (including writing evaluation metadata & R2 path)
     const formattedTasks = (taskSubmissions || []).map((t) => {
       // Extract writing evaluation from question_answers if present
@@ -3602,6 +3680,11 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         ? t.question_answers.find((qa) => qa.writing_evaluation || qa.question_id === 'writing_response' || qa.question_id === 'ocr_handwritten_response' || qa.r2_result_path)
         : null;
       const wEval = writingQa?.writing_evaluation;
+      const score = t.final_score ?? t.points_awarded ?? wEval?.score;
+      const maxScore = t.assignment?.points || wEval?.max_score || 100;
+      const percentage = t.percentage ?? (score != null && maxScore > 0 ? Math.round((Number(score) / maxScore) * 100) : null);
+      const isGraded = t.status === 'graded' || score != null || percentage != null || t.completed_at != null;
+
       const r2Path = writingQa?.r2_result_path || wEval?.r2_result_path || buildTaskEvaluationKey({
         classroomId: t.classroom_id || classroomId,
         studentId: t.student_id || studentId,
@@ -3613,25 +3696,46 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
         id: t.id,
         title: t.assignment?.title || 'Assignment Task',
         assignment_id: t.assignment_id,
-        score: t.final_score ?? t.points_awarded,
-        max_score: t.assignment?.points || 100,
-        percentage: t.percentage,
-        status: t.status,
-        teacher_feedback: t.teacher_feedback,
+        score,
+        max_score: maxScore,
+        percentage,
+        status: isGraded ? 'graded' : (t.status || 'submitted'),
+        teacher_feedback: t.teacher_feedback || wEval?.feedback,
         text_response: t.text_response,
         file_urls: t.file_urls,
         question_answers: t.question_answers,
         ocr_evaluation_id: t.ocr_evaluation_id,
         submitted_at: t.submitted_at,
         completed_at: t.completed_at,
-        is_ai_graded: t.is_ai_graded || false,
+        is_ai_graded: t.is_ai_graded || Boolean(wEval),
         writing_evaluation: wEval || null,
         r2_result_path: r2Path,
         skills: writingQa?.skills || wEval?.skills || [],
-        grammar_error_count: writingQa?.grammar_error_count ?? wEval?.grammar_errors?.length ?? 0,
-        spelling_error_count: writingQa?.spelling_error_count ?? wEval?.spelling_errors?.length ?? 0
+        grammar_error_count: writingQa?.grammar_error_count ?? wEval?.grammar_issues?.length ?? wEval?.grammar_errors?.length ?? 0,
+        spelling_error_count: writingQa?.spelling_error_count ?? wEval?.spelling_issues?.length ?? wEval?.spelling_errors?.length ?? 0
       };
     });
+
+    // Compute Summary Performance
+    const allPercentages = [];
+    (formattedTasks || []).forEach((t) => { if (t.percentage != null) allPercentages.push(Number(t.percentage)); });
+    (quizResults || []).forEach((q) => { if (q.accuracy_percentage != null) allPercentages.push(Number(q.accuracy_percentage)); });
+    (examResults || []).forEach((e) => { if (e.percentage != null) allPercentages.push(Number(e.percentage)); });
+    (ocrEvals || []).forEach((o) => { if (o.percentage != null) allPercentages.push(Number(o.percentage)); });
+    (challengeSubs || []).forEach((c) => { if (c.percentage != null) allPercentages.push(Number(c.percentage)); });
+
+    const totalActivities = (formattedTasks?.length || 0) +
+      (quizResults?.length || 0) +
+      (examResults?.length || 0) +
+      (ocrEvals?.length || 0) +
+      (challengeSubs?.length || 0);
+
+    const overallPercentage = allPercentages.length > 0
+      ? Math.round(allPercentages.reduce((a, b) => a + b, 0) / allPercentages.length)
+      : null;
+
+    // Recent score is the latest activity percentage
+    const recentScore = allPercentages.length > 0 ? allPercentages[0] : null;
 
     // Include task-linked OCR evaluations that don't have assignment_submissions entries
     (ocrEvals || []).forEach((ocr) => {
@@ -7441,12 +7545,17 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
       query = query.eq('category', category);
     }
 
-    const [{ data: tasks, error: tErr }, { data: students, error: sErr }] = await Promise.all([
+    const [{ data: tasks, error: tErr }, { data: students, error: sErr }, { data: studentOcrEvals }] = await Promise.all([
       query,
       serverSupabase
         .from('classroom_students')
         .select('student_id')
-        .eq('classroom_id', classroomId)
+        .eq('classroom_id', classroomId),
+      serverSupabase
+        .from('ocr_evaluations')
+        .select('*')
+        .eq('class_id', classroomId)
+        .eq('student_id', authData.user.id)
     ]);
 
     if (tErr) throw tErr;
@@ -7456,8 +7565,43 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
     const formatted = (tasks || []).map((t) => {
       const subs = t.submissions || [];
       const submittedCount = subs.length;
-      const completedCount = subs.filter((s) => s.status === 'graded' || s.completed_at != null).length;
-      const mySub = subs.find((s) => s.student_id === authData.user.id) || null;
+      const completedCount = subs.filter((s) => s.status === 'graded' || s.completed_at != null || s.final_score != null).length;
+      let mySub = subs.find((s) => s.student_id === authData.user.id) || null;
+
+      // If no assignment_submissions record or status not marked graded, check student's ocr_evaluations for this task
+      if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null)) {
+        const matchingOcr = (studentOcrEvals || []).find((o) => o.assignment_id === t.id);
+        if (matchingOcr && (matchingOcr.status === 'completed' || matchingOcr.final_score != null || matchingOcr.score != null)) {
+          const ocrScore = matchingOcr.final_score ?? matchingOcr.score;
+          const ocrPct = matchingOcr.percentage ?? (ocrScore != null && t.points > 0 ? Math.round((Number(ocrScore) / t.points) * 100) : null);
+          mySub = {
+            id: mySub?.id || matchingOcr.id,
+            assignment_id: t.id,
+            classroom_id: classroomId,
+            student_id: authData.user.id,
+            status: 'graded',
+            points_awarded: Math.round(ocrScore || 0),
+            final_score: ocrScore,
+            percentage: ocrPct,
+            is_ai_graded: true,
+            teacher_feedback: matchingOcr.feedback,
+            ocr_evaluation_id: matchingOcr.id,
+            submitted_at: matchingOcr.created_at,
+            completed_at: matchingOcr.completed_at || matchingOcr.created_at,
+            file_urls: matchingOcr.temporary_file_key ? [matchingOcr.temporary_file_key] : []
+          };
+        }
+      }
+
+      if (mySub && (mySub.status === 'graded' || mySub.final_score != null || mySub.completed_at != null)) {
+        const finalScore = mySub.final_score ?? mySub.points_awarded;
+        mySub = {
+          ...mySub,
+          status: 'graded',
+          final_score: finalScore,
+          percentage: mySub.percentage ?? (finalScore != null && t.points > 0 ? Math.round((Number(finalScore) / t.points) * 100) : null)
+        };
+      }
 
       return {
         ...t,
@@ -7507,12 +7651,53 @@ app.get('/api/classes/tasks/:id', async (req, res) => {
     }
 
     // Check if user has an existing submission
-    const { data: mySub } = await serverSupabase
+    let { data: mySub } = await serverSupabase
       .from('assignment_submissions')
       .select('*')
       .eq('assignment_id', id)
       .eq('student_id', authData.user.id)
       .maybeSingle();
+
+    // Check ocr_evaluations if submission is missing or pending
+    if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null)) {
+      const { data: ocrSub } = await serverSupabase
+        .from('ocr_evaluations')
+        .select('*')
+        .eq('assignment_id', id)
+        .eq('student_id', authData.user.id)
+        .maybeSingle();
+
+      if (ocrSub && (ocrSub.status === 'completed' || ocrSub.final_score != null || ocrSub.score != null)) {
+        const ocrScore = ocrSub.final_score ?? ocrSub.score;
+        const ocrPct = ocrSub.percentage ?? (ocrScore != null && task.points > 0 ? Math.round((Number(ocrScore) / task.points) * 100) : null);
+        mySub = {
+          id: mySub?.id || ocrSub.id,
+          assignment_id: id,
+          classroom_id: task.classroom_id,
+          student_id: authData.user.id,
+          status: 'graded',
+          points_awarded: Math.round(ocrScore || 0),
+          final_score: ocrScore,
+          percentage: ocrPct,
+          is_ai_graded: true,
+          teacher_feedback: ocrSub.feedback,
+          ocr_evaluation_id: ocrSub.id,
+          submitted_at: ocrSub.created_at,
+          completed_at: ocrSub.completed_at || ocrSub.created_at,
+          file_urls: ocrSub.temporary_file_key ? [ocrSub.temporary_file_key] : (mySub?.file_urls || [])
+        };
+      }
+    }
+
+    if (mySub && (mySub.status === 'graded' || mySub.final_score != null || mySub.completed_at != null)) {
+      const finalScore = mySub.final_score ?? mySub.points_awarded;
+      mySub = {
+        ...mySub,
+        status: 'graded',
+        final_score: finalScore,
+        percentage: mySub.percentage ?? (finalScore != null && task.points > 0 ? Math.round((Number(finalScore) / task.points) * 100) : null)
+      };
+    }
 
     res.json({
       success: true,
@@ -7793,16 +7978,19 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
           score: writingEval.score ?? gradingResult.final_score,
           max_score: writingEval.max_score ?? (task.points || 100),
           percentage: writingEval.percentage ?? gradingResult.percentage,
-          grammar_issues: (writingEval.grammar_errors || []).map((g) => ({
-            original: g.text,
-            correction: g.suggestion,
-            explanation: g.rule || 'Grammar correction'
+          grammar_issues: writingEval.grammar_issues || (writingEval.grammar_errors || []).map((g) => ({
+            original: g.text || g.original,
+            correction: g.suggestion || g.correction,
+            explanation: g.rule || g.explanation || 'Grammar correction'
           })),
-          spelling_issues: (writingEval.spelling_errors || []).map((s) => ({
-            original: s.text,
-            correction: s.suggestion,
+          spelling_issues: writingEval.spelling_issues || (writingEval.spelling_errors || []).map((s) => ({
+            original: s.text || s.original,
+            correction: s.suggestion || s.correction,
             explanation: 'Spelling correction'
           })),
+          sentence_structure_issues: writingEval.sentence_structure_issues || [],
+          vocabulary_issues: writingEval.vocabulary_issues || [],
+          next_step: writingEval.next_step || '',
           other_issues: (writingEval.mistakes || []).filter(
             (m) => !(writingEval.grammar_errors || []).some((g) => g.text === m.original)
           ),
@@ -7832,8 +8020,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
             ...qa,
             r2_result_path: r2ResultPath,
             skills: writingEval?.skills || [writingEval?.topic || 'Grammar & Mechanics'],
-            grammar_error_count: writingEval?.grammar_errors?.length || 0,
-            spelling_error_count: writingEval?.spelling_errors?.length || 0
+            grammar_error_count: writingEval?.grammar_issues?.length ?? writingEval?.grammar_errors?.length ?? 0,
+            spelling_error_count: writingEval?.spelling_issues?.length ?? writingEval?.spelling_errors?.length ?? 0
           };
         }
         return qa;
@@ -7903,6 +8091,19 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
             strengths: writingEval.strengths || [],
             grammar_errors: writingEval.grammar_errors || [],
             spelling_errors: writingEval.spelling_errors || [],
+            grammar_issues: writingEval.grammar_issues || (writingEval.grammar_errors || []).map((g) => ({
+              original: g.text || g.original,
+              correction: g.suggestion || g.correction,
+              explanation: g.rule || g.explanation || 'Grammar correction'
+            })),
+            spelling_issues: writingEval.spelling_issues || (writingEval.spelling_errors || []).map((s) => ({
+              original: s.text || s.original,
+              correction: s.suggestion || s.correction,
+              explanation: 'Spelling correction'
+            })),
+            sentence_structure_issues: writingEval.sentence_structure_issues || [],
+            vocabulary_issues: writingEval.vocabulary_issues || [],
+            next_step: writingEval.next_step || '',
             r2_result_path: r2ResultPath
           },
           ai_evaluation_metadata: {

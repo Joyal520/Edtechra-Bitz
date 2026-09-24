@@ -370,8 +370,21 @@ const CANDIDATE_GEMINI_MODELS = [
 /**
  * AI Writing & Text Response Evaluator
  * Evaluates open-ended student writing, essays, summaries, and responses.
- * Detects grammar mistakes, spelling mistakes, subject-verb agreement, and generates
- * full corrected work, constructive feedback, learning gap topics, and skills.
+ * Strictly and actively inspects:
+ * 1. Subject-verb agreement
+ * 2. Verb tense & aspect
+ * 3. Articles (a, an, the)
+ * 4. Prepositions
+ * 5. Pronouns
+ * 6. Singular/plural
+ * 7. Word order
+ * 8. Auxiliary verbs
+ * 9. Sentence completeness
+ * 10. Sentence structure
+ * 11. Punctuation
+ * 12. Capitalization
+ * 13. Spelling
+ * 14. Vocabulary usage
  */
 export async function evaluateWritingTaskResponse(task, textResponse, serverOpenAI = null, geminiApiKey = null) {
   if (!textResponse || !String(textResponse).trim()) {
@@ -381,59 +394,84 @@ export async function evaluateWritingTaskResponse(task, textResponse, serverOpen
   const studentText = String(textResponse).trim();
   const maxScore = Number(task.points) || 10;
   const promptText = task.instructions || task.subtitle || task.title || 'Writing Task';
-  const rubric = task.settings?.evaluation_rubric || 'Grammar, vocabulary, spelling, sentence mechanics, and task relevance.';
+  const rubric = task.settings?.evaluation_rubric || 'Grammar, vocabulary, spelling, sentence mechanics, structure, and task relevance.';
 
   const systemInstruction = `You are the EdTechra Master Educational Evaluator and Writing Coach.
-Evaluate the student's typed response to the educational task.
-Be objective, encouraging, and pedagogically precise.
+You are evaluating a student's English writing submission.
 
-You must return ONLY a single valid JSON object matching this exact schema:
+CRITICAL EVALUATION INSTRUCTIONS:
+1. Carefully inspect the actual submitted text sentence-by-sentence.
+2. Actively check these 14 core writing dimensions:
+   (1) Subject–verb agreement (e.g. "He work" -> "He works", "They is" -> "They are")
+   (2) Verb tense & aspect (e.g. "Yesterday I go" -> "Yesterday I went", inconsistent past/present tense)
+   (3) Articles (a, an, the) and determiners
+   (4) Prepositions (at, in, on, with, for, to)
+   (5) Pronouns (case, subject/object, agreement)
+   (6) Singular / plural nouns and modifier agreement
+   (7) Word order and syntax
+   (8) Auxiliary verbs (is/are/has/have/do/does)
+   (9) Sentence completeness (avoiding fragments, run-ons, comma splices)
+   (10) Sentence structure, variety, and clause connectivity
+   (11) Punctuation (periods, commas, apostrophes)
+   (12) Capitalization (sentence start, "I", proper nouns)
+   (13) Spelling and morphology
+   (14) Vocabulary usage, word choice, and phrasing
+3. DO NOT give generic feedback. Every reported error MUST be supported by an exact excerpt from the student's work.
+4. DO NOT claim that grammar is correct without examining the actual sentences.
+5. DO NOT say "No significant grammar mistakes" when actual grammatical, agreement, or punctuation errors exist.
+6. DO NOT invent errors that do not exist.
+7. If an error exists, quote the original student wording, provide the corrected wording, and explain the exact pedagogical rule ("Why").
+8. Produce a COMPLETE corrected version of the student's entire work with all grammar, spelling, punctuation, capitalization, and phrasing issues corrected while preserving the student's original voice, meaning, and ideas.
+9. Provide 1 to 3 specific strengths ("what you did well") and exactly ONE actionable "next_step" recommendation for learning.
+10. Return ONLY a single valid JSON object matching this exact schema:
+
 {
   "score": number (between 0 and ${maxScore}),
   "max_score": ${maxScore},
   "percentage": number (0 to 100),
   "evaluation_status": "completed",
   "category": "Grammar",
-  "topic": string (the primary grammatical topic or subject, e.g. "Subject-Verb Agreement", "Simple Present", "Past Tense", "Prepositions", "Paragraph Writing"),
-  "skills": string[] (1 to 4 specific skills demonstrated or needing practice, e.g. ["Subject-Verb Agreement", "Simple Present"]),
-  "feedback": string (constructive, friendly feedback <= 60 words explaining what was done well and the key rule to improve),
-  "strengths": string[] (1 to 3 specific strengths in the student's writing),
-  "mistakes": [
+  "topic": string (e.g. "Subject–Verb Agreement", "Simple Present", "Past Tense", "Prepositions", "Paragraph Writing"),
+  "skills": string[] (1 to 4 specific skills, e.g. ["Subject–Verb Agreement", "Sentence Structure"]),
+  "feedback": string (pedagogical feedback <= 60 words explaining key strengths and the primary rule to improve),
+  "strengths": string[] (1 to 3 genuine strengths in the student's work),
+  "next_step": string (one short, specific learning recommendation),
+  "grammar_issues": [
     {
-      "original": string (exact snippet from student's text containing the mistake),
+      "original": string (exact snippet from student's text containing the grammar/agreement/tense/punctuation error),
       "correction": string (corrected snippet),
       "explanation": string (clear pedagogical rule explaining why the correction is needed)
     }
   ],
-  "corrections": string[] (list of corrected sentences or key phrases),
-  "corrected_work": string (COMPLETE student text rewritten with all grammar, spelling, and punctuation errors fixed while maintaining the student's original tone, voice, and ideas),
-  "grammar_errors": [
+  "spelling_issues": [
     {
-      "text": string (error snippet),
-      "suggestion": string (suggestion),
-      "rule": string (e.g. "Subject-Verb Agreement")
+      "original": string (misspelled word),
+      "correction": string (correct spelling),
+      "explanation": string (brief spelling note)
     }
   ],
-  "spelling_errors": [
+  "sentence_structure_issues": [
     {
-      "text": string (misspelled word),
-      "suggestion": string (correct spelling)
+      "original": string (awkward or incomplete sentence from student),
+      "correction": string (improved sentence),
+      "explanation": string (why this improves clarity and flow)
     }
   ],
+  "vocabulary_issues": [
+    {
+      "original": string (inaccurate or repetitive word choice),
+      "correction": string (more precise or natural word choice),
+      "explanation": string (why this word choice is better)
+    }
+  ],
+  "corrected_work": string (COMPLETE student text rewritten with all grammar, spelling, and punctuation errors fixed while maintaining the student's original tone and voice),
   "breakdown": [
     { "criterion": "Grammar & Mechanics", "score": number, "max": 10 },
     { "criterion": "Vocabulary & Word Choice", "score": number, "max": 10 },
     { "criterion": "Sentence Structure", "score": number, "max": 10 },
     { "criterion": "Task Completion", "score": number, "max": 10 }
   ]
-}
-
-RULES:
-1. Return ONLY the JSON object. Do NOT wrap in markdown \`\`\`json or backticks.
-2. If there are NO errors, mistakes, grammar_errors, and spelling_errors must be empty arrays [], and corrected_work must match the student's text.
-3. Every mistake identified MUST be real and accurate. Do not fabricate mistakes.
-4. Score fairly: 1-2 minor subject-verb agreement or spelling errors should not result in 0; award proportionate marks (e.g. 7-8 out of 10).
-5. Ensure 'topic' and 'skills' reflect precise learning gap concepts (e.g. 'Subject-Verb Agreement', 'Simple Present', 'Prepositions') so teachers receive actionable diagnostic evidence.`;
+}`;
 
   const userContent = `TASK TITLE:
 ${task.title || 'Writing Task'}
@@ -456,13 +494,13 @@ ${studentText}`;
   if (serverOpenAI) {
     try {
       const response = await serverOpenAI.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemInstruction },
           { role: 'user', content: userContent }
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.2
+        temperature: 0.1
       });
       const raw = response.choices[0]?.message?.content || '{}';
       const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -495,7 +533,7 @@ ${studentText}`;
             ],
             generationConfig: {
               responseMimeType: 'application/json',
-              temperature: 0.2
+              temperature: 0.1
             }
           })
         });
@@ -516,13 +554,80 @@ ${studentText}`;
     }
   }
 
+  // Helper to validate and clean error items
+  const cleanIssueList = (arr) => {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const orig = String(item.original || item.text || item.student_error || '').trim();
+        const corr = String(item.correction || item.suggestion || item.correct_form || '').trim();
+        const expl = String(item.explanation || item.rule || item.reason || '').trim();
+        if (!orig && !corr) return null;
+        return {
+          original: orig,
+          correction: corr,
+          explanation: expl || 'Correction for accuracy and flow'
+        };
+      })
+      .filter(Boolean);
+  };
+
   // 3. Fallback normalization if AI produced a response
   if (parsed && typeof parsed === 'object') {
     const rawScore = Number(parsed.score);
-    const score = isNaN(rawScore) ? Math.round(maxScore * 0.75) : Math.max(0, Math.min(maxScore, rawScore));
+    const grammarIssues = cleanIssueList(parsed.grammar_issues || parsed.grammar_errors);
+    const spellingIssues = cleanIssueList(parsed.spelling_issues || parsed.spelling_errors);
+    const sentenceIssues = cleanIssueList(parsed.sentence_structure_issues);
+    const vocabularyIssues = cleanIssueList(parsed.vocabulary_issues);
+    const totalIssuesCount = grammarIssues.length + spellingIssues.length + sentenceIssues.length + vocabularyIssues.length;
+
+    // Deduce fair score if needed
+    let score;
+    if (!isNaN(rawScore) && rawScore >= 0 && rawScore <= maxScore) {
+      score = rawScore;
+    } else {
+      const deduction = Math.min(maxScore * 0.5, totalIssuesCount * (maxScore * 0.1));
+      score = Math.max(0, Math.round(maxScore - deduction));
+    }
+
     const percentage = parsed.percentage != null && !isNaN(Number(parsed.percentage))
       ? Math.max(0, Math.min(100, Math.round(Number(parsed.percentage))))
       : Math.round((score / maxScore) * 100);
+
+    const legacyMistakes = [
+      ...grammarIssues,
+      ...spellingIssues,
+      ...sentenceIssues,
+      ...vocabularyIssues
+    ];
+
+    const legacyGrammarErrors = grammarIssues.map((g) => ({
+      text: g.original,
+      suggestion: g.correction,
+      rule: g.explanation
+    }));
+
+    const legacySpellingErrors = spellingIssues.map((s) => ({
+      text: s.original,
+      suggestion: s.correction
+    }));
+
+    const strengths = Array.isArray(parsed.strengths) && parsed.strengths.length > 0
+      ? parsed.strengths.map(String).filter(Boolean)
+      : ['Clear expression of ideas', 'Good attempt at the writing topic'];
+
+    const nextStep = parsed.next_step
+      ? String(parsed.next_step).trim()
+      : (grammarIssues.length > 0
+          ? `Review and practice ${grammarIssues[0].explanation || 'grammar rules'}.`
+          : 'Continue reading and practicing expressive vocabulary in daily writing.');
+
+    const feedback = parsed.feedback
+      ? String(parsed.feedback).trim()
+      : (totalIssuesCount === 0
+          ? 'Excellent writing with clear sentence structure and strong grammatical precision.'
+          : 'Good effort on your response. Review the highlighted corrections to improve your grammar and precision.');
 
     return {
       score,
@@ -530,27 +635,33 @@ ${studentText}`;
       percentage,
       evaluation_status: 'completed',
       category: parsed.category || 'Grammar',
-      topic: parsed.topic || 'Subject-Verb Agreement',
+      topic: parsed.topic || (grammarIssues[0]?.explanation ? 'Grammar & Mechanics' : 'Subject–Verb Agreement'),
+      concept: parsed.topic || 'Subject–Verb Agreement',
       skills: Array.isArray(parsed.skills) && parsed.skills.length > 0 ? parsed.skills : ['Grammar & Sentence Mechanics'],
-      feedback: parsed.feedback || 'Good effort on completing your response. Work on subject-verb agreement and sentence structure.',
-      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : ['Completed writing submission'],
-      mistakes: Array.isArray(parsed.mistakes) ? parsed.mistakes : [],
-      corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
-      corrected_work: parsed.corrected_work || studentText,
-      grammar_errors: Array.isArray(parsed.grammar_errors) ? parsed.grammar_errors : [],
-      spelling_errors: Array.isArray(parsed.spelling_errors) ? parsed.spelling_errors : [],
+      feedback,
+      strengths,
+      next_step: nextStep,
+      grammar_issues: grammarIssues,
+      spelling_issues: spellingIssues,
+      sentence_structure_issues: sentenceIssues,
+      vocabulary_issues: vocabularyIssues,
+      mistakes: legacyMistakes,
+      corrections: legacyMistakes.map((m) => `"${m.original}" → "${m.correction}"`),
+      corrected_work: String(parsed.corrected_work || studentText).trim(),
+      grammar_errors: legacyGrammarErrors,
+      spelling_errors: legacySpellingErrors,
       breakdown: Array.isArray(parsed.breakdown) && parsed.breakdown.length > 0
         ? parsed.breakdown
         : [
-            { criterion: 'Grammar & Mechanics', score: Math.round((score / maxScore) * 10), max: 10 },
+            { criterion: 'Grammar & Mechanics', score: Math.max(1, Math.round((score / maxScore) * 10)), max: 10 },
             { criterion: 'Vocabulary & Word Choice', score: 8, max: 10 },
-            { criterion: 'Sentence Structure', score: Math.round((score / maxScore) * 10), max: 10 },
+            { criterion: 'Sentence Structure', score: Math.max(1, Math.round((score / maxScore) * 10)), max: 10 },
             { criterion: 'Task Completion', score: 10, max: 10 }
           ]
     };
   }
 
-  // 4. Safe deterministic evaluation fallback (never leave student un-evaluated)
+  // 4. Safe deterministic fallback
   const fallbackScore = Math.round(maxScore * 0.8);
   return {
     score: fallbackScore,
@@ -559,9 +670,15 @@ ${studentText}`;
     evaluation_status: 'completed',
     category: 'Writing',
     topic: 'Written Expression',
+    concept: 'Written Expression',
     skills: ['Grammar & Mechanics', 'Sentence Structure'],
-    feedback: 'Your response has been submitted and reviewed. Continue practicing accurate sentence structure.',
+    feedback: 'Your response has been submitted and evaluated. Keep practicing accurate sentence structure and subject-verb agreement.',
     strengths: ['Clear expression of ideas', 'Prompt task submission'],
+    next_step: 'Practice sentence structure and subject-verb consistency in your daily writing.',
+    grammar_issues: [],
+    spelling_issues: [],
+    sentence_structure_issues: [],
+    vocabulary_issues: [],
     mistakes: [],
     corrections: [],
     corrected_work: studentText,

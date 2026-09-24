@@ -302,6 +302,7 @@ class OcrEvaluationQueue {
         }
 
         // 5b. UNIFY WITH TASK SUBMISSIONS: If associated with a Task, upsert into assignment_submissions & student_corrected_work
+        // 5b. UNIFY WITH TASK SUBMISSIONS: If associated with a Task, upsert into assignment_submissions & student_corrected_work
         if (job.taskId || job.assignmentId) {
           const effectiveTaskId = job.taskId || job.assignmentId;
           try {
@@ -311,23 +312,43 @@ class OcrEvaluationQueue {
               .eq('id', effectiveTaskId)
               .maybeSingle();
 
-            const mistakesList = (validated.detected_errors || []).map((d) => ({
-              original: d.student_error,
-              correction: d.correct_form,
-              explanation: d.explanation || d.concept || 'Grammar correction'
+            const grammarIssues = (validated.grammar_issues || []).length > 0
+              ? validated.grammar_issues
+              : (validated.detected_errors || [])
+                  .filter((d) => d.error_type === 'grammar' || d.error_type === 'sentence_structure' || d.error_type === 'punctuation')
+                  .map((g) => ({
+                    original: g.student_error,
+                    correction: g.correct_form,
+                    explanation: g.explanation || g.concept || 'Grammar correction'
+                  }));
+
+            const spellingIssues = (validated.spelling_issues || []).length > 0
+              ? validated.spelling_issues
+              : (validated.spelling_errors || []).map((s) => ({
+                  original: s.misspelled_word,
+                  correction: s.correct_word,
+                  explanation: 'Spelling correction'
+                }));
+
+            const sentenceIssues = validated.sentence_structure_issues || [];
+            const vocabularyIssues = validated.vocabulary_issues || [];
+
+            const mistakesList = [
+              ...grammarIssues,
+              ...spellingIssues,
+              ...sentenceIssues,
+              ...vocabularyIssues
+            ];
+
+            const grammarErrors = grammarIssues.map((g) => ({
+              text: g.original,
+              suggestion: g.correction,
+              rule: g.explanation || 'Grammar'
             }));
 
-            const grammarErrors = (validated.detected_errors || [])
-              .filter((d) => d.error_type === 'grammar' || d.error_type === 'sentence_structure' || d.error_type === 'punctuation')
-              .map((g) => ({
-                text: g.student_error,
-                suggestion: g.correct_form,
-                rule: g.concept || 'Grammar'
-              }));
-
-            const spellingErrors = (validated.spelling_errors || []).map((s) => ({
-              text: s.misspelled_word,
-              suggestion: s.correct_word
+            const spellingErrors = spellingIssues.map((s) => ({
+              text: s.original,
+              suggestion: s.correction
             }));
 
             const writingEval = {
@@ -339,12 +360,18 @@ class OcrEvaluationQueue {
               percentage: validated.percentage,
               category: job.category,
               topic: validated.concept || job.category,
+              concept: validated.concept || job.category,
               skills: [validated.concept || job.category],
               feedback: validated.feedback,
               strengths: validated.strengths || [],
               weaknesses: validated.weaknesses || [],
+              next_step: validated.next_step || 'Review grammar and practice sentence structure in your writing.',
+              grammar_issues: grammarIssues,
+              spelling_issues: spellingIssues,
+              sentence_structure_issues: sentenceIssues,
+              vocabulary_issues: vocabularyIssues,
               mistakes: mistakesList,
-              corrections: mistakesList.map((m) => `${m.original} → ${m.correction}`),
+              corrections: mistakesList.map((m) => `"${m.original}" → "${m.correction}"`),
               grammar_errors: grammarErrors,
               spelling_errors: spellingErrors,
               breakdown: validated.breakdown || []
@@ -436,8 +463,13 @@ class OcrEvaluationQueue {
                   original_text: validated.ocr_text,
                   corrected_work: validated.corrected_work,
                   mistakes: mistakesList,
-                  corrections: mistakesList.map((m) => `${m.original} → ${m.correction}`),
+                  corrections: mistakesList.map((m) => `"${m.original}" → "${m.correction}"`),
                   strengths: validated.strengths,
+                  next_step: validated.next_step,
+                  grammar_issues: grammarIssues,
+                  spelling_issues: spellingIssues,
+                  sentence_structure_issues: sentenceIssues,
+                  vocabulary_issues: vocabularyIssues,
                   grammar_errors: grammarErrors,
                   spelling_errors: spellingErrors,
                   breakdown: validated.breakdown
@@ -634,7 +666,7 @@ class OcrEvaluationQueue {
     const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
 
     const promptText = `You are the EdTechra Master Educational Evaluator and Vision OCR Grader.
-Evaluate the student's handwritten worksheet image objectively, thoroughly, and encouragingly.
+You are evaluating a student's handwritten English writing/worksheet image.
 
 Evaluation Category: ${category}
 Task Title: ${title || 'Classroom Worksheet'}
@@ -646,15 +678,35 @@ ${criteriaSummary}
 
 CRITICAL INSTRUCTIONS:
 1. "ocr_text": Transcribe ALL student handwritten text accurately and verbatim from the image. If empty/unreadable, note that clearly.
-2. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
-3. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
-4. "breakdown": Score each criterion objectively out of its max marks.
-5. "detected_errors": List all grammar, punctuation, sentence structure, and vocabulary errors with original student snippet, corrected form, error type, and brief explanation.
-6. "spelling_errors": List misspelled words and their corrections.
-7. "strengths": 1 to 3 evidence-backed strengths in the student's work.
-8. "weaknesses": 1 to 3 specific areas for improvement.
-9. "feedback": Pedagogical feedback <= 60 words for the student.
-10. Return ONLY a single valid JSON object matching the required schema.
+2. Carefully inspect the transcribed text sentence-by-sentence across all 14 core English writing aspects:
+   (1) Subject–verb agreement (e.g., "He work" -> "He works", "They is" -> "They are")
+   (2) Verb tense & aspect (e.g., "Yesterday I go" -> "Yesterday I went", mixed tenses)
+   (3) Articles (a, an, the) and determiners
+   (4) Prepositions (at, in, on, with, for, to)
+   (5) Pronouns (case, agreement, reference)
+   (6) Singular / plural nouns and modifier agreement
+   (7) Word order and syntax
+   (8) Auxiliary verbs (is/are/has/have/do/does)
+   (9) Sentence completeness (avoiding fragments, run-ons, comma splices)
+   (10) Sentence structure, variety, and clause connectivity
+   (11) Punctuation (periods, commas, apostrophes)
+   (12) Capitalization (sentence start, "I", proper nouns)
+   (13) Spelling and morphology
+   (14) Vocabulary usage, word choice, and phrasing
+3. DO NOT claim that grammar is correct without inspecting the actual sentences.
+4. DO NOT say "No significant grammar mistakes" when actual grammatical, agreement, or punctuation errors exist.
+5. DO NOT invent errors that do not exist.
+6. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
+7. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
+8. "breakdown": Score each criterion objectively out of its max marks.
+9. "grammar_issues": List all grammar, agreement, tense, punctuation, and capitalization errors with original student snippet, corrected form, and pedagogical explanation ("Why").
+10. "spelling_issues": List misspelled words and their corrections.
+11. "sentence_structure_issues": List incomplete or awkward sentences with improved versions.
+12. "vocabulary_issues": List imprecise word choices with better alternatives.
+13. "strengths": 1 to 3 genuine evidence-backed strengths in the student's work.
+14. "next_step": Exactly ONE actionable learning recommendation.
+15. "feedback": Pedagogical guidance <= 60 words for the student.
+16. Return ONLY a single valid JSON object matching the required schema.
 
 Required JSON Schema:
 {
@@ -667,6 +719,34 @@ Required JSON Schema:
   "concept": "<e.g. Subject–Verb Agreement | Paragraph Writing — Organization & Flow | Simple Past — Past Tense Forms | Prepositions — at / in / on>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
+  ],
+  "grammar_issues": [
+    {
+      "original": "<exact incorrect snippet written by student>",
+      "correction": "<corrected snippet or sentence>",
+      "explanation": "<pedagogical reason for correction>"
+    }
+  ],
+  "spelling_issues": [
+    {
+      "original": "<misspelled word>",
+      "correction": "<correct word>",
+      "explanation": "<spelling note>"
+    }
+  ],
+  "sentence_structure_issues": [
+    {
+      "original": "<awkward or incomplete sentence>",
+      "correction": "<improved sentence>",
+      "explanation": "<reason>"
+    }
+  ],
+  "vocabulary_issues": [
+    {
+      "original": "<imprecise word>",
+      "correction": "<better word choice>",
+      "explanation": "<reason>"
+    }
   ],
   "detected_errors": [
     {
@@ -690,6 +770,7 @@ Required JSON Schema:
   "weaknesses": [
     "<area to improve 1>"
   ],
+  "next_step": "<one actionable learning recommendation>",
   "feedback": "<concise pedagogical guidance <= 60 words>"
 }`;
 
@@ -732,7 +813,7 @@ Required JSON Schema:
     if (isReasoningOrGpt5) {
       reqPayload.max_completion_tokens = 2500;
     } else {
-      reqPayload.temperature = 0.2;
+      reqPayload.temperature = 0.1;
       reqPayload.max_tokens = 2000;
     }
 
@@ -757,7 +838,7 @@ Required JSON Schema:
     const criteriaSummary = criteriaList.map((c) => `- ${c.criterion} (~${Math.round(c.weight * 100)}% of total marks)`).join('\n');
 
     const promptText = `You are the EdTechra Master Educational Evaluator and Vision OCR Grader.
-Evaluate the student's handwritten worksheet image objectively, thoroughly, and encouragingly.
+You are evaluating a student's handwritten English writing/worksheet image.
 
 Evaluation Category: ${category}
 Task Title: ${title || 'Classroom Worksheet'}
@@ -769,15 +850,35 @@ ${criteriaSummary}
 
 CRITICAL INSTRUCTIONS:
 1. "ocr_text": Transcribe ALL student handwritten text accurately and verbatim from the image. If empty/unreadable, note that clearly.
-2. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
-3. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
-4. "breakdown": Score each criterion objectively out of its max marks.
-5. "detected_errors": List all grammar, punctuation, sentence structure, and vocabulary errors with original student snippet, corrected form, error type, and brief explanation.
-6. "spelling_errors": List misspelled words and their corrections.
-7. "strengths": 1 to 3 evidence-backed strengths in the student's work.
-8. "weaknesses": 1 to 3 specific areas for improvement.
-9. "feedback": Pedagogical feedback <= 60 words for the student.
-10. Return ONLY a single valid JSON object matching the required schema.
+2. Carefully inspect the transcribed text sentence-by-sentence across all 14 core English writing aspects:
+   (1) Subject–verb agreement (e.g., "He work" -> "He works", "They is" -> "They are")
+   (2) Verb tense & aspect (e.g., "Yesterday I go" -> "Yesterday I went", mixed tenses)
+   (3) Articles (a, an, the) and determiners
+   (4) Prepositions (at, in, on, with, for, to)
+   (5) Pronouns (case, agreement, reference)
+   (6) Singular / plural nouns and modifier agreement
+   (7) Word order and syntax
+   (8) Auxiliary verbs (is/are/has/have/do/does)
+   (9) Sentence completeness (avoiding fragments, run-ons, comma splices)
+   (10) Sentence structure, variety, and clause connectivity
+   (11) Punctuation (periods, commas, apostrophes)
+   (12) Capitalization (sentence start, "I", proper nouns)
+   (13) Spelling and morphology
+   (14) Vocabulary usage, word choice, and phrasing
+3. DO NOT claim that grammar is correct without inspecting the actual sentences.
+4. DO NOT say "No significant grammar mistakes" when actual grammatical, agreement, or punctuation errors exist.
+5. DO NOT invent errors that do not exist.
+6. "corrected_work": Provide a COMPLETE, clean rewritten version of the student's entire text with ALL grammar, spelling, punctuation, capitalization, and sentence structure errors corrected while preserving the student's original voice, meaning, and ideas.
+7. "concept": Identify the primary pedagogical concept/curriculum topic tested or main weakness (e.g. "Subject–Verb Agreement", "Paragraph Writing — Organization & Flow", "Simple Past — Past Tense Forms", "Prepositions — at / in / on", "Spelling — Common Word Errors").
+8. "breakdown": Score each criterion objectively out of its max marks.
+9. "grammar_issues": List all grammar, agreement, tense, punctuation, and capitalization errors with original student snippet, corrected form, and pedagogical explanation ("Why").
+10. "spelling_issues": List misspelled words and their corrections.
+11. "sentence_structure_issues": List incomplete or awkward sentences with improved versions.
+12. "vocabulary_issues": List imprecise word choices with better alternatives.
+13. "strengths": 1 to 3 genuine evidence-backed strengths in the student's work.
+14. "next_step": Exactly ONE actionable learning recommendation.
+15. "feedback": Pedagogical guidance <= 60 words for the student.
+16. Return ONLY a single valid JSON object matching the required schema.
 
 Required JSON Schema:
 {
@@ -790,6 +891,34 @@ Required JSON Schema:
   "concept": "<e.g. Subject–Verb Agreement | Paragraph Writing — Organization & Flow | Simple Past — Past Tense Forms | Prepositions — at / in / on>",
   "breakdown": [
     ${criteriaList.map((c) => `{"criterion": "${c.criterion}", "score": <number>, "max": ${Math.round(c.weight * maxMarks)}}`).join(',\n    ')}
+  ],
+  "grammar_issues": [
+    {
+      "original": "<exact incorrect snippet written by student>",
+      "correction": "<corrected snippet or sentence>",
+      "explanation": "<pedagogical reason for correction>"
+    }
+  ],
+  "spelling_issues": [
+    {
+      "original": "<misspelled word>",
+      "correction": "<correct word>",
+      "explanation": "<spelling note>"
+    }
+  ],
+  "sentence_structure_issues": [
+    {
+      "original": "<awkward or incomplete sentence>",
+      "correction": "<improved sentence>",
+      "explanation": "<reason>"
+    }
+  ],
+  "vocabulary_issues": [
+    {
+      "original": "<imprecise word>",
+      "correction": "<better word choice>",
+      "explanation": "<reason>"
+    }
   ],
   "detected_errors": [
     {
@@ -813,6 +942,7 @@ Required JSON Schema:
   "weaknesses": [
     "<area to improve 1>"
   ],
+  "next_step": "<one actionable learning recommendation>",
   "feedback": "<concise pedagogical guidance <= 60 words>"
 }`;
 
@@ -850,7 +980,7 @@ Required JSON Schema:
             contents: [{ parts }],
             generationConfig: {
               responseMimeType: 'application/json',
-              temperature: 0.2
+              temperature: 0.1
             }
           })
         });
@@ -911,6 +1041,30 @@ Required JSON Schema:
       feedback = words.slice(0, 60).join(' ') + '.';
     }
 
+    // Helper to sanitize issue items
+    const cleanIssueList = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const orig = String(item.original || item.student_error || item.text || item.misspelled_word || '').trim();
+          const corr = String(item.correction || item.correct_form || item.correct_word || item.suggestion || '').trim();
+          const expl = String(item.explanation || item.rule || item.concept || '').trim();
+          if (!orig && !corr) return null;
+          return {
+            original: orig,
+            correction: corr,
+            explanation: expl || 'Correction for accuracy and flow'
+          };
+        })
+        .filter(Boolean);
+    };
+
+    const grammarIssues = cleanIssueList(raw.grammar_issues || (Array.isArray(raw.detected_errors) ? raw.detected_errors.filter(d => d.error_type !== 'spelling') : []));
+    const spellingIssues = cleanIssueList(raw.spelling_issues || raw.spelling_errors || (Array.isArray(raw.detected_errors) ? raw.detected_errors.filter(d => d.error_type === 'spelling') : []));
+    const sentenceIssues = cleanIssueList(raw.sentence_structure_issues);
+    const vocabularyIssues = cleanIssueList(raw.vocabulary_issues);
+
     // Validate Criteria Breakdown
     const criteriaDef = CATEGORY_CRITERIA_MAP[category] || CATEGORY_CRITERIA_MAP['Other'];
     let breakdown = Array.isArray(raw.breakdown) && raw.breakdown.length > 0 ? raw.breakdown : null;
@@ -940,18 +1094,18 @@ Required JSON Schema:
     }
 
     // Parse detected errors and spelling errors
-    const detectedErrors = Array.isArray(raw.detected_errors) ? raw.detected_errors.map(err => ({
-      concept: String(err?.concept || raw.concept || category).trim(),
-      error_type: String(err?.error_type || 'grammar').toLowerCase().trim(),
-      student_error: String(err?.student_error || err?.text || err?.original || '').trim(),
-      correct_form: String(err?.correct_form || err?.suggestion || err?.correction || '').trim(),
-      explanation: String(err?.explanation || err?.rule || '').trim()
-    })).filter(e => e.student_error) : [];
+    const detectedErrors = grammarIssues.map(g => ({
+      concept: String(raw.concept || category).trim(),
+      error_type: 'grammar',
+      student_error: g.original,
+      correct_form: g.correction,
+      explanation: g.explanation
+    }));
 
-    const spellingErrors = Array.isArray(raw.spelling_errors) ? raw.spelling_errors.map(err => ({
-      misspelled_word: String(err?.misspelled_word || err?.text || '').trim(),
-      correct_word: String(err?.correct_word || err?.suggestion || err?.correction || '').trim()
-    })).filter(e => e.misspelled_word) : [];
+    const spellingErrors = spellingIssues.map(s => ({
+      misspelled_word: s.original,
+      correct_word: s.correction
+    }));
 
     const strengths = Array.isArray(raw.strengths) && raw.strengths.length > 0
       ? raw.strengths.map(String).filter(Boolean)
@@ -959,7 +1113,13 @@ Required JSON Schema:
 
     const weaknesses = Array.isArray(raw.weaknesses) && raw.weaknesses.length > 0
       ? raw.weaknesses.map(String).filter(Boolean)
-      : [];
+      : (grammarIssues.length > 0 ? [grammarIssues[0].explanation] : []);
+
+    const nextStep = raw.next_step
+      ? String(raw.next_step).trim()
+      : (grammarIssues.length > 0
+          ? `Review and practice ${grammarIssues[0].explanation || 'grammar rules'}.`
+          : 'Continue practicing paragraph structure and expressive vocabulary.');
 
     const rawConcept = raw.concept ? String(raw.concept).trim() : null;
     const canonical = rawConcept ? normalizeConcept(rawConcept, category) : normalizeConcept(title || category, category);
@@ -975,7 +1135,12 @@ Required JSON Schema:
       feedback,
       strengths,
       weaknesses,
+      next_step: nextStep,
       concept: canonical ? canonical.displayName : (rawConcept || category),
+      grammar_issues: grammarIssues,
+      spelling_issues: spellingIssues,
+      sentence_structure_issues: sentenceIssues,
+      vocabulary_issues: vocabularyIssues,
       detected_errors: detectedErrors,
       spelling_errors: spellingErrors
     };

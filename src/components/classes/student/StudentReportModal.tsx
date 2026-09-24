@@ -14,7 +14,8 @@ import {
   Zap,
   GraduationCap,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import {
   studentLearningService,
@@ -350,10 +351,12 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
         {/* ======================================================================= */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-50/60 space-y-6">
           {loading ? (
-            <div className="space-y-4 py-8 animate-pulse">
-              <div className="h-10 bg-slate-200/70 rounded-2xl w-1/3" />
-              <div className="h-24 bg-slate-200/70 rounded-2xl" />
-              <div className="h-24 bg-slate-200/70 rounded-2xl" />
+            <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-8 shadow-2xs">
+              <Loader2 className="w-8 h-8 text-[#026fc3] animate-spin mx-auto" />
+              <h4 className="text-sm font-bold text-slate-800">Loading your learning results...</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+                Gathering your assignments, corrected writing, quizzes, and learning metrics.
+              </p>
             </div>
           ) : error ? (
             <div className="p-8 bg-white border border-slate-200 rounded-3xl text-center space-y-3">
@@ -466,6 +469,15 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                                       </span>
                                     )}
                                   </div>
+                                ) : result.score !== null ? (
+                                  <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                                    <span className="text-sm font-black">{result.score}{result.maxScore ? `/${result.maxScore}` : ''}</span>
+                                  </div>
+                                ) : (result.isAiGraded || result.status === 'graded' || result.status === 'completed') ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>AI Graded</span>
+                                  </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
                                     <Clock className="w-3 h-3" />
@@ -504,6 +516,11 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                                       strengths: w?.strengths || [],
                                       grammar_errors: w?.grammar_errors || [],
                                       spelling_errors: w?.spelling_errors || [],
+                                      grammar_issues: w?.grammar_issues || (w?.grammar_errors || []).map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' })),
+                                      spelling_issues: w?.spelling_issues || (w?.spelling_errors || []).map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' })),
+                                      sentence_structure_issues: w?.sentence_structure_issues || [],
+                                      vocabulary_issues: w?.vocabulary_issues || [],
+                                      next_step: w?.next_step || '',
                                       r2_result_path: result.r2ResultPath || null,
                                       date: result.date
                                     };

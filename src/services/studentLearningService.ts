@@ -79,6 +79,11 @@ export interface StudentCorrectedWorkItem {
   strengths?: string[];
   grammar_errors?: Array<{ text: string; suggestion: string; rule?: string }>;
   spelling_errors?: Array<{ text: string; suggestion: string }>;
+  grammar_issues?: Array<{ original: string; corrected: string; rule?: string; explanation?: string }>;
+  spelling_issues?: Array<{ original: string; corrected: string; explanation?: string }>;
+  vocabulary_issues?: Array<{ original: string; suggestion: string; explanation?: string }>;
+  sentence_structure_issues?: Array<{ original: string; improvement: string; explanation?: string }>;
+  next_step?: string | null;
   feedback_metadata?: any;
   ai_evaluation_metadata?: any;
   original_r2_key?: string | null;

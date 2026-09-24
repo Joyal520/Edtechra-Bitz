@@ -221,17 +221,27 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
             </div>
           </div>
 
-          {/* Instructions Box */}
-          {task.instructions && (
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                Instructions
+          {/* Prominent High-Contrast Task Instructions Card */}
+          <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white shadow-md space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="px-3 py-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 text-[11px] font-black rounded-full uppercase tracking-wider">
+                TASK INSTRUCTIONS
               </span>
-              <p className="text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
-                {task.instructions}
-              </p>
+              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold rounded-full">
+                Aim for approximately 50 words
+              </span>
             </div>
-          )}
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
+                {task.subtitle || task.title}
+              </h2>
+              {task.instructions && (
+                <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed whitespace-pre-wrap mt-2">
+                  {task.instructions}
+                </p>
+              )}
+            </div>
+          </div>
 
           {/* Structured Learning Sections / Content Blocks */}
           {contentBlocks.length > 0 && (
@@ -455,8 +465,8 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
             </div>
           )}
 
-          {/* Submission Box for tasks allowing responses or handwritten work */}
-          {task.category !== 'resource' && (
+          {/* Submission Box for tasks allowing responses or handwritten work (shown when not yet evaluated) */}
+          {!isTaskEvaluated && task.category !== 'resource' && (
             <div className="p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
@@ -577,25 +587,25 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
         {/* EVALUATING STATE: Show while AI is correcting */}
         {isTaskEvaluating && (
-          <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-sky-50 to-purple-50 text-center space-y-4 animate-in fade-in duration-300">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto animate-pulse">
-              <Sparkles className="w-7 h-7" />
+          <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-indigo-50 via-sky-50 to-purple-50 text-center space-y-4 animate-in fade-in duration-300 shadow-sm">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-md animate-pulse">
+              <Sparkles className="w-8 h-8" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-lg font-black text-slate-900">
-                ✨ AI is checking your work
+              <h3 className="text-xl font-black text-slate-950 tracking-tight">
+                ✨ AI IS CORRECTING YOUR WORK
               </h3>
-              <p className="text-sm font-semibold text-slate-600 max-w-md mx-auto">
-                Please wait while AI is correcting your work and generating feedback.
+              <p className="text-sm font-semibold text-slate-700 max-w-md mx-auto">
+                Please wait while your writing is being evaluated and corrected with sentence-level feedback...
               </p>
               <p className="text-xs font-medium text-slate-500">
                 Your submission has been securely recorded.
               </p>
             </div>
-            <div className="flex items-center justify-center gap-1.5 pt-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
           </div>
         )}
@@ -617,6 +627,23 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           const originalText = submission.text_response || wEval?.ocr_text || '';
           const correctedText = wEval?.corrected_work || '';
           const rubricBreakdown: any[] = Array.isArray(wEval?.breakdown) ? wEval.breakdown.filter((b: any) => !b?.__is_diagnostic_meta) : [];
+
+          const grammarIssues: any[] = Array.isArray(wEval?.grammar_issues) && wEval.grammar_issues.length > 0
+            ? wEval.grammar_issues
+            : Array.isArray(wEval?.grammar_errors) && wEval.grammar_errors.length > 0
+            ? wEval.grammar_errors.map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' }))
+            : [];
+
+          const spellingIssues: any[] = Array.isArray(wEval?.spelling_issues) && wEval.spelling_issues.length > 0
+            ? wEval.spelling_issues
+            : Array.isArray(wEval?.spelling_errors) && wEval.spelling_errors.length > 0
+            ? wEval.spelling_errors.map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' }))
+            : [];
+
+          const vocabIssues: any[] = Array.isArray(wEval?.vocabulary_issues) ? wEval.vocabulary_issues : [];
+          const structureIssues: any[] = Array.isArray(wEval?.sentence_structure_issues) ? wEval.sentence_structure_issues : [];
+          const strengthsList: string[] = Array.isArray(wEval?.strengths) ? wEval.strengths : [];
+          const nextStepText: string = wEval?.next_step || '';
 
           return (
             <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
@@ -656,54 +683,65 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               {/* Structured Result Sections */}
               {(hasWritingResult || studentImage || originalText) && (
                 <>
-                  {/* Original Student Work (Image + Text) */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <PenLine className="w-4 h-4 text-slate-500" />
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR SUBMITTED WORK</span>
+                  {/* Side-by-side comparison on desktop (grid lg:grid-cols-2), stacked on mobile */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: Original Student Work */}
+                    <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <PenLine className="w-4 h-4 text-slate-500" />
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR ORIGINAL WORK</span>
+                          </div>
+                          {studentImage && (
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Handwritten Sheet</span>
+                          )}
+                        </div>
+
+                        {studentImage && (
+                          <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5 p-2 flex flex-col items-center">
+                            <img
+                              src={studentImage}
+                              alt="Submitted Handwritten Work"
+                              className="max-h-72 sm:max-h-96 object-contain rounded-lg shadow-xs"
+                            />
+                          </div>
+                        )}
+
+                        {originalText && (
+                          <div className="space-y-1">
+                            {studentImage && (
+                              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                                Transcribed Text
+                              </span>
+                            )}
+                            <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                              {originalText}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      {studentImage && (
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Handwritten Sheet</span>
-                      )}
                     </div>
 
-                    {studentImage && (
-                      <div className="rounded-xl border border-slate-200 overflow-hidden bg-slate-900/5 p-2 flex flex-col items-center">
-                        <img
-                          src={studentImage}
-                          alt="Submitted Handwritten Work"
-                          className="max-h-72 sm:max-h-96 object-contain rounded-lg shadow-xs"
-                        />
-                      </div>
-                    )}
-
-                    {originalText && (
-                      <div className="space-y-1">
-                        {studentImage && (
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                            Transcribed Text
+                    {/* Right: Complete Corrected Work */}
+                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/30 space-y-3 flex flex-col justify-between">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-xs font-black uppercase tracking-wider text-emerald-800">CORRECTED WORK</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-100 px-2 py-0.5 rounded-full">
+                            Polished English
                           </span>
-                        )}
-                        <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                          {originalText}
+                        </div>
+
+                        <p className="text-xs sm:text-sm font-medium text-emerald-950 leading-relaxed whitespace-pre-wrap bg-white p-4 rounded-xl border border-emerald-200 shadow-2xs">
+                          {correctedText || originalText || 'No text provided.'}
                         </p>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Complete Corrected Work */}
-                  {correctedText && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-emerald-800">COMPLETE CORRECTED WORK</span>
-                      </div>
-                      <p className="text-xs sm:text-sm font-medium text-emerald-950 leading-relaxed whitespace-pre-wrap bg-white p-4 rounded-xl border border-emerald-200 shadow-2xs">
-                        {correctedText}
-                      </p>
                     </div>
-                  )}
+                  </div>
 
                   {/* Rubric Criteria Breakdown if available */}
                   {rubricBreakdown.length > 0 && (
@@ -731,93 +769,176 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     </div>
                   )}
 
-                  {/* What to Improve */}
-                  <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 bg-amber-50/30 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600" />
-                      <span className="text-xs font-black uppercase tracking-wider text-amber-800">WHAT TO IMPROVE</span>
+                  {/* Categorized Issues Breakdown (14-point inspection) */}
+                  <div className="p-4 sm:p-6 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-800">DETAILED WRITING ANALYSIS</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        14-Point English Inspection
+                      </span>
                     </div>
 
-                    {/* Grammar Issues */}
-                    <div className="space-y-1.5">
-                      <h4 className="text-xs font-black text-slate-800">Grammar & Syntax</h4>
-                      {wEval?.grammar_errors && wEval.grammar_errors.length > 0 ? (
-                        <ul className="space-y-1.5">
-                          {wEval.grammar_errors.map((err: any, i: number) => (
-                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                              <span className="text-rose-500 font-black shrink-0">•</span>
-                              <span>
-                                <span className="line-through text-rose-600">"{err.text || err.original}"</span>
-                                <span className="mx-1.5 text-slate-400">→</span>
-                                <span className="text-emerald-700 font-bold">"{err.suggestion || err.correction}"</span>
-                                {err.rule && <span className="text-slate-500 ml-1.5 text-[11px]">({err.rule})</span>}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
-                          ✓ No significant grammar errors found
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Spelling Issues */}
-                    <div className="space-y-1.5">
-                      <h4 className="text-xs font-black text-slate-800">Spelling</h4>
-                      {wEval?.spelling_errors && wEval.spelling_errors.length > 0 ? (
-                        <ul className="space-y-1.5">
-                          {wEval.spelling_errors.map((err: any, i: number) => (
-                            <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                              <span className="text-rose-500 font-black shrink-0">•</span>
-                              <span>
-                                <span className="line-through text-rose-600">"{err.text || err.original}"</span>
-                                <span className="mx-1.5 text-slate-400">→</span>
-                                <span className="text-emerald-700 font-bold">"{err.suggestion || err.correction}"</span>
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
-                          ✓ No spelling mistakes detected
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Other Issues / Mistakes */}
-                    {wEval?.mistakes && wEval.mistakes.length > 0 && (
-                      <div className="space-y-1.5">
-                        <h4 className="text-xs font-black text-slate-800">Other Adjustments</h4>
-                        <ul className="space-y-1.5">
-                          {wEval.mistakes
-                            .filter((m: any) => !wEval.grammar_errors?.some((g: any) => (g.text || g.original) === (m.original || m.text)))
-                            .slice(0, 5)
-                            .map((m: any, i: number) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
-                                <span className="text-amber-500 font-black shrink-0">•</span>
-                                <span>
-                                  "{m.original || m.text}" → "{m.correction || m.suggestion}"
-                                  {m.explanation && <span className="block text-[11px] text-slate-500 mt-0.5">{m.explanation}</span>}
-                                </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Grammar & Syntax */}
+                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-800">Grammar & Syntax</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {grammarIssues.length} issue{grammarIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {grammarIssues.length > 0 ? (
+                          <ul className="space-y-2 pt-1">
+                            {grammarIssues.map((err: any, i: number) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original || err.text}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction || err.suggestion}"</span>
+                                </div>
+                                {(err.explanation || err.rule) && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation || err.rule}
+                                  </p>
+                                )}
                               </li>
                             ))}
-                        </ul>
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                            ✓ No grammar errors detected
+                          </p>
+                        )}
                       </div>
-                    )}
 
-                    {/* Strengths */}
-                    {wEval?.strengths && wEval.strengths.length > 0 && (
-                      <div className="space-y-1.5">
-                        <h4 className="text-xs font-black text-slate-800">Key Strengths</h4>
-                        <ul className="space-y-1">
-                          {wEval.strengths.map((s: string, i: number) => (
-                            <li key={i} className="text-xs text-emerald-800 font-medium flex items-start gap-2">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                      {/* Spelling */}
+                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-800">Spelling</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {spellingIssues.length} issue{spellingIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {spellingIssues.length > 0 ? (
+                          <ul className="space-y-2 pt-1">
+                            {spellingIssues.map((err: any, i: number) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original || err.text}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction || err.suggestion}"</span>
+                                </div>
+                                {(err.explanation || err.rule) && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation || err.rule}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                            ✓ No spelling mistakes detected
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Vocabulary */}
+                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-800">Vocabulary & Word Choice</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {vocabIssues.length} issue{vocabIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {vocabIssues.length > 0 ? (
+                          <ul className="space-y-2 pt-1">
+                            {vocabIssues.map((err: any, i: number) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                            ✓ Vocabulary is appropriate
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Sentence Structure */}
+                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-slate-800">Sentence Structure</h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {structureIssues.length} issue{structureIssues.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {structureIssues.length > 0 ? (
+                          <ul className="space-y-2 pt-1">
+                            {structureIssues.map((err: any, i: number) => (
+                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
+                                <div>
+                                  <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
+                                  <span className="mx-1.5 text-slate-400 font-bold">→</span>
+                                  <span className="text-emerald-700 font-black">"{err.correction}"</span>
+                                </div>
+                                {err.explanation && (
+                                  <p className="text-[11px] text-slate-500 leading-snug">
+                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                            ✓ Sentence structure is clear
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* What You Did Well (Strengths) */}
+                    {strengthsList.length > 0 && (
+                      <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                        <h4 className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>WHAT YOU DID WELL</span>
+                        </h4>
+                        <ul className="space-y-1.5 pl-1">
+                          {strengthsList.map((s: string, i: number) => (
+                            <li key={i} className="text-xs text-emerald-950 font-medium flex items-start gap-2">
+                              <span className="text-emerald-600 font-black">•</span>
                               <span>{s}</span>
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+
+                    {/* Next Step */}
+                    {nextStepText && (
+                      <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1.5">
+                        <h4 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>NEXT STEP</span>
+                        </h4>
+                        <p className="text-xs text-indigo-950 font-medium leading-relaxed">
+                          {nextStepText}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -877,7 +998,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                 <div className="w-full sm:w-auto flex items-center justify-center gap-2 text-xs font-black text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 shadow-2xs">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    Evaluation Complete {submission?.final_score != null ? `• ${submission.final_score}/${task.points}` : ''}
+                    ✓ AI Graded {submission?.final_score != null ? `• ${submission.final_score}/${task.points}` : ''}
                   </span>
                 </div>
               ) : (
