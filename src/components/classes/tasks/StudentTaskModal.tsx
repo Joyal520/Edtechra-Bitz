@@ -108,9 +108,10 @@ export const StudentTaskModal: React.FC<StudentTaskModalProps> = ({
         handwrittenImageBase64
       });
 
-      if (res.error) {
-        setError(res.error);
+      if (res.error || res.data?.status === 'evaluation_failed' || res.data?.status === 'ocr_failed') {
+        setError(res.error || res.data?.teacher_feedback || 'AI evaluation could not be completed. Please try submitting again.');
         setEvaluationPhase('error');
+        if (res.data) setSubmission(res.data);
       } else if (res.data) {
         setSubmission(res.data);
         setEvaluationPhase('evaluated');

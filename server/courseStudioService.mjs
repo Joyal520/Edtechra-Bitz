@@ -7,10 +7,10 @@
 import crypto from 'crypto';
 
 const CANDIDATE_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro'
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-pro-latest'
 ];
 
 // ----------------------------------------------------------------------------
@@ -310,10 +310,10 @@ Return JSON format:
   "summary_of_changes": "Brief bulleted summary of improvements"
 }`;
 
-  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY;
+  const gemKey = geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (gemKey) {
     try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gemKey}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${gemKey}`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

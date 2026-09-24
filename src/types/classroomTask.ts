@@ -125,6 +125,7 @@ export type TaskSubmissionStatus =
   | 'submitted'
   | 'evaluating'
   | 'evaluation_failed'
+  | 'ocr_failed'
   | 'processing'
   | 'graded'
   | 'returned'

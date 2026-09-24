@@ -291,9 +291,9 @@ ${studentText}`;
           response_format: { type: 'json_object' },
           temperature: 0.2
         });
-        rawJsonText = response.choices[0]?.message?.content || '{}';
-      } else if (process.env.GEMINI_API_KEY) {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+      } else if (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY) {
+        const gemKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${gemKey}`;
         const resp = await fetch(geminiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -362,9 +362,10 @@ ${studentText}`;
 }
 
 const CANDIDATE_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash'
+  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-pro-latest'
 ];
 
 /**
@@ -661,35 +662,10 @@ ${studentText}`;
     };
   }
 
-  // 4. Safe deterministic fallback
-  const fallbackScore = Math.round(maxScore * 0.8);
+  // 4. If AI provider failed or produced unparseable output
   return {
-    score: fallbackScore,
-    max_score: maxScore,
-    percentage: Math.round((fallbackScore / maxScore) * 100),
-    evaluation_status: 'completed',
-    category: 'Writing',
-    topic: 'Written Expression',
-    concept: 'Written Expression',
-    skills: ['Grammar & Mechanics', 'Sentence Structure'],
-    feedback: 'Your response has been submitted and evaluated. Keep practicing accurate sentence structure and subject-verb agreement.',
-    strengths: ['Clear expression of ideas', 'Prompt task submission'],
-    next_step: 'Practice sentence structure and subject-verb consistency in your daily writing.',
-    grammar_issues: [],
-    spelling_issues: [],
-    sentence_structure_issues: [],
-    vocabulary_issues: [],
-    mistakes: [],
-    corrections: [],
-    corrected_work: studentText,
-    grammar_errors: [],
-    spelling_errors: [],
-    breakdown: [
-      { criterion: 'Grammar & Mechanics', score: 8, max: 10 },
-      { criterion: 'Vocabulary & Word Choice', score: 8, max: 10 },
-      { criterion: 'Sentence Structure', score: 8, max: 10 },
-      { criterion: 'Task Completion', score: 10, max: 10 }
-    ]
+    evaluation_status: 'evaluation_failed',
+    error: 'AI evaluation could not be completed.'
   };
 }
 
@@ -739,7 +715,7 @@ export async function gradeTaskSubmission(
   let writingEvaluation = null;
   if (textResponse && String(textResponse).trim()) {
     writingEvaluation = await evaluateWritingTaskResponse(task, textResponse, serverOpenAI, geminiApiKey);
-    if (writingEvaluation) {
+    if (writingEvaluation && writingEvaluation.evaluation_status === 'completed') {
       hasAiGraded = true;
       results.push({
         question_id: 'writing_response',
@@ -758,6 +734,12 @@ export async function gradeTaskSubmission(
         totalScore += writingEvaluation.score;
         maxPossible += writingEvaluation.max_score;
       }
+    } else if (writingEvaluation && writingEvaluation.evaluation_status === 'evaluation_failed') {
+      return {
+        evaluation_status: 'evaluation_failed',
+        error: writingEvaluation.error || 'AI evaluation could not be completed. Please try submitting again.',
+        results
+      };
     }
   }
 

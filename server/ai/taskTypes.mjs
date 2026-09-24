@@ -113,7 +113,7 @@ export function getPreferredModel(provider, taskType = '') {
     return process.env.OPENAI_MODEL || 'gpt-5-nano';
   }
 
-  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 }
 
 /**

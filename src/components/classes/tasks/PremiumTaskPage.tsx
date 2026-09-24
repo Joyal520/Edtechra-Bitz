@@ -9,6 +9,7 @@ import {
   Trash2,
   Sparkles,
   AlertTriangle,
+  AlertCircle,
   PenLine,
   MessageSquare
 } from 'lucide-react';
@@ -74,13 +75,21 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<boolean>(Boolean(submission && submission.status !== 'draft'));
 
-  const isTaskEvaluating = evaluationPhase === 'evaluating' || isSubmitting || Boolean(
-    submission && (submission.status === 'evaluating' || (submission.status === 'submitted' && submission.final_score == null) || submission.status === 'processing')
+  const isTaskFailed = Boolean(
+    evaluationPhase === 'error' ||
+    submission?.status === 'evaluation_failed' ||
+    submission?.status === 'ocr_failed'
   );
 
-  const isTaskEvaluated = !isTaskEvaluating && Boolean(
+  const isTaskEvaluating = !isTaskFailed && Boolean(
+    evaluationPhase === 'evaluating' ||
+    isSubmitting ||
+    (submission && (submission.status === 'evaluating' || submission.status === 'processing'))
+  );
+
+  const isTaskEvaluated = !isTaskFailed && !isTaskEvaluating && Boolean(
     evaluationPhase === 'evaluated' ||
-    (submission && (submission.status === 'graded' || submission.final_score != null || submission.points_awarded != null || (submission.status !== 'draft' && submission.teacher_feedback)))
+    (submission && (submission.status === 'graded' || (submission.final_score != null && submission.status !== 'evaluation_failed' && submission.status !== 'ocr_failed')))
   );
 
   const questions: TaskQuestion[] = Array.isArray(task.questions) ? task.questions : [];
@@ -466,7 +475,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           )}
 
           {/* Submission Box for tasks allowing responses or handwritten work (shown when not yet evaluated) */}
-          {!isTaskEvaluated && task.category !== 'resource' && (
+          {!isTaskEvaluated && task.category !== 'resource' && (!submitted || isTaskFailed) && (
             <div className="p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
@@ -481,7 +490,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                       : 'You can type your answer or upload a clear photo of your handwritten work.'}
                   </p>
                 </div>
-                {!submitted && (!task.settings?.submission_method || task.settings?.submission_method === 'both') && (
+                {(!submitted || isTaskFailed) && (!task.settings?.submission_method || task.settings?.submission_method === 'both') && (
                   <div className="flex items-center p-1 bg-white border border-slate-200 rounded-xl shrink-0">
                     <button
                       type="button"
@@ -513,7 +522,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                 <div className="w-full">
                   <textarea
                     rows={questions.length > 0 ? 4 : 8}
-                    disabled={submitted}
+                    disabled={submitted && !isTaskFailed}
                     value={textResponse}
                     onChange={(e) => setTextResponse(e.target.value)}
                     placeholder="Type your explanation, summary, or response notes here..."
@@ -534,7 +543,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                         alt="Handwritten Work Preview"
                         className="max-h-80 object-contain rounded-lg shadow-sm"
                       />
-                      {!submitted && (
+                      {(!submitted || isTaskFailed) && (
                         <button
                           type="button"
                           onClick={() => {
@@ -566,7 +575,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                         accept="image/jpeg,image/png,image/webp"
                         className="hidden"
                         onChange={handleFileChange}
-                        disabled={submitted}
+                        disabled={submitted && !isTaskFailed}
                       />
                     </label>
                   )}
@@ -584,6 +593,37 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
         {/* ================================================================= */}
         {/* AI EVALUATION LIFECYCLE UI                                         */}
         {/* ================================================================= */}
+
+        {/* FAILED STATE: Show clear notice and actionable retry button */}
+        {isTaskFailed && (
+          <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-rose-300 bg-rose-50/90 text-center space-y-4 shadow-sm animate-in fade-in duration-300">
+            <div className="w-14 h-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center mx-auto shadow-md">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-black text-rose-950 tracking-tight">
+                AI EVALUATION COULD NOT BE COMPLETED
+              </h3>
+              <p className="text-xs sm:text-sm font-semibold text-rose-700 max-w-md mx-auto leading-relaxed">
+                {submission?.teacher_feedback || 'Unable to read enough text from this image. Please upload a clearer image.'}
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitted(false);
+                  setHandwrittenPreview(null);
+                  setHandwrittenBase64(null);
+                  setFileError(null);
+                }}
+                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-xs hover:shadow-md transition-all cursor-pointer"
+              >
+                Try Submitting Again
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* EVALUATING STATE: Show while AI is correcting */}
         {isTaskEvaluating && (

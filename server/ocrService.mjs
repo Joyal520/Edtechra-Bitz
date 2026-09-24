@@ -586,13 +586,17 @@ class OcrEvaluationQueue {
       };
     } catch (err) {
       console.error(`[OCR Engine] Evaluation job ${evaluationId} failed:`, err);
+      const isOcrFailure = Boolean(err.message && (err.message.includes('Unable to read enough text') || err.message.includes('unreadable') || err.message.includes('image')));
+      const failStatus = isOcrFailure ? 'ocr_failed' : 'evaluation_failed';
+      const failMessage = err.message || (isOcrFailure ? 'Unable to read enough text from this image. Please upload a clearer image.' : 'AI evaluation could not be completed.');
+
       // Mark evaluation as failed in Supabase without deleting the student submission
       if (this.serverSupabase) {
         await this.serverSupabase
           .from('ocr_evaluations')
           .update({
-            status: 'failed',
-            error_message: err.message || 'Evaluation processing error',
+            status: failStatus,
+            error_message: failMessage,
             updated_at: new Date().toISOString()
           })
           .eq('id', evaluationId);
@@ -603,8 +607,8 @@ class OcrEvaluationQueue {
             await this.serverSupabase
               .from('assignment_submissions')
               .update({
-                status: 'evaluation_failed',
-                teacher_feedback: 'Your work has been submitted, but AI correction is temporarily unavailable. The evaluation will be processed automatically.',
+                status: failStatus,
+                teacher_feedback: failMessage,
                 updated_at: new Date().toISOString()
               })
               .eq('assignment_id', effectiveTaskId)
@@ -962,10 +966,10 @@ Required JSON Schema:
     const candidateModels = [
       process.env.GEMINI_OCR_MODEL,
       process.env.GEMINI_MODEL,
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro'
+      'gemini-3.5-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-pro-latest'
     ].filter(Boolean);
 
     let lastError = null;
@@ -1007,29 +1011,33 @@ Required JSON Schema:
   }
 
   validateAndNormalizeAiOutput(raw, maxMarks = 100, category = 'Other', title = '') {
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('AI evaluation returned invalid or empty response.');
+    }
+
+    // Extracted OCR text validation
+    const ocrText = String(raw.ocr_text || raw.transcription || raw.student_text || '').trim();
+    if (!ocrText || ocrText.toUpperCase() === 'UNREADABLE' || ocrText.toLowerCase().includes('unable to read') || ocrText.toLowerCase().includes('no text provided')) {
+      throw new Error('Unable to read enough text from this image. Please upload a clearer image.');
+    }
+
+    const wordCount = ocrText.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 3) {
+      throw new Error('Unable to read enough text from this image. Please upload a clearer image.');
+    }
+
+    // Corrected text validation
+    let correctedWork = String(raw.corrected_work || raw.corrected_text || raw.correction || '').trim();
+    if (!correctedWork || correctedWork.toLowerCase().includes('no text provided') || correctedWork.toLowerCase().includes('temporarily unavailable')) {
+      throw new Error('AI evaluation incomplete: corrected work missing.');
+    }
+
     const defaultMax = Number(maxMarks) > 0 ? Number(maxMarks) : 100;
-    let score = typeof raw.score === 'number' && !isNaN(raw.score) ? raw.score : Math.round(defaultMax * 0.82);
-    score = Math.min(defaultMax, Math.max(0, Math.round(score * 10) / 10));
+    let score = typeof raw.score === 'number' && !isNaN(raw.score) ? raw.score : null;
 
     let percentage = typeof raw.percentage === 'number' && !isNaN(raw.percentage)
       ? Math.round(raw.percentage)
-      : Math.round((score / defaultMax) * 100);
-    percentage = Math.min(100, Math.max(0, percentage));
-
-    let performance = raw.performance;
-    if (!performance || typeof performance !== 'string') {
-      if (percentage >= 85) performance = 'Excellent';
-      else if (percentage >= 70) performance = 'Good';
-      else if (percentage >= 50) performance = 'Satisfactory';
-      else performance = 'Needs Improvement';
-    }
-
-    // Extracted OCR text & Corrected text
-    const ocrText = String(raw.ocr_text || raw.transcription || raw.student_text || '').trim();
-    let correctedWork = String(raw.corrected_work || raw.corrected_text || raw.correction || '').trim();
-    if (!correctedWork && ocrText) {
-      correctedWork = ocrText;
-    }
+      : (score != null ? Math.round((score / defaultMax) * 100) : null);
 
     // Feedback word count limit enforcement (max 60 words)
     let feedback = String(raw.feedback || '').trim();
@@ -1064,6 +1072,26 @@ Required JSON Schema:
     const spellingIssues = cleanIssueList(raw.spelling_issues || raw.spelling_errors || (Array.isArray(raw.detected_errors) ? raw.detected_errors.filter(d => d.error_type === 'spelling') : []));
     const sentenceIssues = cleanIssueList(raw.sentence_structure_issues);
     const vocabularyIssues = cleanIssueList(raw.vocabulary_issues);
+    const totalIssuesCount = grammarIssues.length + spellingIssues.length + sentenceIssues.length + vocabularyIssues.length;
+
+    if (score == null) {
+      const deduction = Math.min(defaultMax * 0.5, totalIssuesCount * (defaultMax * 0.08));
+      score = Math.max(0, Math.round(defaultMax - deduction));
+    }
+    score = Math.min(defaultMax, Math.max(0, Math.round(score * 10) / 10));
+
+    if (percentage == null) {
+      percentage = Math.round((score / defaultMax) * 100);
+    }
+    percentage = Math.min(100, Math.max(0, percentage));
+
+    let performance = raw.performance;
+    if (!performance || typeof performance !== 'string') {
+      if (percentage >= 85) performance = 'Excellent';
+      else if (percentage >= 70) performance = 'Good';
+      else if (percentage >= 50) performance = 'Satisfactory';
+      else performance = 'Needs Improvement';
+    }
 
     // Validate Criteria Breakdown
     const criteriaDef = CATEGORY_CRITERIA_MAP[category] || CATEGORY_CRITERIA_MAP['Other'];

@@ -325,8 +325,9 @@ export const TaskDashboardModal: React.FC<TaskDashboardModalProps> = ({
             <div className="grid grid-cols-1 gap-3">
               {filteredTasks.map((t) => {
                 const mySub = t.my_submission;
-                const isCompleted = Boolean(mySub && (mySub.status === 'graded' || mySub.completed_at != null || mySub.final_score != null));
-                const isEvaluating = Boolean(mySub && !isCompleted && (mySub.status === 'evaluating' || mySub.status === 'processing' || mySub.status === 'submitted'));
+                const isFailed = Boolean(mySub && (mySub.status === 'evaluation_failed' || mySub.status === 'ocr_failed'));
+                const isCompleted = Boolean(!isFailed && mySub && (mySub.status === 'graded' || (mySub.final_score != null && mySub.status !== 'evaluation_failed' && mySub.status !== 'ocr_failed')));
+                const isEvaluating = Boolean(!isFailed && !isCompleted && mySub && (mySub.status === 'evaluating' || mySub.status === 'processing'));
 
                 return (
                   <div

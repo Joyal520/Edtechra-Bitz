@@ -7565,11 +7565,11 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
     const formatted = (tasks || []).map((t) => {
       const subs = t.submissions || [];
       const submittedCount = subs.length;
-      const completedCount = subs.filter((s) => s.status === 'graded' || s.completed_at != null || s.final_score != null).length;
+      const completedCount = subs.filter((s) => (s.status === 'graded' || (s.final_score != null && s.status !== 'evaluation_failed' && s.status !== 'ocr_failed'))).length;
       let mySub = subs.find((s) => s.student_id === authData.user.id) || null;
 
       // If no assignment_submissions record or status not marked graded, check student's ocr_evaluations for this task
-      if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null)) {
+      if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null && mySub.status !== 'evaluation_failed' && mySub.status !== 'ocr_failed')) {
         const matchingOcr = (studentOcrEvals || []).find((o) => o.assignment_id === t.id);
         if (matchingOcr && (matchingOcr.status === 'completed' || matchingOcr.final_score != null || matchingOcr.score != null)) {
           const ocrScore = matchingOcr.final_score ?? matchingOcr.score;
@@ -7593,7 +7593,7 @@ app.get('/api/classes/:classroomId/tasks', async (req, res) => {
         }
       }
 
-      if (mySub && (mySub.status === 'graded' || mySub.final_score != null || mySub.completed_at != null)) {
+      if (mySub && (mySub.status === 'graded' || (mySub.final_score != null && mySub.status !== 'evaluation_failed' && mySub.status !== 'ocr_failed'))) {
         const finalScore = mySub.final_score ?? mySub.points_awarded;
         mySub = {
           ...mySub,
@@ -7659,7 +7659,7 @@ app.get('/api/classes/tasks/:id', async (req, res) => {
       .maybeSingle();
 
     // Check ocr_evaluations if submission is missing or pending
-    if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null)) {
+    if (!mySub || (mySub.status !== 'graded' && mySub.final_score == null && mySub.status !== 'evaluation_failed' && mySub.status !== 'ocr_failed')) {
       const { data: ocrSub } = await serverSupabase
         .from('ocr_evaluations')
         .select('*')
@@ -7689,7 +7689,7 @@ app.get('/api/classes/tasks/:id', async (req, res) => {
       }
     }
 
-    if (mySub && (mySub.status === 'graded' || mySub.final_score != null || mySub.completed_at != null)) {
+    if (mySub && (mySub.status === 'graded' || (mySub.final_score != null && mySub.status !== 'evaluation_failed' && mySub.status !== 'ocr_failed'))) {
       const finalScore = mySub.final_score ?? mySub.points_awarded;
       mySub = {
         ...mySub,
@@ -7877,39 +7877,33 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
         } catch (_) {}
       }
 
-      if (completedEval || finalSub?.status === 'graded') {
+      if (completedEval && finalSub?.status === 'graded') {
         return res.json({
           success: true,
-          data: finalSub || {
-            id: submissionId,
-            assignment_id: taskId,
-            classroom_id: task.classroom_id,
-            student_id: authData.user.id,
-            status: 'graded',
-            final_score: completedEval?.final_score ?? completedEval?.score,
-            points_awarded: Math.round(completedEval?.final_score ?? completedEval?.score ?? 0),
-            percentage: completedEval?.percentage,
-            teacher_feedback: completedEval?.feedback,
-            completed_at: new Date().toISOString()
-          }
+          data: finalSub
         });
       }
 
-      // If AI vision evaluation failed or is processing asynchronously, still return success to the student!
-      return res.json({
-        success: true,
+      // If OCR or AI vision evaluation failed
+      const isOcrFailure = Boolean(ocrError?.message && (ocrError.message.includes('Unable to read enough text') || ocrError.message.includes('unreadable')));
+      const failStatus = isOcrFailure ? 'ocr_failed' : 'evaluation_failed';
+      const failMsg = ocrError?.message || (isOcrFailure ? 'Unable to read enough text from this image. Please upload a clearer image.' : 'AI evaluation could not be completed. Please try submitting again.');
+
+      return res.status(422).json({
+        success: false,
+        status: failStatus,
+        error: failMsg,
         data: finalSub || {
           id: submissionId,
           assignment_id: taskId,
           classroom_id: task.classroom_id,
           student_id: authData.user.id,
-          status: 'submitted',
+          status: failStatus,
           text_response: textResponse || '',
           file_urls: fileUrls?.length ? fileUrls : (rawImageBase64 ? [rawImageBase64] : []),
-          teacher_feedback: 'Your handwritten submission has been saved. AI evaluation is processing in the background.',
+          teacher_feedback: failMsg,
           submitted_at: new Date().toISOString()
-        },
-        message: 'Submission received successfully.'
+        }
       });
     }
 
@@ -7921,31 +7915,40 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
         studentAnswers,
         serverOpenAI,
         textResponse,
-        process.env.GEMINI_API_KEY
+        process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
       );
     } catch (gradeErr) {
       console.error('[TaskSubmit] Error in gradeTaskSubmission:', gradeErr);
-      // Fallback: Preserve student work as submitted
       await serverSupabase
         .from('assignment_submissions')
         .update({
-          status: 'submitted',
-          teacher_feedback: 'Submission received. Evaluation pending review.',
+          status: 'evaluation_failed',
+          teacher_feedback: gradeErr.message || 'AI evaluation could not be completed. Please try submitting again.',
           updated_at: new Date().toISOString()
         })
         .eq('id', submissionId);
 
-      return res.json({
-        success: true,
-        data: {
-          id: submissionId,
-          assignment_id: taskId,
-          classroom_id: task.classroom_id,
-          student_id: authData.user.id,
-          status: 'submitted',
-          text_response: textResponse,
-          teacher_feedback: 'Submission received. Evaluation pending review.'
-        }
+      return res.status(422).json({
+        success: false,
+        status: 'evaluation_failed',
+        error: gradeErr.message || 'AI evaluation could not be completed. Please try submitting again.'
+      });
+    }
+
+    if (gradingResult.evaluation_status === 'evaluation_failed') {
+      await serverSupabase
+        .from('assignment_submissions')
+        .update({
+          status: 'evaluation_failed',
+          teacher_feedback: gradingResult.error || 'AI evaluation could not be completed. Please try submitting again.',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', submissionId);
+
+      return res.status(422).json({
+        success: false,
+        status: 'evaluation_failed',
+        error: gradingResult.error || 'AI evaluation could not be completed. Please try submitting again.'
       });
     }
 
