@@ -213,6 +213,38 @@ export interface WeakAreaVisualData {
   recommendation: string;
 }
 
+export interface DiagnosisExample {
+  student_error: string;
+  correction: string;
+  source?: string;
+  context?: string;
+}
+
+export interface DiagnosisItem {
+  diagnosis_id: string;
+  category: 'grammar' | 'spelling' | 'vocabulary' | 'writing' | 'reading' | 'curriculum' | string;
+  skill: string;
+  subskill?: string;
+  specific_problem: string;
+  affected_students: string[];
+  affected_students_count?: number;
+  total_students: number;
+  accuracy: number;
+  frequency: number;
+  severity: 'high' | 'medium' | 'low';
+  confidence: 'confirmed' | 'early_signal' | string;
+  evidence_sources: string[];
+  examples: DiagnosisExample[];
+  recommended_teaching: string;
+  priority_score: number;
+  // Dual-compatibility alias fields:
+  topic?: string;
+  displayName?: string;
+  sources?: string[];
+  affectedStudentsCount?: number;
+  recommended_action?: string;
+}
+
 export interface EvidenceBreakdown {
   assignment?: { avg: number; count: number };
   exam?: { avg: number; count: number };
@@ -227,9 +259,24 @@ export interface LearningGap {
   studentCount: number;
   totalStudents: number;
   sourcesCount: number;
-  confidence: 'confirmed_gap' | 'early_signal' | 'strong' | 'developing';
-  evidenceBreakdown: EvidenceBreakdown;
-  priority: number;
+  confidence: 'confirmed_gap' | 'early_signal' | 'strong' | 'developing' | 'confirmed' | string;
+  evidenceBreakdown?: EvidenceBreakdown;
+  priority?: number;
+  // Diagnosis extensions
+  diagnosis_id?: string;
+  category?: string;
+  skill?: string;
+  subskill?: string;
+  specific_problem?: string;
+  affected_students?: string[];
+  affectedStudentsCount?: number;
+  frequency?: number;
+  severity?: 'high' | 'medium' | 'low';
+  evidence_sources?: string[];
+  examples?: DiagnosisExample[];
+  recommended_teaching?: string;
+  displayName?: string;
+  sources?: string[];
 }
 
 export interface StudentNeedingSupport {
@@ -237,6 +284,12 @@ export interface StudentNeedingSupport {
   studentName: string;
   overallAvg: number;
   weakConcepts: string[];
+  primary_diagnosis?: string | null;
+  secondary_diagnosis?: string | null;
+  primaryDiagnosis?: string | null;
+  secondaryDiagnosis?: string | null;
+  primary_diagnosis_id?: string | null;
+  secondary_diagnosis_id?: string | null;
 }
 
 export interface RecommendedTeachingFocus {
@@ -246,6 +299,12 @@ export interface RecommendedTeachingFocus {
   totalStudents: number;
   rationale: string;
   suggestedAction: string;
+  diagnosis_id?: string;
+  category?: string;
+  skill?: string;
+  specific_problem?: string;
+  examples?: DiagnosisExample[];
+  recommended_teaching?: string;
 }
 
 export interface ClassroomMetricsSummary {
@@ -271,16 +330,20 @@ export interface ClassroomMetricsSummary {
     };
   };
   class_health?: ClassHealthSummary;
+  diagnoses?: DiagnosisItem[];
+  primaryDiagnosis?: DiagnosisItem | null;
   learningGapPriority?: LearningGap[];
   classStrengths?: { topic: string; accuracy: number }[];
   studentsNeedingSupport?: StudentNeedingSupport[];
-  recommendedTeachingFocus?: RecommendedTeachingFocus;
+  recommendedTeachingFocus?: RecommendedTeachingFocus | null;
   top_strengths?: TopTopicItem[];
   top_weaknesses?: TopTopicItem[];
   topic_performance: TopicPerformance[];
   students_needing_attention: StudentAttentionItem[];
   students?: StudentIntelligenceDetail[];
   recent_learning_evidence?: RecentLearningEvidenceItem[];
+  spelling_diagnosis?: any;
+  spellingDiagnosis?: any;
   weak_area_visual_data?: WeakAreaVisualData | null;
   activity_breakdown?: any;
   data_hash: string;

@@ -116,6 +116,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+  const mobileOptionsMenuRef = useRef<HTMLDivElement>(null);
 
   // Modals state
   const [activeSubmitAssignment, setActiveSubmitAssignment] = useState<Assignment | null>(null);
@@ -563,7 +564,10 @@ export const ClassroomDetailPage: React.FC = () => {
   // Close floating options menu on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideDesktop = optionsMenuRef.current && optionsMenuRef.current.contains(target);
+      const insideMobile = mobileOptionsMenuRef.current && mobileOptionsMenuRef.current.contains(target);
+      if (!insideDesktop && !insideMobile) {
         setOptionsMenuOpen(false);
       }
     };
@@ -604,34 +608,142 @@ export const ClassroomDetailPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans antialiased text-slate-800 py-4 sm:py-6 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#F4F8F8] font-sans antialiased text-slate-800 py-3 sm:py-6 relative overflow-x-hidden">
       
       {/* 3D Botanical Cut-Paper Decorative Border Frame */}
       <BotanicalPaperCutFrame />
 
       {/* MAIN DIGITAL CLASSROOM WORKSPACE CONTAINER */}
-      <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-7 relative z-10 pt-2 sm:pt-3">
+      <main className="max-w-[1360px] w-full mx-auto px-3 sm:px-6 lg:px-8 space-y-5 sm:space-y-7 relative z-10 pt-1 sm:pt-3">
         
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
-        <section className="relative bg-gradient-to-b from-[#edf6fd] via-[#e2f1fc] to-[#9ed1f7] rounded-[32px] sm:rounded-[36px] p-5 sm:p-7 lg:p-8 border border-white/80 shadow-[0_12px_36px_-6px_rgba(2,111,195,0.12)] overflow-hidden transition-all">
+        <section className="relative bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] overflow-hidden transition-all">
           
-          {/* Subtle Organic Background Glow */}
-          <div className="absolute -top-20 -left-20 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute top-1/2 -right-16 w-64 h-64 bg-sky-400/15 rounded-full blur-3xl pointer-events-none" />
-
-          {/* Top Bar: Back to Classes & Quick Category Tag */}
-          <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-10 flex-wrap">
+          {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
+          <div className="flex sm:hidden items-center justify-between gap-2 mb-3.5 relative z-20">
             <Link
               to="/classes"
-              className="group inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white/95 hover:bg-white px-3.5 sm:px-4 py-2 rounded-full transition-all duration-200 border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Classes</span>
+            </Link>
+
+            {/* Mobile Options Button [ ••• ] — TEACHER ONLY */}
+            {!loading && isTeacher && (
+              <div className="relative inline-block" ref={mobileOptionsMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setOptionsMenuOpen(prev => !prev)}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xs cursor-pointer active:scale-95 shrink-0 ${
+                    optionsMenuOpen
+                      ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
+                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Classroom Options"
+                  aria-label="Classroom Options"
+                >
+                  <MoreHorizontal className="w-4 h-4 stroke-[2.2]" />
+                </button>
+
+                {optionsMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.18)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCopyCodeOnly();
+                          setOptionsMenuOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Copy className="w-4 h-4 text-sky-500" />
+                          <span>Copy Class Code</span>
+                        </div>
+                        <span className="font-mono text-[11px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {copiedCode ? 'Copied!' : inviteCode}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCopyInvite();
+                          setOptionsMenuOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Link2 className="w-4 h-4 text-blue-500" />
+                          <span>Copy Class Link</span>
+                        </div>
+                        {copiedInvite && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            Copied!
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleWhatsAppShare();
+                          setOptionsMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <MessageSquareShare className="w-4 h-4 text-emerald-500" />
+                        <span>Share via WhatsApp</span>
+                      </button>
+                    </div>
+
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCopyInvite();
+                          alert(`Class Invite Link copied!\n\nShare with students:\n${inviteUrl}\nClass Code: ${inviteCode}`);
+                          setOptionsMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <UserPlus className="w-4 h-4 text-indigo-500" />
+                        <span>Invite Students</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOptionsMenuOpen(false);
+                          const el = document.getElementById('classroom-danger-zone');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <Settings className="w-4 h-4 text-slate-400" />
+                        <span>Class Settings</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Top Bar for Desktop (>= 640px): Back on Left, CLASSROOM Badge on Right */}
+          <div className="hidden sm:flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-10 flex-wrap">
+            <Link
+              to="/classes"
+              className="group inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-slate-50/80 hover:bg-slate-100 px-3.5 sm:px-4 py-2 rounded-full transition-all duration-200 border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-95 cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
               <span>Back to Classes</span>
             </Link>
 
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-100/90 border border-sky-200/80 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs backdrop-blur-xs">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs">
               <Sparkles className="w-3.5 h-3.5 text-[#0284c7]" />
               <span>CLASSROOM</span>
             </div>
@@ -651,14 +763,14 @@ export const ClassroomDetailPage: React.FC = () => {
                     const lastWord = words.pop();
                     const firstPart = words.join(' ');
                     return (
-                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a]">
+                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
                         <span>{firstPart} </span>
                         <span className="text-[#0284c7]">{lastWord}</span>
                       </h1>
                     );
                   }
                   return (
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a]">
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
                       {classroom.title}
                     </h1>
                   );
@@ -666,25 +778,25 @@ export const ClassroomDetailPage: React.FC = () => {
 
                 {/* Floating Metadata Pills */}
                 <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap pt-0.5">
-                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
-                    <BookOpen className="w-4 h-4 text-[#0284c7] stroke-[2]" />
+                  <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                     <span>{classroom.subject || 'General'}</span>
                   </span>
 
                   {classroom.grade && (
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
-                      <GraduationCap className="w-4 h-4 text-[#0284c7] stroke-[2]" />
+                    <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                      <GraduationCap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                       <span>{classroom.grade.toLowerCase().startsWith('grade') ? classroom.grade : `Grade ${classroom.grade}`}</span>
                     </span>
                   )}
 
-                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold text-slate-700 border border-sky-100 shadow-[0_2px_6px_rgba(0,0,0,0.03)]">
-                    <Users className="w-4 h-4 text-[#0284c7] stroke-[2]" />
+                  <span className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/80 shadow-2xs">
+                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0284c7] stroke-[2]" />
                     <span>{studentCount} {studentCount === 1 ? 'Student' : 'Students'}</span>
                   </span>
 
                   {isTeacher && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-50 text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
+                    <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-purple-50 text-xs font-bold text-purple-800 border border-purple-200 shadow-2xs">
                       <span>Teacher Workspace</span>
                     </span>
                   )}
@@ -692,7 +804,7 @@ export const ClassroomDetailPage: React.FC = () => {
               </div>
 
               {/* Tagline / Motto — Clean Italic without Quotation Marks */}
-              <p className="text-sm sm:text-base font-semibold italic text-slate-700 tracking-wide pt-0.5">
+              <p className="text-sm sm:text-base font-semibold italic text-slate-600 tracking-wide pt-0.5">
                 Learn • Practise • Improve • Grow Together
               </p>
 
@@ -703,22 +815,22 @@ export const ClassroomDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleEnterClassroom}
-                  className="inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#0091ff] via-[#0084f0] to-[#0070e0] hover:from-[#0084f0] hover:to-[#0060c8] shadow-[0_6px_20px_rgba(0,145,255,0.35)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3 rounded-full font-bold text-sm sm:text-base text-white bg-gradient-to-r from-[#0091ff] via-[#0084f0] to-[#0070e0] hover:from-[#0084f0] hover:to-[#0060c8] shadow-[0_4px_16px_rgba(0,145,255,0.3)] active:scale-95 transition-all duration-200 cursor-pointer group shrink-0"
                 >
                   <span>Enter Classroom</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform stroke-[2.5]" />
                 </button>
 
-                {/* Secondary Options Button: [ ••• ] with Floating Popover Menu — TEACHER ONLY */}
+                {/* Secondary Options Button: [ ••• ] with Floating Popover Menu — TEACHER ONLY (Desktop) */}
                 {!loading && isTeacher && (
-                  <div className="relative inline-block" ref={optionsMenuRef}>
+                  <div className="hidden sm:inline-block relative" ref={optionsMenuRef}>
                     <button
                       type="button"
                       onClick={() => setOptionsMenuOpen(prev => !prev)}
                       className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-pointer active:scale-95 shrink-0 ${
                         optionsMenuOpen
-                          ? 'bg-sky-100 border-sky-300 text-[#0284c7]'
-                          : 'bg-white hover:bg-slate-50 border-sky-100 text-slate-600 hover:text-slate-900'
+                          ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
+                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                       }`}
                       title="Classroom Options"
                       aria-label="Classroom Options"
@@ -728,7 +840,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
                     {/* Floating Dropdown Menu */}
                     {optionsMenuOpen && (
-                      <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-64 rounded-2xl bg-white border border-sky-100 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.15)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
+                      <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.15)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
                         <div className="py-1">
                           {/* Copy Code */}
                           <button
@@ -820,44 +932,12 @@ export const ClassroomDetailPage: React.FC = () => {
 
             </div>
 
-            {/* RIGHT on Desktop / LOWER on Mobile: Integrated Educational 3D Illustration */}
-            <div className="lg:col-span-5 relative flex items-end justify-center lg:justify-end -mb-5 sm:-mb-7 lg:-mb-8 mt-2 lg:mt-0 pt-1 select-none pointer-events-none">
-              {/* Decorative Wave & Vector Layer */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
-                {/* Subtle Paper Plane & Dashed Flight Path */}
-                <svg className="absolute top-2 sm:top-4 left-4 sm:left-10 w-32 h-20 text-sky-400" viewBox="0 0 120 80" fill="none">
-                  <path d="M 10 65 C 25 35, 55 18, 95 30" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5"/>
-                  <polygon points="95,26 108,31 99,39 97,34" fill="#38bdf8" opacity="0.6" />
-                </svg>
-
-                {/* Left Fluid Wave Arc */}
-                <svg className="absolute -bottom-1 -left-6 w-44 sm:w-56 h-36 sm:h-44 text-sky-400" viewBox="0 0 180 140" fill="none">
-                  <path d="M 0 140 C 35 100, 70 70, 110 100 C 130 115, 110 140, 0 140 Z" fill="url(#heroLeftWaveGrad)" opacity="0.45"/>
-                  <defs>
-                    <linearGradient id="heroLeftWaveGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#0284c7" stopOpacity="0.5"/>
-                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.1"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-
-                {/* Right Fluid Wave Arc */}
-                <svg className="absolute -bottom-1 -right-6 w-44 sm:w-56 h-36 sm:h-44 text-sky-400" viewBox="0 0 180 140" fill="none">
-                  <path d="M 180 140 C 145 105, 110 80, 70 110 C 50 125, 70 140, 180 140 Z" fill="url(#heroRightWaveGrad)" opacity="0.45"/>
-                  <defs>
-                    <linearGradient id="heroRightWaveGrad" x1="100%" y1="100%" x2="0%" y2="0%">
-                      <stop offset="0%" stopColor="#0284c7" stopOpacity="0.4"/>
-                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.1"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-
-              {/* 3D Student Artwork — Blended Seamlessly into Hero Card Background */}
+            {/* RIGHT on Desktop / UNDER CTA on Mobile: Seamless White Educational Illustration */}
+            <div className="lg:col-span-5 relative flex items-center justify-center lg:justify-end pt-2 lg:pt-0 select-none pointer-events-none">
               <img
                 src="/images/classroom/classroom-hero-student.jpg"
                 alt="Classroom Student Learning"
-                className="relative z-10 w-full max-w-[340px] sm:max-w-[400px] lg:max-w-[440px] object-contain mix-blend-multiply transition-transform duration-300 select-none pointer-events-none"
+                className="w-full max-w-[260px] sm:max-w-[320px] lg:max-w-[380px] h-auto object-contain transition-transform duration-300 select-none pointer-events-none"
               />
             </div>
 

@@ -14,7 +14,8 @@ import {
   BookOpen,
   Award,
   Zap,
-  PenTool
+  PenTool,
+  Stethoscope
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
@@ -39,7 +40,7 @@ interface InsightTabProps {
 export const InsightTab: React.FC<InsightTabProps> = ({
   classroom,
   data,
-  intelligence,
+  intelligence: _intelligence,
   metrics,
   classroomId: _classroomId,
   students: _students,
@@ -61,13 +62,11 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   };
 
   const resolvedMetrics = metrics || data?.metrics || {};
-  const resolvedIntelligence = intelligence || data?.intelligence;
 
   const classSummary = resolvedMetrics.class_summary || {};
   const classHealth = resolvedMetrics.class_health || {};
   const topicPerformance = resolvedMetrics.topic_performance || [];
   const topStrengths = resolvedMetrics.top_strengths || [];
-  const teachNext = resolvedIntelligence?.teach_next || [];
   const studentsNeedingAttention = resolvedMetrics.students_needing_attention || [];
   const recentEvidence = resolvedMetrics.recent_learning_evidence || [];
 
@@ -78,7 +77,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   const participationRate = classSummary.engagement_rate ?? classHealth.participationRate ?? null;
   const strugglingCount = classHealth.strugglingCount ?? studentsNeedingAttention.length;
 
-  // Multi-source Evidence Summary Counts
+  // Multi-source Evidence Summary Counts (50% OCR/writing, 30% Exams, 20% Quizzes/Comp)
   const evidenceCounts = useMemo(() => {
     const raw = resolvedMetrics.evidenceSummaryCounts || resolvedMetrics.evidence_summary_counts;
     if (raw) return raw;
@@ -134,89 +133,91 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     return cleaned.sort((a, b) => a.score - b.score).slice(0, 10);
   }, [resolvedMetrics.topics, topicPerformance]);
 
-  // Section 2: What Your Students Are Struggling With — Maximum 5 clean, evidence-backed diagnostic cards
-  const learningGaps = useMemo(() => {
-    const rawGaps = resolvedMetrics.learningGapPriority || [];
-    const seen = new Set<string>();
-    const validGaps = [];
+  // Section 2: DIAGNOSIS ENGINE — Maximum 5 clean, evidence-backed diagnostic cards
+  const diagnosesList = useMemo(() => {
+    const rawDiagnoses = (resolvedMetrics.diagnoses && resolvedMetrics.diagnoses.length > 0)
+      ? resolvedMetrics.diagnoses
+      : (resolvedMetrics.learningGapPriority || []);
 
-    for (const g of rawGaps) {
-      const name = g.displayName || g.topic;
+    const seen = new Set<string>();
+    const valid = [];
+
+    for (const d of rawDiagnoses) {
+      const name = d.displayName || d.specific_problem || d.skill || d.topic;
       if (!name || seen.has(name.toLowerCase())) continue;
       if (/session[-_]?id|final[-_]?rank|\{|\}/i.test(name)) continue;
       if (/^(?:grammar|spelling|writing|vocabulary|reading|general|other|task|assignment)$/i.test(name.trim())) continue;
 
       seen.add(name.toLowerCase());
 
-      const sources = Array.isArray(g.sourcesList) && g.sourcesList.length > 0
-        ? g.sourcesList
-        : (Array.isArray(g.sources) ? g.sources : ['Task']);
-      const isMultiSource = sources.length >= 2 || (g.affectedStudentsCount >= 2);
-      const studentCount = g.affectedStudentsCount ?? g.studentCount ?? 1;
-      const total = g.totalStudents || totalStudents || 1;
-      const accuracy = g.accuracy != null ? Math.round(g.accuracy) : (g.averageAccuracy != null ? Math.round(g.averageAccuracy) : 0);
-      const category = g.category || 'Grammar';
-      const commonErrors = Array.isArray(g.commonErrors) ? g.commonErrors : (Array.isArray(g.common_errors) ? g.common_errors : []);
-      const teachAction = g.teachAction || g.recommended_action || `Review foundational rules of ${name} with contrast practice.`;
+      const sources = Array.isArray(d.evidence_sources) && d.evidence_sources.length > 0
+        ? d.evidence_sources
+        : (Array.isArray(d.sourcesList) && d.sourcesList.length > 0
+          ? d.sourcesList
+          : (Array.isArray(d.sources) ? d.sources : ['Worksheet (OCR)']));
+      
+      const affectedStudents = Array.isArray(d.affected_students) ? d.affected_students : [];
+      const studentCount = d.affected_students_count ?? (affectedStudents.length > 0 ? affectedStudents.length : (d.affectedStudentsCount ?? d.studentCount ?? 1));
+      const total = d.total_students || d.totalStudents || totalStudents || 1;
+      const accuracy = d.accuracy != null ? Math.round(d.accuracy) : (d.averageAccuracy != null ? Math.round(d.averageAccuracy) : 0);
+      const category = d.category || 'Grammar';
+      const frequency = d.frequency ?? (d.occurrences ?? (d.commonErrors?.length || 1));
+      const severity = (d.severity || (accuracy < 50 ? 'high' : accuracy < 65 ? 'medium' : 'low')).toLowerCase();
+      const isMultiSource = sources.length >= 2 || studentCount >= 2;
+      const confidence = d.confidence === 'confirmed' || d.confidence === 'confirmed_gap'
+        ? 'Confirmed Gap'
+        : (d.confidence === 'early_signal' ? 'Early Signal' : (isMultiSource ? 'Confirmed Gap' : 'Early Signal'));
+      
+      const examples = Array.isArray(d.examples) && d.examples.length > 0
+        ? d.examples
+        : (Array.isArray(d.commonErrors) && d.commonErrors.length > 0
+          ? d.commonErrors.map((e: any) => ({
+              student_error: e.student_error || e.error || e.student_answer || '',
+              correction: e.correction || e.correct_form || e.correct_answer || ''
+            }))
+          : []);
 
-      validGaps.push({
-        rank: validGaps.length + 1,
+      const recommendedTeaching = d.recommended_teaching || d.recommended_action || d.teachAction || `Review foundational rules of ${name} with guided contrast practice.`;
+
+      valid.push({
+        id: d.diagnosis_id || d.topic_key || `diag_${valid.length + 1}`,
+        rank: valid.length + 1,
         category,
-        topic: g.topic,
+        skill: d.skill || name,
+        subskill: d.subskill,
+        specific_problem: d.specific_problem || name,
         displayName: name,
+        topic: d.topic || d.skill || name,
         accuracy,
+        frequency,
+        severity,
         studentCount,
         totalStudents: total,
+        affectedStudents,
         sources,
-        confidence: g.confidence || (isMultiSource ? 'Confirmed gap' : 'Early signal'),
-        commonErrors,
-        teachAction
+        confidence,
+        examples,
+        recommendedTeaching,
+        priorityScore: d.priority_score ?? d.priority ?? 0
       });
 
-      if (validGaps.length >= 5) break; // Maximum 5 learning gaps
+      if (valid.length >= 5) break; // Strict Maximum 5 Diagnoses
     }
 
-    return validGaps;
-  }, [resolvedMetrics.learningGapPriority, totalStudents]);
+    return valid;
+  }, [resolvedMetrics.diagnoses, resolvedMetrics.learningGapPriority, totalStudents]);
 
-  // Section 3: Teaching Focus — Single #1 Highest Priority Specific Concept
-  const topGap = learningGaps[0] || null;
-  const recommendedFocus = useMemo(() => {
-    if (topGap) {
-      return {
-        displayName: topGap.displayName,
-        topic: topGap.topic,
-        accuracy: topGap.accuracy,
-        studentCount: topGap.studentCount,
-        totalStudents: topGap.totalStudents,
-        teachAction: topGap.teachAction
-      };
-    }
-    const focus = resolvedMetrics.recommendedTeachingFocus || teachNext[0];
-    if (focus && focus.displayName && !/^(?:grammar|spelling|writing|vocabulary|reading|general)$/i.test(focus.displayName.trim())) {
-      return {
-        displayName: focus.displayName || focus.topic,
-        topic: focus.topic,
-        accuracy: focus.accuracy || focus.averageAccuracy || 50,
-        studentCount: focus.studentsAffected || focus.studentCount || 1,
-        totalStudents: focus.studentsTotal || totalStudents || 1,
-        teachAction: focus.teachAction || focus.recommended_action || "Spend the next class period reviewing key rules with guided practice."
-      };
-    }
-    return null;
-  }, [topGap, resolvedMetrics.recommendedTeachingFocus, teachNext, totalStudents]);
-
-  // Section 4: Students Needing Support (with real names and specific weak concepts)
+  // Section 3: Students Needing Support (with real names and linked primary/secondary diagnoses)
   const supportStudentsList = useMemo(() => {
     const list = resolvedMetrics.studentsNeedingSupport || [];
     if (list.length > 0) {
       return list.map((s: any) => ({
         studentId: s.studentId,
         studentName: s.studentName || s.fullName || 'Student',
-        averagePercentage: s.averagePercentage != null ? Math.round(s.averagePercentage) : null,
-        specificWeakConcepts: Array.isArray(s.specificWeakConcepts) && s.specificWeakConcepts.length > 0
-          ? s.specificWeakConcepts
-          : (s.weakAreas?.map((w: any) => w.displayName || w.topic) || ['Targeted Concept Review'])
+        averagePercentage: s.overallAvg != null ? Math.round(s.overallAvg) : (s.averagePercentage != null ? Math.round(s.averagePercentage) : null),
+        primaryDiagnosis: s.primary_diagnosis || s.primaryDiagnosis || (s.weakConcepts && s.weakConcepts[0]) || (s.specificWeakConcepts && s.specificWeakConcepts[0]) || 'Targeted Concept Review',
+        secondaryDiagnosis: s.secondary_diagnosis || s.secondaryDiagnosis || (s.weakConcepts && s.weakConcepts[1]) || (s.specificWeakConcepts && s.specificWeakConcepts[1]) || null,
+        weakConcepts: s.weakConcepts || s.specificWeakConcepts || []
       })).slice(0, 6);
     }
 
@@ -224,11 +225,13 @@ export const InsightTab: React.FC<InsightTabProps> = ({
       studentId: s.studentId || s.id,
       studentName: s.student_ref || s.name || s.fullName || 'Student',
       averagePercentage: s.average_score != null ? Math.round(s.average_score) : null,
-      specificWeakConcepts: s.main_weakness ? [s.main_weakness] : ['Core Concept Review']
+      primaryDiagnosis: s.main_weakness || 'Targeted Concept Review',
+      secondaryDiagnosis: null,
+      weakConcepts: s.main_weakness ? [s.main_weakness] : ['Core Concept Review']
     })).slice(0, 6);
   }, [resolvedMetrics.studentsNeedingSupport, studentsNeedingAttention]);
 
-  // Section 5: Class Strengths (Deduplicated concepts >= 75%)
+  // Section 4: Class Strengths (Deduplicated concepts >= 75%)
   const strengthsList = useMemo(() => {
     const raw = resolvedMetrics.classStrengths || topStrengths || [];
     const seen = new Set<string>();
@@ -276,6 +279,18 @@ export const InsightTab: React.FC<InsightTabProps> = ({
         return 'bg-cyan-50 text-cyan-800 border-cyan-200';
       default:
         return 'bg-teal-50 text-teal-800 border-teal-200';
+    }
+  };
+
+  const getSeverityBadgeColor = (severity: string) => {
+    switch (severity) {
+      case 'high':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'medium':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'low':
+      default:
+        return 'bg-blue-50 text-blue-700 border-blue-200';
     }
   };
 
@@ -336,7 +351,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           </div>
         </div>
 
-        {/* Evidence Sources Badges */}
+        {/* Evidence Sources Badges (50% OCR/Writing, 30% Exams, 20% Quizzes) */}
         <div className="mt-3.5 bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3 flex items-center justify-between flex-wrap gap-2.5">
           <div className="flex items-center gap-2 text-xs font-bold text-[#173B3F]">
             <Layers className="w-3.5 h-3.5 text-[#087477]" />
@@ -382,7 +397,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 2. CLASS PERFORMANCE (MAX 10 CLEAN BARS AGAINST 70% TARGET) */}
+      {/* 2. CLASS PERFORMANCE (MAX 10 CLEAN CANONICAL BARS AGAINST 70% TARGET) */}
       <section>
         <div className="mb-3.5">
           <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Performance</h2>
@@ -424,89 +439,109 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 3. WHAT YOUR STUDENTS ARE STRUGGLING WITH (MAXIMUM 5 CLEAN DIAGNOSTIC CARDS) */}
+      {/* 3. DIAGNOSIS (MAXIMUM 5 GRANULAR, PEDAGOGICAL DIAGNOSES) */}
       <section>
-        <div className="mb-3.5 flex items-center justify-between">
+        <div className="mb-3.5 flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
-              What Your Students Are Struggling With
-            </h2>
+            <div className="flex items-center gap-1.5">
+              <Stethoscope className="w-4 h-4 text-[#087477]" />
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
+                DIAGNOSIS
+              </h2>
+            </div>
             <p className="text-xs text-[#36565A] mt-0.5">
-              Specific, evidence-backed learning gaps and target 1-lesson teaching actions.
+              Specific learning problems detected from student evidence and what to teach next.
             </p>
           </div>
-          {learningGaps.length > 0 && (
+          {diagnosesList.length > 0 && (
             <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-0.5 rounded-full border border-teal-200">
-              {learningGaps.length} Priority {learningGaps.length === 1 ? 'Gap' : 'Gaps'}
+              {diagnosesList.length} {diagnosesList.length === 1 ? 'Diagnosis' : 'Diagnoses'} Detected
             </span>
           )}
         </div>
 
-        {!hasEvidence || learningGaps.length === 0 ? (
+        {!hasEvidence || diagnosesList.length === 0 ? (
           <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
             <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-2 opacity-50" />
             <p className="text-sm font-bold text-[#173B3F]">
-              {!hasEvidence ? "Not enough evidence yet." : "No learning gaps identified yet."}
+              {!hasEvidence ? "Not enough evidence yet." : "No learning problems diagnosed."}
             </p>
             <p className="text-xs text-[#36565A] mt-1">
               {!hasEvidence 
-                ? "Have students complete worksheets, tasks, or exams to unlock diagnostic insights."
-                : "All assessed concepts currently meet or exceed the 70% mastery threshold."}
+                ? "Have students complete worksheets, tasks, or exams to unlock AI pedagogical diagnoses."
+                : "All assessed concepts meet or exceed the 70% curriculum benchmark."}
             </p>
           </div>
         ) : (
-          <div className="space-y-3.5">
-            {learningGaps.map((gap) => (
+          <div className="space-y-4">
+            {diagnosesList.map((diag) => (
               <div 
-                key={gap.rank || gap.displayName} 
-                className="bg-white rounded-xl border border-[#C9E5E2] p-4.5 shadow-2xs hover:border-[#159A9C]/60 transition-all space-y-3"
+                key={diag.id || diag.rank} 
+                className={`bg-white rounded-xl border p-5 shadow-2xs hover:border-[#159A9C] transition-all space-y-3.5 ${
+                  diag.rank === 1 ? 'border-l-4 border-l-[#087477] border-[#C9E5E2]' : 'border-[#C9E5E2]'
+                }`}
               >
-                {/* Header Row: Rank + Category + Concept Name + Ratio + Confidence */}
+                {/* Header Row: Rank + Category + Specific Problem Title + Confidence + Severity */}
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                  <div className="space-y-1.5 flex-1">
+                  <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="w-5 h-5 rounded-full bg-[#173B3F] text-white text-[11px] font-black flex items-center justify-center shrink-0">
-                        {gap.rank}
+                        {diag.rank}
                       </span>
 
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(gap.category)}`}>
-                        {gap.category}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(diag.category)}`}>
+                        {diag.category}
                       </span>
 
-                      <h3 className="text-sm sm:text-base font-black text-[#173B3F]">
-                        {gap.displayName}
+                      <h3 className="text-sm sm:text-base font-black text-[#173B3F] break-words">
+                        {diag.displayName}
                       </h3>
-                      
+
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
-                        gap.confidence === 'Confirmed gap'
+                        diag.confidence === 'Confirmed Gap'
                           ? 'bg-teal-50 text-teal-800 border-teal-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {gap.confidence}
+                        {diag.confidence}
                       </span>
+
+                      {diag.severity && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${getSeverityBadgeColor(diag.severity)}`}>
+                          {diag.severity} Priority
+                        </span>
+                      )}
                     </div>
 
-                    {/* Ratio & Accuracy */}
+                    {/* Metrics Row: Accuracy, Student Ratio, Frequency, Sources */}
                     <div className="flex items-center gap-2.5 text-xs font-semibold text-[#173B3F] flex-wrap">
                       <span 
                         className="px-2 py-0.5 rounded text-xs font-black"
-                        style={{ backgroundColor: getBarColor(gap.accuracy) + '20', color: getBarColor(gap.accuracy) }}
+                        style={{ backgroundColor: getBarColor(diag.accuracy) + '20', color: getBarColor(diag.accuracy) }}
                       >
-                        {gap.accuracy}% accuracy
+                        {diag.accuracy}% accuracy
                       </span>
 
                       <span>•</span>
 
                       <span className="text-[#36565A]">
-                        <strong className="text-[#173B3F]">{gap.studentCount}</strong> of <strong className="text-[#173B3F]">{gap.totalStudents}</strong> students
+                        <strong className="text-[#173B3F]">{diag.studentCount}</strong> of <strong className="text-[#173B3F]">{diag.totalStudents}</strong> students affected
                       </span>
+
+                      {diag.frequency > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-[#36565A]">
+                            <strong className="text-[#173B3F]">{diag.frequency}</strong> {diag.frequency === 1 ? 'error occurrence' : 'error occurrences'}
+                          </span>
+                        </>
+                      )}
 
                       <span>•</span>
 
                       {/* Evidence in */}
                       <div className="flex items-center gap-1 flex-wrap">
                         <span className="text-[11px] text-[#36565A] font-medium">Evidence in:</span>
-                        {(gap.sources || []).map((source: string, idx: number) => (
+                        {(diag.sources || []).map((source: string, idx: number) => (
                           <span key={idx} className="text-[10px] font-bold px-1.5 py-0.2 bg-[#F8FCFB] border border-[#C9E5E2] rounded text-[#173B3F]">
                             {source}
                           </span>
@@ -518,14 +553,14 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   {/* Action Buttons */}
                   <div className="flex flex-row md:flex-col gap-2 shrink-0">
                     <button 
-                      onClick={() => handleNavigation('evidence-reports', { topic: gap.displayName || gap.topic })}
+                      onClick={() => handleNavigation('evidence-reports', { topic: diag.displayName || diag.topic })}
                       className="px-3 py-1.5 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       <FileText className="w-3.5 h-3.5 text-[#087477]" />
                       View Evidence
                     </button>
                     <button 
-                      onClick={() => handleNavigation('teaching', { topic: gap.topic })}
+                      onClick={() => handleNavigation('teaching', { topic: diag.topic || diag.skill })}
                       className="px-3 py-1.5 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       Teach This
@@ -534,35 +569,38 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   </div>
                 </div>
 
-                {/* Common Student Errors Box */}
-                {gap.commonErrors && gap.commonErrors.length > 0 && (
-                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-2.5 text-xs space-y-1">
+                {/* Common Student Errors Contrast Box */}
+                {diag.examples && diag.examples.length > 0 && (
+                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-3 text-xs space-y-1.5">
                     <div className="font-bold text-[#92400E] flex items-center gap-1.5 text-[11px]">
-                      <AlertCircle className="w-3 h-3 text-[#D97706]" />
-                      <span>Common error:</span>
+                      <AlertCircle className="w-3.5 h-3.5 text-[#D97706]" />
+                      <span>Observed student error pattern:</span>
                     </div>
-                    <div className="space-y-0.5 pl-4">
-                      {gap.commonErrors.slice(0, 2).map((err: any, idx: number) => (
+                    <div className="space-y-1 pl-4">
+                      {diag.examples.slice(0, 3).map((err: any, idx: number) => (
                         <div key={idx} className="flex items-center gap-2 text-xs flex-wrap font-sans">
-                          <span className="line-through text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-mono font-medium text-[11px]">
+                          <span className="line-through text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-mono font-medium text-[11px]">
                             {err.student_error}
                           </span>
                           <span className="text-slate-400 font-bold">→</span>
-                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-mono font-bold text-[11px]">
-                            {err.correct_form}
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono font-bold text-[11px]">
+                            {err.correction}
                           </span>
+                          {err.source && (
+                            <span className="text-[10px] text-slate-500 font-medium">({err.source})</span>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Teach Callout */}
-                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-2.5 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
-                  <Lightbulb className="w-3.5 h-3.5 text-[#087477] shrink-0 mt-0.5" />
-                  <div className="flex-1 text-[11px] leading-relaxed">
-                    <span className="font-bold text-[#087477]">Teach: </span>
-                    <InlineMarkdown text={gap.teachAction || "Review core concept with guided examples."} />
+                {/* Pedagogical Teaching Prescription Box */}
+                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2.5">
+                  <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs leading-relaxed">
+                    <span className="font-black text-[#087477]">Teach next: </span>
+                    <InlineMarkdown text={diag.recommendedTeaching} />
                   </div>
                 </div>
 
@@ -574,69 +612,16 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 4. TEACHING FOCUS (ONE CLEAR PRIORITY) */}
-      <section>
-        <div className="bg-gradient-to-r from-[#F0FDF4] to-[#F8FCFB] rounded-xl border border-[#C9E5E2] border-l-4 border-l-[#159A9C] p-5 shadow-2xs">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#087477]" />
-              <h2 className="text-xs font-black uppercase tracking-wider text-[#087477]">Teaching Focus</h2>
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
-              #1 Priority
-            </span>
-          </div>
-
-          {recommendedFocus ? (
-            <div className="space-y-2.5">
-              <h3 className="text-sm sm:text-base font-black text-[#173B3F]">
-                Your class currently needs support with:{' '}
-                <span className="text-[#087477]">{recommendedFocus.displayName}</span>
-              </h3>
-
-              <div className="flex items-center gap-3 text-xs text-[#36565A]">
-                <span>{recommendedFocus.studentCount} of {recommendedFocus.totalStudents} students affected</span>
-                <span>•</span>
-                <span className="font-bold text-rose-600">{recommendedFocus.accuracy}% accuracy</span>
-              </div>
-
-              <p className="text-xs text-[#173B3F] leading-relaxed">
-                <strong className="text-[#087477]">Teach next: </strong>
-                <InlineMarkdown text={recommendedFocus.teachAction} />
-              </p>
-
-              <div className="flex flex-wrap items-center gap-2.5 pt-1.5">
-                <button 
-                  onClick={() => handleNavigation('teaching', { topic: recommendedFocus.topic })}
-                  className="px-3.5 py-1.5 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  Teach This Concept <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-                <button 
-                  onClick={() => handleNavigation('evidence-reports', { topic: recommendedFocus.displayName })}
-                  className="px-3.5 py-1.5 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#087477]" />
-                  View Diagnostic Evidence
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-[#36565A] font-semibold">
-              No clear teaching priority yet. Complete student assessments to identify focal areas.
-            </p>
-          )}
-        </div>
-      </section>
-
-      {/* 5. SUPPORTING PANELS: Students Needing Support & Class Strengths */}
+      {/* 4. STUDENTS NEEDING SUPPORT (LINKED DIRECTLY TO DIAGNOSIS) */}
       <section className="space-y-6 pt-1">
-        {/* Students Needing Support */}
         <div>
           <div className="mb-2.5 flex items-center justify-between">
-            <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
+            <div>
+              <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Students Needing Support</h2>
+              <p className="text-xs text-[#36565A] mt-0.5">Learners connected to diagnosed skill gaps requiring intervention.</p>
+            </div>
             {supportStudentsList.length > 0 && (
-              <span className="text-[11px] font-bold text-[#087477]">
+              <span className="text-[11px] font-bold text-[#087477] bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
                 {supportStudentsList.length} {supportStudentsList.length === 1 ? 'student' : 'students'}
               </span>
             )}
@@ -656,23 +641,30 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   <div 
                     key={i} 
                     onClick={() => handleNavigation('students', { studentId: student.studentId })}
-                    className="bg-white border border-[#C9E5E2] hover:border-amber-300 rounded-xl p-3 shadow-2xs cursor-pointer transition-colors flex items-start gap-2.5"
+                    className="bg-white border border-[#C9E5E2] hover:border-[#159A9C] rounded-xl p-3.5 shadow-2xs cursor-pointer transition-all flex items-start gap-2.5"
                   >
-                    <div className="w-7 h-7 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#087477] font-black text-xs shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-[#087477] font-black text-xs shrink-0">
                       {initial}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <span className="text-xs font-black text-[#173B3F] truncate pr-2">{sName}</span>
                         {student.averagePercentage != null && (
-                          <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                          <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100 shrink-0">
                             {student.averagePercentage}%
                           </span>
                         )}
                       </div>
-                      <p className="text-[10px] text-[#36565A] mt-0.5 line-clamp-1 font-medium">
-                        {student.specificWeakConcepts?.join(', ') || "Needs concept review"}
-                      </p>
+                      <div className="mt-1 space-y-1">
+                        <div className="text-[10px] text-[#36565A] font-medium truncate">
+                          <strong className="text-[#087477]">Primary:</strong> {student.primaryDiagnosis}
+                        </div>
+                        {student.secondaryDiagnosis && (
+                          <div className="text-[10px] text-[#36565A] font-medium truncate">
+                            <strong className="text-slate-600">Secondary:</strong> {student.secondaryDiagnosis}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -681,7 +673,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           )}
         </div>
 
-        {/* Class Strengths */}
+        {/* 5. CLASS STRENGTHS (Deduplicated concepts >= 75%) */}
         {strengthsList.length > 0 && (
           <div>
             <div className="mb-2.5">
