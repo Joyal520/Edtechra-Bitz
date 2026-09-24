@@ -7717,7 +7717,7 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
-      return res.status(401).json({ success: false, error: 'Authentication required.' });
+      return res.status(401).json({ success: false, error: 'Authentication required.', code: 'UNAUTHORIZED' });
     }
 
     const { id: taskId } = req.params;
@@ -7730,8 +7730,13 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       temporaryFileKey
     } = req.body;
 
+    const rawImageBase64 = imageBase64 || handwrittenImageBase64;
+    const hasHandwrittenWork = Boolean(rawImageBase64 || temporaryFileKey);
+
+    console.log(`[TaskSubmit] Request received: taskId=${taskId}, studentId=${authData.user.id}, hasHandwritten=${hasHandwrittenWork}, contentType=${req.headers['content-type']}`);
+
     if (!serverSupabase) {
-      return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
+      return res.status(500).json({ success: false, error: 'Supabase client not initialized.', code: 'SERVER_ERROR' });
     }
 
     // Retrieve authoritative task record
@@ -7743,7 +7748,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       .single();
 
     if (tErr || !task) {
-      return res.status(404).json({ success: false, error: 'Task not found.' });
+      console.warn(`[TaskSubmit] Task not found: ${taskId}`);
+      return res.status(404).json({ success: false, error: 'Task not found.', code: 'TASK_NOT_FOUND' });
     }
 
     // 1. Check existing submission to reuse ID or check duplicate submission
@@ -7755,7 +7761,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       .maybeSingle();
 
     // Prevent duplicate submission if already graded and retries not allowed
-    if (existingSub && existingSub.status === 'graded' && !task.settings?.allow_retry) {
+    if (existingSub && (existingSub.status === 'graded' || (existingSub.final_score != null && existingSub.status !== 'evaluation_failed' && existingSub.status !== 'ocr_failed')) && !task.settings?.allow_retry) {
+      console.log(`[TaskSubmit] Returning existing graded submission: ${existingSub.id} for task ${taskId}`);
       return res.json({
         success: true,
         data: existingSub,
@@ -7764,8 +7771,6 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     }
 
     const submissionId = existingSub?.id || crypto.randomUUID();
-    const rawImageBase64 = imageBase64 || handwrittenImageBase64;
-    const hasHandwrittenWork = Boolean(rawImageBase64 || temporaryFileKey);
 
     // 2. IMMEDIATE PRE-PERSISTENCE: Save student work in assignment_submissions with status 'evaluating'
     // This ensures student work is never lost and UI reflects in-progress evaluation even across page refreshes
@@ -7877,10 +7882,25 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
         } catch (_) {}
       }
 
-      if (completedEval && finalSub?.status === 'graded') {
+      if (completedEval && (finalSub?.status === 'graded' || completedEval.status === 'completed' || finalSub?.final_score != null)) {
+        console.log(`[TaskSubmit] Successfully evaluated handwritten task: ${taskId}, score: ${finalSub?.final_score ?? completedEval?.score}`);
         return res.json({
           success: true,
-          data: finalSub
+          data: finalSub || {
+            id: submissionId,
+            assignment_id: taskId,
+            classroom_id: task.classroom_id,
+            student_id: authData.user.id,
+            status: 'graded',
+            final_score: completedEval.score,
+            points_awarded: Math.round(completedEval.score),
+            percentage: completedEval.percentage,
+            is_ai_graded: true,
+            teacher_feedback: completedEval.feedback,
+            text_response: completedEval.ocr_text || '',
+            file_urls: fileUrls?.length ? fileUrls : (rawImageBase64 ? [rawImageBase64] : []),
+            submitted_at: new Date().toISOString()
+          }
         });
       }
 
@@ -7889,10 +7909,14 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       const failStatus = isOcrFailure ? 'ocr_failed' : 'evaluation_failed';
       const failMsg = ocrError?.message || (isOcrFailure ? 'Unable to read enough text from this image. Please upload a clearer image.' : 'AI evaluation could not be completed. Please try submitting again.');
 
+      console.error(`[TaskSubmit] Handwritten task evaluation failed: taskId=${taskId}, failStatus=${failStatus}, message=${failMsg}`);
+
       return res.status(422).json({
         success: false,
         status: failStatus,
         error: failMsg,
+        code: isOcrFailure ? 'OCR_UNREADABLE' : 'EVALUATION_FAILED',
+        message: failMsg,
         data: finalSub || {
           id: submissionId,
           assignment_id: taskId,

@@ -207,6 +207,8 @@ class OcrEvaluationQueue {
     const { evaluationId } = job;
     console.log(`[OCR Engine] Processing job: ${evaluationId} (Active: ${this.activeWorkers}/${this.concurrencyLimit})`);
 
+    let updatedEvalRecord = null;
+
     // 1. Mark status = 'processing'
     if (this.serverSupabase) {
       await this.serverSupabase
