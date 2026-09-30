@@ -27,7 +27,9 @@ export const BitzReadingVisual: React.FC<BitzReadingVisualProps> = ({
   const [imageFailed, setImageFailed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const hasValidImage = Boolean(visualUrl) && !imageFailed;
+  // Only allow valid http/https URLs as image sources (reject raw R2 object keys)
+  const validatedUrl = visualUrl && visualUrl.startsWith('http') ? visualUrl : null;
+  const hasValidImage = Boolean(validatedUrl) && !imageFailed;
 
   if (variant === 'mobile') {
     if (!hasValidImage) {
@@ -42,7 +44,7 @@ export const BitzReadingVisual: React.FC<BitzReadingVisualProps> = ({
           </div>
         )}
         <img
-          src={visualUrl!}
+          src={validatedUrl!}
           alt={title}
           onError={() => setImageFailed(true)}
           onLoad={() => setIsLoaded(true)}
@@ -66,7 +68,7 @@ export const BitzReadingVisual: React.FC<BitzReadingVisualProps> = ({
             </div>
           )}
           <img
-            src={visualUrl!}
+            src={validatedUrl!}
             alt={title}
             onError={() => setImageFailed(true)}
             onLoad={() => setIsLoaded(true)}

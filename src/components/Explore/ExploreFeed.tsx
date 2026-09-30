@@ -84,8 +84,15 @@ export const ExploreFeed: React.FC = () => {
   }, [searchParams, token]);
 
   // Fetch Feed from Server
+  const abortControllerRef = useRef<AbortController | null>(null);
   const fetchFeed = useCallback(
     async (targetPage = 1, isAppend = false) => {
+      // Abort any in-flight request to prevent race conditions
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
       if (targetPage === 1) setLoading(true);
       else setLoadingMore(true);
       setError(null);
@@ -94,7 +101,7 @@ export const ExploreFeed: React.FC = () => {
         const res = await knowledgeBitzService.getFeed(
           {
             page: targetPage,
-            limit: 8,
+            limit: targetPage === 1 ? 12 : 8,
             topic: activeTopic === 'all' ? null : activeTopic,
             difficulty: difficultyFilter === 'all' ? null : difficultyFilter,
             search: searchQuery.trim(),
@@ -302,7 +309,7 @@ export const ExploreFeed: React.FC = () => {
         {loading ? (
           // Loading Skeletons
           <div className="space-y-4">
-            {[1, 2].map((n) => (
+            {[1, 2, 3, 4].map((n) => (
               <div
                 key={n}
                 className={`rounded-3xl border overflow-hidden animate-pulse p-4 sm:p-5 space-y-4 max-w-xl mx-auto w-full ${

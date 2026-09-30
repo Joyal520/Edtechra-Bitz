@@ -60,8 +60,9 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
   }, [bitz.id, bitz.bitz_code, bitz.visual_url, bitz.category]);
 
   const category = getCategoryById(bitz.category || bitz.topic_id);
-  // Strict Image Priority: If visual_url exists and hasn't failed to load, it ALWAYS wins
-  const hasImage = Boolean(bitz.visual_url) && !imgLoadError;
+  // Strict Image Priority: visual_url must be a valid http/https URL and not have failed loading
+  const imageUrl = bitz.visual_url && bitz.visual_url.startsWith('http') ? bitz.visual_url : null;
+  const hasImage = Boolean(imageUrl) && !imgLoadError;
 
   // Double-tap touch/click detection
   const lastTapRef = useRef<number>(0);
@@ -187,12 +188,17 @@ export const KnowledgeBitzDiscoveryCard: React.FC<KnowledgeBitzDiscoveryCardProp
             )}
 
             <img
-              src={bitz.visual_url!}
+              src={imageUrl!}
               alt={bitz.title}
               loading="lazy"
               decoding="async"
               onLoad={() => setImgLoaded(true)}
-              onError={() => setImgLoadError(true)}
+              onError={() => {
+                if (process.env.NODE_ENV !== 'production') {
+                  console.warn(`[Feed Image Error] Failed to load image for bitz ${bitz.id} (${bitz.bitz_code}): ${imageUrl}`);
+                }
+                setImgLoadError(true);
+              }}
               className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-[1.03] ${
                 imgLoaded ? 'opacity-100' : 'opacity-0'
               }`}

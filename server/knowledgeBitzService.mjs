@@ -660,8 +660,25 @@ class KnowledgeBitzService {
         score = Math.max(0, 100 - ageHours);
       }
 
+      // Resolve visual_url: prefer visual_url, fallback to image_url if present
+      let resolvedVisualUrl = b.visual_url || b.image_url || null;
+      
+      // If the URL is a raw R2 object key (not a full URL), prepend the R2 public base
+      if (resolvedVisualUrl && !resolvedVisualUrl.startsWith('http') && !resolvedVisualUrl.startsWith('data:')) {
+        const r2PublicBase = process.env.R2_PUBLIC_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL || '';
+        if (r2PublicBase) {
+          resolvedVisualUrl = `${r2PublicBase.replace(/\/$/, '')}/${resolvedVisualUrl.replace(/^\//, '')}`;
+        }
+      }
+      
+      // Sanitize: reject obviously invalid or blank URLs
+      if (resolvedVisualUrl && resolvedVisualUrl.trim() === '') {
+        resolvedVisualUrl = null;
+      }
+
       return {
         ...b,
+        visual_url: resolvedVisualUrl,
         _score: score,
         is_liked_by_me: userLikes.has(b.id),
         is_saved_by_me: userBookmarks.has(b.id),
@@ -1184,12 +1201,27 @@ STRICT RESTRICTIONS:
           totalSaves
         };
 
-        const formattedBitz = (bitzData || []).map(b => ({
-          ...b,
-          image_url: b.visual_url || b.image_url || null,
-          visual_url: b.visual_url || b.image_url || null,
-          image_source: b.image_source || (b.visual_url ? 'custom' : 'none')
-        }));
+        const formattedBitz = (bitzData || []).map(b => {
+          let resolvedVisualUrl = b.visual_url || b.image_url || null;
+          
+          if (resolvedVisualUrl && !resolvedVisualUrl.startsWith('http') && !resolvedVisualUrl.startsWith('data:')) {
+            const r2PublicBase = process.env.R2_PUBLIC_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL || '';
+            if (r2PublicBase) {
+              resolvedVisualUrl = `${r2PublicBase.replace(/\/$/, '')}/${resolvedVisualUrl.replace(/^\//, '')}`;
+            }
+          }
+          
+          if (resolvedVisualUrl && resolvedVisualUrl.trim() === '') {
+            resolvedVisualUrl = null;
+          }
+          
+          return {
+            ...b,
+            image_url: resolvedVisualUrl,
+            visual_url: resolvedVisualUrl,
+            image_source: b.image_source || (resolvedVisualUrl ? 'custom' : 'none')
+          };
+        });
 
         return {
           success: true,

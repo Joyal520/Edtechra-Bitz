@@ -70,6 +70,21 @@ export const knowledgeBitzService = {
         if (!error && Array.isArray(data)) {
           let items = data as KnowledgeBitzItem[];
 
+          // Normalize image URLs: resolve R2 object keys and clean empty strings
+          items = items.map(b => {
+            let resolvedVisualUrl = b.visual_url || null;
+            // If it's an R2 object key (not a full URL), it can't be rendered directly
+            // Only full URLs (http/https) or data: URIs are valid for <img> src
+            if (resolvedVisualUrl && resolvedVisualUrl.trim() === '') {
+              resolvedVisualUrl = null;
+            }
+            return {
+              ...b,
+              visual_url: resolvedVisualUrl,
+              visual_status: resolvedVisualUrl ? 'ready' as const : (b.visual_status || 'missing' as const),
+            };
+          });
+
           // Flexible topic/category matching
           if (params.topic && params.topic !== 'all') {
             const t = params.topic.toLowerCase().trim();
