@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, AuthModalMode, AuthIntent, AuthState } from '@/types';
+import { saveCurrentAccount } from '@/utils/accountSwitcher';
 
 interface AuthContextType {
   authState: AuthState;
@@ -136,6 +137,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           created_at: data.created_at || currentUser.created_at,
           updated_at: data.updated_at
         };
+        saveCurrentAccount({
+          id: userProfile.id,
+          email: userProfile.email,
+          full_name: userProfile.full_name,
+          avatar_url: userProfile.avatar_url,
+          role: userProfile.role
+        });
         return userProfile;
       }
 
@@ -153,6 +161,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: currentUser.created_at
       };
 
+      saveCurrentAccount({
+        id: fallbackProfile.id,
+        email: fallbackProfile.email,
+        full_name: fallbackProfile.full_name,
+        avatar_url: fallbackProfile.avatar_url,
+        role: fallbackProfile.role
+      });
       return fallbackProfile;
     } catch (err) {
       console.error('[AuthContext] Unexpected error resolving user profile:', err);

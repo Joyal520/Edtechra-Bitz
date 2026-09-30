@@ -20,6 +20,14 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
   onSuccess
 }) => {
   const existingSub = assignment?.my_submission;
+  const isAlreadySubmitted = Boolean(
+    existingSub && (
+      existingSub.status === 'submitted' ||
+      existingSub.status === 'graded' ||
+      existingSub.status === 'completed' ||
+      Boolean(existingSub.submitted_at)
+    )
+  );
   const [textResponse, setTextResponse] = useState(existingSub?.text_response || '');
   const [attachments, setAttachments] = useState<AssignmentAttachment[]>(existingSub?.file_urls || []);
   const [isUploading, setIsUploading] = useState(false);
@@ -143,8 +151,10 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#026fc3] bg-blue-50 px-2 py-0.5 rounded-md">
-              Submit Task
+            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+              isAlreadySubmitted ? 'bg-emerald-100 text-emerald-800' : 'text-[#026fc3] bg-blue-50'
+            }`}>
+              {isAlreadySubmitted ? 'Task Completed' : 'Submit Task'}
             </span>
             <h2 className="text-base font-black text-slate-900 mt-1 line-clamp-1">
               {assignment.title}
@@ -159,116 +169,191 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
           </button>
         </div>
 
-        {/* Existing Feedback notice if graded */}
-        {existingSub?.status === 'graded' && (
-          <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs space-y-1">
-            <div className="font-extrabold text-emerald-800 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Score: {existingSub.points_awarded} / {assignment.points} points</span>
+        {/* COMPLETED / SUBMITTED READ-ONLY VIEW */}
+        {isAlreadySubmitted ? (
+          <div className="mt-4 space-y-4">
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/90 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>You completed this task</span>
+                </span>
+                {existingSub?.submitted_at && (
+                  <span className="text-[11px] font-semibold text-emerald-700">
+                    Submitted {new Date(existingSub.submitted_at).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </span>
+                )}
+              </div>
+
+              {existingSub?.status === 'graded' && existingSub.points_awarded != null && (
+                <div className="text-xs font-bold text-emerald-800 pt-1 border-t border-emerald-200/60">
+                  Score: {existingSub.points_awarded} / {assignment.points} points
+                </div>
+              )}
+
+              {existingSub?.teacher_feedback && (
+                <p className="text-xs text-emerald-800 font-medium italic pt-1">
+                  &ldquo;{existingSub.teacher_feedback}&rdquo;
+                </p>
+              )}
             </div>
-            {existingSub.teacher_feedback && (
-              <p className="text-emerald-700 font-medium">"{existingSub.teacher_feedback}"</p>
-            )}
-          </div>
-        )}
 
-        {/* Error notification */}
-        {errorMessage && (
-          <div className="mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
-            {errorMessage}
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
-              Your Response / Notes
-            </label>
-            <textarea
-              rows={4}
-              value={textResponse}
-              onChange={(e) => setTextResponse(e.target.value)}
-              placeholder="Type your answer, summary, or response here..."
-              className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all resize-none shadow-2xs select-text"
-            />
-          </div>
-
-          {/* Attachment list */}
-          {attachments.length > 0 && (
+            {/* Submitted Text Response */}
             <div className="space-y-1.5">
               <label className="block text-xs font-extrabold text-slate-700">
-                Attached Files ({attachments.length})
+                Your Submitted Response
               </label>
-              <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                {attachments.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-bold text-[#026fc3] hover:underline truncate"
-                      >
-                        {file.name}
-                      </a>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAttachment(idx)}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded-md"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                {existingSub?.text_response || 'No written text was submitted.'}
               </div>
             </div>
-          )}
 
-          {/* File Upload Dropzone */}
-          <div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              className="hidden"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt,.zip"
-            />
-            <button
-              type="button"
-              disabled={isUploading}
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 p-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-2xl text-xs font-extrabold text-slate-600 transition-all cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-slate-400" />
-              <span>{isUploading ? 'Uploading to R2 Storage...' : '+ Attach Document or Image (R2)'}</span>
-            </button>
-          </div>
+            {/* Attached Files List (Read-only) */}
+            {attachments.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="block text-xs font-extrabold text-slate-700">
+                  Attached Files ({attachments.length})
+                </label>
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {attachments.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-bold text-[#026fc3] hover:underline truncate"
+                        >
+                          {file.name}
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-          {/* Form Actions */}
-          <div className="pt-2 flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isUploading}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Submitting...' : 'Submit Work'}</span>
-            </button>
+            {/* View-Only Close Button */}
+            <div className="pt-2 flex items-center justify-end border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
-        </form>
+        ) : (
+          /* UNCOMPLETED / SUBMIT FORM */
+          <>
+            {/* Error notification */}
+            {errorMessage && (
+              <div className="mt-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                {errorMessage}
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
+                  Your Response / Notes
+                </label>
+                <textarea
+                  rows={4}
+                  value={textResponse}
+                  onChange={(e) => setTextResponse(e.target.value)}
+                  placeholder="Type your answer, summary, or response here..."
+                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all resize-none shadow-2xs select-text"
+                />
+              </div>
+
+              {/* Attachment list */}
+              {attachments.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-extrabold text-slate-700">
+                    Attached Files ({attachments.length})
+                  </label>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {attachments.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Paperclip className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-bold text-[#026fc3] hover:underline truncate"
+                          >
+                            {file.name}
+                          </a>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachment(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-md"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* File Upload Dropzone */}
+              <div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt,.zip"
+                />
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-2xl text-xs font-extrabold text-slate-600 transition-all cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-slate-400" />
+                  <span>{isUploading ? 'Uploading to R2 Storage...' : '+ Attach Document or Image (R2)'}</span>
+                </button>
+              </div>
+
+              {/* Form Actions */}
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || isUploading}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? 'Submitting...' : 'Submit Work'}</span>
+                </button>
+              </div>
+            </form>
+          </>
+        )}
 
       </div>
     </div>

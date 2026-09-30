@@ -12,7 +12,10 @@ import {
   ChevronRight,
   HelpCircle,
   Plus,
-  X
+  X,
+  Check,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 import { Classroom, ClassroomMessage, Assignment, ClassroomExam } from '@/types/classroom';
 import { LiveQuizSession } from '@/types/liveQuiz';
@@ -37,6 +40,10 @@ export interface StreamItem {
   rawId: string;
   rawItem: any;
   onAction?: () => void;
+  isCompleted?: boolean;
+  submittedAt?: string | null;
+  scoreText?: string | null;
+  actionLabel?: string;
 }
 
 export interface ClassroomMessagesProps {
@@ -119,21 +126,64 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
 
+      const sub = a.my_submission;
+      // Real student completion detection from submission record
+      const isCompleted =
+        !isTeacher &&
+        Boolean(
+          sub &&
+            (sub.status === 'submitted' ||
+              sub.status === 'graded' ||
+              sub.status === 'completed' ||
+              sub.status === 'evaluating' ||
+              sub.status === 'processing' ||
+              Boolean(sub.submitted_at))
+        );
+
+      const isGraded = Boolean(
+        sub &&
+          (sub.status === 'graded' ||
+            sub.points_awarded != null ||
+            (sub as any).final_score != null)
+      );
+      const score = sub?.points_awarded ?? (sub as any)?.final_score;
+
       const isDueSoon =
         a.due_date &&
         new Date(a.due_date).getTime() - Date.now() < 86400000 * 2 &&
         new Date(a.due_date).getTime() > Date.now();
       const isOverdue = a.due_date && new Date(a.due_date).getTime() < Date.now();
 
+      let statusBadge = isOverdue ? 'Overdue' : isDueSoon ? 'Due Soon' : 'Available';
+      let description =
+        a.instructions || 'Complete the assignment and submit your work before the deadline.';
+      let scoreText: string | null = null;
+      let actionLabel = isTeacher ? 'Review Work' : 'Start Task';
+
+      if (isCompleted) {
+        statusBadge = 'COMPLETED';
+        description = 'You completed this task';
+        scoreText = isGraded && score != null ? `${score} / ${a.points} pts` : '✓ Submission received';
+        actionLabel = isGraded ? 'View Result' : 'View Submission';
+      } else if (isTeacher) {
+        statusBadge = isOverdue ? 'Overdue' : 'Active';
+        scoreText = `${a.submission_count ?? 0} Submissions`;
+        actionLabel = 'Review Work';
+      }
+
       items.push({
         id: key,
         type: 'task',
         title: a.title || 'Classroom Task',
-        description: a.instructions || 'Complete the assignment and submit your work before the deadline.',
+        description,
         createdAt: a.created_at || new Date().toISOString(),
         dueDate: a.due_date,
         points: a.points || 100,
-        statusBadge: isOverdue ? 'Overdue' : isDueSoon ? 'Due Soon' : 'New',
+        statusBadge,
+        isCompleted,
+        submittedAt: sub?.submitted_at || null,
+        scoreText,
+        actionLabel,
         rawId: a.id,
         rawItem: a,
         onAction: () => onOpenTask?.(a)
@@ -150,17 +200,43 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       const totalMarks = e.total_marks || 100;
       const startsAt = e.starts_at;
 
+      const result = e.latest_result;
+      const isExamCompleted =
+        !isTeacher &&
+        Boolean(
+          result &&
+            (result.status === 'submitted' ||
+              result.status === 'graded' ||
+              Boolean(result.submitted_at))
+        );
+
+      let statusBadge = startsAt && new Date(startsAt).getTime() > Date.now() ? 'Scheduled' : 'Active';
+      let description = e.description || e.instructions || 'Comprehensive timed assessment covering class curriculum.';
+      let scoreText: string | null = null;
+      let actionLabel = isTeacher ? 'Review Results' : 'Take Exam';
+
+      if (isExamCompleted) {
+        statusBadge = 'SUBMITTED';
+        description = 'You completed this exam';
+        scoreText = result?.score != null ? `Score: ${result.score} / ${totalMarks}` : '✓ Submitted';
+        actionLabel = 'View Result';
+      }
+
       items.push({
         id: key,
         type: 'exam',
         title: e.title || 'Classroom Exam',
-        description: e.description || e.instructions || 'Comprehensive timed assessment covering class curriculum.',
+        description,
         createdAt: e.created_at || new Date().toISOString(),
         scheduledAt: startsAt,
         points: totalMarks,
         questionCount: qCount,
         durationMinutes: e.duration_minutes || 30,
-        statusBadge: startsAt && new Date(startsAt).getTime() > Date.now() ? 'Scheduled' : 'Active',
+        statusBadge,
+        isCompleted: isExamCompleted,
+        submittedAt: result?.submitted_at || null,
+        scoreText,
+        actionLabel,
         rawId: e.id,
         rawItem: e,
         onAction: () => onOpenExam?.(e)
@@ -187,6 +263,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           scheduledAt: s.scheduled_start_at || s.started_at,
           questionCount: qCount,
           statusBadge: isLive ? 'Live Now' : isScheduled ? 'Starting Soon' : 'Active',
+          actionLabel: isLive ? 'Join Now' : 'Details',
           rawId: s.id,
           rawItem: s,
           onAction: () => onOpenLiveQuiz?.(s)
@@ -200,15 +277,38 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
 
+      const compSub = c.my_submission;
+      const isCompCompleted =
+        !isTeacher &&
+        Boolean(
+          compSub &&
+            (compSub.status === 'submitted' ||
+              compSub.status === 'completed' ||
+              Boolean(compSub.submitted_at))
+        );
+
+      let statusBadge = 'Active';
+      let description = c.description || c.instructions || 'Submit your creative work for AI-powered evaluation and class leaderboard.';
+      let actionLabel = isTeacher ? 'View Entries' : 'Participate';
+
+      if (isCompCompleted) {
+        statusBadge = 'Participated';
+        description = 'You participated in this challenge';
+        actionLabel = 'View Entry';
+      }
+
       items.push({
         id: key,
         type: 'competition',
         title: c.title || 'Creative Problem Challenge',
-        description: c.description || c.instructions || 'Submit your creative work for AI-powered evaluation and class leaderboard.',
+        description,
         createdAt: c.created_at || new Date().toISOString(),
         dueDate: c.due_date,
         points: c.points || 100,
-        statusBadge: 'Active',
+        statusBadge,
+        isCompleted: isCompCompleted,
+        submittedAt: compSub?.submitted_at || null,
+        actionLabel,
         rawId: c.id,
         rawItem: c,
         onAction: () => onOpenChallenge?.(c)
@@ -240,7 +340,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       if (!a.isPinned && b.isPinned) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [assignments, exams, activeLiveQuizSession, challenges, messages, classroom?.title, onOpenTask, onOpenExam, onOpenLiveQuiz, onOpenChallenge]);
+  }, [assignments, exams, activeLiveQuizSession, challenges, messages, classroom?.title, isTeacher, onOpenTask, onOpenExam, onOpenLiveQuiz, onOpenChallenge]);
 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -399,7 +499,78 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           ) : (
             <div className="space-y-3.5 max-h-[640px] overflow-y-auto pr-1">
               {streamItems.map((item) => {
-                // TASK CARD
+                // TASK CARD - COMPLETED STATE (STUDENT)
+                if (item.type === 'task' && item.isCompleted) {
+                  return (
+                    <article
+                      key={item.id}
+                      onClick={item.onAction}
+                      className="bg-[#F4FAF6] hover:bg-white rounded-2xl p-4 sm:p-5 border-2 border-emerald-200/90 hover:border-emerald-400 shadow-[0_2px_12px_rgba(5,150,105,0.04)] hover:shadow-[0_8px_24px_rgba(5,150,105,0.10)] transition-all duration-200 flex items-start sm:items-center justify-between gap-3.5 group cursor-pointer"
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                        {/* Soft Green Check Icon Box */}
+                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-100/90 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200 shadow-2xs group-hover:scale-105 transition-transform mt-0.5 sm:mt-0">
+                          <CheckCircle2 className="w-6 h-6 stroke-[2.4]" />
+                        </div>
+
+                        <div className="space-y-1.5 min-w-0 flex-1">
+                          {/* Top Row: Type Pill + Relative Time */}
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-300 shadow-2xs">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>COMPLETED</span>
+                              </span>
+                              {item.scoreText && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                                  <span>{item.scoreText}</span>
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-semibold text-slate-400">
+                              {formatRelativeTime(item.createdAt)}
+                            </span>
+                          </div>
+
+                          {/* Title */}
+                          <h4 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-emerald-900 transition-colors leading-tight">
+                            {item.title}
+                          </h4>
+
+                          {/* Completed Subtitle */}
+                          <p className="text-xs text-emerald-700 font-bold flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>You completed this task</span>
+                          </p>
+
+                          {/* Metadata Pills Row */}
+                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                            {item.submittedAt && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200/80 shadow-2xs">
+                                <Calendar className="w-3 h-3 text-emerald-600" />
+                                <span>Submitted: {formatScheduledDate(item.submittedAt)}</span>
+                              </span>
+                            )}
+                            {item.points != null && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[11px] font-bold border border-slate-200 shadow-2xs">
+                                <Award className="w-3 h-3 text-amber-500" />
+                                <span>{item.points} points</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Action: View Submission / View Result */}
+                      <div className="flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white border border-emerald-200 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 font-extrabold text-xs transition-all shadow-2xs shrink-0">
+                        <span>{item.actionLabel || 'View Submission'}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                    </article>
+                  );
+                }
+
+                // TASK CARD - AVAILABLE / ACTIVE STATE
                 if (item.type === 'task') {
                   return (
                     <article
@@ -424,7 +595,9 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                   item.statusBadge === 'Overdue'
                                     ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : item.statusBadge === 'Due Soon'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-purple-50 text-purple-700 border border-purple-200'
                                 }`}>
                                   {item.statusBadge}
                                 </span>
@@ -459,13 +632,84 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
                                 <span>{item.points} points</span>
                               </span>
                             )}
+                            {item.scoreText && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold border border-slate-200 shadow-2xs">
+                                <span>{item.scoreText}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
 
                       {/* Right Circular Action Arrow Button */}
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white border border-slate-200 group-hover:border-purple-300 text-slate-400 group-hover:text-purple-700 flex items-center justify-center shrink-0 shadow-2xs group-hover:shadow-xs group-hover:translate-x-0.5 transition-all">
+                      <div className="flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white border border-slate-200 group-hover:border-purple-300 text-slate-600 group-hover:text-purple-800 font-extrabold text-xs transition-all shadow-2xs shrink-0">
+                        <span>{item.actionLabel || (isTeacher ? 'Review' : 'Start Task')}</span>
                         <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                      </div>
+                    </article>
+                  );
+                }
+
+                // EXAM CARD - COMPLETED STATE
+                if (item.type === 'exam' && item.isCompleted) {
+                  return (
+                    <article
+                      key={item.id}
+                      onClick={item.onAction}
+                      className="bg-[#F4FAF6] hover:bg-white rounded-2xl p-4 sm:p-5 border-2 border-emerald-200/90 hover:border-emerald-400 shadow-[0_2px_12px_rgba(5,150,105,0.04)] hover:shadow-[0_8px_24px_rgba(5,150,105,0.10)] transition-all duration-200 flex items-start sm:items-center justify-between gap-3.5 group cursor-pointer"
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                        <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-100/90 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200 shadow-2xs group-hover:scale-105 transition-transform mt-0.5 sm:mt-0">
+                          <CheckCircle2 className="w-6 h-6 stroke-[2.4]" />
+                        </div>
+
+                        <div className="space-y-1.5 min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-300 shadow-2xs">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>SUBMITTED</span>
+                              </span>
+                              {item.scoreText && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                                  <span>{item.scoreText}</span>
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-semibold text-slate-400">
+                              {formatRelativeTime(item.createdAt)}
+                            </span>
+                          </div>
+
+                          <h4 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-emerald-900 transition-colors leading-tight">
+                            {item.title}
+                          </h4>
+
+                          <p className="text-xs text-emerald-700 font-bold flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>You completed this exam</span>
+                          </p>
+
+                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                            {item.submittedAt && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200/80 shadow-2xs">
+                                <Calendar className="w-3 h-3 text-emerald-600" />
+                                <span>Submitted: {formatScheduledDate(item.submittedAt)}</span>
+                              </span>
+                            )}
+                            {item.points != null && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[11px] font-bold border border-slate-200 shadow-2xs">
+                                <Award className="w-3 h-3 text-amber-500" />
+                                <span>{item.points} marks</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white border border-emerald-200 text-emerald-800 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-600 font-extrabold text-xs transition-all shadow-2xs shrink-0">
+                        <span>View Result</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </div>
                     </article>
                   );

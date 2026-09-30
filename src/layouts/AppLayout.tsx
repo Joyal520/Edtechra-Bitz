@@ -12,12 +12,14 @@ import {
   ChevronDown,
   Download,
   Settings,
-  GraduationCap
+  GraduationCap,
+  Users
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
 import { AuthModal } from '@/components/AuthModal';
 import { UserSettingsModal } from '@/components/UserSettingsModal';
+import { AccountSwitcherModal } from '@/components/AccountSwitcherModal';
 import { useAuth } from '@/context/AuthContext';
 import { getFirstName } from '@/utils/greeting';
 
@@ -25,6 +27,7 @@ export const AppLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -387,6 +390,18 @@ export const AppLayout: React.FC = () => {
 
                     <div className="border-t border-stone-100 pt-1">
                       <button
+                        type="button"
+                        onClick={() => {
+                          setUserDropdownOpen(false);
+                          setAccountSwitcherOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#026fc3] transition-colors text-left cursor-pointer"
+                      >
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span>Switch Account</span>
+                      </button>
+
+                      <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
                       >
@@ -587,6 +602,21 @@ export const AppLayout: React.FC = () => {
                 </button>
               )}
 
+              {/* Switch Account on mobile if logged in */}
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setAccountSwitcherOpen(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all text-left cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-slate-400" />
+                  <span>Switch Account</span>
+                </button>
+              )}
+
               {/* Sign Out on mobile if logged in */}
               {user && (
                 <button
@@ -644,6 +674,12 @@ export const AppLayout: React.FC = () => {
       <UserSettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      {/* Account Switcher Modal */}
+      <AccountSwitcherModal
+        isOpen={accountSwitcherOpen}
+        onClose={() => setAccountSwitcherOpen(false)}
       />
 
       {/* Global Authentication Modal */}

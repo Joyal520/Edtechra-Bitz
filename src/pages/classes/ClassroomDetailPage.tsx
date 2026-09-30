@@ -23,7 +23,8 @@ import {
   CalendarDays,
   GraduationCap,
   Trophy,
-  Flame
+  Flame,
+  Pencil
 } from 'lucide-react';
 import {
   Classroom,
@@ -84,6 +85,8 @@ import { CourseClassroomAssignment } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 import { StudentReportModal } from '@/components/classes/student/StudentReportModal';
+import { EditClassroomModal } from '@/components/classes/EditClassroomModal';
+import { getClassroomTheme } from '@/utils/classroomThemes';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -138,6 +141,8 @@ export const ClassroomDetailPage: React.FC = () => {
   const [studentAssessmentHistoryOpen, setStudentAssessmentHistoryOpen] = useState(false);
   const [studentReportModalOpen, setStudentReportModalOpen] = useState(false);
   const [studentReportInitialTab, setStudentReportInitialTab] = useState<'results' | 'corrected' | 'progress' | 'achievements'>('results');
+  const [editClassroomModalOpen, setEditClassroomModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
@@ -810,25 +815,45 @@ export const ClassroomDetailPage: React.FC = () => {
             {/* LEFT: Headline, Details, Tagline & Action */}
             <div className="lg:col-span-7 space-y-3.5 sm:space-y-4">
               
-              {/* Classroom Title — Two-Tone Styling */}
+              {/* Classroom Title — Two-Tone Styling with Teacher Edit Control */}
               <div className="space-y-2.5">
                 {(() => {
                   const titleStr = (classroom.title || 'Classroom').trim();
                   const words = titleStr.split(' ');
-                  if (words.length > 1) {
-                    const lastWord = words.pop();
-                    const firstPart = words.join(' ');
-                    return (
-                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
-                        <span>{firstPart} </span>
-                        <span className="text-[#0284c7]">{lastWord}</span>
-                      </h1>
-                    );
-                  }
+                  const activeTheme = getClassroomTheme(classroom.theme);
+
                   return (
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
-                      {classroom.title}
-                    </h1>
+                    <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                      {words.length > 1 ? (
+                        (() => {
+                          const lastWord = words.pop();
+                          const firstPart = words.join(' ');
+                          return (
+                            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
+                              <span>{firstPart} </span>
+                              <span style={{ color: activeTheme.hex }}>{lastWord}</span>
+                            </h1>
+                          );
+                        })()
+                      ) : (
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight leading-tight text-[#0f172a] break-words">
+                          {classroom.title}
+                        </h1>
+                      )}
+
+                      {/* Small pencil/edit icon next to classroom name — ONLY visible to teachers */}
+                      {isTeacher && (
+                        <button
+                          type="button"
+                          onClick={() => setEditClassroomModalOpen(true)}
+                          className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-900 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                          title="Edit Classroom Name & Colour"
+                          aria-label="Edit Classroom"
+                        >
+                          <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3]" />
+                        </button>
+                      )}
+                    </div>
                   );
                 })()}
 
@@ -2354,6 +2379,31 @@ export const ClassroomDetailPage: React.FC = () => {
         } : null)}
         onClose={() => setStudentAssessmentHistoryOpen(false)}
       />
+
+      {/* Edit Classroom Modal (Teacher only) */}
+      {isTeacher && (
+        <EditClassroomModal
+          isOpen={editClassroomModalOpen}
+          classroom={classroom}
+          onClose={() => setEditClassroomModalOpen(false)}
+          onSuccess={(updated) => {
+            setClassroom((prev) =>
+              prev ? { ...prev, title: updated.title, theme: updated.theme } : null
+            );
+            setToastMessage('Classroom updated');
+            setTimeout(() => setToastMessage(null), 3500);
+            loadAllClassroomData(true);
+          }}
+        />
+      )}
+
+      {/* Subtle, non-intrusive success notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-slate-900/95 text-white rounded-2xl shadow-xl border border-slate-700/80 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
     </div>
   );

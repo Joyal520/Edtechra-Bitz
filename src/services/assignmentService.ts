@@ -206,17 +206,33 @@ class AssignmentService {
     if (!userId) return { error: 'You must be logged in to submit work.' };
 
     try {
+      // Check if student has already submitted this assignment
+      const { data: existing } = await supabase
+        .from('assignment_submissions')
+        .select('*')
+        .eq('assignment_id', payload.assignment_id)
+        .eq('student_id', userId)
+        .maybeSingle();
+
+      if (existing && (existing.status === 'submitted' || existing.status === 'graded' || existing.status === 'completed')) {
+        return {
+          data: existing,
+          error: 'You have already submitted this task. Duplicate submissions are not allowed.'
+        };
+      }
+
       const { data, error } = await supabase
         .from('assignment_submissions')
         .upsert(
           {
+            ...(existing?.id ? { id: existing.id } : {}),
             assignment_id: payload.assignment_id,
             classroom_id: payload.classroom_id,
             student_id: userId,
             text_response: (payload.text_response || '').trim(),
             file_urls: payload.file_urls || [],
             status: 'submitted',
-            submitted_at: new Date().toISOString(),
+            submitted_at: existing?.submitted_at || new Date().toISOString(),
             updated_at: new Date().toISOString()
           },
           { onConflict: 'assignment_id,student_id' }
