@@ -1416,11 +1416,21 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         onClose={() => setIsPreviewModalOpen(false)}
         onUpdateAssessment={(updated) => updateAssessment(() => updated)}
         onPublishExam={async (settings) => {
-          const updatedMeta = settings?.mode === 'schedule' && settings.scheduledDate
+          let startsAt: string | null = null;
+          let endsAt: string | null = null;
+          const duration = Number(assessment.exam.durationMinutes) || 60;
+
+          if (settings?.mode === 'schedule' && settings.scheduledDate) {
+            const startObj = new Date(`${settings.scheduledDate}T${settings.startTime || '09:00'}:00`);
+            startsAt = startObj.toISOString();
+            endsAt = new Date(startObj.getTime() + duration * 60 * 1000).toISOString();
+          }
+
+          const updatedMeta = startsAt
             ? {
                 ...assessment.exam,
-                startsAt: `${settings.scheduledDate}T${settings.startTime || '09:00'}:00`,
-                endsAt: `${settings.scheduledDate}T${settings.endTime || '11:00'}:00`
+                startsAt,
+                endsAt
               }
             : assessment.exam;
           const assessmentToSave: CanonicalAssessmentV2 = {

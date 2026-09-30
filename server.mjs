@@ -247,6 +247,29 @@ if (serverSupabase && process.env.VERCEL !== '1') {
   setInterval(() => {
     syncActiveLiveQuizSessions(serverSupabase).catch(() => {});
   }, 1000);
+
+  // Authoritative scheduled Exam Auto-Activation Ticker (Zero Teacher Browser Required)
+  const syncScheduledExams = async () => {
+    if (!serverSupabase) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: activated } = await serverSupabase
+        .from('classroom_exams')
+        .update({ status: 'active', updated_at: nowIso })
+        .eq('status', 'scheduled')
+        .lte('starts_at', nowIso)
+        .select('id, title');
+      if (activated && activated.length > 0) {
+        console.log(`[ExamScheduler] Authoritatively auto-activated ${activated.length} scheduled exam(s):`, activated.map(a => `${a.title} (${a.id})`));
+      }
+    } catch (err) {
+      // non-blocking
+    }
+  };
+  syncScheduledExams().catch(() => {});
+  setInterval(() => {
+    syncScheduledExams().catch(() => {});
+  }, 10000);
 }
 
 // ============================================================================
@@ -7496,6 +7519,318 @@ app.post('/api/classes/tasks', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/tasks:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to create task' });
+  }
+});
+
+// ============================================================================
+// AUTHORITATIVE RECENT ANNOUNCEMENTS LIFECYCLE API
+// Filters active announcements: 7-day cutoff, student submission status,
+// due date expiration, and exam schedule validity.
+// ============================================================================
+app.get('/api/classes/:classroomId/announcements', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database service unavailable.' });
+    }
+
+    const userId = authData.user.id;
+
+    // Check classroom and determine user role
+    const { data: classroom, error: cErr } = await serverSupabase
+      .from('classrooms')
+      .select('id, title, teacher_id')
+      .eq('id', classroomId)
+      .single();
+
+    if (cErr || !classroom) {
+      return res.status(404).json({ success: false, error: 'Classroom not found.' });
+    }
+
+    const isTeacher = classroom.teacher_id === userId || authData.isTeacher;
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const nowMs = now.getTime();
+    const sevenDaysAgo = new Date(nowMs - 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgoIso = sevenDaysAgo.toISOString();
+
+    // Fetch candidate records in parallel
+    const [
+      { data: tasks },
+      { data: exams },
+      { data: liveQuiz },
+      { data: challenges },
+      { data: messages },
+      { data: studentSubmissions },
+      { data: studentExamResults },
+      { data: studentChallengeSubs }
+    ] = await Promise.all([
+      // 1. Tasks in classroom
+      serverSupabase
+        .from('assignments')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false }),
+
+      // 2. Classroom Exams
+      serverSupabase
+        .from('classroom_exams')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .in('status', ['scheduled', 'published', 'active'])
+        .order('created_at', { ascending: false }),
+
+      // 3. Active / Scheduled Live Quizzes
+      serverSupabase
+        .from('live_quiz_sessions')
+        .select(`*, quiz:quizzes!quiz_id (id, title, description, questions)`)
+        .eq('classroom_id', classroomId)
+        .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
+        .order('created_at', { ascending: false })
+        .limit(3),
+
+      // 4. AI Challenges / Competitions
+      serverSupabase
+        .from('ai_challenges')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .order('created_at', { ascending: false }),
+
+      // 5. Teacher Messages (last 7 days only)
+      serverSupabase
+        .from('classroom_messages')
+        .select(`*, teacher:profiles!teacher_id (id, full_name, avatar_url)`)
+        .eq('classroom_id', classroomId)
+        .eq('is_deleted', false)
+        .gte('created_at', sevenDaysAgoIso)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false }),
+
+      // 6. Student Task Submissions (if student)
+      !isTeacher
+        ? serverSupabase
+            .from('assignment_submissions')
+            .select('id, assignment_id, status, submitted_at, points_awarded')
+            .eq('student_id', userId)
+        : Promise.resolve({ data: [] }),
+
+      // 7. Student Exam Results (if student)
+      !isTeacher
+        ? serverSupabase
+            .from('classroom_exam_results')
+            .select('id, exam_id, status, submitted_at, score')
+            .eq('student_id', userId)
+            .neq('status', 'in_progress')
+        : Promise.resolve({ data: [] }),
+
+      // 8. Student Challenge Submissions (if student)
+      !isTeacher
+        ? serverSupabase
+            .from('ai_challenge_submissions')
+            .select('id, challenge_id, status, submitted_at')
+            .eq('student_id', userId)
+        : Promise.resolve({ data: [] })
+    ]);
+
+    const completedTaskIds = new Set(
+      (studentSubmissions || [])
+        .filter(s => s.status === 'submitted' || s.status === 'graded' || s.status === 'completed' || s.submitted_at)
+        .map(s => s.assignment_id)
+    );
+
+    const completedExamIds = new Set(
+      (studentExamResults || [])
+        .filter(r => r.status !== 'in_progress' && (r.score != null || r.submitted_at != null))
+        .map(r => r.exam_id)
+    );
+
+    const completedChallengeIds = new Set(
+      (studentChallengeSubs || [])
+        .filter(c => c.status === 'submitted' || c.status === 'completed' || c.submitted_at)
+        .map(c => c.challenge_id)
+    );
+
+    const activeItems = [];
+    const seen = new Set();
+
+    // Helper for questions count
+    const extractQuestionCount = (e) => {
+      if (!e) return 0;
+      if (Array.isArray(e.questions_json)) {
+        const flat = e.questions_json.flatMap(s => Array.isArray(s?.questions) ? s.questions : (s?.question || s?.question_text ? [s] : []));
+        if (flat.length > 0) return flat.length;
+      }
+      if (e.questions_json?.sections && Array.isArray(e.questions_json.sections)) {
+        const flat = e.questions_json.sections.flatMap(s => s?.questions || []);
+        if (flat.length > 0) return flat.length;
+      }
+      if (Array.isArray(e.questions) && e.questions.length > 0) {
+        const flat = e.questions.flatMap(s => Array.isArray(s?.questions) ? s.questions : (s?.question || s?.question_text ? [s] : []));
+        if (flat.length > 0) return flat.length;
+      }
+      return Number(e.total_questions) || Number(e.questions_count) || 0;
+    };
+
+    // A. Tasks
+    (tasks || []).forEach(t => {
+      const key = `task-${t.id}`;
+      if (seen.has(key)) return;
+
+      // 1. Completion rule: if student completed, hide from announcement feed
+      if (!isTeacher && completedTaskIds.has(t.id)) return;
+
+      // 2. Due date rule: if past due, hide from active announcement feed
+      if (t.due_date && new Date(t.due_date).getTime() < nowMs) return;
+
+      // 3. 7-day rule: if older than 7 days and no future due date, hide
+      const createdMs = new Date(t.created_at || nowIso).getTime();
+      const hasFutureDue = t.due_date && new Date(t.due_date).getTime() >= nowMs;
+      if (createdMs < sevenDaysAgo.getTime() && !hasFutureDue) return;
+
+      seen.add(key);
+      const isDueSoon = t.due_date && (new Date(t.due_date).getTime() - nowMs < 86400000 * 2);
+      activeItems.push({
+        id: key,
+        rawId: t.id,
+        type: 'task',
+        title: t.title || 'Classroom Task',
+        description: t.instructions || 'Complete the assignment and submit your work before the deadline.',
+        createdAt: t.created_at || nowIso,
+        dueDate: t.due_date || null,
+        points: t.points || 100,
+        statusBadge: isDueSoon ? 'Due Soon' : 'Available',
+        rawItem: t
+      });
+    });
+
+    // B. Exams
+    (exams || []).forEach(e => {
+      const key = `exam-${e.id}`;
+      if (seen.has(key)) return;
+
+      // 1. Completion rule: if student submitted, hide from announcement feed
+      if (!isTeacher && completedExamIds.has(e.id)) return;
+
+      // 2. Expiration rule: if exam has ends_at and ends_at < now, hide
+      if (e.ends_at && new Date(e.ends_at).getTime() < nowMs) return;
+
+      // 3. 7-day rule: if older than 7 days and not future scheduled, hide
+      const createdMs = new Date(e.created_at || nowIso).getTime();
+      const isFutureScheduled = e.starts_at && new Date(e.starts_at).getTime() > nowMs;
+      if (createdMs < sevenDaysAgo.getTime() && !isFutureScheduled) return;
+
+      seen.add(key);
+      const qCount = extractQuestionCount(e);
+      activeItems.push({
+        id: key,
+        rawId: e.id,
+        type: 'exam',
+        title: e.title || 'Classroom Exam',
+        description: e.description || e.instructions || 'Comprehensive timed assessment covering class curriculum.',
+        createdAt: e.created_at || nowIso,
+        scheduledAt: e.starts_at || null,
+        points: e.total_marks || 100,
+        questionCount: qCount,
+        durationMinutes: e.duration_minutes || 60,
+        statusBadge: isFutureScheduled ? 'Scheduled' : 'Active',
+        rawItem: e
+      });
+    });
+
+    // C. Live Quiz
+    (liveQuiz || []).forEach(s => {
+      const key = `livequiz-${s.id}`;
+      if (seen.has(key)) return;
+      if (s.status === 'completed' || s.status === 'finished' || s.status === 'cancelled') return;
+
+      seen.add(key);
+      const isLive = s.status === 'in_progress' || s.status === 'reveal';
+      const isScheduled = s.status === 'scheduled' || Boolean(s.scheduled_start_at);
+      const qCount = s.quiz?.questions?.length || 15;
+
+      activeItems.push({
+        id: key,
+        rawId: s.id,
+        type: 'live_quiz',
+        title: s.quiz?.title || (classroom?.title ? `${classroom.title} Live Quiz` : 'Live Quiz Game'),
+        description: s.quiz?.description || 'Join the live quiz session and test your knowledge with real-time class leaderboards!',
+        createdAt: s.started_at || s.created_at || nowIso,
+        scheduledAt: s.scheduled_start_at || s.started_at || null,
+        questionCount: qCount,
+        statusBadge: isLive ? 'Live Now' : isScheduled ? 'Starting Soon' : 'Active',
+        rawItem: s
+      });
+    });
+
+    // D. Competitions
+    (challenges || []).forEach(c => {
+      const key = `comp-${c.id}`;
+      if (seen.has(key)) return;
+
+      if (!isTeacher && completedChallengeIds.has(c.id)) return;
+      if (c.due_date && new Date(c.due_date).getTime() < nowMs) return;
+
+      const createdMs = new Date(c.created_at || nowIso).getTime();
+      const hasFutureDue = c.due_date && new Date(c.due_date).getTime() >= nowMs;
+      if (createdMs < sevenDaysAgo.getTime() && !hasFutureDue) return;
+
+      seen.add(key);
+      activeItems.push({
+        id: key,
+        rawId: c.id,
+        type: 'competition',
+        title: c.title || 'Creative Problem Challenge',
+        description: c.description || c.instructions || 'Submit your creative work for AI-powered evaluation.',
+        createdAt: c.created_at || nowIso,
+        dueDate: c.due_date || null,
+        points: c.points || 100,
+        statusBadge: 'Active',
+        rawItem: c
+      });
+    });
+
+    // E. Teacher Messages (Strict 7-day lifecycle)
+    (messages || []).forEach(m => {
+      const key = `msg-${m.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      activeItems.push({
+        id: key,
+        rawId: m.id,
+        type: 'announcement',
+        title: m.is_pinned ? '📌 Pinned Announcement' : 'Classroom Announcement',
+        description: m.message,
+        createdAt: m.created_at || nowIso,
+        isPinned: Boolean(m.is_pinned),
+        authorName: m.teacher?.full_name || 'Class Teacher',
+        rawItem: m
+      });
+    });
+
+    // Sort: Pinned first, then newest createdAt -> oldest
+    activeItems.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return res.json({
+      success: true,
+      server_time: nowIso,
+      total_count: activeItems.length,
+      announcements: activeItems
+    });
+  } catch (err) {
+    console.error('[API /api/classes/:classroomId/announcements error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch announcements' });
   }
 });
 
@@ -17144,6 +17479,10 @@ app.all('/api/exam-engine', async (req, res) => {
         return res.status(404).json({ success: false, error: 'Exam not found.' });
       }
 
+      const now = new Date();
+      const serverTime = now.toISOString();
+      const serverTimestamp = now.getTime();
+
       let myResult = null;
       if (user) {
         const { data: resData } = await serverSupabase
@@ -17158,32 +17497,77 @@ app.all('/api/exam-engine', async (req, res) => {
         myResult = resData;
       }
 
-      const canStart = !myResult && (exam.status === 'published' || exam.status === 'active');
+      const startsAt = exam.starts_at ? new Date(exam.starts_at) : null;
+      const endsAt = exam.ends_at ? new Date(exam.ends_at) : null;
 
-      // If student has not submitted yet, strip correct answers and explanations for exam integrity
-      let sanitizedExam = { ...exam };
-      if (!myResult && action === 'get-student-exam') {
-        let rawSections = [];
-        if (Array.isArray(exam.questions_json) && exam.questions_json.length > 0) {
-          rawSections = exam.questions_json;
-        } else if (typeof exam.questions_json === 'string' && exam.questions_json.trim().startsWith('[')) {
+      const isScheduled = startsAt && startsAt.getTime() > serverTimestamp;
+      const isEnded = endsAt && endsAt.getTime() < serverTimestamp;
+
+      // Auto-activation: If exam was marked scheduled but its starts_at has arrived, update status to active
+      if (exam.status === 'scheduled' && startsAt && startsAt.getTime() <= serverTimestamp) {
+        try {
+          await serverSupabase
+            .from('classroom_exams')
+            .update({ status: 'active', updated_at: serverTime })
+            .eq('id', exam.id);
+          exam.status = 'active';
+        } catch (actErr) {
+          console.warn('[ExamEngine] Auto-activate update notice:', actErr);
+        }
+      }
+
+      let lifecycleStatus = exam.status || 'published';
+      if (exam.status === 'draft') {
+        lifecycleStatus = 'draft';
+      } else if (isEnded || exam.status === 'closed') {
+        lifecycleStatus = 'closed';
+      } else if (isScheduled) {
+        lifecycleStatus = 'scheduled';
+      } else if (exam.status === 'published' || exam.status === 'active') {
+        lifecycleStatus = 'active';
+      }
+
+      const canStart = !myResult && lifecycleStatus === 'active' && !isEnded;
+
+      // Extract raw sections/questions
+      let rawSections = [];
+      if (Array.isArray(exam.questions_json) && exam.questions_json.length > 0) {
+        rawSections = exam.questions_json;
+      } else if (typeof exam.questions_json === 'string' && exam.questions_json.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(exam.questions_json);
+          if (Array.isArray(parsed) && parsed.length > 0) rawSections = parsed;
+        } catch (e) {}
+      }
+      if (rawSections.length === 0) {
+        let rawQuestions = exam.questions;
+        if (typeof rawQuestions === 'string' && rawQuestions.trim().startsWith('[')) {
           try {
-            const parsed = JSON.parse(exam.questions_json);
-            if (Array.isArray(parsed) && parsed.length > 0) rawSections = parsed;
+            rawQuestions = JSON.parse(rawQuestions);
           } catch (e) {}
         }
-        if (rawSections.length === 0) {
-          let rawQuestions = exam.questions;
-          if (typeof rawQuestions === 'string' && rawQuestions.trim().startsWith('[')) {
-            try {
-              rawQuestions = JSON.parse(rawQuestions);
-            } catch (e) {}
-          }
-          if (Array.isArray(rawQuestions) && rawQuestions.length > 0) {
-            rawSections = [{ id: 'sec_1', title: 'General', questions: rawQuestions }];
-          }
+        if (Array.isArray(rawQuestions) && rawQuestions.length > 0) {
+          rawSections = [{ id: 'sec_1', title: 'General', questions: rawQuestions }];
         }
+      }
 
+      const totalQuestionsCount = rawSections.reduce((acc, s) => acc + (s.questions?.length || 0), 0);
+
+      let sanitizedExam = { ...exam };
+      sanitizedExam.lifecycle_status = lifecycleStatus;
+      sanitizedExam.question_count = totalQuestionsCount;
+
+      // If exam is scheduled in the future and student is requesting it, do NOT expose question content yet
+      if (isScheduled && action === 'get-student-exam' && !myResult) {
+        sanitizedExam.questions_json = rawSections.map((s, idx) => ({
+          id: s.id || `sec_${idx + 1}`,
+          title: s.title || `Section ${String.fromCharCode(65 + idx)}`,
+          questionCount: (s.questions || []).length,
+          questions: [] // Intentionally blank until exam starts
+        }));
+        sanitizedExam.questions = [];
+      } else if (!myResult && action === 'get-student-exam') {
+        // Exam is ACTIVE: sanitize questions (strip correct answers and explanations for security)
         const sanitizedSections = rawSections.map((s, idx) => ({
           ...s,
           id: s.id || `sec_${idx + 1}`,
@@ -17201,6 +17585,11 @@ app.all('/api/exam-engine', async (req, res) => {
       return res.json({
         success: true,
         exam: sanitizedExam,
+        lifecycle_status: lifecycleStatus,
+        server_time: serverTime,
+        server_timestamp: serverTimestamp,
+        is_scheduled: isScheduled,
+        question_count: totalQuestionsCount,
         latest_result: myResult,
         can_start: canStart
       });
@@ -17807,12 +18196,21 @@ app.post('/api/exams/publish', async (req, res) => {
       return res.status(400).json({ error: 'canonicalExam payload is required.' });
     }
 
+    const allQuestions = (canonicalExam.sections || []).flatMap(s => s.questions || []);
+    if (allQuestions.length === 0) {
+      return res.status(400).json({ error: 'Cannot publish an examination with 0 questions. Please add questions before publishing or scheduling.' });
+    }
+
     const examData = canonicalExam.exam || {};
     const totalMarks = (canonicalExam.sections || []).reduce((secAcc, sec) => {
       return secAcc + (sec.questions || []).reduce((qAcc, q) => qAcc + (Number(q.marks) || 1), 0);
     }, 0) || 100;
 
     const passMarks = Math.ceil((totalMarks * (examData.passPercentage || 40)) / 100);
+
+    const startsAt = schedule.startsAt || examData.startsAt || null;
+    const isFutureScheduled = Boolean(startsAt && new Date(startsAt).getTime() > Date.now());
+    const initialStatus = isFutureScheduled ? 'scheduled' : 'published';
 
     const record = {
       classroom_id: classroomId,
@@ -17834,8 +18232,8 @@ app.post('/api/exams/publish', async (req, res) => {
       show_marks_immediately: examData.showMarksImmediately !== false,
       show_correct_answers: examData.showCorrectAnswers !== false,
       password: examData.password || null,
-      starts_at: schedule.startsAt || examData.startsAt || null,
-      ends_at: schedule.endsAt || examData.endsAt || null,
+      starts_at: startsAt,
+      ends_at: schedule.endsAt || examData.endsAt || (startsAt ? new Date(new Date(startsAt).getTime() + (Number(examData.durationMinutes) || 45) * 60 * 1000).toISOString() : null),
       questions_json: canonicalExam.sections || [],
       questions: canonicalExam.sections || [],
       pedagogical_config: canonicalExam.requirements || {},
@@ -17844,7 +18242,7 @@ app.post('/api/exams/publish', async (req, res) => {
       brand_kit: canonicalExam.brandKit || {},
       branching_logic: canonicalExam.branchingLogic || {},
       survey_settings: canonicalExam.surveySettings || examData.surveySettings || {},
-      status: 'published',
+      status: initialStatus,
       published_at: new Date().toISOString()
     };
 
@@ -17856,10 +18254,10 @@ app.post('/api/exams/publish', async (req, res) => {
         .single();
 
       if (error) throw error;
-      return res.json({ success: true, id: data.id, status: 'published' });
+      return res.json({ success: true, id: data.id, status: initialStatus });
     }
 
-    return res.json({ success: true, id: `exam_${Date.now()}`, status: 'published' });
+    return res.json({ success: true, id: `exam_${Date.now()}`, status: initialStatus });
   } catch (err) {
     console.error('[API /api/exams/publish Error]:', err);
     return res.status(500).json({ error: err.message || 'Failed to publish exam.' });
@@ -17887,6 +18285,32 @@ app.post('/api/exams/start-attempt', async (req, res) => {
       exam = data;
     }
 
+    const now = new Date();
+    const serverTimestamp = now.getTime();
+
+    // Verify Schedule: Do not start attempt before scheduled start time!
+    if (exam?.starts_at) {
+      const startsAt = new Date(exam.starts_at);
+      if (startsAt.getTime() > serverTimestamp) {
+        return res.status(403).json({
+          error: 'This examination has not started yet. Please wait for the scheduled start time.',
+          code: 'EXAM_SCHEDULED_NOT_STARTED',
+          startsAt: exam.starts_at,
+          serverTime: now.toISOString()
+        });
+      }
+
+      // Auto-activate exam status in database if start time has arrived
+      if (exam.status === 'scheduled' && serverSupabase) {
+        await serverSupabase
+          .from('classroom_exams')
+          .update({ status: 'active', updated_at: now.toISOString() })
+          .eq('id', examId)
+          .catch(() => {});
+        exam.status = 'active';
+      }
+    }
+
     // Verify Password if exam is protected
     if (exam?.password && exam.password.trim().length > 0) {
       if (!password || password.trim() !== exam.password.trim()) {
@@ -17895,8 +18319,15 @@ app.post('/api/exams/start-attempt', async (req, res) => {
     }
 
     const durationMinutes = exam?.duration_minutes || 45;
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
+    let expiresAt = new Date(serverTimestamp + durationMinutes * 60 * 1000);
+
+    // If exam has an authoritative ends_at, bound expiry to the exam end window
+    if (exam?.ends_at) {
+      const examEndsAt = new Date(exam.ends_at);
+      if (expiresAt.getTime() > examEndsAt.getTime()) {
+        expiresAt = examEndsAt;
+      }
+    }
 
     if (serverSupabase && user) {
       // 1. Check for existing in-progress attempt to restore

@@ -19,6 +19,8 @@ class ClassroomMessageService {
     if (!supabase || !classroomId) return [];
 
     try {
+      // 7-day lifecycle rule for messages feed
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('classroom_messages')
         .select(`
@@ -27,6 +29,7 @@ class ClassroomMessageService {
         `)
         .eq('classroom_id', classroomId)
         .eq('is_deleted', false)
+        .gte('created_at', sevenDaysAgo)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -36,6 +39,46 @@ class ClassroomMessageService {
       console.error('[ClassroomMessageService] getMessages error:', err);
       return [];
     }
+  }
+
+  /**
+   * Retrieves server-authoritative active announcements with strict 7-day,
+   * completion, and schedule lifecycle filtering.
+   */
+  async getActiveAnnouncements(classroomId: string): Promise<any[]> {
+    if (!classroomId) return [];
+    try {
+      const { data: { session } } = await (supabase?.auth?.getSession() || { data: { session: null } });
+      const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`/api/classes/${classroomId}/announcements`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.announcements)) {
+          return json.announcements;
+        }
+      }
+    } catch (e) {
+      console.warn('[ClassroomMessageService] getActiveAnnouncements API fallback:', e);
+    }
+
+    // Fallback: 7-day filtered messages
+    const msgs = await this.getMessages(classroomId);
+    return msgs.map((m: any) => ({
+      id: `msg-${m.id}`,
+      rawId: m.id,
+      type: 'announcement',
+      title: m.is_pinned ? '📌 Pinned Announcement' : 'Classroom Announcement',
+      description: m.message,
+      createdAt: m.created_at,
+      isPinned: Boolean(m.is_pinned),
+      authorName: m.teacher?.full_name || 'Class Teacher',
+      rawItem: m
+    }));
   }
 
   /**

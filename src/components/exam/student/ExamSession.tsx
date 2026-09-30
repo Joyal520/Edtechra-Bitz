@@ -10,7 +10,8 @@ import {
   ArrowRight,
   Bookmark,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { CanonicalExamV1 } from '../shared/ExamSchema';
 import { flattenExamQuestions, FlattenedExamQuestion } from '../shared/scoringUtilities';
@@ -203,6 +204,11 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
 
   // 5. Final Submission
   const performSubmission = async () => {
+    if (flattenedQuestions.length === 0) {
+      alert('Cannot submit an examination with 0 questions.');
+      return;
+    }
+
     setIsSubmitting(true);
     setShowSubmitConfirm(false);
 
@@ -454,8 +460,24 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               onAnswerChange={handleAnswerChange}
             />
           ) : (
-            <div className="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200">
-              No questions available in this examination.
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 space-y-3">
+              <AlertCircle className="w-8 h-8 text-amber-500 mx-auto" />
+              <div className="text-sm font-black text-slate-800">
+                Exam questions could not be loaded.
+              </div>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                The questions for this examination are not currently available or failed to load.
+              </p>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Return to Classroom</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -463,7 +485,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           <div className="p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs flex items-center justify-between gap-2">
             <button
               type="button"
-              disabled={currentIndex === 0}
+              disabled={currentIndex === 0 || flattenedQuestions.length === 0}
               onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
               className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-2xs"
             >
@@ -475,7 +497,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={handleClearCurrentAnswer}
-                disabled={answers[currentQ?.question?.id] === undefined || answers[currentQ?.question?.id] === null || answers[currentQ?.question?.id] === ''}
+                disabled={!currentQ || answers[currentQ.question.id] === undefined || answers[currentQ.question.id] === null || answers[currentQ.question.id] === ''}
                 className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50/50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                 title="Clear answer for this question"
               >
@@ -486,7 +508,8 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               <button
                 type="button"
                 onClick={handleToggleBookmark}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                disabled={!currentQ}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${
                   isBookmarked
                     ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
                     : 'bg-slate-50 text-slate-700 hover:text-amber-700 hover:bg-amber-50/50 border-slate-200'
@@ -498,24 +521,26 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               </button>
             </div>
 
-            {currentIndex < flattenedQuestions.length - 1 ? (
-              <button
-                type="button"
-                onClick={() => setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1))}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
-              >
-                <span>Next</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowSubmitConfirm(true)}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Submit Exam</span>
-              </button>
+            {flattenedQuestions.length > 0 && (
+              currentIndex < flattenedQuestions.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1))}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                >
+                  <span>Next</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitConfirm(true)}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Submit Exam</span>
+                </button>
+              )
             )}
           </div>
         </div>

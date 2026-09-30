@@ -56,7 +56,13 @@ export const ExamHeader: React.FC<ExamHeaderProps> = ({
               <span className="text-xs font-black text-slate-900 truncate max-w-[120px] sm:max-w-xs">{title}</span>
             </div>
             <div className="text-xs font-black text-indigo-700">
-              Question {currentIndex + 1} <span className="text-slate-400 font-medium">/ {totalCount}</span>
+              {totalCount > 0 ? (
+                <>
+                  Question {currentIndex + 1} <span className="text-slate-400 font-medium">/ {totalCount}</span>
+                </>
+              ) : (
+                <span className="text-slate-500 font-semibold">Loading questions...</span>
+              )}
             </div>
           </div>
         </div>

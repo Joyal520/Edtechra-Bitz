@@ -46,8 +46,16 @@ class ExamPlatformService {
       if (res.ok) {
         const data = await res.json();
         return data;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        if (res.status === 403 || errJson.code === 'EXAM_SCHEDULED_NOT_STARTED') {
+          throw new Error(errJson.error || 'This examination has not started yet. Please wait for the scheduled start time.');
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message?.includes('not started yet') || e.message?.includes('scheduled')) {
+        throw e;
+      }
       console.warn('[ExamPlatformService] startExamAttempt API fallback to Supabase:', e);
     }
 
@@ -58,6 +66,16 @@ class ExamPlatformService {
     const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
 
     if (supabase && userId) {
+      // Check if exam is scheduled in the future
+      const { data: examRow } = await supabase
+        .from('classroom_exams')
+        .select('starts_at, duration_minutes, ends_at')
+        .eq('id', payload.examId)
+        .maybeSingle();
+
+      if (examRow?.starts_at && new Date(examRow.starts_at).getTime() > now.getTime()) {
+        throw new Error('This examination has not started yet. Please wait for the scheduled start time.');
+      }
       // Check existing in-progress attempt
       const { data: existing } = await supabase
         .from('classroom_exam_results')

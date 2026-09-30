@@ -103,6 +103,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [buckets, setBuckets] = useState<ContentBucket[]>([]);
   const [exams, setExams] = useState<ClassroomExam[]>([]);
   const [challenges, setChallenges] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [classroomCourses, setClassroomCourses] = useState<CourseClassroomAssignment[]>([]);
   const [leaderboard, setLeaderboard] = useState<ClassroomLeaderboardEntry[]>([]);
   const [stats, setStats] = useState<IClassroomStats>({
@@ -360,7 +361,8 @@ export const ClassroomDetailPage: React.FC = () => {
         leaderboardData,
         statsData,
         coursesData,
-        challengesData
+        challengesData,
+        announcementsData
       ] = await Promise.all([
         classroomService.getClassroomById(id),
         classroomService.getOrCreateInvite(id),
@@ -372,7 +374,8 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomPointsService.getClassroomLeaderboard(id),
         classroomService.getClassroomStats(id),
         user ? courseStudioService.getClassroomCourses(id).catch(() => []) : Promise.resolve([]),
-        aiChallengeService.getChallenges(id).catch(() => [])
+        aiChallengeService.getChallenges(id).catch(() => []),
+        classroomMessageService.getActiveAnnouncements(id).catch(() => [])
       ]);
 
       if (!classData) {
@@ -391,6 +394,7 @@ export const ClassroomDetailPage: React.FC = () => {
       setStats(statsData);
       setClassroomCourses(coursesData || []);
       setChallenges(challengesData || []);
+      setAnnouncements(announcementsData || []);
     } catch (err) {
       console.error('Error loading classroom:', err);
     } finally {
@@ -531,6 +535,28 @@ export const ClassroomDetailPage: React.FC = () => {
               schema: 'public',
               table: 'ai_challenges',
               filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'assignment_submissions'
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'classroom_exam_results'
             },
             () => {
               if (isMounted) loadAllClassroomData(true);
@@ -1322,6 +1348,7 @@ export const ClassroomDetailPage: React.FC = () => {
             exams={exams}
             activeLiveQuizSession={activeLiveQuizSession}
             challenges={challenges}
+            announcements={announcements}
             isTeacher={isTeacher}
             onMessageUpdated={loadAllClassroomData}
             onOpenTask={(task) => {
@@ -2050,9 +2077,21 @@ export const ClassroomDetailPage: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => navigate(`/classes/${classroom.id}/exams/${exam.id}`)}
-                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold shadow-2xs active:scale-95 transition-all cursor-pointer ${
+                                    exam.latest_result
+                                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                      : (exam.starts_at && new Date(exam.starts_at).getTime() > Date.now())
+                                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                  }`}
                                 >
-                                  {exam.latest_result ? 'View Result' : isSurveyItem ? 'Take Survey' : 'Take Exam'}
+                                  {exam.latest_result
+                                    ? 'View Result'
+                                    : isSurveyItem
+                                    ? 'Take Survey'
+                                    : (exam.starts_at && new Date(exam.starts_at).getTime() > Date.now())
+                                    ? 'Scheduled'
+                                    : 'Take Exam'}
                                 </button>
                               </div>
                             </div>

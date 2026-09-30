@@ -162,10 +162,21 @@ class ClassroomExamService {
         }
       }
 
+      const now = new Date();
+      const start = exam.starts_at ? new Date(exam.starts_at) : null;
+      const end = exam.ends_at ? new Date(exam.ends_at) : null;
+      const isStarted = !start || now >= start;
+      const isEnded = end && now > end;
+      const isScheduled = start && now < start;
+      const canStart = !myResult && (exam.status === 'published' || exam.status === 'active') && isStarted && !isEnded;
+      const lifecycleStatus = isEnded ? 'closed' : isScheduled ? 'scheduled' : exam.status;
+
       return {
         ...exam,
+        lifecycle_status: lifecycleStatus,
+        is_scheduled: isScheduled,
         latest_result: myResult,
-        can_start: !myResult
+        can_start: canStart
       };
     } catch (err) {
       console.error('[ClassroomExamService] getExamById error:', err);
@@ -619,17 +630,16 @@ class ClassroomExamService {
 
       const flatQuestions = assessment.sections.flatMap((s) => s.questions || []);
 
+      if (status === 'published' && flatQuestions.length === 0) {
+        return { error: 'Cannot publish an examination with 0 questions. Please add questions before publishing.' };
+      }
+
       // Safe defaults for NOT NULL JSONB columns in public.classroom_exams
       const safeThemeConfig = assessment.theme && typeof assessment.theme === 'object' ? assessment.theme : {};
       const safeBrandKit = assessment.brandKit && typeof assessment.brandKit === 'object' ? assessment.brandKit : {};
       const safeBranching = (assessment as any).branchingLogic || (assessment as any).branching_logic || {};
 
       // Determine valid survey_settings payload:
-      // If surveySettings is defined and non-empty, use it.
-      // If missing/undefined:
-      // - For surveys, supply standard survey configuration so responses can be collected.
-      // - For exams, supply the canonical empty JSON object {} (matching the DB column DEFAULT '{}'::jsonb),
-      //   ensuring the NOT NULL constraint is satisfied without requiring exam creators to configure surveys.
       let safeSurveySettings: Record<string, any> = {};
       if (assessment.surveySettings && typeof assessment.surveySettings === 'object' && Object.keys(assessment.surveySettings).length > 0) {
         safeSurveySettings = assessment.surveySettings;
@@ -644,6 +654,10 @@ class ClassroomExamService {
         safeSurveySettings = {};
       }
 
+      const startsAt = assessment.exam.startsAt || null;
+      const isFutureScheduled = Boolean(startsAt && new Date(startsAt).getTime() > Date.now());
+      const effectiveStatus = (status === 'published' && isFutureScheduled) ? 'scheduled' : (status || 'published');
+
       const rowData: Record<string, any> = {
         classroom_id: classroomId,
         title: assessment.exam.title.trim() || 'Untitled Assessment',
@@ -653,15 +667,15 @@ class ClassroomExamService {
         duration_minutes: assessment.exam.durationMinutes || 60,
         total_marks: totalMarks,
         pass_marks: Math.round(totalMarks * ((assessment.exam.passPercentage || 60) / 100)),
-        starts_at: assessment.exam.startsAt || null,
-        ends_at: assessment.exam.endsAt || null,
+        starts_at: startsAt,
+        ends_at: assessment.exam.endsAt || (startsAt ? new Date(new Date(startsAt).getTime() + (Number(assessment.exam.durationMinutes) || 60) * 60 * 1000).toISOString() : null),
         theme_config: safeThemeConfig,
         brand_kit: safeBrandKit,
         branching_logic: safeBranching,
         survey_settings: safeSurveySettings,
         questions: flatQuestions,
         questions_json: assessment.sections || [],
-        status: status || 'published',
+        status: effectiveStatus,
         updated_at: new Date().toISOString()
       };
 
