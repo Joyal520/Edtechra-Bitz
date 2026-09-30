@@ -912,74 +912,120 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                     />
                   </div>
                 )}
+
+                {/* FINAL QUESTION BOUNDARY / COMPLETION INTERFACE */}
+                {isLastQuestion && (
+                  <div className="mt-4 p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border-2 border-emerald-300 text-center space-y-3 shadow-xs animate-fadeIn">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>
+                        {answeredCount >= totalCount
+                          ? 'All questions answered'
+                          : `${answeredCount} of ${totalCount} questions answered`}
+                      </span>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <h3 className="text-base sm:text-lg font-black text-slate-900">
+                        You have reached the end of the examination.
+                      </h3>
+                      <p className="text-xs text-slate-600">
+                        {hasAnsweredCurrent
+                          ? 'Final answer saved. Review your responses or submit when ready.'
+                          : 'Please select an answer for this final question before submitting.'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2.5 sm:gap-3 pt-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setMobileNavigatorOpen(true)}
+                        className="px-4 py-2.5 rounded-2xl bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 transition-all"
+                      >
+                        <Menu className="w-3.5 h-3.5" />
+                        <span>Review Answers</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={onSubmit}
+                        className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/30 active:scale-95 transition-all"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Submit Exam</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ==========================================================
                   NAVIGATION CONTROLS:
-                  - Desktop: Previous, Flag for Review, Clear, Next Question
-                  - Mobile: 2 rows ([Flag] [Clear], then [Previous] [Next])
+                  - Mobile (<640px): 2 rows ([Flag] [Clear], then [Previous] [Next/Submit])
+                  - Desktop (>=640px): Single-row flex container
               ========================================================== */}
-              {isMobilePreview ? (
-                <div className="flex flex-col gap-2.5 pt-2 w-full border-t border-slate-100">
-                  <div className="grid grid-cols-2 gap-2.5 w-full">
-                    <button
-                      type="button"
-                      onClick={onToggleBookmark}
-                      className={`py-2.5 sm:py-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                        isBookmarked
-                          ? 'bg-amber-500 border-amber-500 text-white shadow-amber-300/30'
-                          : 'bg-white border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : 'text-slate-700'}`} />
-                      <span>{isBookmarked ? 'Flagged' : 'Flag'}</span>
-                    </button>
+              {/* Mobile View Navigation Strip */}
+              <div className="flex sm:hidden flex-col gap-2.5 pt-2 w-full border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-2.5 w-full">
+                  <button
+                    type="button"
+                    onClick={onToggleBookmark}
+                    className={`py-2.5 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                      isBookmarked
+                        ? 'bg-amber-500 border-amber-500 text-white shadow-amber-300/30'
+                        : 'bg-white border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : 'text-slate-700'}`} />
+                    <span>{isBookmarked ? 'Flagged' : 'Flag'}</span>
+                  </button>
 
-                    <button
-                      type="button"
-                      onClick={onClearAnswer}
-                      disabled={!hasAnsweredCurrent}
-                      className="py-2.5 sm:py-3 rounded-2xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Clear</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5 w-full">
-                    <button
-                      type="button"
-                      disabled={currentIndex === 0}
-                      onClick={onPrevious}
-                      className="py-3 rounded-2xl bg-[#edf2f7] text-slate-600 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>Previous</span>
-                    </button>
-
-                    {isLastQuestion ? (
-                      <button
-                        type="button"
-                        onClick={onSubmit}
-                        className="py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/25 active:scale-95"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Submit</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={onNext}
-                        className="py-3 rounded-2xl bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 active:scale-95"
-                      >
-                        <span>Next</span>
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={onClearAnswer}
+                    disabled={!hasAnsweredCurrent}
+                    className="py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Clear</span>
+                  </button>
                 </div>
-              ) : (
-                <div className="hidden sm:flex items-center justify-between gap-3 pt-3 w-full border-t border-slate-100">
+
+                <div className="grid grid-cols-2 gap-2.5 w-full">
+                  <button
+                    type="button"
+                    disabled={currentIndex === 0}
+                    onClick={onPrevious}
+                    className="py-3 rounded-2xl bg-[#edf2f7] text-slate-600 disabled:opacity-40 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Previous</span>
+                  </button>
+
+                  {isLastQuestion ? (
+                    <button
+                      type="button"
+                      onClick={onSubmit}
+                      className="py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/25 active:scale-95 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Submit Exam</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onNext}
+                      className="py-3 rounded-2xl bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-500/25 active:scale-95 cursor-pointer"
+                    >
+                      <span>Next</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop View Navigation Strip */}
+              <div className="hidden sm:flex items-center justify-between gap-3 pt-3 w-full border-t border-slate-100">
                   <button
                     type="button"
                     disabled={currentIndex === 0}
@@ -1035,7 +1081,6 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                     </button>
                   )}
                 </div>
-              )}
             </main>
           </div>
 

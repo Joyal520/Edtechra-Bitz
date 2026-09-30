@@ -825,6 +825,27 @@ export function gradeExamAttempt(examPayload, answers = {}, subjectiveScores = {
         const cleanCor = String(rawCorrect || '').trim().toLowerCase();
         isExact = cleanSub === cleanCor && cleanSub.length > 0;
       }
+
+      // Resilient fallback: match by option text or ID if submitted answer format differs from correctAnswer format
+      if (!isExact && cleanSub.length > 0 && Array.isArray(question.options)) {
+        const matchedOpt = question.options.find(o => 
+          (o.id && String(o.id).trim().toLowerCase() === cleanSub) ||
+          (o.text && String(o.text).trim().toLowerCase() === cleanSub)
+        );
+        if (matchedOpt) {
+          const optId = String(matchedOpt.id || '').trim().toLowerCase();
+          const optText = String(matchedOpt.text || '').trim().toLowerCase();
+          if (Array.isArray(rawCorrect)) {
+            isExact = rawCorrect.some(c => {
+              const cleanC = String(c).trim().toLowerCase();
+              return cleanC === optId || cleanC === optText;
+            });
+          } else {
+            const cleanC = String(rawCorrect || '').trim().toLowerCase();
+            isExact = cleanC === optId || cleanC === optText;
+          }
+        }
+      }
     }
 
     const score = isExact ? marks : 0;

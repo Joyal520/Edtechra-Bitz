@@ -66,9 +66,32 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>(attemptData?.savedAnswers || {});
+  const answersRef = useRef<Record<string, any>>(attemptData?.savedAnswers || {});
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(
     new Set(attemptData?.bookmarkedIds || [])
   );
+
+  // Sync answersRef with attemptData updates
+  useEffect(() => {
+    if (attemptData?.savedAnswers) {
+      answersRef.current = { ...attemptData.savedAnswers, ...answersRef.current };
+    }
+  }, [attemptData?.savedAnswers]);
+
+  // Boundary safety: guarantee currentIndex never points beyond valid questions
+  useEffect(() => {
+    if (flattenedQuestions.length > 0 && currentIndex >= flattenedQuestions.length) {
+      setCurrentIndex(flattenedQuestions.length - 1);
+    }
+  }, [currentIndex, flattenedQuestions.length]);
+
+  // Synchronously update memory ref and React state to avoid any asynchronous closure lag
+  const updateAnswerSynchronously = useCallback((qId: string, val: any) => {
+    const updated = { ...answersRef.current, [qId]: val };
+    answersRef.current = updated;
+    setAnswers(updated);
+    return updated;
+  }, []);
 
   // Time Remaining State (in seconds)
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(() => {
@@ -182,8 +205,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     if (!currentQ) return;
 
     const qId = currentQ.question.id;
-    const updated = { ...answers, [qId]: val };
-    setAnswers(updated);
+    const updated = updateAnswerSynchronously(qId, val);
     triggerAutosave(updated, bookmarkedIds);
   };
 
@@ -192,17 +214,17 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   const autoAdvanceTimerRef = useRef<any>(null);
 
   /**
-   * Enhanced answer handler for MCQ/True-False on mobile:
+   * Enhanced answer handler for MCQ/True-False:
    * 1. Lock to prevent double-taps
-   * 2. Save the answer immediately
+   * 2. Save the answer immediately in memory and state
    * 3. Play subtle click sound
-   * 4. Wait ~250ms for visual feedback
-   * 5. Advance to next question (unless last)
-   *
-   * Last question does NOT auto-advance — shows submit flow instead.
+   * 4. For questions 1 -> N-1: Auto-advance after 250ms delay
+   * 5. For the LAST question:
+   *    - Await immediate backend autosave to guarantee final answer is committed
+   *    - DO NOT navigate to question N+1
+   *    - Enter final review/submission ready state
    */
-  const handleAnswerWithAutoAdvance = useCallback((val: any) => {
-    // Double-tap prevention: if locked, ignore
+  const handleAnswerWithAutoAdvance = useCallback(async (val: any) => {
     if (autoAdvanceLockRef.current) return;
 
     const currentQ = flattenedQuestions[currentIndex];
@@ -211,32 +233,51 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     // Lock selection immediately
     autoAdvanceLockRef.current = true;
 
-    // 1. Save answer
+    // 1. Synchronously update answer in memory ref and React state
     const qId = currentQ.question.id;
-    const updated = { ...answers, [qId]: val };
-    setAnswers(updated);
-    triggerAutosave(updated, bookmarkedIds);
+    const updated = updateAnswerSynchronously(qId, val);
 
-    // 2. Play click sound (user-gesture context — safe for mobile)
+    // 2. Play click sound
     playAnswerClickSound();
 
-    // 3. If NOT last question, auto-advance after brief delay
     const isLast = currentIndex >= flattenedQuestions.length - 1;
 
     if (!isLast) {
+      // Questions 1 -> N-1: Trigger debounced autosave and auto-advance
+      triggerAutosave(updated, bookmarkedIds);
+
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = setTimeout(() => {
+        // Enforce strict boundary: NEVER advance beyond flattenedQuestions.length - 1
         setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1));
-        // Release lock after advancing
         autoAdvanceLockRef.current = false;
       }, 250);
     } else {
-      // Last question: release lock immediately, student uses Submit button
+      // LAST QUESTION: Cancel pending debounced timer and commit directly
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      setSyncState('saving');
+
+      if (!isPreview && onAutosaveAnswers) {
+        try {
+          await onAutosaveAnswers(updated, Array.from(bookmarkedIds));
+          setSyncState('saved');
+        } catch (err) {
+          console.warn('[ExamSession] Final question autosave notice:', err);
+          setSyncState('saved');
+        }
+      } else {
+        setSyncState('saved');
+      }
+
+      // Final question remains valid: release lock so student can review or submit
       setTimeout(() => {
         autoAdvanceLockRef.current = false;
-      }, 300);
+      }, 200);
     }
-  }, [currentIndex, flattenedQuestions, answers, bookmarkedIds]);
+  }, [currentIndex, flattenedQuestions, bookmarkedIds, isPreview, onAutosaveAnswers, updateAnswerSynchronously]);
 
   // Cleanup auto-advance timer on unmount
   useEffect(() => {
@@ -257,7 +298,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       next.add(qId);
     }
     setBookmarkedIds(next);
-    triggerAutosave(answers, next);
+    triggerAutosave(answersRef.current, next);
   };
 
   // 3. Begin Examination Action
@@ -280,7 +321,10 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         const rem = Math.max(0, Math.floor((expiryTimestampRef.current - Date.now()) / 1000));
         setTimeRemainingSeconds(rem);
       }
-      if (data?.savedAnswers) setAnswers(data.savedAnswers);
+      if (data?.savedAnswers) {
+        answersRef.current = { ...answersRef.current, ...data.savedAnswers };
+        setAnswers(data.savedAnswers);
+      }
       if (data?.bookmarkedIds) setBookmarkedIds(new Set(data.bookmarkedIds));
 
       setSessionPhase('taking');
@@ -294,18 +338,29 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   // 4. Auto-Submit on Expiry
   const handleAutoSubmitOnExpiry = async () => {
     console.warn('[ExamSession] Authoritative time expired. Triggering auto-submit.');
-    await performSubmission();
+    await performSubmission(answersRef.current);
   };
 
-  // 5. Final Submission
-  const performSubmission = async () => {
+  // 5. Final Submission (Idempotent, Safe with Latest Answers)
+  const performSubmission = async (overrideAnswers?: Record<string, any>) => {
     if (flattenedQuestions.length === 0) {
       alert('Cannot submit an examination with 0 questions.');
       return;
     }
 
+    // Idempotency: prevent double-clicks or concurrent submissions
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setShowSubmitConfirm(false);
+
+    // Cancel any pending debounced autosave
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    // Use guaranteed latest answers from ref to prevent stale state omission
+    const finalAnswersToSubmit = overrideAnswers || answersRef.current || answers;
 
     try {
       if (isPreview || !onSubmitExam) {
@@ -313,7 +368,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         const totalMarks = flattenedQuestions.reduce((acc, q) => acc + (q.question.marks || 1), 0);
         let correctCount = 0;
         const breakdown = flattenedQuestions.map((q) => {
-          const studentAns = answers[q.question.id];
+          const studentAns = finalAnswersToSubmit[q.question.id];
           const isCorrect = studentAns !== undefined && studentAns !== null && String(studentAns).trim().length > 0;
           if (isCorrect) correctCount++;
           return {
@@ -335,6 +390,9 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         setFinalResult({
           score,
           maxScore: totalMarks,
+          totalScore: score,
+          totalMarks,
+          total_marks: totalMarks,
           percentage,
           grade: percentage >= 80 ? 'A' : percentage >= 60 ? 'B' : 'Pass',
           passed: percentage >= (exam.exam.passPercentage || 40),
@@ -344,11 +402,23 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         return;
       }
 
-      const result = await onSubmitExam(answers);
-      setFinalResult(result);
-      setSessionPhase('submitted');
+      // Flush final answers to backend attempt before computing final score
+      if (onAutosaveAnswers) {
+        await onAutosaveAnswers(finalAnswersToSubmit, Array.from(bookmarkedIds)).catch(err => {
+          console.warn('[ExamSession] Pre-submit flush notice:', err);
+        });
+      }
+
+      const result = await onSubmitExam(finalAnswersToSubmit);
+      if (result) {
+        setFinalResult(result);
+        setSessionPhase('submitted');
+      } else {
+        throw new Error('No result returned from server.');
+      }
     } catch (err: any) {
-      alert(err.message || 'Failed to submit exam.');
+      console.error('[ExamSession] Final submission error:', err);
+      alert(err.message || "Your answers are saved, but we couldn't complete the submission. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

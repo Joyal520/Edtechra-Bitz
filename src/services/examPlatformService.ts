@@ -8,9 +8,15 @@ import { CanonicalExamV1 } from '@/components/exam/shared/ExamSchema';
 
 class ExamPlatformService {
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    if (!supabase) return {};
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    let token: string | undefined = undefined;
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      token = session?.access_token;
+    }
+    if (!token && typeof window !== 'undefined') {
+      token = localStorage.getItem('auth_token') || localStorage.getItem('token') || undefined;
+    }
+    return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   private async getUserId(): Promise<string | null> {
@@ -204,7 +210,8 @@ class ExamPlatformService {
 
       const data = await res.json();
       if (res.ok && (data.success || data.score !== undefined)) {
-        return data;
+        const { classroomExamService } = await import('./classroomExamService');
+        return classroomExamService.normalizeExamResult(data);
       }
       if (!res.ok && data.error) {
         console.warn('[ExamPlatformService] submitExamAttempt server returned error, trying Supabase fallback:', data.error);
@@ -213,19 +220,20 @@ class ExamPlatformService {
       console.warn('[ExamPlatformService] submitExamAttempt network error, falling back to Supabase:', e);
     }
 
-    // Fallback: direct Supabase submission via classroomExamService
+    // Fallback: direct Supabase submission via classroomExamService.submitExam2
     const { classroomExamService } = await import('./classroomExamService');
-    const directResult = await classroomExamService.submitExam({
-      exam_id: payload.examId,
-      classroom_id: payload.classroomId,
+    const directResult = await classroomExamService.submitExam2({
+      examId: payload.examId,
+      classroomId: payload.classroomId,
+      exam: payload.exam,
       answers: payload.answers
     });
 
-    if (directResult.error) {
-      throw new Error(directResult.error || 'Failed to submit exam attempt.');
+    if (!directResult) {
+      throw new Error('Failed to submit exam attempt.');
     }
 
-    return directResult.data;
+    return directResult;
   }
 
   /**
