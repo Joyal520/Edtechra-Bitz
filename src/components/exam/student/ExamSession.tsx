@@ -4,7 +4,7 @@
 // question navigation, and secure grading.
 // ============================================================================
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,6 +22,7 @@ import { SubmitDialog } from './SubmitDialog';
 import { ExamInstructions } from './ExamInstructions';
 import { ExamResultView } from './ExamResultView';
 import { SimpleExamStudentView } from './SimpleExamStudentView';
+import { playAnswerClickSound } from '@/utils/examSoundUtils';
 
 export interface ExamSessionAttemptData {
   attemptId?: string;
@@ -75,7 +76,13 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       const remaining = Math.max(0, Math.floor((new Date(attemptData.expiresAt).getTime() - Date.now()) / 1000));
       return remaining;
     }
-    return (exam.exam.durationMinutes || 45) * 60;
+    const defaultSec = (exam.exam.durationMinutes || 45) * 60;
+    const endsAt = (exam.exam as any).endsAt || (exam as any).ends_at;
+    if (endsAt) {
+      const windowRemainingSec = Math.max(0, Math.floor((new Date(endsAt).getTime() - Date.now()) / 1000));
+      return Math.min(defaultSec, windowRemainingSec);
+    }
+    return defaultSec;
   });
 
   const [syncState, setSyncState] = useState<SyncState>('saved');
@@ -87,8 +94,38 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
 
   const autosaveTimerRef = useRef<any>(null);
   const expiryTimestampRef = useRef<number | null>(
-    attemptData?.expiresAt ? new Date(attemptData.expiresAt).getTime() : null
+    attemptData?.expiresAt
+      ? new Date(attemptData.expiresAt).getTime()
+      : (() => {
+          const endsAt = (exam.exam as any).endsAt || (exam as any).ends_at;
+          if (endsAt) {
+            const endsTime = new Date(endsAt).getTime();
+            const defaultExpiry = Date.now() + (exam.exam.durationMinutes || 45) * 60 * 1000;
+            return Math.min(defaultExpiry, endsTime);
+          }
+          return null;
+        })()
   );
+
+  // Sync attempt data changes (e.g. from background restoration or late activation)
+  useEffect(() => {
+    if (attemptData) {
+      if (attemptData.expiresAt) {
+        expiryTimestampRef.current = new Date(attemptData.expiresAt).getTime();
+        const rem = Math.max(0, Math.floor((expiryTimestampRef.current - Date.now()) / 1000));
+        setTimeRemainingSeconds(rem);
+      }
+      if (attemptData.savedAnswers) {
+        setAnswers(prev => ({ ...attemptData.savedAnswers, ...prev }));
+      }
+      if (attemptData.bookmarkedIds) {
+        setBookmarkedIds(new Set(attemptData.bookmarkedIds));
+      }
+      if (attemptData.startedAt) {
+        setSessionPhase('taking');
+      }
+    }
+  }, [attemptData]);
 
   // 1. Authoritative Countdown Timer Effect
   useEffect(() => {
@@ -149,6 +186,64 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     setAnswers(updated);
     triggerAutosave(updated, bookmarkedIds);
   };
+
+  // ── Mobile Auto-Advance: answer → sound → brief delay → next question ──
+  const autoAdvanceLockRef = useRef(false);
+  const autoAdvanceTimerRef = useRef<any>(null);
+
+  /**
+   * Enhanced answer handler for MCQ/True-False on mobile:
+   * 1. Lock to prevent double-taps
+   * 2. Save the answer immediately
+   * 3. Play subtle click sound
+   * 4. Wait ~250ms for visual feedback
+   * 5. Advance to next question (unless last)
+   *
+   * Last question does NOT auto-advance — shows submit flow instead.
+   */
+  const handleAnswerWithAutoAdvance = useCallback((val: any) => {
+    // Double-tap prevention: if locked, ignore
+    if (autoAdvanceLockRef.current) return;
+
+    const currentQ = flattenedQuestions[currentIndex];
+    if (!currentQ) return;
+
+    // Lock selection immediately
+    autoAdvanceLockRef.current = true;
+
+    // 1. Save answer
+    const qId = currentQ.question.id;
+    const updated = { ...answers, [qId]: val };
+    setAnswers(updated);
+    triggerAutosave(updated, bookmarkedIds);
+
+    // 2. Play click sound (user-gesture context — safe for mobile)
+    playAnswerClickSound();
+
+    // 3. If NOT last question, auto-advance after brief delay
+    const isLast = currentIndex >= flattenedQuestions.length - 1;
+
+    if (!isLast) {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        setCurrentIndex(prev => Math.min(flattenedQuestions.length - 1, prev + 1));
+        // Release lock after advancing
+        autoAdvanceLockRef.current = false;
+      }, 250);
+    } else {
+      // Last question: release lock immediately, student uses Submit button
+      setTimeout(() => {
+        autoAdvanceLockRef.current = false;
+      }, 300);
+    }
+  }, [currentIndex, flattenedQuestions, answers, bookmarkedIds]);
+
+  // Cleanup auto-advance timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+    };
+  }, []);
 
   const handleToggleBookmark = () => {
     const currentQ = flattenedQuestions[currentIndex];
@@ -366,6 +461,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           unansweredCount={unansweredCount}
           markedCount={markedCount}
           onAnswerChange={handleAnswerChange}
+          onAnswerWithAutoAdvance={handleAnswerWithAutoAdvance}
           onClearAnswer={() => handleAnswerChange(undefined)}
           onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
           onNext={() => setCurrentIndex((prev) => Math.min(flattenedQuestions.length - 1, prev + 1))}
@@ -458,6 +554,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
               questionItem={currentQ}
               currentAnswer={answers[currentQ.question.id]}
               onAnswerChange={handleAnswerChange}
+              onAnswerWithAutoAdvance={handleAnswerWithAutoAdvance}
             />
           ) : (
             <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 space-y-3">

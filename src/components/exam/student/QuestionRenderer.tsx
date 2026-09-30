@@ -24,6 +24,7 @@ interface QuestionRendererProps {
   questionItem: FlattenedExamQuestion;
   currentAnswer: any;
   onAnswerChange: (answer: any) => void;
+  onAnswerWithAutoAdvance?: (answer: any) => void;
   showAnswerKey?: boolean;
 }
 
@@ -31,6 +32,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
   questionItem,
   currentAnswer,
   onAnswerChange,
+  onAnswerWithAutoAdvance,
   showAnswerKey = false
 }) => {
   const {
@@ -64,6 +66,8 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
 
   const charCount = typeof currentAnswer === 'string' ? currentAnswer.length : 0;
 
+  const handleSingleSelectAnswer = onAnswerWithAutoAdvance || onAnswerChange;
+
   const renderContent = () => {
     switch (question.type) {
       case 'multiple_choice':
@@ -71,7 +75,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           <MCQQuestion
             question={question}
             currentAnswer={currentAnswer}
-            onAnswerChange={onAnswerChange}
+            onAnswerChange={handleSingleSelectAnswer}
             showAnswerKey={showAnswerKey}
           />
         );
@@ -90,7 +94,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           <TrueFalseQuestionComponent
             question={question}
             currentAnswer={currentAnswer}
-            onAnswerChange={onAnswerChange}
+            onAnswerChange={handleSingleSelectAnswer}
             showAnswerKey={showAnswerKey}
           />
         );

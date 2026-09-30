@@ -131,13 +131,35 @@ export const StudentExamPage: React.FC = () => {
         return;
       }
 
-      // Check if student already submitted
-      if (examData.latest_result && examData.latest_result.status !== 'in_progress') {
-        setStudentResult(examData.latest_result);
+      // Check if student already submitted or has an in-progress attempt to restore
+      if (examData.latest_result) {
+        if (examData.latest_result.status !== 'in_progress') {
+          setStudentResult(examData.latest_result);
+        } else {
+          setStudentAttemptData({
+            attemptId: examData.latest_result.id,
+            startedAt: examData.latest_result.started_at,
+            expiresAt: examData.latest_result.expires_at,
+            savedAnswers: examData.latest_result.session_answers || examData.latest_result.answers || {},
+            bookmarkedIds: examData.latest_result.bookmarked_question_ids || [],
+            durationMinutes: examData.duration_minutes || 45
+          });
+        }
       } else if (user?.id) {
         const existingResult = await classroomExamService.getStudentExamResult(effectiveExamId);
-        if (existingResult && existingResult.status !== 'in_progress') {
-          setStudentResult(existingResult);
+        if (existingResult) {
+          if (existingResult.status !== 'in_progress') {
+            setStudentResult(existingResult);
+          } else {
+            setStudentAttemptData({
+              attemptId: existingResult.id,
+              startedAt: existingResult.started_at,
+              expiresAt: existingResult.expires_at,
+              savedAnswers: existingResult.session_answers || existingResult.answers || {},
+              bookmarkedIds: existingResult.bookmarked_question_ids || [],
+              durationMinutes: examData.duration_minutes || 45
+            });
+          }
         }
       }
 
@@ -254,7 +276,9 @@ export const StudentExamPage: React.FC = () => {
         passPercentage: totalMarks > 0 ? Math.round((passMarks / totalMarks) * 100) : 40,
         showMarksImmediately: examRecord.show_marks_immediately !== false,
         showCorrectAnswers: examRecord.show_correct_answers !== false,
-        password: examRecord.password || undefined
+        password: examRecord.password || undefined,
+        startsAt: examRecord.starts_at || null,
+        endsAt: examRecord.ends_at || null
       },
       theme: examRecord.theme_config || undefined,
       brandKit: examRecord.brand_kit || undefined,

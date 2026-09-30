@@ -45,6 +45,8 @@ export interface SimpleExamStudentViewProps {
   unansweredCount: number;
   markedCount: number;
   onAnswerChange: (val: any) => void;
+  /** Optional: MCQ/True-False answer handler with auto-advance + sound + double-tap prevention */
+  onAnswerWithAutoAdvance?: (val: any) => void;
   onClearAnswer: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -297,6 +299,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
   unansweredCount,
   markedCount,
   onAnswerChange,
+  onAnswerWithAutoAdvance,
   onClearAnswer,
   onPrevious,
   onNext,
@@ -308,6 +311,9 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
   isMobilePreview = false
 }) => {
   const [mobileNavigatorOpen, setMobileNavigatorOpen] = useState(false);
+
+  // Use auto-advance handler for MCQ/True-False taps when available
+  const handleMCQAnswer = onAnswerWithAutoAdvance || onAnswerChange;
 
   const currentQ = questions[currentIndex];
   const totalCount = questions.length || 25;
@@ -686,7 +692,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                           <button
                             key={opt.id || optIdx}
                             type="button"
-                            onClick={() => onAnswerChange(opt.id || opt.text)}
+                            onClick={() => handleMCQAnswer(opt.id || opt.text)}
                             className={`w-full min-h-[58px] sm:min-h-[66px] md:min-h-[74px] p-3.5 sm:p-4 md:p-5 rounded-2xl sm:rounded-[24px] border-2 text-left flex items-center justify-between gap-3 sm:gap-4 cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-4 relative overflow-hidden group ${
                               isSelected
                                 ? `${theme.cardSelectedBg} ${theme.cardSelectedBorder} ${theme.cardSelectedRing} shadow-md -translate-y-0.5`
@@ -755,7 +761,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                       return (
                         <button
                           type="button"
-                          onClick={() => onAnswerChange('true')}
+                          onClick={() => handleMCQAnswer('true')}
                           className={`w-full min-h-[66px] sm:min-h-[76px] p-4 sm:p-5 rounded-2xl sm:rounded-[24px] border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-emerald-400 relative overflow-hidden group ${
                             isTrueSelected
                               ? 'bg-gradient-to-r from-emerald-100 via-teal-100 to-emerald-100/90 border-emerald-500 ring-4 ring-emerald-500/25 shadow-md -translate-y-0.5'
@@ -789,7 +795,7 @@ export const SimpleExamStudentView: React.FC<SimpleExamStudentViewProps> = ({
                       return (
                         <button
                           type="button"
-                          onClick={() => onAnswerChange('false')}
+                          onClick={() => handleMCQAnswer('false')}
                           className={`w-full min-h-[66px] sm:min-h-[76px] p-4 sm:p-5 rounded-2xl sm:rounded-[24px] border-2 text-left flex items-center justify-between gap-3 cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-rose-400 relative overflow-hidden group ${
                             isFalseSelected
                               ? 'bg-gradient-to-r from-rose-100 via-pink-100 to-rose-100/90 border-rose-500 ring-4 ring-rose-500/25 shadow-md -translate-y-0.5'

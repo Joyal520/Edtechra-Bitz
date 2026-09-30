@@ -18324,6 +18324,12 @@ app.post('/api/exams/start-attempt', async (req, res) => {
     // If exam has an authoritative ends_at, bound expiry to the exam end window
     if (exam?.ends_at) {
       const examEndsAt = new Date(exam.ends_at);
+      if (examEndsAt.getTime() <= serverTimestamp) {
+        return res.status(403).json({
+          error: 'This examination has already ended.',
+          code: 'EXAM_ALREADY_ENDED'
+        });
+      }
       if (expiresAt.getTime() > examEndsAt.getTime()) {
         expiresAt = examEndsAt;
       }

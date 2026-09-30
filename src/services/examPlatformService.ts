@@ -61,20 +61,33 @@ class ExamPlatformService {
 
     // Direct Supabase fallback
     const userId = await this.getUserId();
-    const durationMinutes = 45;
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
+    let durationMinutes = 45;
+    let expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
 
     if (supabase && userId) {
-      // Check if exam is scheduled in the future
+      // Check if exam is scheduled in the future or already ended
       const { data: examRow } = await supabase
         .from('classroom_exams')
         .select('starts_at, duration_minutes, ends_at')
         .eq('id', payload.examId)
         .maybeSingle();
 
+      durationMinutes = examRow?.duration_minutes || 45;
+      expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
+
       if (examRow?.starts_at && new Date(examRow.starts_at).getTime() > now.getTime()) {
         throw new Error('This examination has not started yet. Please wait for the scheduled start time.');
+      }
+
+      if (examRow?.ends_at) {
+        const endsAtTime = new Date(examRow.ends_at).getTime();
+        if (endsAtTime <= now.getTime()) {
+          throw new Error('This examination has already ended.');
+        }
+        if (expiresAt.getTime() > endsAtTime) {
+          expiresAt = new Date(endsAtTime);
+        }
       }
       // Check existing in-progress attempt
       const { data: existing } = await supabase
