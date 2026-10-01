@@ -63,32 +63,38 @@ ON public.library_resources FOR SELECT
 USING (
     published = TRUE
     OR auth.uid() = uploaded_by
-    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-    OR (SELECT email FROM auth.users WHERE id = auth.uid()) = 'roshanjoyal520@gmail.com'
+    OR COALESCE(auth.jwt() ->> 'email', '') = 'roshanjoyal520@gmail.com'
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (role = 'admin' OR email = 'roshanjoyal520@gmail.com'))
 );
 
 DROP POLICY IF EXISTS "Admins can insert library resources" ON public.library_resources;
 CREATE POLICY "Admins can insert library resources"
 ON public.library_resources FOR INSERT
 WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-    OR (SELECT email FROM auth.users WHERE id = auth.uid()) = 'roshanjoyal520@gmail.com'
+    auth.uid() IS NOT NULL
+    AND (
+        auth.uid() = uploaded_by
+        OR COALESCE(auth.jwt() ->> 'email', '') = 'roshanjoyal520@gmail.com'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (role = 'admin' OR email = 'roshanjoyal520@gmail.com'))
+    )
 );
 
 DROP POLICY IF EXISTS "Admins can update library resources" ON public.library_resources;
 CREATE POLICY "Admins can update library resources"
 ON public.library_resources FOR UPDATE
 USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-    OR (SELECT email FROM auth.users WHERE id = auth.uid()) = 'roshanjoyal520@gmail.com'
+    auth.uid() = uploaded_by
+    OR COALESCE(auth.jwt() ->> 'email', '') = 'roshanjoyal520@gmail.com'
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (role = 'admin' OR email = 'roshanjoyal520@gmail.com'))
 );
 
 DROP POLICY IF EXISTS "Admins can delete library resources" ON public.library_resources;
 CREATE POLICY "Admins can delete library resources"
 ON public.library_resources FOR DELETE
 USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-    OR (SELECT email FROM auth.users WHERE id = auth.uid()) = 'roshanjoyal520@gmail.com'
+    auth.uid() = uploaded_by
+    OR COALESCE(auth.jwt() ->> 'email', '') = 'roshanjoyal520@gmail.com'
+    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (role = 'admin' OR email = 'roshanjoyal520@gmail.com'))
 );
 
 -- 5. RLS Policies for presentation_sessions
