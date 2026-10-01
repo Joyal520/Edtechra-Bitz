@@ -10,6 +10,7 @@ import {
 } from '@/types/classroom';
 import { CanonicalAssessmentV2 } from '@/components/exam/shared/ExamSchema';
 import { classroomPointsService } from './classroomPointsService';
+import { sanitizeAnswersForPayload, sanitizeExamForPayload } from '@/utils/examPayloadSanitizer';
 
 class ClassroomExamService {
   private async getUserId(): Promise<string | null> {
@@ -508,6 +509,16 @@ class ClassroomExamService {
 
     this.inFlightSubmissions.add(payload.examId);
 
+    const cleanAnswers = sanitizeAnswersForPayload(payload.answers);
+    const cleanExam = sanitizeExamForPayload(payload.exam);
+
+    const cleanPayload = {
+      examId: String(payload.examId || ''),
+      classroomId: String(payload.classroomId || ''),
+      exam: cleanExam,
+      answers: cleanAnswers
+    };
+
     try {
       const headers = await this.getAuthHeaders();
       const res = await fetch('/api/exam-engine?action=submit-student-exam', {
@@ -516,7 +527,7 @@ class ClassroomExamService {
           'Content-Type': 'application/json',
           ...headers
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(cleanPayload)
       });
 
       const data = await res.json();

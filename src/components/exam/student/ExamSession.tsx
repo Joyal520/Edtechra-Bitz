@@ -114,6 +114,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [finalResult, setFinalResult] = useState<any | null>(null);
+  const [sessionErrorMessage, setSessionErrorMessage] = useState<string | null>(null);
 
   const autosaveTimerRef = useRef<any>(null);
   const expiryTimestampRef = useRef<number | null>(
@@ -329,7 +330,8 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
 
       setSessionPhase('taking');
     } catch (err: any) {
-      alert(err.message || 'Failed to start examination session.');
+      const msg = typeof err?.message === 'string' ? err.message : 'Failed to start examination session.';
+      setSessionErrorMessage(msg);
     } finally {
       setIsStarting(false);
     }
@@ -344,7 +346,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   // 5. Final Submission (Idempotent, Safe with Latest Answers)
   const performSubmission = async (overrideAnswers?: Record<string, any>) => {
     if (flattenedQuestions.length === 0) {
-      alert('Cannot submit an examination with 0 questions.');
+      setSessionErrorMessage('Cannot submit an examination with 0 questions.');
       return;
     }
 
@@ -360,7 +362,11 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     }
 
     // Use guaranteed latest answers from ref to prevent stale state omission
-    const finalAnswersToSubmit = overrideAnswers || answersRef.current || answers;
+    // Safety guard: reject browser Event objects accidentally passed as overrideAnswers
+    const safeOverride = overrideAnswers && typeof overrideAnswers === 'object' && !('nativeEvent' in overrideAnswers) && !('target' in overrideAnswers && 'type' in overrideAnswers)
+      ? overrideAnswers
+      : undefined;
+    const finalAnswersToSubmit = safeOverride || answersRef.current || answers;
 
     try {
       if (isPreview || !onSubmitExam) {
@@ -418,7 +424,17 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       }
     } catch (err: any) {
       console.error('[ExamSession] Final submission error:', err);
-      alert(err.message || "Your answers are saved, but we couldn't complete the submission. Please try again.");
+      let errorMsg = "Your answers are saved, but we couldn't complete the submission. Please try again.";
+      if (err) {
+        if (typeof err.message === 'string' && err.message.trim()) {
+          errorMsg = err.message;
+        } else if (typeof err.error === 'string' && err.error.trim()) {
+          errorMsg = err.error;
+        } else if (typeof err === 'string' && err.trim()) {
+          errorMsg = err;
+        }
+      }
+      setSessionErrorMessage(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -550,8 +566,34 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           markedForReviewCount={markedCount}
           isSubmitting={isSubmitting}
           onClose={() => setShowSubmitConfirm(false)}
-          onConfirmSubmit={performSubmission}
+          onConfirmSubmit={() => performSubmission()}
         />
+
+        {/* In-App Error Notification Modal */}
+        {sessionErrorMessage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+            <div className="bg-[#0b142c] border border-rose-500/50 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5 text-white text-center">
+              <div className="w-14 h-14 rounded-3xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-white">Notice</h3>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {sessionErrorMessage}
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSessionErrorMessage(null)}
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm cursor-pointer shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -753,8 +795,34 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
         markedForReviewCount={markedCount}
         isSubmitting={isSubmitting}
         onClose={() => setShowSubmitConfirm(false)}
-        onConfirmSubmit={performSubmission}
+        onConfirmSubmit={() => performSubmission()}
       />
+
+      {/* In-App Error Notification Modal */}
+      {sessionErrorMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#0b142c] border border-rose-500/50 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5 text-white text-center">
+            <div className="w-14 h-14 rounded-3xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-white">Notice</h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                {sessionErrorMessage}
+              </p>
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSessionErrorMessage(null)}
+                className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm cursor-pointer shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

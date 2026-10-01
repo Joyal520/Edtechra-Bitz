@@ -75,7 +75,7 @@ export const SubmitDialog: React.FC<SubmitDialogProps> = ({
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={onClose}
+            onClick={() => onClose()}
             className="flex-1 py-3.5 rounded-2xl border border-blue-800/80 text-slate-300 hover:text-white hover:bg-blue-900/40 text-xs font-black cursor-pointer transition-all"
           >
             Return to Exam
@@ -84,7 +84,7 @@ export const SubmitDialog: React.FC<SubmitDialogProps> = ({
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={onConfirmSubmit}
+            onClick={() => onConfirmSubmit()}
             className="flex-1 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
           >
             <CheckCircle2 className="w-4 h-4" />

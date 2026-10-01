@@ -6,6 +6,8 @@
 import { supabase } from '@/lib/supabase';
 import { CanonicalExamV1 } from '@/components/exam/shared/ExamSchema';
 
+import { sanitizeAnswersForPayload, sanitizeExamForPayload } from '@/utils/examPayloadSanitizer';
+
 class ExamPlatformService {
   private async getAuthHeaders(): Promise<Record<string, string>> {
     let token: string | undefined = undefined;
@@ -161,12 +163,24 @@ class ExamPlatformService {
     answers: Record<string, any>;
     bookmarkedIds: string[];
   }): Promise<void> {
+    const cleanAnswers = sanitizeAnswersForPayload(payload.answers);
+    const cleanBookmarks = Array.isArray(payload.bookmarkedIds)
+      ? payload.bookmarkedIds.map(String)
+      : [];
+
+    const cleanPayload = {
+      examId: String(payload.examId || ''),
+      attemptId: payload.attemptId ? String(payload.attemptId) : undefined,
+      answers: cleanAnswers,
+      bookmarkedIds: cleanBookmarks
+    };
+
     try {
       const headers = await this.getAuthHeaders();
       const res = await fetch('/api/exams/attempts/sync', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(cleanPayload)
       });
 
       if (res.ok) return;
@@ -180,8 +194,8 @@ class ExamPlatformService {
         await supabase
           .from('classroom_exam_results')
           .update({
-            session_answers: payload.answers,
-            bookmarked_question_ids: payload.bookmarkedIds,
+            session_answers: cleanAnswers,
+            bookmarked_question_ids: cleanBookmarks,
             last_synced_at: new Date().toISOString()
           })
           .eq('id', payload.attemptId);
@@ -200,12 +214,22 @@ class ExamPlatformService {
     exam: any;
     answers: Record<string, any>;
   }): Promise<any> {
+    const cleanAnswers = sanitizeAnswersForPayload(payload.answers);
+    const cleanExam = sanitizeExamForPayload(payload.exam);
+
+    const cleanPayload = {
+      examId: String(payload.examId || ''),
+      classroomId: String(payload.classroomId || ''),
+      exam: cleanExam,
+      answers: cleanAnswers
+    };
+
     try {
       const headers = await this.getAuthHeaders();
       const res = await fetch('/api/exam-engine?action=submit-student-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(cleanPayload)
       });
 
       const data = await res.json();
@@ -223,10 +247,10 @@ class ExamPlatformService {
     // Fallback: direct Supabase submission via classroomExamService.submitExam2
     const { classroomExamService } = await import('./classroomExamService');
     const directResult = await classroomExamService.submitExam2({
-      examId: payload.examId,
-      classroomId: payload.classroomId,
-      exam: payload.exam,
-      answers: payload.answers
+      examId: cleanPayload.examId,
+      classroomId: cleanPayload.classroomId,
+      exam: cleanExam,
+      answers: cleanAnswers
     });
 
     if (!directResult) {
