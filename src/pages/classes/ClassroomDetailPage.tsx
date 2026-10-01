@@ -148,6 +148,7 @@ export const ClassroomDetailPage: React.FC = () => {
   // Live Quiz State
   const [liveQuizBankOpen, setLiveQuizBankOpen] = useState(false);
   const [createLiveQuizOpen, setCreateLiveQuizOpen] = useState(false);
+  const [quizToEdit, setQuizToEdit] = useState<LiveQuiz | null>(null);
   const [launchDecisionModalOpen, setLaunchDecisionModalOpen] = useState(false);
   const [quizToLaunch, setQuizToLaunch] = useState<LiveQuiz | null>(null);
   const [activeLiveQuizSession, setActiveLiveQuizSession] = useState<LiveQuizSession | null>(null);
@@ -250,6 +251,18 @@ export const ClassroomDetailPage: React.FC = () => {
     setCreateLiveQuizOpen(false);
     setQuizToLaunch(quiz);
     setLaunchDecisionModalOpen(true);
+  };
+
+  const handleOpenCreateQuiz = () => {
+    setQuizToEdit(null);
+    setLiveQuizBankOpen(false);
+    setCreateLiveQuizOpen(true);
+  };
+
+  const handleEditQuizFromBank = (quiz: LiveQuiz) => {
+    setQuizToEdit(quiz);
+    setLiveQuizBankOpen(false);
+    setCreateLiveQuizOpen(true);
   };
 
   const handleLaunchNow = async (selectedQuiz: LiveQuiz) => {
@@ -2341,14 +2354,30 @@ export const ClassroomDetailPage: React.FC = () => {
         classroomId={classroom.id}
         onClose={() => setLiveQuizBankOpen(false)}
         onSelectQuiz={handleOpenLaunchDecision}
-        onCreateCustomQuiz={() => setCreateLiveQuizOpen(true)}
+        onCreateCustomQuiz={handleOpenCreateQuiz}
+        onEditQuiz={handleEditQuizFromBank}
       />
 
       <CreateLiveQuizModal
         isOpen={createLiveQuizOpen}
         classroomId={classroom.id}
-        onClose={() => setCreateLiveQuizOpen(false)}
-        onSuccess={handleOpenLaunchDecision}
+        initialQuiz={quizToEdit}
+        onClose={() => {
+          setCreateLiveQuizOpen(false);
+          if (quizToEdit) {
+            setQuizToEdit(null);
+            setLiveQuizBankOpen(true);
+          }
+        }}
+        onSuccess={(savedQuiz) => {
+          setCreateLiveQuizOpen(false);
+          if (quizToEdit) {
+            setQuizToEdit(null);
+            setLiveQuizBankOpen(true);
+          } else {
+            handleOpenLaunchDecision(savedQuiz);
+          }
+        }}
       />
 
       <LiveQuizLaunchDecisionModal

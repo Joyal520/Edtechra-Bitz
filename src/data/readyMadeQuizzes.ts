@@ -17,25 +17,29 @@ function buildClientSafeQuestions(title: string, _category: string): LiveQuizQue
       { q: 'Which sentence is in the past continuous tense?', opts: ['Was reading', 'Read regularly', 'Will read', 'Have read'] },
       { q: '"She has lived in London for five years." Which tense is this?', opts: ['Simple Past', 'Present Perfect', 'Past Perfect', 'Future Perfect'] },
       { q: 'Choose the correct future form: "By tomorrow, we ___ the project."', opts: ['will finish', 'will have finished', 'finished', 'finishing'] },
-      { q: 'Yesterday, they ___ to the museum.', opts: ['go', 'gone', 'went', 'going'] }
+      { q: 'Yesterday, they ___ to the museum.', opts: ['go', 'gone', 'went', 'going'] },
+      { q: 'Which sentence uses the present perfect tense?', opts: ['I have eaten', 'I ate pizza', 'I will eat', 'I am eating'] }
     ],
     'ICT Basics': [
       { q: 'What does "CPU" stand for in computing?', opts: ['Central Processing Unit', 'Computer Power Unit', 'Central Program Utility', 'Core Peripheral Unit'] },
       { q: 'Which of these is an example of an input device?', opts: ['Monitor', 'Keyboard', 'Speaker', 'Printer'] },
       { q: 'What does URL stand for in internet terminology?', opts: ['Uniform Resource Locator', 'Universal Record Link', 'Unified Resource Language', 'Universal Routing Logic'] },
-      { q: 'Which file extension typically denotes an image file?', opts: ['.docx', '.png', '.mp3', '.exe'] }
+      { q: 'Which file extension typically denotes an image file?', opts: ['.docx', '.png', '.mp3', '.exe'] },
+      { q: 'What does RAM stand for in hardware?', opts: ['Random Access Memory', 'Rapid Access Mode', 'Read Action Module', 'Remote Access Memory'] }
     ],
     'AI Basics': [
       { q: 'What does "AI" stand for?', opts: ['Automated Internet', 'Artificial Intelligence', 'Algorithmic Input', 'Advanced Integration'] },
       { q: 'Which field of AI allows computers to learn from data patterns without explicit programming?', opts: ['Quantum Computing', 'Machine Learning', 'Computer Graphics', 'Database Management'] },
       { q: 'What is a neural network in AI inspired by?', opts: ['Computer motherboards', 'Human Brain', 'Internet cables', 'Telephone switches'] },
-      { q: 'Which of the following is a conversational AI model?', opts: ['Large Language Model', 'Relational Database', 'Video Decoder', 'Rasterizer'] }
+      { q: 'Which of the following is a conversational AI model?', opts: ['Large Language Model', 'Relational Database', 'Video Decoder', 'Rasterizer'] },
+      { q: 'What is the process of training an AI model called?', opts: ['Model training', 'Data archiving', 'Disk formatting', 'Hardware caching'] }
     ],
     'Solar System': [
       { q: 'Which is the largest planet in our solar system?', opts: ['Mars', 'Saturn', 'Jupiter', 'Neptune'] },
       { q: 'Which planet is known as the "Red Planet"?', opts: ['Venus', 'Mars', 'Mercury', 'Saturn'] },
       { q: 'What is the closest planet to the Sun?', opts: ['Mercury', 'Venus', 'Earth', 'Mars'] },
-      { q: 'Which celestial body is at the center of our solar system?', opts: ['The Moon', 'The Sun', 'Jupiter', 'Polaris'] }
+      { q: 'Which celestial body is at the center of our solar system?', opts: ['The Moon', 'The Sun', 'Jupiter', 'Polaris'] },
+      { q: 'Which planet is renowned for its prominent rings?', opts: ['Saturn', 'Jupiter', 'Mercury', 'Mars'] }
     ]
   };
 
@@ -48,8 +52,8 @@ function buildClientSafeQuestions(title: string, _category: string): LiveQuizQue
     }));
   }
 
-  // Fallback generation for other topics (strictly 1-3 words per option)
-  return Array.from({ length: 6 }, (_, index) => ({
+  // Fallback generation for other topics (strictly 1-3 words per option, exactly 5 questions = 100 points)
+  return Array.from({ length: 5 }, (_, index) => ({
     id: `q_${title.toLowerCase().replace(/\s+/g, '_')}_${index + 1}`,
     question: `${title}: Question ${index + 1} on core concepts`,
     options: [

@@ -855,4 +855,61 @@ export function buildTaskEvaluationKey({ classroomId, studentId, taskId, submiss
   return `classrooms/${cleanClassId}/students/${cleanStudentId}/tasks/${cleanTaskId}/submissions/${cleanSubId}/evaluation.json`;
 }
 
+// ============================================================================
+// EDTECHRA LIBRARY: R2 Object Keys & File Validation (PDF and PPTX)
+// ============================================================================
+
+export function buildLibraryObjectKey({ filename = 'document.pdf', contentType = 'application/pdf' }) {
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  const rawExt = filename.split('.').pop() || 'bin';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'bin';
+  return `library/resources/${timestamp}_${randomSuffix}.${cleanExt}`;
+}
+
+export function buildLibraryCoverObjectKey({ filename = 'cover.webp', contentType = 'image/webp' }) {
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  const rawExt = filename.split('.').pop() || 'webp';
+  const cleanExt = sanitizeSegment(rawExt).slice(0, 10) || 'webp';
+  return `library/covers/${timestamp}_${randomSuffix}.${cleanExt}`;
+}
+
+export function validateLibraryUpload({ contentType, filename, size, isCover = false }) {
+  if (isCover) {
+    const norm = (contentType || '').toLowerCase().trim();
+    if (!norm.startsWith('image/')) {
+      throw new Error('Library cover image must be a valid image file (JPG, PNG, WebP).');
+    }
+    const MAX_COVER_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (size && Number(size) > MAX_COVER_SIZE) {
+      throw new Error('Cover image exceeds the 10 MB limit.');
+    }
+    return true;
+  }
+
+  // V1 Resource: strictly PDF or PPTX
+  const normType = (contentType || '').toLowerCase().trim();
+  const normName = (filename || '').toLowerCase().trim();
+
+  const isPdf = normType === 'application/pdf' || normName.endsWith('.pdf');
+  const isPptx =
+    normType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    normType === 'application/vnd.ms-powerpoint' ||
+    normName.endsWith('.pptx') ||
+    normName.endsWith('.ppt');
+
+  if (!isPdf && !isPptx) {
+    throw new Error('Unsupported format for EdTechra Library. For V1, only PDF (.pdf) and PowerPoint (.pptx) documents are supported.');
+  }
+
+  const MAX_LIBRARY_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+  if (size && Number(size) > MAX_LIBRARY_FILE_SIZE) {
+    throw new Error('Resource file exceeds the 100 MB limit.');
+  }
+
+  return true;
+}
+
+
 

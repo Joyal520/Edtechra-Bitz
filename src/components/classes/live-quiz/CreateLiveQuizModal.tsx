@@ -36,6 +36,7 @@ interface CreateLiveQuizModalProps {
   classroomId: string;
   onClose: () => void;
   onSuccess: (newQuiz: LiveQuiz) => void;
+  initialQuiz?: LiveQuiz | null;
 }
 
 const PRESET_TOPICS = [
@@ -49,7 +50,7 @@ const PRESET_TOPICS = [
   'Fractions'
 ];
 
-const QUESTION_COUNT_OPTIONS = [5, 10, 15, 20, 25, 30];
+export const QUESTION_COUNT_OPTIONS = [5, 10, 20, 25] as const;
 const CATEGORY_OPTIONS = [
   'Grammar',
   'Vocabulary',
@@ -66,21 +67,32 @@ const TIMER_PRESETS = [30, 60, 90, 120, 300, 600];
 type ModalMode = 'ai' | 'manual';
 type AiStep = 'create_prompt' | 'view_prompt' | 'paste_quiz' | 'quiz_ready';
 
+function buildDefaultQuestions(count: number): LiveQuizQuestion[] {
+  return Array.from({ length: count }, (_, idx) => ({
+    id: `q_${Date.now()}_${idx + 1}`,
+    question: '',
+    options: ['', '', '', ''],
+    correctIndex: 0,
+    durationSec: 20,
+    explanation: ''
+  }));
+}
+
 export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   isOpen,
   classroomId,
   onClose,
-  onSuccess
+  onSuccess,
+  initialQuiz
 }) => {
-  const [mode, setMode] = useState<ModalMode>('ai');
+  const isEditMode = Boolean(initialQuiz);
+  const [mode, setMode] = useState<ModalMode>(isEditMode ? 'manual' : 'ai');
   const [aiStep, setAiStep] = useState<AiStep>('create_prompt');
 
   // AI Prompt Generator Form State
   const [topic, setTopic] = useState('');
   const [learningContent, setLearningContent] = useState('');
   const [questionCount, setQuestionCount] = useState<number>(10);
-  const [isCustomCount, setIsCustomCount] = useState(false);
-  const [customCountValue, setCustomCountValue] = useState('10');
   const [difficulty, setDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [category, setCategory] = useState('Grammar');
 
@@ -103,15 +115,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [manualCategory, setManualCategory] = useState('General');
   const [manualDifficulty, setManualDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [manualDescription, setManualDescription] = useState('');
-  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>([
-    {
-      id: 'q1',
-      question: '',
-      options: ['', '', '', ''],
-      correctIndex: 0,
-      durationSec: 20
-    }
-  ]);
+  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>(buildDefaultQuestions(5));
 
   // Submission State
   const [isSaving, setIsSaving] = useState(false);
@@ -121,6 +125,56 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Initialize or reset form based on initialQuiz and isOpen
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialQuiz) {
+        setMode('manual');
+        setManualTitle(initialQuiz.title || '');
+        setManualDescription(initialQuiz.description || '');
+        setManualCategory(initialQuiz.category || 'General');
+        setManualDifficulty(initialQuiz.difficulty || 'Medium');
+        setCoverImageUrl(initialQuiz.cover_image || initialQuiz.cover_image_url || null);
+        setTimerEnabled(Boolean(initialQuiz.timer_enabled));
+        setTimerSeconds(initialQuiz.timer_seconds || 60);
+        setVisibility(initialQuiz.visibility || 'private');
+        setManualQuestions(
+          initialQuiz.questions && initialQuiz.questions.length > 0
+            ? initialQuiz.questions.map((q, idx) => ({
+                id: q.id || `q_${idx + 1}`,
+                question: q.question,
+                options: Array.isArray(q.options) ? [...q.options] : ['', '', '', ''],
+                correctIndex: q.correctIndex ?? 0,
+                durationSec: q.durationSec || 20,
+                explanation: q.explanation || ''
+              }))
+            : buildDefaultQuestions(5)
+        );
+      } else {
+        setMode('ai');
+        setAiStep('create_prompt');
+        setTopic('');
+        setLearningContent('');
+        setQuestionCount(10);
+        setDifficulty('Medium');
+        setCategory('Grammar');
+        setTimerEnabled(false);
+        setTimerSeconds(60);
+        setVisibility('private');
+        setGeneratedPrompt('');
+        setPastedJson('');
+        setValidationResult(null);
+        setManualTitle('');
+        setManualDescription('');
+        setManualCategory('General');
+        setManualDifficulty('Medium');
+        setCoverImageUrl(null);
+        setManualQuestions(buildDefaultQuestions(5));
+      }
+      setError(null);
+    }
+  }, [isOpen, initialQuiz]);
 
   if (!isOpen) return null;
 
@@ -137,14 +191,14 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     setError(null);
     try {
       const res = await courseStudioService.uploadCourseImage(file, 'quiz-covers', true);
-      setCoverImageUrl(res.publicUrl);
-    } catch (uploadErr) {
-      console.warn('R2 upload notice, falling back to local data URL:', uploadErr);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setCoverImageUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      if (res && res.publicUrl) {
+        setCoverImageUrl(res.publicUrl);
+      } else {
+        throw new Error('Upload succeeded but no public URL was returned.');
+      }
+    } catch (uploadErr: any) {
+      console.error('R2 cover upload error:', uploadErr);
+      setError(`Cover image upload failed: ${uploadErr.message || 'Please check your connection and try again.'}`);
     } finally {
       setUploadingCover(false);
       if (coverFileInputRef.current) {
@@ -162,16 +216,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
   // Handle Question Count Selection
   const handleSelectCount = (count: number) => {
-    setIsCustomCount(false);
     setQuestionCount(count);
-  };
-
-  const handleCustomCountChange = (val: string) => {
-    setCustomCountValue(val);
-    const num = parseInt(val, 10);
-    if (!isNaN(num) && num > 0 && num <= 50) {
-      setQuestionCount(num);
-    }
   };
 
   // Generate Prompt
@@ -182,11 +227,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     }
     setError(null);
 
-    const count = isCustomCount ? parseInt(customCountValue, 10) || 10 : questionCount;
     const prompt = generateAiQuizPrompt({
       topic: topic.trim(),
       content: learningContent.trim(),
-      questionCount: count,
+      questionCount,
       difficulty,
       category
     });
@@ -226,8 +270,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     setIsValidating(true);
 
     try {
-      const count = isCustomCount ? parseInt(customCountValue, 10) || 10 : questionCount;
-      const result = validateAndParseAiQuiz(pastedJson, count, category, difficulty);
+      const result = validateAndParseAiQuiz(pastedJson, questionCount, category, difficulty);
       setValidationResult(result);
 
       if (result.isValid && result.parsedQuiz) {
@@ -260,7 +303,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       // Upfront client check against existing user quizzes
       const existingQuizzes = await liveQuizService.getAllQuizzes(classroomId);
       const isDuplicate = existingQuizzes.some(
-        (q) => q.is_owner && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
+        (q) => q.is_owner && q.id !== initialQuiz?.id && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
       );
       if (isDuplicate) {
         setError('A quiz with this title already exists. Please choose a different title.');
@@ -268,23 +311,41 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         return;
       }
 
-      const res = await liveQuizService.createCustomQuiz({
-        classroom_id: classroomId,
-        title: rawTitle,
-        description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
-        category: parsedQuiz.category || category,
-        difficulty: parsedQuiz.difficulty || difficulty,
-        questions: parsedQuiz.questions,
-        cover_image: coverImageUrl,
-        cover_image_url: coverImageUrl,
-        visibility,
-        timer_enabled: timerEnabled,
-        timer_seconds: timerEnabled ? timerSeconds : null,
-        is_public: visibility === 'common'
-      });
+      let res;
+      if (initialQuiz) {
+        res = await liveQuizService.updateCustomQuiz(initialQuiz.id, {
+          classroom_id: classroomId,
+          title: rawTitle,
+          description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
+          category: parsedQuiz.category || category,
+          difficulty: parsedQuiz.difficulty || difficulty,
+          questions: parsedQuiz.questions,
+          cover_image: coverImageUrl,
+          cover_image_url: coverImageUrl,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerEnabled ? timerSeconds : null,
+          is_public: visibility === 'common'
+        });
+      } else {
+        res = await liveQuizService.createCustomQuiz({
+          classroom_id: classroomId,
+          title: rawTitle,
+          description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
+          category: parsedQuiz.category || category,
+          difficulty: parsedQuiz.difficulty || difficulty,
+          questions: parsedQuiz.questions,
+          cover_image: coverImageUrl,
+          cover_image_url: coverImageUrl,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerEnabled ? timerSeconds : null,
+          is_public: visibility === 'common'
+        });
+      }
 
       if (res.error || !res.data) {
-        throw new Error(res.error || 'Failed to save imported quiz');
+        throw new Error(res.error || (initialQuiz ? 'Failed to update quiz' : 'Failed to save imported quiz'));
       }
 
       onSuccess(res.data);
@@ -298,8 +359,36 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     }
   };
 
+  // Manual Mode: Set question count directly to 5, 10, 20, or 25
+  const handleSetManualCount = (targetCount: number) => {
+    if (manualQuestions.length === targetCount) return;
+    if (manualQuestions.length < targetCount) {
+      const added = Array.from({ length: targetCount - manualQuestions.length }, (_, i) => ({
+        id: `q_${Date.now()}_${manualQuestions.length + i + 1}`,
+        question: '',
+        options: ['', '', '', ''],
+        correctIndex: 0,
+        durationSec: 20,
+        explanation: ''
+      }));
+      setManualQuestions((prev) => [...prev, ...added]);
+    } else {
+      if (
+        window.confirm(
+          `Reducing to ${targetCount} questions will remove the last ${manualQuestions.length - targetCount} questions. Proceed?`
+        )
+      ) {
+        setManualQuestions((prev) => prev.slice(0, targetCount));
+      }
+    }
+  };
+
   // Manual Mode: Add Question
   const handleManualAddQuestion = () => {
+    if (manualQuestions.length >= 25) {
+      setError('Quizzes are limited to a maximum of 25 questions (100 points total).');
+      return;
+    }
     const nextId = `q${manualQuestions.length + 1}`;
     setManualQuestions((prev) => [
       ...prev,
@@ -308,7 +397,8 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         question: '',
         options: ['', '', '', ''],
         correctIndex: 0,
-        durationSec: 20
+        durationSec: 20,
+        explanation: ''
       }
     ]);
   };
@@ -327,6 +417,14 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
     const rawTitle = manualTitle.trim();
     if (!rawTitle) {
       setError('Please provide a quiz title.');
+      return;
+    }
+
+    // Enforce 100-Point question counts (5, 10, 20, 25)
+    if (![5, 10, 20, 25].includes(manualQuestions.length)) {
+      setError(
+        `Quizzes must contain exactly 5, 10, 20, or 25 questions for the 100-Point System (currently have ${manualQuestions.length}).`
+      );
       return;
     }
 
@@ -370,7 +468,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       // Upfront client check against existing user quizzes
       const existingQuizzes = await liveQuizService.getAllQuizzes(classroomId);
       const isDuplicate = existingQuizzes.some(
-        (q) => q.is_owner && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
+        (q) => q.is_owner && q.id !== initialQuiz?.id && q.title.trim().replace(/\s+/g, ' ').toLowerCase() === normalizedCandidate
       );
       if (isDuplicate) {
         setError('A quiz with this title already exists. Please choose a different title.');
@@ -378,29 +476,47 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         return;
       }
 
-      const res = await liveQuizService.createCustomQuiz({
-        classroom_id: classroomId,
-        title: rawTitle,
-        description: manualDescription.trim(),
-        category: manualCategory,
-        difficulty: manualDifficulty,
-        questions: manualQuestions,
-        cover_image: coverImageUrl,
-        cover_image_url: coverImageUrl,
-        visibility,
-        timer_enabled: timerEnabled,
-        timer_seconds: timerEnabled ? timerSeconds : null,
-        is_public: visibility === 'common'
-      });
+      let res;
+      if (initialQuiz) {
+        res = await liveQuizService.updateCustomQuiz(initialQuiz.id, {
+          classroom_id: classroomId,
+          title: rawTitle,
+          description: manualDescription.trim(),
+          category: manualCategory,
+          difficulty: manualDifficulty,
+          questions: manualQuestions,
+          cover_image: coverImageUrl,
+          cover_image_url: coverImageUrl,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerEnabled ? timerSeconds : null,
+          is_public: visibility === 'common'
+        });
+      } else {
+        res = await liveQuizService.createCustomQuiz({
+          classroom_id: classroomId,
+          title: rawTitle,
+          description: manualDescription.trim(),
+          category: manualCategory,
+          difficulty: manualDifficulty,
+          questions: manualQuestions,
+          cover_image: coverImageUrl,
+          cover_image_url: coverImageUrl,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerEnabled ? timerSeconds : null,
+          is_public: visibility === 'common'
+        });
+      }
 
       if (res.error || !res.data) {
-        throw new Error(res.error || 'Failed to save quiz');
+        throw new Error(res.error || (initialQuiz ? 'Failed to update quiz' : 'Failed to save quiz'));
       }
 
       onSuccess(res.data);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error saving quiz');
+      setError(err.message || (initialQuiz ? 'Error updating quiz' : 'Error saving quiz'));
     } finally {
       setIsSaving(false);
     }
@@ -419,17 +535,24 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <Sparkles className="w-5 h-5" />
+              {isEditMode ? <FileText className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-slate-900">Create Custom Quiz</h2>
+                <h2 className="text-lg font-black text-slate-900">
+                  {isEditMode ? 'Edit Quiz' : 'Create Custom Quiz'}
+                </h2>
                 <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-black border border-purple-200">
-                  Cloudflare R2 Storage
+                  {isEditMode ? 'Edit Mode' : 'Cloudflare R2 Storage'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-black border border-amber-200">
+                  100 Points Total
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-semibold">
-                Generate a quiz with AI using ChatGPT, Gemini or author questions manually
+                {isEditMode
+                  ? 'Update quiz title, description, questions, choices, answers, or cover image'
+                  : 'Generate a quiz with AI using ChatGPT, Gemini or author questions manually'}
               </p>
             </div>
           </div>
@@ -638,49 +761,41 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                   {/* Settings Grid (Questions, Difficulty, Category) */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     
-                    {/* Number of Questions */}
+                    {/* Number of Questions (100-Point System) */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                      <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Number of Questions
-                      </label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {QUESTION_COUNT_OPTIONS.map((count) => (
-                          <button
-                            key={count}
-                            type="button"
-                            onClick={() => handleSelectCount(count)}
-                            className={`py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                              !isCustomCount && questionCount === count
-                                ? 'bg-purple-600 text-white shadow-2xs'
-                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-purple-50'
-                            }`}
-                          >
-                            {count}
-                          </button>
-                        ))}
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Questions
+                        </label>
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-850 border border-amber-200">
+                          100 Pts Total
+                        </span>
                       </div>
-
-                      {/* Custom Count Toggle */}
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setIsCustomCount(!isCustomCount)}
-                          className="text-[11px] font-bold text-purple-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          {isCustomCount ? 'Use preset options' : '+ Custom question count'}
-                        </button>
-                        {isCustomCount && (
-                          <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            value={customCountValue}
-                            onChange={(e) => handleCustomCountChange(e.target.value)}
-                            placeholder="e.g. 12"
-                            className="mt-1 w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-purple-600"
-                          />
-                        )}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {QUESTION_COUNT_OPTIONS.map((count) => {
+                          const ptsEach = 100 / count;
+                          return (
+                            <button
+                              key={count}
+                              type="button"
+                              onClick={() => handleSelectCount(count)}
+                              className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center cursor-pointer ${
+                                questionCount === count
+                                  ? 'bg-purple-600 text-white shadow-2xs'
+                                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-purple-50'
+                              }`}
+                            >
+                              <span>{count} Qs</span>
+                              <span className={`text-[10px] font-bold ${questionCount === count ? 'text-purple-100' : 'text-slate-400'}`}>
+                                {ptsEach} pts each
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      <p className="text-[10px] text-slate-400 font-semibold pt-0.5 text-center">
+                        Strictly 100 points total per quiz
+                      </p>
                     </div>
 
                     {/* Difficulty */}
@@ -959,7 +1074,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                       <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                         <span>Your AI Quiz Prompt</span>
                         <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-black border border-purple-200">
-                          {isCustomCount ? customCountValue : questionCount} Questions • {difficulty}
+                          {questionCount} Questions ({Math.round(100 / questionCount)} pts each) • {difficulty}
                         </span>
                       </h3>
                       <p className="text-xs text-slate-500 font-medium">
@@ -1507,29 +1622,77 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
               </div>
 
+              {/* 100-Point Target Selector for Manual Editor */}
+              <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-slate-50 rounded-2xl border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      100-Point Question Count
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-black shadow-2xs">
+                      100 Points Total
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      [5, 10, 20, 25].includes(manualQuestions.length)
+                        ? 'bg-purple-100 text-purple-900'
+                        : 'bg-rose-100 text-rose-850'
+                    }`}>
+                      Current: {manualQuestions.length} Qs ({[5, 10, 20, 25].includes(manualQuestions.length) ? `${100 / manualQuestions.length} pts each` : 'Must be 5, 10, 20, or 25'})
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium pt-0.5">
+                    Select target count: 5 (20 pts), 10 (10 pts), 20 (5 pts), or 25 (4 pts)
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5 shrink-0">
+                  {QUESTION_COUNT_OPTIONS.map((cnt) => (
+                    <button
+                      key={cnt}
+                      type="button"
+                      onClick={() => handleSetManualCount(cnt)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        manualQuestions.length === cnt
+                          ? 'bg-purple-600 text-white shadow-2xs'
+                          : 'bg-white text-purple-900 border border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      {cnt} Qs ({100 / cnt} pts)
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Questions List */}
               <div className="space-y-4 pt-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black uppercase tracking-wider text-slate-400">
                     Questions ({manualQuestions.length})
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleManualAddQuestion}
-                    className="inline-flex items-center gap-1 text-xs font-black text-purple-700 hover:underline cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Question</span>
-                  </button>
+                  {manualQuestions.length < 25 && (
+                    <button
+                      type="button"
+                      onClick={handleManualAddQuestion}
+                      className="inline-flex items-center gap-1 text-xs font-black text-purple-700 hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Question</span>
+                    </button>
+                  )}
                 </div>
 
                 {manualQuestions.map((q, qIndex) => (
                   <div key={q.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <strong className="text-xs font-black text-slate-800">
-                        Question {qIndex + 1}
-                      </strong>
-                      {manualQuestions.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        <strong className="text-xs font-black text-slate-800">
+                          Question {qIndex + 1}
+                        </strong>
+                        <span className="text-[10px] font-black text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                          {[5, 10, 20, 25].includes(manualQuestions.length) ? `${100 / manualQuestions.length} pts` : ''}
+                        </span>
+                      </div>
+                      {manualQuestions.length > 5 && (
                         <button
                           type="button"
                           onClick={() => handleManualRemoveQuestion(qIndex)}
@@ -1590,12 +1753,26 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                                 )
                               );
                             }}
-                            placeholder={`Option ${String.fromCharCode(65 + optIndex)}`}
+                            placeholder={`Option ${String.fromCharCode(65 + optIndex)} (1-3 words)`}
                             className="flex-1 px-2 py-1 text-xs font-medium border-none focus:outline-none"
                           />
                         </div>
                       ))}
                     </div>
+
+                    {/* Explanation */}
+                    <input
+                      type="text"
+                      value={q.explanation || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setManualQuestions((prev) =>
+                          prev.map((item, i) => (i === qIndex ? { ...item, explanation: val } : item))
+                        );
+                      }}
+                      placeholder="Educational explanation for correct answer (optional)..."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-[11px] font-medium text-slate-700 placeholder:text-slate-400"
+                    />
                   </div>
                 ))}
               </div>
@@ -1605,7 +1782,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1614,7 +1791,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                   disabled={isSaving}
                   className="px-5 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  {isSaving ? 'Saving to R2...' : 'Save & Prepare Quiz'}
+                  {isSaving ? (isEditMode ? 'Updating Quiz...' : 'Saving to R2...') : (isEditMode ? 'Save Changes' : 'Save & Prepare Quiz')}
                 </button>
               </div>
 

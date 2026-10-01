@@ -4,6 +4,9 @@
 
 import { LiveQuizDifficulty, LiveQuizQuestion } from '@/types/liveQuiz';
 
+export const VALID_QUIZ_QUESTION_COUNTS = [5, 10, 20, 25] as const;
+export type ValidQuizQuestionCount = typeof VALID_QUIZ_QUESTION_COUNTS[number];
+
 export interface RawAiQuestion {
   question: string;
   options: string[];
@@ -48,6 +51,7 @@ export function generateAiQuizPrompt(params: {
   category?: string;
 }): string {
   const { topic, content, questionCount, difficulty, category } = params;
+  const pointsPerQuestion = Math.round(100 / (questionCount || 10));
 
   let topicOrContentSection = '';
   if (topic && content) {
@@ -60,7 +64,7 @@ export function generateAiQuizPrompt(params: {
 
   return `You are an expert educational assessment creator for EdTechra Digital Classroom.
 
-Generate a ${questionCount}-question multiple choice quiz on the following material:
+Generate a ${questionCount}-question multiple choice quiz (${pointsPerQuestion} points per question = 100 points total) on the following material:
 
 ${topicOrContentSection}
 
@@ -70,7 +74,7 @@ CATEGORY: ${category || 'General'}
 =============================================================================
 CRITICAL QUESTION REQUIREMENTS
 =============================================================================
-1. Generate EXACTLY ${questionCount} questions.
+1. Generate EXACTLY ${questionCount} questions (worth ${pointsPerQuestion} points each = 100 points total).
 2. Every question must be multiple choice.
 3. Every question must have EXACTLY 4 options in an array.
 4. OPTION LENGTH RULE: Every option MUST contain between 1 and 3 words (minimum 1 word, maximum 3 words). NEVER write sentences or options exceeding 3 words.
@@ -234,11 +238,16 @@ export function validateAndParseAiQuiz(
     return { isValid: false, errors };
   }
 
-  // Validate question count if specified
+  // Validate strictly against 100-point system (5, 10, 20, or 25 questions)
+  if (!VALID_QUIZ_QUESTION_COUNTS.includes(questionsArray.length as any)) {
+    errors.push(
+      `Quizzes must contain exactly 5, 10, 20, or 25 questions to satisfy the 100-Point System (found ${questionsArray.length}).`
+    );
+  }
+
+  // Validate expected question count if specified
   if (expectedQuestionCount && questionsArray.length !== expectedQuestionCount) {
-    if (questionsArray.length < 1) {
-      errors.push(`Expected ${expectedQuestionCount} questions, but found ${questionsArray.length}.`);
-    }
+    errors.push(`Expected ${expectedQuestionCount} questions, but found ${questionsArray.length}.`);
   }
 
   const liveQuestions: LiveQuizQuestion[] = [];

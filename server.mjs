@@ -53,7 +53,10 @@ import {
   buildCourseMediaObjectKey,
   buildCourseCoverObjectKey,
   buildTeacherMaterialObjectKey,
-  validateTeacherStorageQuota
+  validateTeacherStorageQuota,
+  buildLibraryObjectKey,
+  buildLibraryCoverObjectKey,
+  validateLibraryUpload
 } from './server/r2Service.mjs';
 import {
   getClassroomTeachingIntelligence,
@@ -2236,6 +2239,84 @@ app.post('/api/classes/presign-upload', async (req, res) => {
   } catch (error) {
     console.error('Error in /api/classes/presign-upload:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to generate classroom upload URL' });
+  }
+});
+
+// ============================================================================
+// EDTECHRA LIBRARY: Cloudflare R2 Presigned Upload & Management
+// ============================================================================
+
+// POST /api/library/presign-upload - Generate presigned R2 upload URL for Library PDF/PPTX resources & covers
+app.post('/api/library/presign-upload', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const isAdmin =
+      authData.profile?.role === 'admin' ||
+      authData.user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Administrator privileges required to upload to Library.' });
+    }
+
+    const { filename = 'document.pdf', contentType = 'application/pdf', size, isCover = false } = req.body;
+
+    try {
+      validateLibraryUpload({ contentType, filename, size, isCover });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const objectKey = isCover
+      ? buildLibraryCoverObjectKey({ filename, contentType })
+      : buildLibraryObjectKey({ filename, contentType });
+
+    const presigned = buildPresignedUpload({
+      objectKey,
+      contentType
+    });
+
+    res.json({
+      success: true,
+      data: presigned
+    });
+  } catch (error) {
+    console.error('Error in /api/library/presign-upload:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate Library upload URL' });
+  }
+});
+
+// POST /api/library/delete-file - Delete file from R2 when a Library resource is removed
+app.post('/api/library/delete-file', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const isAdmin =
+      authData.profile?.role === 'admin' ||
+      authData.user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Administrator privileges required.' });
+    }
+
+    const { objectKeys } = req.body;
+    if (Array.isArray(objectKeys) && objectKeys.length > 0) {
+      const validKeys = objectKeys.filter((k) => typeof k === 'string' && k.startsWith('library/'));
+      if (validKeys.length > 0) {
+        await deleteObjects(validKeys);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in /api/library/delete-file:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to delete file from storage.' });
   }
 });
 

@@ -14,6 +14,7 @@ import {
   EffectiveLiveQuizState
 } from '@/types/liveQuiz';
 import { READY_MADE_QUIZZES } from '@/data/readyMadeQuizzes';
+import { VALID_QUIZ_QUESTION_COUNTS } from '@/utils/aiQuizParser';
 import { classroomPointsService } from './classroomPointsService';
 
 class LiveQuizService {
@@ -68,7 +69,8 @@ class LiveQuizService {
 
         const { data, error } = await query;
         if (!error && data) {
-          const parsed = data.map((q: any) => {
+          const nonArchived = data.filter((q: any) => q.is_archived !== true);
+          const parsed = nonArchived.map((q: any) => {
             const isOwner = Boolean(currentUserId && q.created_by === currentUserId);
             const creatorName = isOwner
               ? 'Created by You'
@@ -165,7 +167,7 @@ class LiveQuizService {
         .eq('id', quizId)
         .maybeSingle();
 
-      if (error || !data) return null;
+      if (error || !data || data.is_archived === true) return null;
 
       const isOwner = Boolean(currentUserId && data.created_by === currentUserId);
       const creatorName = isOwner
@@ -297,14 +299,16 @@ class LiveQuizService {
       try {
         const { data: userQuizzes, error: checkErr } = await supabase
           .from('live_quizzes')
-          .select('id, title')
+          .select('id, title, is_archived')
           .eq('created_by', userId);
 
         if (!checkErr && userQuizzes) {
-          const isDuplicate = userQuizzes.some((q) => {
-            const existingNorm = (q.title || '').trim().replace(/\s+/g, ' ').toLowerCase();
-            return existingNorm === normalizedNewTitle;
-          });
+          const isDuplicate = userQuizzes
+            .filter((q) => !q.is_archived)
+            .some((q) => {
+              const existingNorm = (q.title || '').trim().replace(/\s+/g, ' ').toLowerCase();
+              return existingNorm === normalizedNewTitle;
+            });
 
           if (isDuplicate) {
             return { error: 'A quiz with this title already exists. Please choose a different title.' };
@@ -315,9 +319,9 @@ class LiveQuizService {
       }
     }
 
-    // Option length validation (1-3 words per choice, exactly 4 choices, no "all/none of above")
-    if (!Array.isArray(payload.questions) || payload.questions.length === 0) {
-      return { error: 'Please provide at least 1 question for the quiz.' };
+    // 100-Point Question Count Validation (5, 10, 20, or 25 questions)
+    if (!Array.isArray(payload.questions) || !VALID_QUIZ_QUESTION_COUNTS.includes(payload.questions.length as any)) {
+      return { error: 'Quizzes must contain exactly 5, 10, 20, or 25 questions to satisfy the 100-Point System.' };
     }
 
     for (let i = 0; i < payload.questions.length; i++) {
@@ -487,6 +491,273 @@ class LiveQuizService {
       visibility: 'private',
       is_public: false
     });
+  }
+
+  /**
+   * Updates an existing custom quiz (metadata & questions), preserving its ID and ownership
+   */
+  async updateCustomQuiz(
+    quizId: string,
+    payload: {
+      classroom_id?: string | null;
+      title: string;
+      description?: string;
+      category?: string;
+      difficulty?: 'Easy' | 'Medium' | 'Hard';
+      accent_color?: string;
+      cover_image?: string | null;
+      cover_image_url?: string | null;
+      questions: LiveQuizQuestion[];
+      is_public?: boolean;
+      visibility?: 'private' | 'common';
+      timer_enabled?: boolean;
+      timer_seconds?: number | null;
+    }
+  ): Promise<{ data?: LiveQuiz; error?: string }> {
+    if (!supabase) return { error: 'Supabase is not configured' };
+    const userId = await this.getUserId();
+    if (!userId) return { error: 'Authentication required' };
+
+    // 1. Verify existence and ownership
+    const { data: existingQuiz, error: fetchErr } = await supabase
+      .from('live_quizzes')
+      .select('id, created_by, is_archived')
+      .eq('id', quizId)
+      .maybeSingle();
+
+    if (fetchErr || !existingQuiz) {
+      return { error: 'Quiz not found' };
+    }
+
+    if (existingQuiz.created_by !== userId) {
+      return { error: 'You do not have permission to edit this quiz' };
+    }
+
+    // 2. Validate Question Count for 100-Point System
+    if (!Array.isArray(payload.questions) || !VALID_QUIZ_QUESTION_COUNTS.includes(payload.questions.length as any)) {
+      return { error: 'Quizzes must contain exactly 5, 10, 20, or 25 questions to satisfy the 100-Point System.' };
+    }
+
+    // 3. Validate Options (exactly 4, 1-3 words, no all/none)
+    for (let i = 0; i < payload.questions.length; i++) {
+      const q = payload.questions[i];
+      const qNum = i + 1;
+      let opts: string[] = [];
+      if (Array.isArray(q.options)) {
+        opts = q.options.map(String);
+      } else if (typeof q.options === 'string') {
+        try { opts = JSON.parse(q.options); } catch { opts = []; }
+      }
+
+      if (opts.length !== 4) {
+        return { error: `Question ${qNum} must have exactly 4 choices.` };
+      }
+
+      for (let j = 0; j < opts.length; j++) {
+        const optText = (opts[j] || '').trim();
+        const words = optText.split(/\s+/).filter(Boolean);
+        if (words.length < 1) {
+          return { error: `Question ${qNum}, choice ${j + 1} cannot be empty.` };
+        }
+        if (words.length > 3) {
+          return {
+            error: `Question ${qNum}, choice "${optText}" has ${words.length} words. Every choice must contain between 1 and 3 words.`
+          };
+        }
+        if (/^(all|none)\s+of\s+the\s+above$/i.test(optText)) {
+          return {
+            error: `Question ${qNum}, choice "${optText}" is forbidden. Never use "All of the above" or "None of the above".`
+          };
+        }
+      }
+    }
+
+    // 4. Duplicate title check (excluding current quizId)
+    const normalizedNewTitle = payload.title.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!normalizedNewTitle) {
+      return { error: 'Please provide a valid quiz title.' };
+    }
+
+    const { data: userQuizzes } = await supabase
+      .from('live_quizzes')
+      .select('id, title, is_archived')
+      .eq('created_by', userId)
+      .neq('id', quizId);
+
+    if (userQuizzes) {
+      const isDuplicate = userQuizzes
+        .filter((q) => !q.is_archived)
+        .some((q) => {
+          const existingNorm = (q.title || '').trim().replace(/\s+/g, ' ').toLowerCase();
+          return existingNorm === normalizedNewTitle;
+        });
+      if (isDuplicate) {
+        return { error: 'A quiz with this title already exists. Please choose a different title.' };
+      }
+    }
+
+    // 5. Timer and visibility
+    const timerEnabled = Boolean(payload.timer_enabled);
+    let timerSeconds: number | null = null;
+    if (timerEnabled) {
+      const parsedSec = Number(payload.timer_seconds);
+      if (isNaN(parsedSec) || parsedSec <= 0 || !Number.isInteger(parsedSec)) {
+        timerSeconds = 60;
+      } else {
+        timerSeconds = Math.min(36000, Math.max(1, Math.floor(parsedSec)));
+      }
+    }
+
+    const visibility = payload.visibility === 'common' ? 'common' : 'private';
+    const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
+
+    try {
+      // 6. Update quiz header
+      const updateHeaderPayload: any = {
+        title: payload.title.trim(),
+        description: (payload.description || '').trim(),
+        category: payload.category || 'General',
+        difficulty: payload.difficulty || 'Medium',
+        accent_color: payload.accent_color || '#026fc3',
+        is_public: visibility === 'common',
+        visibility,
+        timer_enabled: timerEnabled,
+        timer_seconds: timerSeconds,
+        cover_image: coverImage,
+        updated_at: new Date().toISOString()
+      };
+
+      if (payload.classroom_id !== undefined) {
+        updateHeaderPayload.classroom_id = payload.classroom_id || null;
+      }
+
+      const { data: updatedHeader, error: updateErr } = await supabase
+        .from('live_quizzes')
+        .update(updateHeaderPayload)
+        .eq('id', quizId)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      // 7. Replace questions: delete old, insert new
+      await supabase.from('live_quiz_questions').delete().eq('quiz_id', quizId);
+
+      const questionRows = payload.questions.map((q, idx) => ({
+        quiz_id: quizId,
+        question_index: idx,
+        question_text: q.question,
+        options: q.options,
+        correct_index: q.correctIndex ?? 0,
+        duration_sec: q.durationSec || 20,
+        explanation: q.explanation || null
+      }));
+
+      const { error: questionsError } = await supabase
+        .from('live_quiz_questions')
+        .insert(questionRows);
+
+      if (questionsError) {
+        console.warn('live_quiz_questions batch update error:', questionsError.message);
+      }
+
+      // 8. Mirror to R2
+      try {
+        await fetch('/api/live-quiz/save-r2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quizId,
+            quizData: {
+              ...updatedHeader,
+              visibility,
+              timer_enabled: timerEnabled,
+              timer_seconds: timerSeconds,
+              questions: payload.questions,
+              storage_provider: 'cloudflare_r2'
+            }
+          })
+        });
+      } catch (r2Err) {
+        console.warn('[LiveQuizService] R2 mirror update notice:', r2Err);
+      }
+
+      return {
+        data: {
+          ...updatedHeader,
+          cover_image: coverImage,
+          cover_image_url: coverImage,
+          visibility,
+          timer_enabled: timerEnabled,
+          timer_seconds: timerSeconds,
+          is_owner: true,
+          creator_name: 'Created by You',
+          questions: payload.questions
+        }
+      };
+    } catch (err: any) {
+      console.error('[LiveQuizService] updateCustomQuiz error:', err);
+      if (
+        err?.code === '23505' ||
+        err?.message?.includes('duplicate key') ||
+        err?.message?.includes('idx_live_quizzes_owner_norm_title') ||
+        err?.message?.includes('already exists')
+      ) {
+        return { error: 'A quiz with this title already exists. Please choose a different title.' };
+      }
+      return { error: err.message || 'Failed to update quiz' };
+    }
+  }
+
+  /**
+   * Safely deletes a custom quiz by archiving it, preserving historical session analytics
+   */
+  async deleteCustomQuiz(quizId: string): Promise<{ success: boolean; error?: string }> {
+    if (!supabase) return { success: false, error: 'Supabase is not configured' };
+    const userId = await this.getUserId();
+    if (!userId) return { success: false, error: 'Authentication required' };
+
+    try {
+      // Verify ownership
+      const { data: quiz, error: fetchErr } = await supabase
+        .from('live_quizzes')
+        .select('id, created_by')
+        .eq('id', quizId)
+        .maybeSingle();
+
+      if (fetchErr || !quiz) {
+        return { success: false, error: 'Quiz not found' };
+      }
+
+      if (quiz.created_by !== userId) {
+        return { success: false, error: 'You do not have permission to delete this quiz' };
+      }
+
+      // Soft delete: mark is_archived = true
+      const { error: archiveErr } = await supabase
+        .from('live_quizzes')
+        .update({
+          is_archived: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', quizId)
+        .eq('created_by', userId);
+
+      if (archiveErr) {
+        console.warn('[LiveQuizService] Soft-delete error, attempting fallback hard delete:', archiveErr);
+        const { error: hardDeleteErr } = await supabase
+          .from('live_quizzes')
+          .delete()
+          .eq('id', quizId)
+          .eq('created_by', userId);
+        if (hardDeleteErr) throw hardDeleteErr;
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[LiveQuizService] deleteCustomQuiz error:', err);
+      return { success: false, error: err.message || 'Failed to delete quiz' };
+    }
   }
 
   // ==========================================================================

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Users,
   GraduationCap,
@@ -18,7 +19,8 @@ import {
   EyeOff,
   Image as ImageIcon,
   Upload,
-  Trophy
+  Trophy,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -434,6 +436,18 @@ export const AdminPage: React.FC = () => {
             Auto
           </span>
         </button>
+
+        <Link
+          to="/admin/library"
+          className="px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200"
+          title="Manage PDF & PowerPoint Library Resources"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+          <span>Library (PDF / PPTX)</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-purple-200 text-purple-900">
+            Admin
+          </span>
+        </Link>
 
         <button
           onClick={() => setAdminTab('all')}

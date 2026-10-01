@@ -13,7 +13,8 @@ import {
   Download,
   Settings,
   GraduationCap,
-  Users
+  Users,
+  BookOpen
 } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { InstallAppModal } from '@/components/InstallAppModal';
@@ -39,7 +40,9 @@ export const AppLayout: React.FC = () => {
   const isReaderPage =
     location.pathname.includes('/courses/') ||
     location.pathname.includes('/preview') ||
-    location.pathname.includes('/assessments/builder');
+    location.pathname.includes('/assessments/builder') ||
+    location.pathname.includes('/library/present') ||
+    location.pathname.includes('/library/controller');
 
   const { user, profile, isAdmin, isLoading, signOut, requireAuth } = useAuth();
 
@@ -226,6 +229,24 @@ export const AppLayout: React.FC = () => {
             >
               <GraduationCap className="w-4 h-4" />
               <span>Classes</span>
+            </NavLink>
+
+            <NavLink
+              to="/library"
+              className={({ isActive }) =>
+                isHomePage
+                  ? 'flex items-center gap-1.5 text-xs sm:text-sm font-bold text-white/90 hover:text-white transition-all py-1'
+                  : isClassesPage
+                  ? `flex items-center gap-1.5 text-xs sm:text-sm font-bold transition-all py-1 ${isActive ? 'text-sky-300 font-black' : 'text-slate-300 hover:text-white'}`
+                  : `flex items-center gap-1.5 text-xs sm:text-sm font-extrabold transition-all py-1 relative ${
+                      isActive
+                        ? 'text-[#026fc3] after:absolute after:-bottom-2.5 after:left-0 after:right-0 after:h-0.5 after:bg-[#026fc3] after:rounded-full'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`
+              }
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Library</span>
             </NavLink>
 
             {/* Admin Link — Only visible when authenticated as Admin */}
@@ -569,6 +590,19 @@ export const AppLayout: React.FC = () => {
               >
                 <GraduationCap className="w-4 h-4" />
                 <span>Classes</span>
+              </NavLink>
+
+              <NavLink
+                to="/library"
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                    isActive ? 'bg-brand-50 text-[#026fc3]' : 'text-slate-700 hover:bg-slate-50'
+                  }`
+                }
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Library</span>
               </NavLink>
 
               {/* Admin Link for Mobile */}

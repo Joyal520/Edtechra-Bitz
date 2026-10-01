@@ -32,6 +32,7 @@ export interface LiveQuiz {
   visibility?: 'private' | 'common';
   timer_enabled?: boolean;
   timer_seconds?: number | null;
+  is_archived?: boolean;
   created_by?: string | null;
   created_at: string;
   updated_at: string;

@@ -24,6 +24,10 @@ import { CourseAnalyticsPage } from '@/pages/course-studio/CourseAnalyticsPage';
 import { StudentCoursePlayerPage } from '@/pages/classes/courses/StudentCoursePlayerPage';
 import { AssessmentBuilderPage } from '@/pages/classes/AssessmentBuilderPage';
 import { StudentExamPage } from '@/pages/classes/StudentExamPage';
+import { LibraryPage } from '@/pages/library/LibraryPage';
+import { PresentationViewerPage } from '@/pages/library/PresentationViewerPage';
+import { MobileControllerPage } from '@/pages/library/MobileControllerPage';
+import { AdminLibraryPage } from '@/pages/admin/AdminLibraryPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -38,6 +42,12 @@ export const AppRoutes: React.FC = () => {
         <Route path="classes/join/:code" element={<JoinClassroomPage />} />
         <Route path="classes/:id" element={<ClassroomDetailPage />} />
         <Route path="classes/:id/resources" element={<TeacherResourcesPage />} />
+
+        {/* EdTechra Library & Realtime Presentation Routes */}
+        <Route path="library" element={<LibraryPage />} />
+        <Route path="library/present/:id" element={<PresentationViewerPage />} />
+        <Route path="library/controller" element={<MobileControllerPage />} />
+        <Route path="library/controller/:code" element={<MobileControllerPage />} />
         
         {/* Assessment & Survey Studio (Teacher Authoring) Routes */}
         <Route path="classes/:classroomId/assessments/builder" element={<AssessmentBuilderPage />} />
@@ -73,6 +83,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <AdminRoute>
               <AdminPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="admin/library"
+          element={
+            <AdminRoute>
+              <AdminLibraryPage />
             </AdminRoute>
           }
         />
