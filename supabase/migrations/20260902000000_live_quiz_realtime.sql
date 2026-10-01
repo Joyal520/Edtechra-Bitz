@@ -289,6 +289,13 @@ DECLARE
     v_duration_ms BIGINT;
     v_remaining_ms BIGINT;
     v_existing_score INTEGER := 0;
+    v_participant_count INTEGER := 0;
+    v_answered_count INTEGER := 0;
+    v_total_questions INTEGER := 0;
+    v_all_answered BOOLEAN := FALSE;
+    v_advanced BOOLEAN := FALSE;
+    v_is_finished BOOLEAN := FALSE;
+    v_next_q_index INTEGER := p_question_index;
 BEGIN
     IF v_user_id IS NULL THEN
         RAISE EXCEPTION 'Authentication required.';
@@ -389,10 +396,54 @@ BEGIN
     WHERE session_id = p_session_id AND student_id = v_user_id
     RETURNING score INTO v_existing_score;
 
+    -- 9. Server-Side Auto-Advance Check: If all eligible participants have answered, atomically advance!
+    SELECT count(*) INTO v_participant_count
+    FROM public.live_quiz_participants
+    WHERE session_id = p_session_id;
+
+    SELECT count(*) INTO v_answered_count
+    FROM public.live_quiz_answers
+    WHERE session_id = p_session_id AND question_index = p_question_index;
+
+    IF v_participant_count > 0 AND v_answered_count >= v_participant_count THEN
+        v_all_answered := TRUE;
+
+        SELECT count(*) INTO v_total_questions
+        FROM public.live_quiz_questions
+        WHERE quiz_id = v_session.quiz_id;
+
+        IF v_total_questions > 0 AND (p_question_index + 1) >= v_total_questions THEN
+            -- Final question completed: Atomically finalize session
+            v_is_finished := TRUE;
+            UPDATE public.live_quiz_sessions
+            SET 
+                status = 'finished',
+                ended_at = now(),
+                updated_at = now()
+            WHERE id = p_session_id;
+        ELSE
+            -- Atomically advance session to next question without waiting for timer
+            v_advanced := TRUE;
+            v_next_q_index := p_question_index + 1;
+            UPDATE public.live_quiz_sessions
+            SET 
+                current_question_index = v_next_q_index,
+                question_start_ms = v_server_now_ms,
+                correct_answer_index = NULL,
+                status = 'in_progress',
+                updated_at = now()
+            WHERE id = p_session_id;
+        END IF;
+    END IF;
+
     RETURN jsonb_build_object(
         'is_correct', v_is_correct,
         'points_awarded', v_points,
-        'current_score', COALESCE(v_existing_score, v_points)
+        'current_score', COALESCE(v_existing_score, v_points),
+        'all_answered', v_all_answered,
+        'advanced', v_advanced,
+        'next_question_index', v_next_q_index,
+        'is_finished', v_is_finished
     );
 END;
 $$;

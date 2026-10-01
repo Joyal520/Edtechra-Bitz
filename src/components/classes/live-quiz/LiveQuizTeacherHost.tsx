@@ -168,6 +168,31 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
           }));
         }
       })
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'live_quiz_sessions',
+          filter: `id=eq.${session.id}`
+        },
+        (payload: any) => {
+          const updated = payload.new as Partial<LiveQuizSession>;
+          if (!updated) return;
+
+          if (updated.status === 'finished') {
+            onFinish();
+            return;
+          }
+
+          if (typeof updated.current_question_index === 'number' && updated.current_question_index !== currentQIndex) {
+            setCurrentQIndex(updated.current_question_index);
+          }
+        }
+      )
+      .on('broadcast', { event: 'quiz_finished' }, () => {
+        onFinish();
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           isChannelSubscribedRef.current = true;

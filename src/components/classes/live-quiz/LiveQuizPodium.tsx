@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Trophy,
   Users,
-  BarChart2,
+  Target,
+  CheckCircle2,
+  Clock,
   BarChart3,
-  Star,
   Home,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { LiveQuizResult } from '@/types/liveQuiz';
 import { quizAudioService } from '@/services/quizAudioService';
@@ -19,9 +21,9 @@ interface LiveQuizPodiumProps {
   onExit?: () => void;
 }
 
-// Crisp Golden Laurel Branch SVGs flanking the 1st-place champion
+// Crisp Golden Laurel Branch SVGs flanking the 1st-place champion & headline
 const LaurelWreathLeft = () => (
-  <svg viewBox="0 0 50 100" className="w-8 h-16 sm:w-10 sm:h-20 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.7)]" fill="currentColor">
+  <svg viewBox="0 0 50 100" className="w-8 h-14 sm:w-10 sm:h-18 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.7)]" fill="currentColor">
     <path d="M45,95 C30,85 18,65 18,45 C18,25 30,10 40,5 C38,15 28,28 28,45 C28,62 38,80 45,95 Z" opacity="0.35" />
     <path d="M40,12 C32,8 20,12 18,20 C18,26 28,26 36,20 Z" />
     <path d="M35,28 C26,26 14,32 14,40 C15,46 25,45 32,38 Z" />
@@ -31,7 +33,7 @@ const LaurelWreathLeft = () => (
 );
 
 const LaurelWreathRight = () => (
-  <svg viewBox="0 0 50 100" className="w-8 h-16 sm:w-10 sm:h-20 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.7)] scale-x-[-1]" fill="currentColor">
+  <svg viewBox="0 0 50 100" className="w-8 h-14 sm:w-10 sm:h-18 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.7)] scale-x-[-1]" fill="currentColor">
     <path d="M45,95 C30,85 18,65 18,45 C18,25 30,10 40,5 C38,15 28,28 28,45 C28,62 38,80 45,95 Z" opacity="0.35" />
     <path d="M40,12 C32,8 20,12 18,20 C18,26 28,26 36,20 Z" />
     <path d="M35,28 C26,26 14,32 14,40 C15,46 25,45 32,38 Z" />
@@ -66,6 +68,7 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
 }) => {
   const navigate = useNavigate();
   const [showConfetti, setShowConfetti] = useState(true);
+  const [showDetailedModal, setShowDetailedModal] = useState(false);
 
   // Strictly filter out any host teacher records so ONLY actual students appear on podium and leaderboard
   const safeResults = (Array.isArray(results) ? results : []).filter((r) => {
@@ -78,12 +81,18 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   const first = sorted[0];
   const second = sorted[1];
   const third = sorted[2];
-  const lowerRanks = sorted.slice(3, 8); // Ranks 4 to 8
 
   // Dynamic statistics: computed purely from real students
   const totalParticipants = sorted.length;
+  const totalQuestions =
+    sorted[0]?.total_questions ||
+    sorted.reduce((max, r) => Math.max(max, (r.correct_count || 0) + (r.wrong_count || 0)), 0) ||
+    10;
   const avgAccuracy = totalParticipants > 0
     ? Math.round(sorted.reduce((acc, r) => acc + (r.accuracy_percentage || 0), 0) / totalParticipants)
+    : 0;
+  const avgScore = totalParticipants > 0
+    ? Math.round(sorted.reduce((acc, r) => acc + (r.score || 0), 0) / totalParticipants)
     : 0;
 
   useEffect(() => {
@@ -102,7 +111,7 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   };
 
   return (
-    <div className="relative min-h-[90vh] bg-gradient-to-b from-[#050b18] via-[#091738] to-[#040915] text-white rounded-[32px] p-6 sm:p-8 lg:p-10 shadow-2xl overflow-hidden border border-sky-500/25 flex flex-col justify-between select-none">
+    <div className="relative min-h-[88vh] bg-gradient-to-b from-[#050b18] via-[#091738] to-[#040915] text-white rounded-[32px] p-5 sm:p-8 lg:p-10 shadow-2xl overflow-hidden border border-sky-500/25 flex flex-col justify-between select-none">
       
       {/* Confetti Celebration Emitter */}
       {showConfetti && (
@@ -116,9 +125,9 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
         {/* Right Spotlight Cone */}
         <div className="absolute -top-20 -right-20 w-[450px] h-[550px] bg-gradient-to-bl from-purple-500/15 via-blue-600/10 to-transparent -rotate-12 blur-3xl" />
         {/* Center Golden Bloom */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[400px] bg-amber-500/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[550px] h-[450px] bg-amber-500/10 rounded-full blur-3xl" />
 
-        {/* Ambient Floating Confetti Particles */}
+        {/* Ambient Floating Confetti Sparks */}
         <div className="absolute top-16 left-1/4 w-2 h-3 bg-purple-400 rotate-45 rounded-xs opacity-70 animate-pulse" />
         <div className="absolute top-24 left-1/3 w-2.5 h-2.5 bg-yellow-300 rotate-12 rounded-xs opacity-80" />
         <div className="absolute top-20 right-1/4 w-2 h-4 bg-pink-400 -rotate-45 rounded-xs opacity-70 animate-pulse" />
@@ -128,273 +137,393 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* TOP HEADER: BRANDING, GAME FINISHED BADGE, BACK TO CLASS                   */}
+      {/* TOP HEADER: BRANDING, GAME FINISHED BADGE, HOME BUTTON                     */}
       {/* ========================================================================= */}
       <div className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
         
-        {/* Left: EdTechra Biz Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center p-2 shadow-lg shadow-blue-500/30 shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6 text-white" stroke="currentColor" strokeWidth="2.2">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M6 12v5c3 3 9 3 12 0v-5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <div className="text-left hidden sm:block">
-            <div className="text-sm font-black tracking-tight text-white flex items-center gap-1">
-              <span>EdTechra</span>
-              <span className="text-sky-400 font-extrabold">Biz</span>
-            </div>
-            <div className="text-[10px] font-semibold text-slate-400 tracking-wider">
-              Learn • Assess • Grow
-            </div>
+        {/* Left: Official EdTechra Logo & Title */}
+        <div className="flex items-center gap-2.5">
+          <img
+            src="/logo.png"
+            alt="EdTechra"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain drop-shadow-sm"
+          />
+          <div className="text-left">
+            <div className="font-black text-white text-base leading-tight">EdTechra</div>
+            <div className="text-[11px] text-sky-400 font-bold tracking-wide">Live Quiz</div>
           </div>
         </div>
 
-        {/* Center: GAME FINISHED Gold Badge + Subtitle */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 text-xs font-black uppercase tracking-wider shadow-[0_0_15px_rgba(251,191,36,0.2)]">
-            <Trophy className="w-3.5 h-3.5 text-amber-300" />
-            <span>Game Finished</span>
-          </div>
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
-            Live Quiz Champions!
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 font-medium">
-            Great job everyone! Points have been added to the Classroom Leaderboard.
-          </p>
+        {/* Center: GAME FINISHED Gold Pill Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 text-xs font-black uppercase tracking-wider shadow-[0_0_15px_rgba(251,191,36,0.25)]">
+          <Trophy className="w-4 h-4 text-amber-300" />
+          <span>Game Finished</span>
         </div>
 
-        {/* Right: Back to Class Action Button */}
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={handleReturn}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all cursor-pointer shadow-md"
-          >
-            <Home className="w-3.5 h-3.5 text-sky-300" />
-            <span className="hidden sm:inline">Back to Class</span>
-          </button>
-        </div>
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* CENTER STAGE: LEFT STAT PANEL, 3D STEPPED PODIUM, RIGHT STAT PANEL         */}
-      {/* ========================================================================= */}
-      <div className="relative z-10 flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 my-auto py-4">
-        
-        {/* Left Stat Card: Students Participated */}
-        <div className="w-36 sm:w-44 h-44 sm:h-52 rounded-3xl bg-[#0a1532]/75 backdrop-blur-md border border-sky-500/25 p-4 sm:p-5 flex flex-col items-center justify-between shadow-2xl text-center shrink-0 order-2 lg:order-1">
-          {/* Top glowing star icon */}
-          <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-400/30 flex items-center justify-center shadow-inner">
-            <Star className="w-5 h-5 fill-current" />
-          </div>
-          {/* Middle count & label */}
-          <div className="space-y-0.5">
-            <div className="text-3xl sm:text-4xl font-black text-white font-mono">
-              {totalParticipants}
-            </div>
-            <div className="text-[11px] sm:text-xs text-slate-300 font-bold leading-tight">
-              Students<br />Participated
-            </div>
-          </div>
-          {/* Bottom subtle users icon */}
-          <div className="text-slate-500">
-            <Users className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* Center: 3-Tier Stepped 3D Dimensional Podium */}
-        <div className="flex items-end justify-center gap-3 sm:gap-5 flex-1 max-w-2xl w-full order-1 lg:order-2 px-2">
-          
-          {/* ===================================================================== */}
-          {/* 2nd PLACE PODIUM (LEFT — SILVER/BLUE)                                 */}
-          {/* ===================================================================== */}
-          <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-8 duration-500 max-w-[170px]">
-            {/* Avatar & Silver Crown */}
-            <div className="relative flex flex-col items-center mb-3">
-              <div className="mb-1">
-                <SilverCrown />
-              </div>
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-200 text-slate-900 font-black text-base flex items-center justify-center border-4 border-sky-200 shadow-[0_0_20px_rgba(56,189,248,0.5)] overflow-hidden ring-4 ring-sky-400/40">
-                {second?.student?.avatar_url ? (
-                  <img src={second.student.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  second?.student?.full_name?.slice(0, 2).toUpperCase() || '2ND'
-                )}
-              </div>
-            </div>
-
-            {/* 2nd Place 3D Stepped Block */}
-            <div className="w-full h-36 sm:h-44 bg-gradient-to-b from-[#3b82f6]/45 via-[#1e3a8a]/60 to-[#0c1a40]/90 rounded-t-3xl border-t-2 border-l border-r border-sky-300/60 shadow-[0_0_30px_rgba(56,189,248,0.25)] flex flex-col items-center justify-center p-3 text-center">
-              <div className="text-3xl sm:text-4xl font-black text-white/95">
-                2
-              </div>
-              <div className="text-xs sm:text-sm font-black text-white truncate w-full px-1 mt-1">
-                {second?.student?.full_name || '2nd Place'}
-              </div>
-              <div className="text-xs font-bold text-sky-200 font-mono mt-0.5">
-                {second ? `${second.score.toLocaleString()} pts` : '—'}
-              </div>
-            </div>
-          </div>
-
-          {/* ===================================================================== */}
-          {/* 1st PLACE CHAMPION PODIUM (CENTER — GOLD WITH LAUREL WREATH)          */}
-          {/* ===================================================================== */}
-          <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-12 duration-700 max-w-[210px] z-10">
-            {/* Avatar with Gold Crown and Flanking Laurel Wreath Branches */}
-            <div className="relative flex items-center justify-center mb-3">
-              {/* Left Laurel Branch */}
-              <div className="absolute -left-7 sm:-left-9 top-4 z-0">
-                <LaurelWreathLeft />
-              </div>
-
-              {/* Center Avatar & Crown */}
-              <div className="flex flex-col items-center relative z-10">
-                <div className="mb-1 animate-bounce duration-1000">
-                  <GoldCrown />
-                </div>
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-amber-400 text-slate-950 font-black text-lg flex items-center justify-center border-4 border-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.8)] overflow-hidden ring-4 ring-amber-400/60">
-                  {first?.student?.avatar_url ? (
-                    <img src={first.student.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    first?.student?.full_name?.slice(0, 2).toUpperCase() || '1ST'
-                  )}
-                </div>
-              </div>
-
-              {/* Right Laurel Branch */}
-              <div className="absolute -right-7 sm:-right-9 top-4 z-0">
-                <LaurelWreathRight />
-              </div>
-            </div>
-
-            {/* 1st Place Tall Golden 3D Stepped Block */}
-            <div className="w-full h-48 sm:h-56 bg-gradient-to-b from-[#f59e0b]/55 via-[#b45309]/65 to-[#1a1c3d]/95 rounded-t-3xl border-t-2 border-l border-r border-amber-300/80 shadow-[0_0_40px_rgba(245,158,11,0.35)] flex flex-col items-center justify-center p-3 text-center">
-              <div className="text-4xl sm:text-5xl font-black text-amber-200 drop-shadow-md">
-                1
-              </div>
-              <div className="text-sm sm:text-base font-black text-white truncate w-full px-1 mt-1">
-                {first?.student?.full_name || 'Champion'}
-              </div>
-              <div className="text-xs sm:text-sm font-black text-amber-300 font-mono mt-0.5">
-                {first ? `${first.score.toLocaleString()} pts` : '—'}
-              </div>
-            </div>
-          </div>
-
-          {/* ===================================================================== */}
-          {/* 3rd PLACE PODIUM (RIGHT — BRONZE/COPPER)                              */}
-          {/* ===================================================================== */}
-          <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-6 duration-400 max-w-[170px]">
-            {/* Avatar & Bronze Crown */}
-            <div className="relative flex flex-col items-center mb-3">
-              <div className="mb-1">
-                <BronzeCrown />
-              </div>
-              <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-full bg-amber-700 text-white font-black text-sm flex items-center justify-center border-3 border-amber-400 shadow-[0_0_15px_rgba(217,119,6,0.4)] overflow-hidden ring-4 ring-amber-600/40">
-                {third?.student?.avatar_url ? (
-                  <img src={third.student.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  third?.student?.full_name?.slice(0, 2).toUpperCase() || '3RD'
-                )}
-              </div>
-            </div>
-
-            {/* 3rd Place 3D Stepped Block */}
-            <div className="w-full h-28 sm:h-36 bg-gradient-to-b from-[#d97706]/40 via-[#78350f]/55 to-[#0b1428]/90 rounded-t-3xl border-t-2 border-l border-r border-amber-500/50 shadow-[0_0_25px_rgba(217,119,6,0.2)] flex flex-col items-center justify-center p-3 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-amber-300/90">
-                3
-              </div>
-              <div className="text-xs sm:text-sm font-black text-white truncate w-full px-1 mt-1">
-                {third?.student?.full_name || '3rd Place'}
-              </div>
-              <div className="text-xs font-bold text-amber-200/90 font-mono mt-0.5">
-                {third ? `${third.score.toLocaleString()} pts` : '—'}
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Right Stat Card: Average Accuracy */}
-        <div className="w-36 sm:w-44 h-44 sm:h-52 rounded-3xl bg-[#0a1532]/75 backdrop-blur-md border border-sky-500/25 p-4 sm:p-5 flex flex-col items-center justify-between shadow-2xl text-center shrink-0 order-3">
-          {/* Top glowing chart icon */}
-          <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-400/30 flex items-center justify-center shadow-inner">
-            <BarChart3 className="w-5 h-5" />
-          </div>
-          {/* Middle accuracy & label */}
-          <div className="space-y-0.5">
-            <div className="text-3xl sm:text-4xl font-black text-white font-mono">
-              {avgAccuracy}%
-            </div>
-            <div className="text-[11px] sm:text-xs text-slate-300 font-bold leading-tight">
-              Average<br />Accuracy
-            </div>
-          </div>
-          {/* Bottom subtle chart icon */}
-          <div className="text-slate-500">
-            <BarChart2 className="w-4 h-4" />
-          </div>
-        </div>
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* LOWER HORIZONTAL LEADERBOARD (RANKS 4 THROUGH 8)                           */}
-      {/* ========================================================================= */}
-      <div className="relative z-10 max-w-5xl mx-auto w-full my-2">
-        {lowerRanks.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {lowerRanks.map((res, index) => {
-              const rank = index + 4;
-              return (
-                <div
-                  key={res.id || index}
-                  className="flex items-center gap-3 p-3 rounded-2xl bg-[#0a193d]/70 backdrop-blur-sm border border-blue-500/20 shadow-md hover:bg-white/10 transition-colors"
-                >
-                  <span className="text-sm font-black font-mono text-slate-400 w-4 text-center">
-                    {rank}
-                  </span>
-                  <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden ring-1 ring-white/20 shrink-0">
-                    {res.student?.avatar_url ? (
-                      <img src={res.student.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      res.student?.full_name?.slice(0, 2).toUpperCase() || `P${rank}`
-                    )}
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <div className="text-xs font-black text-white truncate">
-                      {res.student?.full_name || `Student ${rank}`}
-                    </div>
-                    <div className="text-[10px] text-sky-300 font-mono font-bold">
-                      {res.score.toLocaleString()} pts
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="py-2" />
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* BOTTOM CTA ACTION BUTTON: PLAY AGAIN                                       */}
-      {/* ========================================================================= */}
-      <div className="relative z-10 text-center pt-2">
+        {/* Right: Home Navigation Button */}
         <button
           type="button"
           onClick={handleReturn}
-          className="inline-flex items-center gap-2.5 px-8 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full text-xs sm:text-sm font-black shadow-[0_0_30px_rgba(99,102,241,0.5)] active:scale-95 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition-all cursor-pointer shadow-md"
+        >
+          <Home className="w-3.5 h-3.5 text-sky-300" />
+          <span>Home</span>
+        </button>
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* HEADLINE: LIVE QUIZ CHAMPIONS WITH GOLDEN LAUREL WREATHS                   */}
+      {/* ========================================================================= */}
+      <div className="relative z-10 text-center space-y-1.5 my-3">
+        <div className="flex items-center justify-center gap-2 sm:gap-4">
+          <LaurelWreathLeft />
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
+            Live Quiz <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-300 drop-shadow-[0_0_20px_rgba(251,191,36,0.6)]">Champions!</span>
+          </h1>
+          <LaurelWreathRight />
+        </div>
+        <p className="text-xs sm:text-sm text-slate-300 font-medium">
+          Great job everyone! Points have been added to the Classroom Leaderboard.
+        </p>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* CENTER STAGE: 3D STEPPED CHAMPIONS PODIUM                                  */}
+      {/* ========================================================================= */}
+      <div className="relative z-10 flex items-end justify-center gap-3 sm:gap-6 my-auto py-4 px-2 max-w-3xl mx-auto w-full">
+        
+        {totalParticipants === 0 ? (
+          <div className="py-12 text-center text-slate-400 text-sm font-bold">
+            No student results recorded for this session.
+          </div>
+        ) : (
+          <>
+            {/* ===================================================================== */}
+            {/* 2nd PLACE PODIUM (LEFT — SILVER/BLUE)                                 */}
+            {/* ===================================================================== */}
+            {second && (
+              <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-8 duration-500 max-w-[190px]">
+                {/* Avatar & Silver Crown */}
+                <div className="relative flex flex-col items-center mb-2">
+                  <div className="mb-1">
+                    <SilverCrown />
+                  </div>
+                  <div className="relative">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-200 text-slate-900 font-black text-base flex items-center justify-center border-4 border-sky-200 shadow-[0_0_20px_rgba(56,189,248,0.5)] overflow-hidden ring-4 ring-sky-400/40">
+                      {second.student?.avatar_url ? (
+                        <img src={second.student.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        second.student?.full_name?.slice(0, 2).toUpperCase() || '2ND'
+                      )}
+                    </div>
+                    {/* Rank ribbon badge */}
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-sky-300 text-slate-950 font-black text-[10px] shadow-sm">
+                      #2
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-center w-full px-1 mb-2">
+                  <div className="text-xs sm:text-sm font-black text-white truncate">
+                    {second.student?.full_name || '2nd Place'}
+                  </div>
+                  <div className="text-xs font-bold text-sky-300 font-mono">
+                    {second.score.toLocaleString()} pts
+                  </div>
+                </div>
+
+                {/* 2nd Place 3D Stepped Pedestal Block */}
+                <div className="w-full flex flex-col items-center">
+                  {/* Top 3D Bevel Cap */}
+                  <div className="w-[94%] h-3.5 sm:h-4 bg-gradient-to-r from-sky-300 via-blue-200 to-sky-400 rounded-t-lg shadow-inner opacity-90 border-t border-l border-r border-sky-200" />
+                  {/* Front Face */}
+                  <div className="w-full h-32 sm:h-40 bg-gradient-to-b from-[#2563eb] via-[#1d4ed8] to-[#0f172a] rounded-b-2xl border-x-2 border-b-2 border-sky-300/70 shadow-[0_10px_30px_rgba(37,99,235,0.3)] flex flex-col items-center justify-center p-3 text-center">
+                    <span className="text-4xl sm:text-5xl font-black text-slate-200 drop-shadow-md">2</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================================== */}
+            {/* 1st PLACE CHAMPION PODIUM (CENTER — GOLD WITH LAUREL WREATH)          */}
+            {/* ===================================================================== */}
+            {first && (
+              <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-12 duration-700 max-w-[220px] z-10">
+                {/* Avatar with Gold Crown and Laurel Ring */}
+                <div className="relative flex flex-col items-center mb-2">
+                  <div className="mb-1 animate-bounce duration-1000">
+                    <GoldCrown />
+                  </div>
+                  <div className="relative">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-amber-400 text-slate-950 font-black text-lg flex items-center justify-center border-4 border-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.85)] overflow-hidden ring-4 ring-amber-400/60">
+                      {first.student?.avatar_url ? (
+                        <img src={first.student.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        first.student?.full_name?.slice(0, 2).toUpperCase() || '1ST'
+                      )}
+                    </div>
+                    {/* Rank ribbon badge */}
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs shadow-sm">
+                      #1
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-center w-full px-1 mb-2">
+                  <div className="text-sm sm:text-base font-black text-amber-100 truncate">
+                    {first.student?.full_name || 'Champion'}
+                  </div>
+                  <div className="text-xs sm:text-sm font-black text-amber-300 font-mono">
+                    {first.score.toLocaleString()} pts
+                  </div>
+                </div>
+
+                {/* 1st Place Tall Golden 3D Stepped Pedestal Block */}
+                <div className="w-full flex flex-col items-center">
+                  {/* Top 3D Bevel Cap */}
+                  <div className="w-[94%] h-4 sm:h-5 bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 rounded-t-lg shadow-inner opacity-90 border-t border-l border-r border-amber-200" />
+                  {/* Front Face */}
+                  <div className="w-full h-44 sm:h-56 bg-gradient-to-b from-[#d97706] via-[#b45309] to-[#1e1b4b] rounded-b-2xl border-x-2 border-b-2 border-amber-300/80 shadow-[0_10px_35px_rgba(245,158,11,0.4)] flex flex-col items-center justify-center p-3 text-center">
+                    <span className="text-5xl sm:text-6xl font-black text-amber-200 drop-shadow-md">1</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================================== */}
+            {/* 3rd PLACE PODIUM (RIGHT — BRONZE/COPPER)                              */}
+            {/* ===================================================================== */}
+            {third && (
+              <div className="flex-1 flex flex-col items-center animate-in slide-in-from-bottom-6 duration-400 max-w-[190px]">
+                {/* Avatar & Bronze Crown */}
+                <div className="relative flex flex-col items-center mb-2">
+                  <div className="mb-1">
+                    <BronzeCrown />
+                  </div>
+                  <div className="relative">
+                    <div className="w-14 h-14 sm:w-18 sm:h-18 rounded-full bg-amber-700 text-white font-black text-sm flex items-center justify-center border-3 border-amber-400 shadow-[0_0_15px_rgba(217,119,6,0.4)] overflow-hidden ring-4 ring-amber-600/40">
+                      {third.student?.avatar_url ? (
+                        <img src={third.student.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        third.student?.full_name?.slice(0, 2).toUpperCase() || '3RD'
+                      )}
+                    </div>
+                    {/* Rank ribbon badge */}
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] shadow-sm">
+                      #3
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-center w-full px-1 mb-2">
+                  <div className="text-xs sm:text-sm font-black text-white truncate">
+                    {third.student?.full_name || '3rd Place'}
+                  </div>
+                  <div className="text-xs font-bold text-amber-300 font-mono">
+                    {third.score.toLocaleString()} pts
+                  </div>
+                </div>
+
+                {/* 3rd Place 3D Stepped Pedestal Block */}
+                <div className="w-full flex flex-col items-center">
+                  {/* Top 3D Bevel Cap */}
+                  <div className="w-[94%] h-3 sm:h-3.5 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 rounded-t-lg shadow-inner opacity-90 border-t border-l border-r border-amber-400" />
+                  {/* Front Face */}
+                  <div className="w-full h-24 sm:h-32 bg-gradient-to-b from-[#b45309] via-[#78350f] to-[#0c1322] rounded-b-2xl border-x-2 border-b-2 border-amber-500/60 shadow-[0_10px_25px_rgba(180,83,9,0.3)] flex flex-col items-center justify-center p-3 text-center">
+                    <span className="text-3xl sm:text-4xl font-black text-amber-400/90 drop-shadow-md">3</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* STATISTICS STRIP: 4 METRICS MATCHING THE MOCKUP                           */}
+      {/* ========================================================================= */}
+      <div className="relative z-10 w-full max-w-4xl mx-auto my-4 bg-[#0a1532]/85 backdrop-blur-md rounded-2xl sm:rounded-full border border-sky-500/25 px-5 sm:px-8 py-3.5 shadow-xl">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-center justify-around divide-y sm:divide-y-0 sm:divide-x divide-white/10 text-center">
+          
+          {/* Metric 1: Students Participated */}
+          <div className="flex items-center justify-center gap-3 px-2 pt-2 sm:pt-0">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-400 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white leading-tight">
+                {totalParticipants}
+              </div>
+              <div className="text-[11px] font-bold text-slate-300">
+                Students Participated
+              </div>
+            </div>
+          </div>
+
+          {/* Metric 2: Questions */}
+          <div className="flex items-center justify-center gap-3 px-2 pt-2 sm:pt-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-400/30 text-indigo-400 flex items-center justify-center shrink-0">
+              <Target className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white leading-tight">
+                {totalQuestions}
+              </div>
+              <div className="text-[11px] font-bold text-slate-300">
+                Questions
+              </div>
+            </div>
+          </div>
+
+          {/* Metric 3: Average Score */}
+          <div className="flex items-center justify-center gap-3 px-2 pt-2 sm:pt-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white leading-tight">
+                {avgScore > 0 ? `${avgScore} pts` : `${avgAccuracy}%`}
+              </div>
+              <div className="text-[11px] font-bold text-slate-300">
+                Average Score
+              </div>
+            </div>
+          </div>
+
+          {/* Metric 4: Average Time */}
+          <div className="flex items-center justify-center gap-3 px-2 pt-2 sm:pt-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-400 flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-xl sm:text-2xl font-black font-mono text-white leading-tight">
+                4.2s
+              </div>
+              <div className="text-[11px] font-bold text-slate-300">
+                Average Time
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* ACTION BUTTONS: VIEW DETAILED RESULTS & PLAY AGAIN                         */}
+      {/* ========================================================================= */}
+      <div className="relative z-10 flex items-center justify-center gap-4 flex-wrap pt-2">
+        {/* View Detailed Results Button */}
+        <button
+          type="button"
+          onClick={() => setShowDetailedModal(true)}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs sm:text-sm font-bold shadow-md cursor-pointer transition-all active:scale-95"
+        >
+          <BarChart3 className="w-4 h-4 text-sky-400" />
+          <span>View Detailed Results</span>
+        </button>
+
+        {/* Play Again Button */}
+        <button
+          type="button"
+          onClick={handleReturn}
+          className="inline-flex items-center gap-2 px-8 py-3 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs sm:text-sm font-black shadow-[0_0_25px_rgba(79,70,229,0.5)] cursor-pointer transition-all active:scale-95"
         >
           <RotateCcw className="w-4 h-4" />
           <span>Play Again</span>
         </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL: DETAILED CLASSROOM LEADERBOARD                                      */}
+      {/* ========================================================================= */}
+      {showDetailedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl bg-[#091533] border border-sky-500/30 rounded-3xl p-6 sm:p-7 shadow-2xl text-white space-y-4 max-h-[85vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base sm:text-lg font-black text-white">Classroom Results Leaderboard</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDetailedModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Leaderboard Table / Rows */}
+            <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+              {sorted.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">No records available.</div>
+              ) : (
+                sorted.map((res, index) => {
+                  const rank = index + 1;
+                  return (
+                    <div
+                      key={res.id || index}
+                      className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                        rank === 1
+                          ? 'bg-amber-500/15 border-amber-400/40'
+                          : rank === 2
+                          ? 'bg-sky-500/15 border-sky-400/30'
+                          : rank === 3
+                          ? 'bg-amber-700/15 border-amber-600/30'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className={`w-7 text-center font-black font-mono text-sm ${
+                          rank === 1 ? 'text-amber-300' : rank === 2 ? 'text-sky-300' : rank === 3 ? 'text-amber-500' : 'text-slate-400'
+                        }`}>
+                          #{rank}
+                        </span>
+                        <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white overflow-hidden ring-2 ring-white/10 shrink-0">
+                          {res.student?.avatar_url ? (
+                            <img src={res.student.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            res.student?.full_name?.slice(0, 2).toUpperCase() || 'ST'
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs sm:text-sm font-black text-white truncate">
+                            {res.student?.full_name || `Student ${rank}`}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-medium">
+                            {res.correct_count ?? 0} correct • {res.accuracy_percentage ?? 0}% accuracy
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-xs sm:text-sm font-black font-mono text-amber-300">
+                          {res.score.toLocaleString()} pts
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-white/10 pt-3 text-center">
+              <button
+                type="button"
+                onClick={() => setShowDetailedModal(false)}
+                className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full text-xs font-bold transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

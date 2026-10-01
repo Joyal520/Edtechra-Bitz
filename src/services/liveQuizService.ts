@@ -1288,7 +1288,7 @@ class LiveQuizService {
     session_id: string;
     question_index: number;
     selected_option_index: number;
-  }): Promise<{ data?: { is_correct: boolean; points_awarded: number; current_score?: number }; error?: string }> {
+  }): Promise<{ data?: { is_correct: boolean; points_awarded: number; current_score?: number; all_answered?: boolean; advanced?: boolean; next_question_index?: number; is_finished?: boolean }; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const userId = await this.getUserId();
     if (!userId) return { error: 'Authentication required' };
@@ -1317,7 +1317,11 @@ class LiveQuizService {
           data: {
             is_correct: Boolean(rpcData.is_correct),
             points_awarded: Number(rpcData.points_awarded || 0),
-            current_score: Number(rpcData.current_score || 0)
+            current_score: Number(rpcData.current_score || 0),
+            all_answered: Boolean(rpcData.all_answered),
+            advanced: Boolean(rpcData.advanced),
+            next_question_index: typeof rpcData.next_question_index === 'number' ? rpcData.next_question_index : undefined,
+            is_finished: Boolean(rpcData.is_finished)
           }
         };
       }
@@ -1339,10 +1343,68 @@ class LiveQuizService {
 
       if (ansError) throw ansError;
 
+      // Fallback: check if all participants have answered to trigger atomic advance
+      let allAnswered = false;
+      let advanced = false;
+      let isFinished = false;
+      let nextQIndex = payload.question_index;
+
+      try {
+        const { count: partCount } = await supabase
+          .from('live_quiz_participants')
+          .select('*', { count: 'exact', head: true })
+          .eq('session_id', payload.session_id);
+
+        const { count: ansCount } = await supabase
+          .from('live_quiz_answers')
+          .select('*', { count: 'exact', head: true })
+          .eq('session_id', payload.session_id)
+          .eq('question_index', payload.question_index);
+
+        if (partCount && ansCount && ansCount >= partCount) {
+          allAnswered = true;
+          const { data: sess } = await supabase
+            .from('live_quiz_sessions')
+            .select('quiz_id, current_question_index, status')
+            .eq('id', payload.session_id)
+            .single();
+
+          if (sess && sess.current_question_index === payload.question_index) {
+            const { count: totalQuestions } = await supabase
+              .from('live_quiz_questions')
+              .select('*', { count: 'exact', head: true })
+              .eq('quiz_id', sess.quiz_id);
+
+            if (totalQuestions && payload.question_index + 1 >= totalQuestions) {
+              isFinished = true;
+              await this.finishQuiz(payload.session_id);
+            } else {
+              advanced = true;
+              nextQIndex = payload.question_index + 1;
+              await supabase
+                .from('live_quiz_sessions')
+                .update({
+                  current_question_index: nextQIndex,
+                  question_start_ms: Date.now(),
+                  status: 'in_progress',
+                  correct_answer_index: null
+                })
+                .eq('id', payload.session_id);
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.warn('[LiveQuizService] fallback advance check notice:', checkErr);
+      }
+
       return {
         data: {
           is_correct: false,
-          points_awarded: 0
+          points_awarded: 0,
+          all_answered: allAnswered,
+          advanced,
+          next_question_index: nextQIndex,
+          is_finished: isFinished
         }
       };
     } catch (err: any) {

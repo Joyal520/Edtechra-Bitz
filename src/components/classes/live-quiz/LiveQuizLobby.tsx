@@ -7,7 +7,6 @@ import {
   Play,
   Volume2,
   VolumeX,
-  Sparkles,
   ArrowLeft,
   Clock,
   Calendar,
@@ -91,11 +90,20 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
 
   const questionsCount = realQuestionsCount || session.quiz?.questions?.length || 0;
 
-  // 1. Stale-state / Reconnection Guard: If quiz is already active, navigate immediately
+  // 1. Audio management: Respect soundEnabled toggle and cleanup on unmount
   useEffect(() => {
-    // Start background lobby music
-    quizAudioService.startBackgroundMusic();
+    if (soundEnabled) {
+      quizAudioService.startBackgroundMusic();
+    } else {
+      quizAudioService.stopBackgroundMusic();
+    }
+    return () => {
+      quizAudioService.stopBackgroundMusic();
+    };
+  }, [soundEnabled]);
 
+  // 1b. Stale-state / Reconnection Guard: If quiz is already active, navigate immediately
+  useEffect(() => {
     if (!isTeacher && (session.status === 'in_progress' || session.status === 'reveal')) {
       navigate(`/classes/${session.classroom_id}/live-quiz/play/${session.id}`, {
         state: { initialSession: session }
@@ -396,65 +404,57 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   };
 
   return (
-    <div className="relative min-h-[82vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6">
+    <div className="relative min-h-[82vh] bg-gradient-to-b from-[#eaf2f9] via-[#f1f6fc] to-[#e4edf7] text-slate-900 rounded-[32px] p-4 sm:p-7 md:p-8 shadow-xl overflow-hidden border border-sky-200/70 flex flex-col justify-between space-y-6">
       
-      {/* Background ambient lighting effects */}
-      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/4 -mb-20 w-80 h-80 rounded-full bg-sky-400/15 blur-3xl pointer-events-none" />
-
-      {/* Top Header: Navigation, Authoritative Status, Compact Game PIN & Sound */}
+      {/* Top Header: Branding, Authoritative Status, PIN, Sound, & Exit */}
       <div className="relative z-10 flex items-center justify-between gap-3 flex-wrap">
         
-        {/* Left: Exit Lobby */}
-        <button
-          type="button"
-          onClick={() => {
-            if (isTeacher && !isScheduled && participants.length === 0) {
-              if (confirm('Do you want to cancel this live quiz lobby before leaving?')) {
-                liveQuizService.cancelSession(session.id).catch(() => {});
-              }
-            }
-            navigate(`/classes/${session.classroom_id}`);
-          }}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-200 hover:text-white bg-white/10 hover:bg-white/15 px-3.5 py-1.5 rounded-full transition-all border border-white/10 cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Exit Lobby</span>
-        </button>
+        {/* Left: Official EdTechra Logo & Title */}
+        <div className="flex items-center gap-2.5">
+          <img
+            src="/logo.png"
+            alt="EdTechra"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain drop-shadow-xs"
+          />
+          <div className="text-left">
+            <div className="font-black text-slate-900 text-base sm:text-lg leading-tight">EdTechra</div>
+            <div className="text-[11px] text-sky-600 font-bold tracking-wide">Live Quiz</div>
+          </div>
+        </div>
 
         {/* Center / Status Badge */}
         {isScheduled && scheduledTimeStr ? (
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-black shadow-sm">
-            <Calendar className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/90 border border-amber-300 text-amber-900 text-xs font-black shadow-xs">
+            <Calendar className="w-3.5 h-3.5 text-amber-700" />
             <span>STATUS: SCHEDULED</span>
-            <span className="text-white/60">•</span>
+            <span className="text-amber-400">•</span>
             <span>
               Starts at {new Date(scheduledTimeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-black shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100/90 border border-emerald-300 text-emerald-900 text-xs font-black shadow-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
             <span>STATUS: LIVE NOW</span>
           </div>
         )}
 
-        {/* Right Controls: Compact Game PIN & Audio */}
+        {/* Right Controls: Game PIN, Sound, & Exit Lobby */}
         <div className="flex items-center gap-2.5">
           {/* Game PIN Pill — Only shown to teacher to display to class */}
           {isTeacher && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-sm">
-              <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-xs text-xs font-bold text-slate-800">
+              <span className="text-[10px] font-black uppercase tracking-wider text-sky-700">
                 {session.classroom_id ? 'Guest PIN:' : 'Game PIN:'}
               </span>
-              <span className="font-mono font-black text-amber-300 tracking-wider text-sm">{pin}</span>
+              <span className="font-mono font-black text-slate-900 tracking-wider text-sm">{pin}</span>
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="p-1 rounded-md hover:bg-white/15 text-sky-200 hover:text-white transition-colors cursor-pointer"
+                className="p-1 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                 title="Copy Direct Join Link"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
           )}
@@ -463,214 +463,284 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           <button
             type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-200 shadow-xs flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
             title={soundEnabled ? 'Mute audio' : 'Unmute audio'}
           >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-sky-600" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+          </button>
+
+          {/* Exit Lobby */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isTeacher && !isScheduled && participants.length === 0) {
+                if (confirm('Do you want to cancel this live quiz lobby before leaving?')) {
+                  liveQuizService.cancelSession(session.id).catch(() => {});
+                }
+              }
+              navigate(`/classes/${session.classroom_id}`);
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 px-3.5 py-1.5 rounded-full transition-all border border-slate-200 shadow-xs cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Exit Lobby</span>
           </button>
         </div>
 
       </div>
 
-      {/* Main Center Display: Prioritizing Quiz Cover, Title, Countdown, & Status */}
-      <div className="relative z-10 text-center space-y-6 max-w-2xl mx-auto w-full">
+      {/* Main Content Area: 1. Quiz Hero Card, 2. Countdown Hero Card */}
+      <div className="relative z-10 space-y-5">
         
-        {/* Prominent Quiz Cover Image Card with Badge */}
-        <div className="relative w-full max-w-md mx-auto aspect-video rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-900/80 group">
-          <img
-            src={coverUrl}
-            alt={quizTitle}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-            onError={(e) => {
-              e.currentTarget.src = DEFAULT_QUIZ_COVER;
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent pointer-events-none" />
+        {/* Card 1: Quiz Information Hero Card */}
+        <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-xs border border-slate-200/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            <div className="space-y-2.5 flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-3.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} border ${badgeStyle.border} shadow-xs`}>
+                  {category}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
+                  <Layers className="w-3.5 h-3.5 text-slate-500" />
+                  <span>{questionsCount} Questions</span>
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {quizTitle}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed max-w-xl">
+                {session.quiz?.description || 'A live classroom quiz testing your knowledge, speed, and accuracy.'}
+              </p>
+            </div>
 
-          {/* Top-Left Category Badge */}
-          <div className="absolute top-3 left-3">
-            <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} border ${badgeStyle.border} shadow-md`}>
-              {category}
-            </span>
+            {/* Right Cover / Illustration */}
+            <div className="shrink-0 self-center sm:self-auto">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-50 to-indigo-100 border border-slate-200 p-1 shadow-xs flex items-center justify-center">
+                <img
+                  src={coverUrl}
+                  alt={quizTitle}
+                  className="w-full h-full object-cover rounded-xl"
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_QUIZ_COVER;
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Top-Right Question Count Badge */}
-          <div className="absolute top-3 right-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black bg-black/60 backdrop-blur-md border border-white/20 text-sky-200 shadow-md">
-              <Layers className="w-3 h-3 text-sky-400" />
-              <span>{questionsCount} Questions</span>
-            </span>
-          </div>
-
-          {/* Bottom Title Bar over Image */}
-          <div className="absolute bottom-3 left-4 right-4 text-left pointer-events-none">
-            <h2 className="text-lg sm:text-xl font-black text-white drop-shadow-md truncate">
-              {quizTitle}
-            </h2>
+          {/* Bottom Meta Badges Strip */}
+          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-2.5 sm:gap-3 flex-wrap text-xs font-bold text-slate-600">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 border border-slate-200/70">
+              <span className={`w-2 h-2 rounded-full ${isScheduled ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span>Status: {isScheduled ? 'Scheduled' : 'Live Now'}</span>
+            </div>
+            {scheduledTimeStr && (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 border border-slate-200/70">
+                <Clock className="w-3.5 h-3.5 text-sky-600" />
+                <span>Starts at: {new Date(scheduledTimeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 border border-slate-200/70">
+              <Users className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Players Joined: {participants.length}</span>
+            </div>
           </div>
         </div>
 
-        {/* State A: SCHEDULED LOBBY — Prominent Synchronized Countdown */}
-        {isScheduled && (
-          <div className="p-6 sm:p-7 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl space-y-3 animate-in zoom-in-95 max-w-lg mx-auto">
-            <div className="flex items-center justify-center gap-2 text-xs font-extrabold uppercase tracking-widest text-emerald-300">
-              <Clock className="w-4 h-4 animate-pulse" />
-              <span>Quiz Starts In</span>
+        {/* Card 2: Countdown Hero Card */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xs border border-slate-200/80 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8">
+          {/* Left: 3D Student Character */}
+          <div className="w-full md:w-5/12 flex items-center justify-center">
+            <div className="relative w-full max-w-[260px] aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-tr from-sky-100 via-indigo-50 to-blue-100 flex items-center justify-center p-2 border border-sky-200/60 shadow-xs">
+              <img
+                src="/images/classroom/student-classroom-hero.webp"
+                alt="Student Learning"
+                className="w-full h-full object-contain drop-shadow-sm"
+                onError={(e) => {
+                  e.currentTarget.src = '/images/classroom/classroom-hero-student.jpg';
+                }}
+              />
             </div>
-            <div className="font-mono font-black text-5xl sm:text-7xl text-emerald-300 drop-shadow-md tracking-wider">
-              {formattedCountdown}
-            </div>
-            <p className="text-xs sm:text-sm text-sky-100 font-medium">
-              {!isTeacher
-                ? 'Please wait. The quiz will start automatically when the countdown reaches zero.'
-                : 'Students are entering the waiting lobby. The quiz is scheduled to begin at 00:00.'}
-            </p>
           </div>
-        )}
 
-        {/* State B: LIVE NOW / READY — Auto-Start for Scheduled, or Teacher Controls for Live */}
-        {isReady && (
-          <div className="max-w-lg mx-auto w-full animate-in zoom-in-95">
-            {targetStartMs ? (
-              <div className="p-6 sm:p-7 bg-emerald-500/20 backdrop-blur-md rounded-3xl border border-emerald-400/40 shadow-2xl space-y-3">
-                <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+          {/* Right: Countdown or Live Action Controls */}
+          <div className="w-full md:w-7/12 text-center md:text-left space-y-3">
+            {isScheduled ? (
+              <>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/80 text-slate-700 text-xs font-black uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-sky-600 animate-pulse" />
+                  <span>Quiz Starts In</span>
+                </div>
+
+                <div className="font-mono font-black text-5xl sm:text-6xl md:text-7xl text-slate-900 tracking-tight drop-shadow-xs">
+                  {formattedCountdown}
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed max-w-md">
+                  {!isTeacher
+                    ? 'Please wait. The quiz will start automatically when the countdown reaches zero.'
+                    : 'Students are entering the waiting lobby. The quiz will automatically begin when the timer reaches 00:00.'}
+                </p>
+
+                {/* Teacher Early Start Controls */}
+                {isTeacher && (
+                  <div className="pt-2 flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={isStarting || participants.length === 0}
+                      onClick={handleStart}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>
+                        {isStarting
+                          ? 'Starting...'
+                          : `Start Question 1 Now (${participants.length} Ready)`}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isCancelling || isStarting}
+                      onClick={handleCancelSession}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      {isCancelling ? 'Cancelling...' : 'Cancel Quiz'}
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : isReady && targetStartMs ? (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   <span>Scheduled Start Reached</span>
                 </div>
-                <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto my-2" />
-                <h3 className="text-lg sm:text-xl font-black text-white">Starting Quiz Automatically!</h3>
-                <p className="text-xs text-slate-200 font-medium">
-                  The countdown is complete. Transitioning to Question 1 automatically...
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                  Starting Quiz Automatically!
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                  The countdown is complete. Transitioning to Question 1...
                 </p>
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin my-2" />
               </div>
             ) : isTeacher ? (
-              <div className="p-6 sm:p-7 bg-emerald-500/15 backdrop-blur-md rounded-3xl border border-emerald-400/30 shadow-2xl space-y-4">
-                <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   <span>Ready to Begin</span>
                 </div>
-                <h3 className="text-lg sm:text-xl font-black text-white">
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
                   {participants.length > 0
                     ? `${participants.length} Student${participants.length > 1 ? 's' : ''} Connected & Ready`
-                    : 'Lobby is Open — Waiting for Students to Join'}
-                </h3>
-                <p className="text-xs text-slate-200 font-medium">
-                  When students have joined, click below to begin. All connected student devices will automatically transition to Question 1.
+                    : 'Lobby is Open — Waiting for Students'}
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-md">
+                  When your students have joined, click below to begin. All connected student devices will automatically transition to Question 1.
                 </p>
-                <button
-                  type="button"
-                  disabled={isStarting}
-                  onClick={handleStart}
-                  className="w-full py-4 px-6 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 rounded-2xl text-base font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-2.5"
-                >
-                  <Play className="w-5 h-5 fill-current" />
-                  <span>
-                    {isStarting
-                      ? 'Starting Question 1...'
-                      : participants.length > 0
-                        ? `Start Quiz (${participants.length} Ready)`
-                        : 'Start Quiz'}
-                  </span>
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={isStarting}
+                    onClick={handleStart}
+                    className="inline-flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-sm font-black shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>
+                      {isStarting
+                        ? 'Starting Question 1...'
+                        : participants.length > 0
+                          ? `Start Quiz (${participants.length} Ready)`
+                          : 'Start Quiz'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isCancelling || isStarting}
+                    onClick={handleCancelSession}
+                    className="inline-flex items-center gap-1.5 px-4 py-3 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isCancelling ? 'Cancelling...' : 'Cancel Quiz'}
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="p-6 sm:p-7 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl space-y-4">
-                <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-300">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-sky-100 border border-sky-300 text-sky-800 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
                   <span>Get Ready!</span>
                 </div>
-                <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto my-2" />
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  Get Ready!
-                </h3>
-                <p className="text-sm text-sky-100 font-semibold">
-                  Waiting for the teacher to start the quiz.
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                  Waiting for the teacher to start...
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-md">
+                  Sit tight! Question 1 will appear automatically on your screen as soon as the teacher starts the quiz.
                 </p>
-                <p className="text-xs text-slate-300 font-medium">
-                  Sit tight! Question 1 will appear automatically on your screen without refreshing.
-                </p>
+                <div className="w-8 h-8 border-3 border-sky-500 border-t-transparent rounded-full animate-spin my-2" />
               </div>
             )}
           </div>
-        )}
+        </div>
 
       </div>
 
-      {/* Bottom Section: Connected Players Grid & Host Action Controls */}
-      <div className="relative z-10 space-y-4">
-        
-        <div className="flex items-center justify-between border-b border-white/15 pb-3 flex-wrap gap-3">
-          <div className="flex items-center gap-2 text-sm font-black text-white">
-            <Users className="w-4 h-4 text-sky-300" />
-            <span>Players Connected ({participants.length})</span>
+      {/* Players Connected Section */}
+      <div className="relative z-10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <h2 className="text-sm sm:text-base font-black text-slate-900">
+              Players Connected ({participants.length})
+            </h2>
           </div>
-
-          {isTeacher && (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={isCancelling || isStarting}
-                onClick={handleCancelSession}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-rose-400/40 text-rose-300 hover:bg-rose-500/20 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
-              >
-                {isCancelling ? 'Cancelling...' : isScheduled ? 'Cancel Scheduled Quiz' : 'Cancel Live Quiz'}
-              </button>
-
-              {/* Early Start button for teacher if scheduled but all students are already ready */}
-              {isScheduled && (
-                <button
-                  type="button"
-                  disabled={isStarting || participants.length === 0}
-                  onClick={handleStart}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl text-xs font-black shadow-xl active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>
-                    {isStarting
-                      ? 'Starting...'
-                      : `Start Question 1 Now (${participants.length} Ready)`}
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
+          <span className="text-xs text-slate-400 font-medium italic">
+            Waiting for more players...
+          </span>
         </div>
 
-        {/* Players Avatar Pills */}
         {participants.length === 0 ? (
-          <div className="py-8 text-center text-xs font-bold text-slate-300 animate-pulse flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 text-center border border-slate-200/80 shadow-xs space-y-2">
+            <Users className="w-8 h-8 text-slate-300 mx-auto" />
+            <div className="text-xs font-bold text-slate-500">
               {session.classroom_id ? (
                 <>Waiting for classroom students to join...</>
               ) : (
-                <>Waiting for students to connect using Game PIN <strong className="text-white font-mono text-sm">{pin}</strong>...</>
+                <>Waiting for students to connect using Game PIN <strong className="text-slate-800 font-mono text-sm">{pin}</strong>...</>
               )}
-            </span>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-center gap-2.5 max-h-40 overflow-y-auto py-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {participants.map((p) => {
               const initials = p.display_name.slice(0, 2).toUpperCase();
               return (
                 <div
                   key={p.student_id}
-                  className="flex items-center gap-2 px-3.5 py-1.5 bg-white/15 backdrop-blur-md rounded-2xl border border-white/20 text-xs font-black text-white animate-in zoom-in-90 duration-200"
+                  className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3 hover:border-sky-300 transition-colors"
                 >
-                  <div className="w-6 h-6 rounded-full bg-amber-300 text-slate-900 font-black text-[10px] flex items-center justify-center overflow-hidden">
-                    {p.avatar_url ? (
-                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      initials
-                    )}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-sky-400 to-indigo-500 text-white font-black text-xs flex items-center justify-center overflow-hidden shadow-xs">
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          initials
+                        )}
+                      </div>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+                    </div>
+                    <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                      {p.display_name}
+                    </span>
                   </div>
-                  <span>{p.display_name}</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-black uppercase tracking-wider shrink-0">
+                    Ready!
+                  </span>
                 </div>
               );
             })}
           </div>
         )}
-
       </div>
 
     </div>

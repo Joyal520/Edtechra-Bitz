@@ -40,3 +40,4 @@ server/data/*.json
 !server/data/.gitkeep
 .kilo/
 scratch/
+Edtechra Lab/

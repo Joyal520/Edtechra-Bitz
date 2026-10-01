@@ -706,6 +706,33 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
             selected_option_index: canonicalIndex
           }
         }).catch(() => {});
+
+        // If server auto-advanced because all participants answered, broadcast immediately
+        if (res.data?.advanced && typeof res.data?.next_question_index === 'number') {
+          const nextIdx = res.data.next_question_index;
+          const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
+          const nextQ = questions[nextIdx];
+          if (nextQ) {
+            channel.send({
+              type: 'broadcast',
+              event: 'question_started',
+              payload: {
+                qIndex: nextIdx,
+                question: nextQ.question,
+                options: parseOptions(nextQ.options),
+                durationSec: session.question_duration_sec || nextQ.durationSec || 20,
+                questionStartMs: Date.now(),
+                totalQuestions: questions.length
+              }
+            }).catch(() => {});
+          }
+        } else if (res.data?.is_finished) {
+          channel.send({
+            type: 'broadcast',
+            event: 'quiz_finished',
+            payload: { session_id: session.id }
+          }).catch(() => {});
+        }
       }
     } catch (err) {
       console.error('Error submitting answer:', err);
