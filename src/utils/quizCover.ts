@@ -6,16 +6,25 @@ export const DEFAULT_QUIZ_COVER = '/images/quiz/default-quiz-cover.jpg';
 
 /**
  * Resolves the cover image for any quiz or session.
- * Always falls back cleanly to the official EdTechra layered papercut cover.
+ * 1. Uploaded quiz cover image (cover_image, cover_image_url, image_url)
+ * 2. Valid existing quiz image URL
+ * 3. Default EdTechra image fallback
  */
 export function getQuizCover(quiz?: {
   cover_image?: string | null;
   cover_image_url?: string | null;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
 } | null): string {
   if (!quiz) return DEFAULT_QUIZ_COVER;
-  const custom = quiz.cover_image || quiz.cover_image_url;
+  const custom = quiz.cover_image || quiz.cover_image_url || quiz.image_url || quiz.thumbnail_url;
   if (custom && typeof custom === 'string' && custom.trim().length > 0) {
-    return custom.trim();
+    const trimmed = custom.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {
+      return trimmed;
+    }
+    // Prefix relative path if missing leading slash
+    return `/${trimmed}`;
   }
   return DEFAULT_QUIZ_COVER;
 }

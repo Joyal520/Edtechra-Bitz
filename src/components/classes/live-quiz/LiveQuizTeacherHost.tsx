@@ -241,6 +241,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         options: activeQuestion.options,
         durationSec: durationSec,
         questionStartMs: startMs,
+        questionEndsAtMs: startMs + (durationSec * 1000),
         totalQuestions: questions.length
       }
     };
@@ -393,8 +394,9 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const handleFinishQuiz = async () => {
     if (isFinishing) return;
     setIsFinishing(true);
+    quizAudioService.setQuizFinished(true);
     quizAudioService.stopBackgroundMusic();
-    quizAudioService.playQuizComplete();
+    quizAudioService.playQuizComplete(session.id);
 
     try {
       const res = await liveQuizService.finishQuiz(session.id);

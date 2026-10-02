@@ -23,6 +23,14 @@ class QuizAudioService {
   // Background Music singleton instance
   private bgmAudio: HTMLAudioElement | null = null;
   private bgmPlaying = false;
+  private autoplayPermissionHandler: (() => void) | null = null;
+
+  // Strict Lifecycle State: When true, BGM and gameplay SFX are forbidden from playing/restarting
+  private isQuizFinished = false;
+  private playedVictorySessions = new Set<string>();
+
+  // Active synthesized Web Audio oscillators tracking for clean teardown
+  private activeOscillators: OscillatorNode[] = [];
 
   // Click Sound Audio Pool (prevents rapid overlapping distortion or garbage collection lag)
   private clickPool: HTMLAudioElement[] = [];
@@ -97,6 +105,58 @@ class QuizAudioService {
   }
 
   // ==========================================================================
+  // QUIZ FINISHED LIFECYCLE CONTROLS
+  // ==========================================================================
+
+  /**
+   * Authoritatively declares the quiz finished.
+   * When true, background music and gameplay sounds are strictly blocked from starting or restarting.
+   */
+  public setQuizFinished(finished: boolean): void {
+    this.isQuizFinished = finished;
+    if (finished) {
+      this.stopBackgroundMusic();
+      this.stopActiveEffects();
+    }
+  }
+
+  public isFinished(): boolean {
+    return this.isQuizFinished;
+  }
+
+  /**
+   * Resets audio state for a new session
+   */
+  public resetSessionAudio(sessionKey?: string): void {
+    this.isQuizFinished = false;
+    if (sessionKey) {
+      this.playedVictorySessions.delete(sessionKey);
+    } else {
+      this.playedVictorySessions.clear();
+    }
+  }
+
+  /**
+   * Stops and disconnects all currently active synthesized sound effects
+   */
+  public stopActiveEffects(): void {
+    this.activeOscillators.forEach((osc) => {
+      try {
+        osc.stop();
+        osc.disconnect();
+      } catch {}
+    });
+    this.activeOscillators = [];
+  }
+
+  private trackOscillator(osc: OscillatorNode): void {
+    this.activeOscillators.push(osc);
+    osc.onended = () => {
+      this.activeOscillators = this.activeOscillators.filter((o) => o !== osc);
+    };
+  }
+
+  // ==========================================================================
   // BACKGROUND MUSIC (BGM) CONTROLS
   // ==========================================================================
 
@@ -152,10 +212,11 @@ class QuizAudioService {
 
   /**
    * Starts background music during active quiz session.
+   * Strictly blocked if quiz is finished.
    * Idempotent: If already playing, keeps track running smoothly across questions without restart.
    */
   public startBackgroundMusic(): void {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.isQuizFinished) return;
     const bgm = this.getBgmInstance();
     if (!bgm) return;
 
@@ -166,29 +227,48 @@ class QuizAudioService {
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            this.bgmPlaying = true;
+            if (this.isQuizFinished) {
+              // Quiz finished while play promise was resolving - immediately stop!
+              this.stopBackgroundMusic();
+            } else {
+              this.bgmPlaying = true;
+            }
           })
           .catch(() => {
-            // Autoplay blocked: wait for first user tap to begin playing
-            const handleAutoplayPermission = () => {
-              if (bgm && !this.bgmPlaying) {
+            // Remove previous pending autoplay listener if any
+            if (this.autoplayPermissionHandler && typeof window !== 'undefined') {
+              window.removeEventListener('pointerdown', this.autoplayPermissionHandler);
+            }
+
+            // Autoplay blocked: wait for first user tap to begin playing ONLY if quiz not finished
+            this.autoplayPermissionHandler = () => {
+              if (bgm && !this.bgmPlaying && !this.isQuizFinished) {
                 bgm.play().then(() => {
-                  this.bgmPlaying = true;
+                  this.bgmPlaying = !this.isQuizFinished;
+                  if (this.isQuizFinished) this.stopBackgroundMusic();
                 }).catch(() => {});
               }
-              window.removeEventListener('pointerdown', handleAutoplayPermission);
+              if (this.autoplayPermissionHandler && typeof window !== 'undefined') {
+                window.removeEventListener('pointerdown', this.autoplayPermissionHandler);
+                this.autoplayPermissionHandler = null;
+              }
             };
-            window.addEventListener('pointerdown', handleAutoplayPermission, { once: true });
+            window.addEventListener('pointerdown', this.autoplayPermissionHandler, { once: true });
           });
       }
     }
   }
 
   /**
-   * Stops background music immediately and resets playhead.
+   * Stops background music immediately, resets playhead, and cleans pending autoplay listeners.
    * Call when quiz ends, unmounts, or navigates to podium.
    */
   public stopBackgroundMusic(): void {
+    if (this.autoplayPermissionHandler && typeof window !== 'undefined') {
+      window.removeEventListener('pointerdown', this.autoplayPermissionHandler);
+      this.autoplayPermissionHandler = null;
+    }
+
     if (this.bgmAudio) {
       try {
         this.bgmAudio.pause();
@@ -214,10 +294,15 @@ class QuizAudioService {
    * Resumes background music from current position
    */
   public resumeBackgroundMusic(): void {
+    if (this.isQuizFinished) return;
     if (this.bgmAudio && !this.bgmPlaying) {
       this.bgmAudio.volume = this.isMusicMuted() ? 0 : 0.20;
       this.bgmAudio.play().then(() => {
-        this.bgmPlaying = true;
+        if (this.isQuizFinished) {
+          this.stopBackgroundMusic();
+        } else {
+          this.bgmPlaying = true;
+        }
       }).catch(() => {});
     }
   }
@@ -284,7 +369,7 @@ class QuizAudioService {
    * Upbeat, high-fidelity celebratory chime (C5 -> E5 -> G5 -> C6)
    */
   public playCorrect(): void {
-    if (!this.isSoundEnabled()) return;
+    if (!this.isSoundEnabled() || this.isQuizFinished) return;
 
     try {
       const ctx = this.getAudioContext();
@@ -312,6 +397,7 @@ class QuizAudioService {
         osc.connect(gainNode);
         gainNode.connect(ctx.destination);
 
+        this.trackOscillator(osc);
         osc.start(n.time);
         osc.stop(n.time + n.dur);
       });
@@ -325,7 +411,7 @@ class QuizAudioService {
    * Soft, gentle descending reminder (Eb4 -> Bb3) with lowpass filter
    */
   public playIncorrect(): void {
-    if (!this.isSoundEnabled()) return;
+    if (!this.isSoundEnabled() || this.isQuizFinished) return;
 
     try {
       const ctx = this.getAudioContext();
@@ -356,6 +442,7 @@ class QuizAudioService {
         gainNode.connect(filter);
         filter.connect(ctx.destination);
 
+        this.trackOscillator(osc);
         osc.start(n.time);
         osc.stop(n.time + n.dur);
       });
@@ -369,7 +456,7 @@ class QuizAudioService {
    * 3-note ascending fanfare (G4 -> C5 -> G5) announcing the start of Question 1
    */
   public playQuizStart(): void {
-    if (!this.isSoundEnabled()) return;
+    if (!this.isSoundEnabled() || this.isQuizFinished) return;
 
     try {
       const ctx = this.getAudioContext();
@@ -396,6 +483,7 @@ class QuizAudioService {
         osc.connect(gainNode);
         gainNode.connect(ctx.destination);
 
+        this.trackOscillator(osc);
         osc.start(n.time);
         osc.stop(n.time + n.dur);
       });
@@ -409,7 +497,7 @@ class QuizAudioService {
    * Ascending chime/whoosh (D5 -> F#5 -> A5 -> D6) when transitioning between questions
    */
   public playQuestionTransition(): void {
-    if (!this.isSoundEnabled()) return;
+    if (!this.isSoundEnabled() || this.isQuizFinished) return;
 
     try {
       const ctx = this.getAudioContext();
@@ -437,6 +525,7 @@ class QuizAudioService {
         osc.connect(gainNode);
         gainNode.connect(ctx.destination);
 
+        this.trackOscillator(osc);
         osc.start(n.time);
         osc.stop(n.time + n.dur);
       });
@@ -448,9 +537,16 @@ class QuizAudioService {
   /**
    * Play Quiz Complete Victory Fanfare
    * Celebratory melody (C5 -> E5 -> G5 -> C6 -> A5 -> B5 -> C6) for podium / leaderboard
+   * Plays ONCE only per quiz session to prevent audio repetition on re-render.
    */
-  public playQuizComplete(): void {
+  public playQuizComplete(sessionKey: string = 'global'): void {
     if (!this.isSoundEnabled()) return;
+
+    const normalizedKey = (sessionKey || 'global').trim();
+    if (this.playedVictorySessions.has(normalizedKey)) {
+      return; // Already played for this session, strictly play once only!
+    }
+    this.playedVictorySessions.add(normalizedKey);
 
     try {
       const ctx = this.getAudioContext();
@@ -481,6 +577,7 @@ class QuizAudioService {
         osc.connect(gainNode);
         gainNode.connect(ctx.destination);
 
+        this.trackOscillator(osc);
         osc.start(n.time);
         osc.stop(n.time + n.dur);
       });

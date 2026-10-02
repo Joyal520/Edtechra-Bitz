@@ -132,6 +132,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     permutation: number[];
     durationSec: number;
     questionStartMs: number;
+    questionEndsAtMs: number;
     totalQuestions: number;
   } | null>(() => {
     if (isPlayingStatus) {
@@ -143,13 +144,21 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       const q = questions[idx] || questions[0];
       if (q) {
         const opts = parseOptions(q.options);
+        const duration = session.question_duration_sec || q.durationSec || 20;
+        let startMs = Number(session.question_start_ms);
+        // Guard: if startMs is invalid or anchored to an old scheduled timestamp that would immediately expire, anchor to now
+        if (!startMs || isNaN(startMs) || (Date.now() - startMs >= duration * 1000)) {
+          startMs = Date.now();
+        }
+        const endsAtMs = Number((session as any).questionEndsAtMs) || (startMs + duration * 1000);
         return {
           qIndex: idx,
           question: q.question || `Question ${idx + 1}`,
           options: opts,
           permutation: generatePermutation(opts.length),
-          durationSec: session.question_duration_sec || q.durationSec || 20,
-          questionStartMs: Number(session.question_start_ms) || Date.now(),
+          durationSec: duration,
+          questionStartMs: startMs,
+          questionEndsAtMs: endsAtMs,
           totalQuestions: questions.length || 0
         };
       }
@@ -182,12 +191,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
   // Rehydrate initial remaining time
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(() => {
+    const duration = session.question_duration_sec || 20;
     if (session.status === 'in_progress' && session.question_start_ms) {
       const elapsed = (Date.now() - Number(session.question_start_ms)) / 1000;
-      const duration = session.question_duration_sec || 20;
-      return Math.max(0, Math.ceil(duration - elapsed));
+      const remaining = Math.ceil(duration - elapsed);
+      if (remaining > 0) return remaining;
     }
-    return 20;
+    return duration;
   });
 
   // Audio and Visual Celebration Feedback State
@@ -234,15 +244,16 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     activeQIndexRef.current = questionData?.qIndex ?? null;
   }, [questionData?.qIndex]);
 
-  // Total Quiz Timer State
-  const isTotalTimed = Boolean(session.quiz?.timer_enabled || session.expires_at);
+  // Total Quiz Timer State - ONLY active when timer_enabled is true on the quiz
+  const isTotalTimed = Boolean(session.quiz?.timer_enabled);
   const totalDurationSec = session.quiz?.timer_seconds || 60;
 
   const [totalTimeLeft, setTotalTimeLeft] = useState<number>(() => {
     if (!isTotalTimed) return 0;
     if (session.expires_at) {
       const remainingMs = new Date(session.expires_at).getTime() - Date.now();
-      return Math.max(0, Math.ceil(remainingMs / 1000));
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      if (remainingSec > 0) return remainingSec;
     }
     return totalDurationSec;
   });
@@ -262,6 +273,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
     // Bounds check: if quiz has questions and index is past the end, complete quiz!
     if (questions.length > 0 && rawIdx >= questions.length) {
+      quizAudioService.setQuizFinished(true);
       quizAudioService.stopBackgroundMusic();
       if (onQuizFinishedRef.current) {
         onQuizFinishedRef.current([]);
@@ -277,7 +289,16 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     const resolvedOptions = parseOptions(rawOpts);
 
     const duration = raw.durationSec || raw.duration_sec || session.question_duration_sec || fallbackQ?.durationSec || 20;
-    const startMs = Number(raw.questionStartMs || raw.startMs || raw.question_start_ms) || Date.now();
+    let startMs = Number(raw.questionStartMs || raw.startMs || raw.question_start_ms);
+    let endsAtMs = Number(raw.questionEndsAtMs || raw.endsAtMs);
+
+    // If startMs or endsAtMs would expire the question immediately on start, reset to now
+    if (!startMs || isNaN(startMs) || (Date.now() - startMs >= duration * 1000)) {
+      startMs = Date.now();
+      endsAtMs = startMs + duration * 1000;
+    } else if (!endsAtMs || isNaN(endsAtMs)) {
+      endsAtMs = startMs + duration * 1000;
+    }
 
     setQuestionData({
       qIndex: rawIdx,
@@ -286,6 +307,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       permutation: generatePermutation(resolvedOptions.length),
       durationSec: duration,
       questionStartMs: startMs,
+      questionEndsAtMs: endsAtMs,
       totalQuestions: totalCount
     });
     setSelectedIndex(null);
@@ -296,10 +318,9 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     hasTriggeredFeedbackRef.current = null;
     setPointsEarned(0);
 
-    const elapsed = (Date.now() - startMs) / 1000;
-    const remaining = Math.max(0, Math.ceil(duration - elapsed));
-    setQuestionTimeLeft(remaining);
-  }, [session.quiz?.questions, session.question_duration_sec]);
+    const remaining = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
+    setQuestionTimeLeft(remaining > 0 ? remaining : duration);
+  }, [session.quiz?.questions, session.question_duration_sec, studentQuestions]);
 
   const applyQuestionReveal = useCallback((rData: {
     qIndex?: number;
@@ -344,6 +365,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       if (!fresh) return;
 
       if (fresh.status === 'finished') {
+        quizAudioService.setQuizFinished(true);
         quizAudioService.stopBackgroundMusic();
         if (onQuizFinishedRef.current) {
           onQuizFinishedRef.current([]);
@@ -383,6 +405,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           const qDuration = fresh.question_duration_sec || questions[idx]?.durationSec || 20;
           const elapsedSec = (Date.now() - Number(fresh.question_start_ms)) / 1000;
           if (elapsedSec > qDuration + 15) {
+            quizAudioService.setQuizFinished(true);
             quizAudioService.stopBackgroundMusic();
             if (session.classroom_id) {
               fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`, { method: 'POST' }).catch(() => {});
@@ -478,6 +501,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
         }
       })
       .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
+        quizAudioService.setQuizFinished(true);
         quizAudioService.stopBackgroundMusic();
         if (onQuizFinishedRef.current) {
           onQuizFinishedRef.current(payload?.payload?.results || []);
@@ -496,6 +520,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           if (!updated) return;
 
           if (updated.status === 'finished') {
+            quizAudioService.setQuizFinished(true);
             quizAudioService.stopBackgroundMusic();
             if (onQuizFinishedRef.current) {
               onQuizFinishedRef.current([]);
@@ -596,15 +621,16 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     if (!questionData || revealData) return;
 
     const timer = setInterval(() => {
-      const elapsed = (Date.now() - questionData.questionStartMs) / 1000;
-      const remaining = Math.max(0, Math.ceil(questionData.durationSec - elapsed));
+      const endsAt = questionData.questionEndsAtMs || (questionData.questionStartMs + questionData.durationSec * 1000);
+      const remainingMs = endsAt - Date.now();
+      const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
       setQuestionTimeLeft(remaining);
 
       if (remaining <= 0) {
         setIsLocked(true);
         clearInterval(timer);
       }
-    }, 500);
+    }, 250);
 
     return () => clearInterval(timer);
   }, [questionData, revealData]);
@@ -713,6 +739,8 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
           const nextQ = questions[nextIdx];
           if (nextQ) {
+            const nextDur = session.question_duration_sec || nextQ.durationSec || 20;
+            const nextStartMs = Date.now();
             channel.send({
               type: 'broadcast',
               event: 'question_started',
@@ -720,8 +748,9 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
                 qIndex: nextIdx,
                 question: nextQ.question,
                 options: parseOptions(nextQ.options),
-                durationSec: session.question_duration_sec || nextQ.durationSec || 20,
-                questionStartMs: Date.now(),
+                durationSec: nextDur,
+                questionStartMs: nextStartMs,
+                questionEndsAtMs: nextStartMs + (nextDur * 1000),
                 totalQuestions: questions.length
               }
             }).catch(() => {});

@@ -46,10 +46,29 @@ export const LiveQuizPlayPage: React.FC = () => {
         // If scheduled start time is reached, authoritatively treat as in_progress and reconcile
         if ((s.status === 'scheduled' || s.status === 'lobby') && isScheduledTimeReached) {
           s.status = 'in_progress';
+          s.current_question_index = s.current_question_index ?? 0;
+          if (!s.question_start_ms) {
+            s.question_start_ms = initialSession?.question_start_ms || Date.now();
+          }
+          if (!s.question_duration_sec) {
+            s.question_duration_sec = initialSession?.question_duration_sec || s.quiz?.questions?.[0]?.durationSec || 20;
+          }
+          if ((initialSession as any)?.questionEndsAtMs) {
+            (s as any).questionEndsAtMs = (initialSession as any).questionEndsAtMs;
+          }
           liveQuizService.reconcileScheduledSession(s.id, s.classroom_id).catch(() => {});
         } else if (initialSession?.status === 'in_progress' && (s.status === 'scheduled' || s.status === 'lobby')) {
           // Never downgrade an active session back to lobby
           s.status = 'in_progress';
+          if (!s.question_start_ms && initialSession.question_start_ms) {
+            s.question_start_ms = initialSession.question_start_ms;
+          }
+          if (!s.question_duration_sec && initialSession.question_duration_sec) {
+            s.question_duration_sec = initialSession.question_duration_sec;
+          }
+          if ((initialSession as any)?.questionEndsAtMs) {
+            (s as any).questionEndsAtMs = (initialSession as any).questionEndsAtMs;
+          }
         }
 
         // Guarantee quiz questions are retained if s.quiz is missing
@@ -74,17 +93,23 @@ export const LiveQuizPlayPage: React.FC = () => {
   };
 
   const handleQuizFinished = useCallback(async (results: any) => {
-    if (Array.isArray(results) && results.length > 0) {
+    if (Array.isArray(results) && results.length > 0 && results[0]?.student?.full_name) {
       setFinalResults(results);
     } else if (sessionId) {
       try {
         const { data } = await liveQuizService.getResults(sessionId);
         if (data && data.length > 0) {
           setFinalResults(data);
+        } else if (Array.isArray(results) && results.length > 0) {
+          setFinalResults(results);
         }
       } catch {
-        // ignore
+        if (Array.isArray(results) && results.length > 0) {
+          setFinalResults(results);
+        }
       }
+    } else if (Array.isArray(results)) {
+      setFinalResults(results);
     }
     setIsFinished(true);
   }, [sessionId]);
@@ -104,6 +129,9 @@ export const LiveQuizPlayPage: React.FC = () => {
         <LiveQuizPodium
           results={finalResults}
           classroomId={classroomId || session.classroom_id}
+          sessionId={session.id}
+          session={session}
+          quiz={session.quiz}
           onExit={() => navigate(`/classes/${classroomId || session.classroom_id}`)}
         />
       ) : (

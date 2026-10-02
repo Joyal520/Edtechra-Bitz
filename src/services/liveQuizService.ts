@@ -167,7 +167,59 @@ class LiveQuizService {
         .eq('id', quizId)
         .maybeSingle();
 
-      if (error || !data || data.is_archived === true) return null;
+      if (error || !data || data.is_archived === true) {
+        // Fallback 1: Query server endpoint for public metadata (bypasses RLS safely without answers)
+        try {
+          const apiRes = await fetch(`/api/live-quiz/quiz-info/${quizId}`);
+          if (apiRes.ok) {
+            const json = await apiRes.json();
+            if (json.success && json.data) {
+              const qData = json.data;
+              let studentQuestions: any[] = [];
+              try {
+                const { data: qRows } = await supabase.rpc('get_live_quiz_questions_for_student', { p_quiz_id: quizId });
+                if (Array.isArray(qRows)) {
+                  studentQuestions = qRows.map((item: any) => ({
+                    id: item.id,
+                    question: item.question_text,
+                    options: item.options,
+                    durationSec: item.duration_sec || 20
+                  }));
+                }
+              } catch {}
+
+              return {
+                ...qData,
+                cover_image: qData.cover_image || qData.cover_image_url || null,
+                cover_image_url: qData.cover_image_url || qData.cover_image || null,
+                visibility: 'private',
+                timer_enabled: qData.timer_enabled ?? false,
+                timer_seconds: qData.timer_seconds ?? null,
+                is_owner: false,
+                creator_name: 'Created by Teacher',
+                questions: studentQuestions
+              };
+            }
+          }
+        } catch {}
+
+        // Fallback 2: Check R2 mirror
+        try {
+          const r2Res = await fetch(`/api/live-quiz/get-r2/${quizId}`);
+          if (r2Res.ok) {
+            const r2Json = await r2Res.json();
+            if (r2Json.success && r2Json.data) {
+              return {
+                ...r2Json.data,
+                cover_image: r2Json.data.cover_image || r2Json.data.cover_image_url || null,
+                cover_image_url: r2Json.data.cover_image_url || r2Json.data.cover_image || null
+              };
+            }
+          }
+        } catch {}
+
+        return null;
+      }
 
       const isOwner = Boolean(currentUserId && data.created_by === currentUserId);
       const creatorName = isOwner
@@ -210,6 +262,8 @@ class LiveQuizService {
 
       return {
         ...data,
+        cover_image: data.cover_image || data.cover_image_url || null,
+        cover_image_url: data.cover_image_url || data.cover_image || null,
         visibility: data.visibility || 'private',
         timer_enabled: data.timer_enabled ?? false,
         timer_seconds: data.timer_seconds ?? null,
@@ -851,6 +905,8 @@ class LiveQuizService {
           category: payload.custom_quiz.category,
           difficulty: payload.custom_quiz.difficulty,
           accent_color: payload.custom_quiz.accent_color,
+          cover_image: payload.custom_quiz.cover_image || payload.custom_quiz.cover_image_url || null,
+          cover_image_url: payload.custom_quiz.cover_image_url || payload.custom_quiz.cover_image || null,
           questions: payload.custom_quiz.questions,
           visibility: payload.custom_quiz.visibility || 'private',
           timer_enabled: payload.custom_quiz.timer_enabled,
@@ -879,6 +935,8 @@ class LiveQuizService {
             category: readyMade.category,
             difficulty: readyMade.difficulty,
             accent_color: readyMade.accent_color,
+            cover_image: readyMade.cover_image || readyMade.cover_image_url || null,
+            cover_image_url: readyMade.cover_image_url || readyMade.cover_image || null,
             questions: readyMade.questions,
             visibility: 'common',
             is_public: true
@@ -890,15 +948,22 @@ class LiveQuizService {
       }
 
       const quiz = payload.custom_quiz || (targetQuizId ? await this.getQuizById(targetQuizId) : null) || (readyMade ? { ...readyMade, id: targetQuizId || readyMade.id } : null);
+      if (quiz && payload.custom_quiz) {
+        if (!quiz.cover_image && !quiz.cover_image_url) {
+          quiz.cover_image = payload.custom_quiz.cover_image || payload.custom_quiz.cover_image_url || null;
+          quiz.cover_image_url = payload.custom_quiz.cover_image_url || payload.custom_quiz.cover_image || null;
+        }
+      }
       const totalTimerEnabled = Boolean(quiz?.timer_enabled);
       const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
       const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
       const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
       // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
       // For Scheduled: started_at stores the future scheduled start time
-      const startedAt = isScheduled ? scheduledStartAt : null;
       const expiresAt = totalTimerEnabled && totalTimerSeconds
-        ? new Date(Date.now() + totalTimerSeconds * 1000).toISOString()
+        ? (isScheduled && scheduledStartAt
+            ? new Date(new Date(scheduledStartAt).getTime() + totalTimerSeconds * 1000).toISOString()
+            : new Date(Date.now() + totalTimerSeconds * 1000).toISOString())
         : null;
 
       // Generate unique PIN
@@ -1136,13 +1201,18 @@ class LiveQuizService {
     if (!supabase) return null;
     try {
       const startMs = Date.now();
+      const existing = await this.getSessionById(sessionId);
+      const q0Dur = existing?.quiz?.questions?.[0]?.durationSec || existing?.question_duration_sec || 20;
+
       const { data, error } = await supabase
         .from('live_quiz_sessions')
         .update({
           status: 'in_progress',
+          started_at: new Date(startMs).toISOString(),
           current_question_index: 0,
           question_start_ms: startMs,
-          question_duration_sec: 20
+          question_duration_sec: q0Dur,
+          correct_answer_index: null
         })
         .eq('id', sessionId)
         .select(`
@@ -1310,10 +1380,21 @@ class LiveQuizService {
       if (
         scheduledMs > 0 &&
         now >= scheduledMs &&
-        (sessionObj.status === 'scheduled' ||
-          sessionObj.status === 'lobby' ||
-          sessionObj.status === 'in_progress' ||
-          sessionObj.status === 'reveal')
+        (sessionObj.status === 'scheduled' || sessionObj.status === 'lobby')
+      ) {
+        const q0Dur = quiz?.questions?.[0]?.durationSec || sessionObj.question_duration_sec || 20;
+        sessionObj = {
+          ...sessionObj,
+          status: 'in_progress',
+          current_question_index: 0,
+          started_at: new Date(now).toISOString(),
+          question_start_ms: sessionObj.question_start_ms || now,
+          question_duration_sec: q0Dur,
+          correct_answer_index: null
+        };
+      } else if (
+        sessionObj.status === 'in_progress' ||
+        sessionObj.status === 'reveal'
       ) {
         const computed = this.computeSessionTimeline(sessionObj, quiz?.questions || [], now);
         const hasDiverged =
@@ -1822,7 +1903,14 @@ class LiveQuizService {
           .single();
 
         if (resRow) {
-          finalResults.push(resRow);
+          finalResults.push({
+            ...resRow,
+            student: {
+              id: p.student_id,
+              full_name: p.display_name || 'Student',
+              avatar_url: p.avatar_url || null
+            }
+          });
         }
 
         // Idempotent point award via classroomPointsService
@@ -1854,6 +1942,14 @@ class LiveQuizService {
           });
         } catch {}
       }
+
+      // Re-query results to get joined profiles from profiles table
+      try {
+        const { data: fullyPopulated } = await this.getResults(sessionId);
+        if (fullyPopulated && fullyPopulated.length > 0) {
+          return { data: fullyPopulated };
+        }
+      } catch {}
 
       return { data: finalResults };
     } catch (err: any) {

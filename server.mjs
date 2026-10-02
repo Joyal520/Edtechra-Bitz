@@ -585,9 +585,9 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
           .from('live_quiz_sessions')
           .update({
             status: 'in_progress',
-            started_at: new Date(scheduledMs).toISOString(),
+            started_at: new Date(now).toISOString(),
             current_question_index: 0,
-            question_start_ms: scheduledMs,
+            question_start_ms: now,
             question_duration_sec: q0Dur,
             correct_answer_index: null
           })
@@ -604,9 +604,9 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
         console.log(`[LiveQuiz Server] SCHEDULED QUIZ STARTED | quiz_id=${session.quiz_id} | session_id=${session.id} | scheduled_start_at=${scheduledTime} | server_time=${new Date().toISOString()} | trigger_source=server_ticker`);
 
         session.status = 'in_progress';
-        session.started_at = new Date(scheduledMs).toISOString();
+        session.started_at = new Date(now).toISOString();
         session.current_question_index = 0;
-        session.question_start_ms = scheduledMs;
+        session.question_start_ms = now;
         session.question_duration_sec = q0Dur;
 
         // Broadcast Question 1 to all connected students
@@ -623,7 +623,8 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
             question: q0?.question_text || q0?.question || 'Question 1',
             options: opts,
             durationSec: q0Dur,
-            questionStartMs: scheduledMs,
+            questionStartMs: now,
+            questionEndsAtMs: now + (q0Dur * 1000),
             totalQuestions: questions.length
           });
         }
@@ -4378,28 +4379,38 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
       ? [...session.quiz.questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
       : [];
 
-    let effectiveStartedAt = session.started_at;
-    if (isStartNow || (!session.started_at && scheduledMs > 0 && now >= scheduledMs)) {
-      effectiveStartedAt = new Date(now).toISOString();
+    const isTransitioningFromLobby = session.status === 'lobby' || session.status === 'scheduled';
+    const q0Dur = questions[0]?.duration_sec || questions[0]?.durationSec || session.question_duration_sec || 20;
+
+    let updatePayload;
+    if (isStartNow || isTransitioningFromLobby) {
+      updatePayload = {
+        status: 'in_progress',
+        started_at: new Date(now).toISOString(),
+        current_question_index: 0,
+        question_start_ms: now,
+        question_duration_sec: q0Dur,
+        correct_answer_index: null
+      };
+    } else {
+      let effectiveStartedAt = session.started_at;
+      if (!session.started_at) {
+        effectiveStartedAt = new Date(now).toISOString();
+      }
+      const sessionWithStart = { ...session, started_at: effectiveStartedAt };
+      const computed = computeLiveQuizTimeline(sessionWithStart, questions, now);
+      updatePayload = {
+        status: computed.status,
+        started_at: effectiveStartedAt,
+        current_question_index: computed.current_question_index,
+        question_start_ms: computed.question_start_ms,
+        question_duration_sec: computed.question_duration_sec,
+        correct_answer_index: computed.correct_answer_index
+      };
     }
 
-    const sessionWithStart = { ...session, started_at: effectiveStartedAt };
-    const computed = computeLiveQuizTimeline(sessionWithStart, questions, now);
-
-    const updatePayload = {
-      status: isStartNow ? 'in_progress' : computed.status,
-      current_question_index: isStartNow ? 0 : computed.current_question_index,
-      question_start_ms: isStartNow ? now : computed.question_start_ms,
-      question_duration_sec: computed.question_duration_sec,
-      correct_answer_index: isStartNow ? null : computed.correct_answer_index
-    };
-
-    if (effectiveStartedAt) {
-      updatePayload.started_at = effectiveStartedAt;
-    }
-
-    if (computed.status === 'finished') {
-      updatePayload.ended_at = computed.ended_at || new Date().toISOString();
+    if (updatePayload.status === 'finished') {
+      updatePayload.ended_at = new Date().toISOString();
     }
 
     const { data: updatedSession, error: updateErr } = await serverSupabase
@@ -4433,6 +4444,7 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/reconcile-sche
           options: opts,
           durationSec: updatePayload.question_duration_sec,
           questionStartMs: updatePayload.question_start_ms,
+          questionEndsAtMs: updatePayload.question_start_ms + (updatePayload.question_duration_sec * 1000),
           totalQuestions: questions.length || 1
         });
       } else if (updatePayload.status === 'reveal') {
@@ -17430,6 +17442,43 @@ app.get('/api/live-quiz/get-r2/:id', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to retrieve Live Quiz from Cloudflare R2.'
+    });
+  }
+});
+
+/**
+ * GET /api/live-quiz/quiz-info/:id
+ * Retrieves sanitized Live Quiz metadata (title, cover_image, description, category) safely
+ */
+app.get('/api/live-quiz/quiz-info/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !serverSupabase) {
+      return res.status(400).json({ success: false, error: 'Valid Quiz ID required.' });
+    }
+
+    const { data, error } = await serverSupabase
+      .from('live_quizzes')
+      .select('id, classroom_id, title, description, category, difficulty, accent_color, cover_image, visibility, timer_enabled, timer_seconds, created_by, created_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'Quiz not found.' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        ...data,
+        cover_image: data.cover_image || null,
+        cover_image_url: data.cover_image || null
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to retrieve quiz info.'
     });
   }
 });

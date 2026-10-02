@@ -24,7 +24,16 @@ export const LiveQuizHostPage: React.FC = () => {
     setLoading(true);
     try {
       const s = await liveQuizService.getSessionById(sessionId || '');
-      if (s) setSession(s);
+      if (s) {
+        setSession(s);
+        if (s.status === 'finished') {
+          setIsFinished(true);
+          const res = await liveQuizService.getResults(s.id);
+          if (res.data && res.data.length > 0) {
+            setFinalResults(res.data);
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to load host session', err);
     } finally {
@@ -36,7 +45,12 @@ export const LiveQuizHostPage: React.FC = () => {
     if (!sessionId) return;
     try {
       const res = await liveQuizService.finishQuiz(sessionId);
-      if (res.data) setFinalResults(res.data);
+      if (res.data && res.data.length > 0) {
+        setFinalResults(res.data);
+      } else {
+        const fallback = await liveQuizService.getResults(sessionId);
+        if (fallback.data) setFinalResults(fallback.data);
+      }
     } catch (err) {
       console.warn('Finish quiz notice:', err);
     }
@@ -58,6 +72,9 @@ export const LiveQuizHostPage: React.FC = () => {
         <LiveQuizPodium
           results={finalResults}
           classroomId={classroomId || session.classroom_id}
+          sessionId={session.id}
+          session={session}
+          quiz={session.quiz}
           onExit={() => navigate(`/classes/${classroomId || session.classroom_id}`)}
         />
       ) : (
