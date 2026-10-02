@@ -364,6 +364,9 @@ export const PresentationViewerPage: React.FC = () => {
     (activeSlideData?.content && activeSlideData.content.length > 0)
   );
 
+  // If a slide has an image and no bullet points or paragraphs, the image IS the entire slide!
+  const isImageSlide = Boolean(hasImages && !hasText && activeSlideData?.images?.length === 1);
+
   return (
     <div
       ref={containerRef}
@@ -488,138 +491,151 @@ export const PresentationViewerPage: React.FC = () => {
 
         {/* 16:9 Presentation Canvas Container (Dominant full-stage viewport element) */}
         <div
-          className={`presentation-slide bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800/80 shadow-2xl flex flex-col justify-between relative overflow-hidden transition-all duration-100 select-none ${
-            isFullscreen ? 'rounded-none border-0' : 'rounded-2xl sm:rounded-3xl'
+          className={`presentation-slide bg-black shadow-2xl flex items-center justify-center relative overflow-hidden transition-all duration-150 select-none ${
+            isFullscreen ? 'rounded-none border-0' : 'rounded-xl sm:rounded-2xl border border-slate-800/80'
           }`}
           style={{
             width: slideWidth > 0 ? `${slideWidth}px` : '100%',
             height: slideHeight > 0 ? `${slideHeight}px` : 'auto',
             maxWidth: '100%',
             maxHeight: '100%',
-            aspectRatio: '16 / 9',
-            padding: `${Math.max(16, Math.min(52, Math.round((slideWidth || 1000) * 0.036)))}px`
+            aspectRatio: '16 / 9'
           }}
         >
-          {/* Subtle Stage Gradient Line */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-indigo-500 to-sky-500 opacity-80" />
+          {isImageSlide ? (
+            /* ================================================================= */
+            /* PURE 16:9 PRESENTATION SLIDE (Full-bleed edge-to-edge)             */
+            /* The slide graphic fills 100% of the canvas without artificial      */
+            /* headers, fake text, or nested cards. Exactly like Google Slides!    */
+            /* ================================================================= */
+            <img
+              src={activeSlideData.images[0]}
+              alt={activeSlideData.title || `Slide ${currentSlide}`}
+              className="w-full h-full object-contain select-none pointer-events-none"
+            />
+          ) : (
+            /* ================================================================= */
+            /* STRUCTURED HTML PRESENTATION SLIDE                                */
+            /* For presentations with extracted text shapes, bullets, etc.        */
+            /* ================================================================= */
+            <div
+              className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 flex flex-col justify-between relative overflow-hidden"
+              style={{
+                padding: `${Math.max(16, Math.min(52, Math.round((slideWidth || 1000) * 0.036)))}px`
+              }}
+            >
+              {/* Subtle Stage Gradient Line */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-indigo-500 to-sky-500 opacity-80" />
 
-          {/* Slide Header: Title & Subtitle */}
-          <div className="space-y-1 sm:space-y-2 relative z-10 shrink-0">
-            <div className="inline-flex items-center gap-2">
-              <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
-                Slide {currentSlide} of {totalSlides}
-              </span>
-            </div>
-            
-            <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-white tracking-tight leading-tight line-clamp-2">
-              {activeSlideData?.title || `Slide ${currentSlide}`}
-            </h2>
+              {/* Slide Header: Title & Subtitle */}
+              <div className="space-y-1 sm:space-y-2 relative z-10 shrink-0">
+                <div className="inline-flex items-center gap-2">
+                  <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest text-amber-400/90 bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
+                    Slide {currentSlide} of {totalSlides}
+                  </span>
+                </div>
+                
+                <h2 className="text-lg sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-white tracking-tight leading-tight line-clamp-2">
+                  {activeSlideData?.title || `Slide ${currentSlide}`}
+                </h2>
 
-            {activeSlideData?.subtitle && (
-              <p className="text-xs sm:text-sm md:text-base lg:text-lg text-slate-400 font-semibold line-clamp-1">
-                {activeSlideData.subtitle}
-              </p>
-            )}
-          </div>
-
-          {/* Slide Body: Bullets, Content & Embedded Images */}
-          {hasImages && !hasText ? (
-            /* Hero Single Image Slide (Full stage containment without squishing) */
-            <div className="my-auto py-2 flex-1 min-h-0 w-full flex items-center justify-center relative z-10 overflow-hidden">
-              <img
-                src={activeSlideData.images[0]}
-                alt={activeSlideData.title || `Slide ${currentSlide}`}
-                className="max-h-full max-w-full w-auto h-auto object-contain rounded-xl shadow-2xl border border-slate-700/60"
-              />
-            </div>
-          ) : hasImages && hasText ? (
-            /* 2-Column Responsive Layout: Text on Left, Embedded Graphics on Right */
-            <div className="my-auto py-2 flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 lg:gap-8 items-center relative z-10 overflow-hidden">
-              <div className="md:col-span-7 space-y-3 sm:space-y-4 overflow-y-auto max-h-full pr-1">
-                {activeSlideData?.bulletPoints && activeSlideData.bulletPoints.length > 0 && (
-                  <ul className="space-y-2 sm:space-y-3">
-                    {activeSlideData.bulletPoints.map((bullet, bIdx) => (
-                      <li key={bIdx} className="flex items-start gap-2.5 sm:gap-3">
-                        <div className="w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-amber-400 mt-2 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
-                        <span className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-200 font-medium leading-relaxed">
-                          {bullet}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {activeSlideData?.content && activeSlideData.content.length > 0 && (
-                  <div className="space-y-2">
-                    {activeSlideData.content.map((paragraph, pIdx) => (
-                      <p key={pIdx} className="text-xs sm:text-sm md:text-base lg:text-lg text-slate-300 font-normal leading-relaxed">
-                        {paragraph}
-                      </p>
-                    ))}
-                  </div>
+                {activeSlideData?.subtitle && (
+                  <p className="text-xs sm:text-sm md:text-base lg:text-lg text-slate-400 font-semibold line-clamp-1">
+                    {activeSlideData.subtitle}
+                  </p>
                 )}
               </div>
 
-              <div className="md:col-span-5 h-full flex flex-col gap-3 justify-center items-center overflow-hidden">
-                {activeSlideData.images.slice(0, 2).map((imgUrl, imgIdx) => (
-                  <div key={imgIdx} className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-black/40 shadow-lg flex-1 max-h-[85%] w-full flex items-center justify-center p-1">
-                    <img
-                      src={imgUrl}
-                      alt={`Slide Graphic ${imgIdx + 1}`}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : hasText ? (
-            /* Text-Only Slide (Spanning full stage with high-legibility presentation typography) */
-            <div className="my-auto py-2 flex-1 min-h-0 w-full flex flex-col justify-center relative z-10 overflow-y-auto">
-              {activeSlideData?.bulletPoints && activeSlideData.bulletPoints.length > 0 && (
-                <ul className="space-y-2.5 sm:space-y-4 max-w-4xl">
-                  {activeSlideData.bulletPoints.map((bullet, bIdx) => (
-                    <li key={bIdx} className="flex items-start gap-3 sm:gap-3.5">
-                      <div className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-amber-400 mt-2 shrink-0 shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
-                      <span className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-200 font-medium leading-relaxed">
-                        {bullet}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {/* Slide Body: 2-Column or Text-Only */}
+              {hasImages && hasText ? (
+                /* 2-Column Responsive Layout: Text on Left, Embedded Graphics on Right */
+                <div className="my-auto py-2 flex-1 min-h-0 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 lg:gap-8 items-center relative z-10 overflow-hidden">
+                  <div className="md:col-span-7 space-y-3 sm:space-y-4 overflow-y-auto max-h-full pr-1">
+                    {activeSlideData?.bulletPoints && activeSlideData.bulletPoints.length > 0 && (
+                      <ul className="space-y-2 sm:space-y-3">
+                        {activeSlideData.bulletPoints.map((bullet, bIdx) => (
+                          <li key={bIdx} className="flex items-start gap-2.5 sm:gap-3">
+                            <div className="w-2 sm:w-2.5 h-2 sm:w-2.5 rounded-full bg-amber-400 mt-2 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                            <span className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-200 font-medium leading-relaxed">
+                              {bullet}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
 
-              {activeSlideData?.content && activeSlideData.content.length > 0 && (
-                <div className="space-y-2.5 max-w-4xl mt-2">
-                  {activeSlideData.content.map((paragraph, pIdx) => (
-                    <p key={pIdx} className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-300 font-normal leading-relaxed">
-                      {paragraph}
-                    </p>
-                  ))}
+                    {activeSlideData?.content && activeSlideData.content.length > 0 && (
+                      <div className="space-y-2">
+                        {activeSlideData.content.map((paragraph, pIdx) => (
+                          <p key={pIdx} className="text-xs sm:text-sm md:text-base lg:text-lg text-slate-300 font-normal leading-relaxed">
+                            {paragraph}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="md:col-span-5 h-full flex flex-col gap-3 justify-center items-center overflow-hidden">
+                    {activeSlideData.images.slice(0, 2).map((imgUrl, imgIdx) => (
+                      <div key={imgIdx} className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-black/40 shadow-lg flex-1 max-h-[85%] w-full flex items-center justify-center p-1">
+                        <img
+                          src={imgUrl}
+                          alt={`Slide Graphic ${imgIdx + 1}`}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : hasText ? (
+                /* Text-Only Slide (Spanning full stage with high-legibility presentation typography) */
+                <div className="my-auto py-2 flex-1 min-h-0 w-full flex flex-col justify-center relative z-10 overflow-y-auto">
+                  {activeSlideData?.bulletPoints && activeSlideData.bulletPoints.length > 0 && (
+                    <ul className="space-y-2.5 sm:space-y-4 max-w-4xl">
+                      {activeSlideData.bulletPoints.map((bullet, bIdx) => (
+                        <li key={bIdx} className="flex items-start gap-3 sm:gap-3.5">
+                          <div className="w-2.5 sm:w-3 h-2.5 sm:h-3 rounded-full bg-amber-400 mt-2 shrink-0 shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
+                          <span className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-200 font-medium leading-relaxed">
+                            {bullet}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {activeSlideData?.content && activeSlideData.content.length > 0 && (
+                    <div className="space-y-2.5 max-w-4xl mt-2">
+                      {activeSlideData.content.map((paragraph, pIdx) => (
+                        <p key={pIdx} className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-300 font-normal leading-relaxed">
+                          {paragraph}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Fallback Blank Slide */
+                <div className="my-auto py-2 flex-1 min-h-0 w-full flex flex-col items-center justify-center text-center relative z-10">
+                  <Presentation className="w-12 h-12 text-amber-500/30 mb-2" />
+                  <p className="text-xs sm:text-sm text-slate-500 italic">No additional content on this slide.</p>
                 </div>
               )}
-            </div>
-          ) : (
-            /* Fallback Blank Slide */
-            <div className="my-auto py-2 flex-1 min-h-0 w-full flex flex-col items-center justify-center text-center relative z-10">
-              <Presentation className="w-12 h-12 text-amber-500/30 mb-2" />
-              <p className="text-xs sm:text-sm text-slate-500 italic">No additional content on this slide.</p>
-            </div>
-          )}
 
-          {/* Slide Footer: Deck Title & Slide Progress Bar */}
-          <div className="pt-2 sm:pt-3 border-t border-slate-800/80 flex items-center justify-between text-[10px] sm:text-xs text-slate-500 font-semibold relative z-10 shrink-0">
-            <span className="truncate max-w-xs sm:max-w-md">{resource.title}</span>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <span className="font-mono">{currentSlide} / {totalSlides}</span>
-              <div className="w-16 sm:w-28 md:w-36 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-amber-500 transition-all duration-300"
-                  style={{ width: `${(currentSlide / totalSlides) * 100}%` }}
-                />
+              {/* Slide Footer: Deck Title & Slide Progress Bar */}
+              <div className="pt-2 sm:pt-3 border-t border-slate-800/80 flex items-center justify-between text-[10px] sm:text-xs text-slate-500 font-semibold relative z-10 shrink-0">
+                <span className="truncate max-w-xs sm:max-w-md">{resource.title}</span>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="font-mono">{currentSlide} / {totalSlides}</span>
+                  <div className="w-16 sm:w-28 md:w-36 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 transition-all duration-300"
+                      style={{ width: `${(currentSlide / totalSlides) * 100}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
+          )}
         </div>
 
       </main>
