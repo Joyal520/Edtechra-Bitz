@@ -960,6 +960,7 @@ class LiveQuizService {
       const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
       // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
       // For Scheduled: started_at stores the future scheduled start time
+      const startedAt = isScheduled && scheduledStartAt ? new Date(scheduledStartAt).toISOString() : null;
       const expiresAt = totalTimerEnabled && totalTimerSeconds
         ? (isScheduled && scheduledStartAt
             ? new Date(new Date(scheduledStartAt).getTime() + totalTimerSeconds * 1000).toISOString()

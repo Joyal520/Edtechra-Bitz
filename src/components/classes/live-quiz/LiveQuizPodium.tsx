@@ -6,12 +6,8 @@ import {
   Target,
   CheckCircle2,
   BarChart3,
-  RotateCcw,
   X,
-  Award,
-  Sparkles,
-  ArrowLeft,
-  HelpCircle
+  ArrowLeft
 } from 'lucide-react';
 import { LiveQuizResult, LiveQuizSession, LiveQuiz } from '@/types/liveQuiz';
 import { quizAudioService } from '@/services/quizAudioService';

@@ -9,14 +9,13 @@ import {
   VolumeX,
   ArrowLeft,
   Clock,
-  Calendar,
   Layers
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizParticipant } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { quizAudioService } from '@/services/quizAudioService';
 import { useAuth } from '@/context/AuthContext';
-import { getQuizCover, DEFAULT_QUIZ_COVER, getQuizCategoryBadgeStyle } from '@/utils/quizCover';
+import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 
 interface LiveQuizLobbyProps {
   session: LiveQuizSession;
@@ -62,7 +61,6 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
   const coverUrl = getQuizCover(session.quiz);
   const quizTitle = session.quiz?.title || 'Classroom Live Quiz';
   const category = session.quiz?.category || 'General';
-  const badgeStyle = getQuizCategoryBadgeStyle(category);
 
   // Proactively fetch question count if missing from session
   const [realQuestionsCount, setRealQuestionsCount] = useState<number>(() => session.quiz?.questions?.length || 0);
