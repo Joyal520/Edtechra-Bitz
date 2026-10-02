@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText,
   Presentation,
@@ -8,6 +8,7 @@ import {
   User
 } from 'lucide-react';
 import { LibraryResource } from '@/types/library';
+import { extractPptxCoverFromUrl } from '@/utils/pptxParser';
 
 interface LibraryCardProps {
   resource: LibraryResource;
@@ -23,6 +24,32 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
   onPresent
 }) => {
   const isPptx = resource.file_type === 'pptx';
+  const [coverUrl, setCoverUrl] = useState<string | null>(resource.cover_image_url || null);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+    if (resource.cover_image_url) {
+      setCoverUrl(resource.cover_image_url);
+      return;
+    }
+
+    // Auto-extract first slide cover from PPTX URL if cover_image_url is not set in DB
+    if (isPptx && resource.file_url) {
+      let isMounted = true;
+      extractPptxCoverFromUrl(resource.file_url).then((extractedUrl) => {
+        if (isMounted && extractedUrl) {
+          setCoverUrl(extractedUrl);
+        }
+      }).catch((err) => {
+        console.warn('[LibraryCard] PPTX first slide cover fetch notice:', err);
+      });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [resource.cover_image_url, isPptx, resource.file_url]);
 
   const formatFileSize = (bytes?: number): string => {
     if (!bytes || bytes <= 0) return '';
@@ -55,15 +82,14 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
     >
       {/* Cover / Preview Image Banner */}
       <div className="relative w-full aspect-[16/10] overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 shrink-0">
-        {resource.cover_image_url ? (
+        {coverUrl && !imageError ? (
           <img
-            src={resource.cover_image_url}
+            src={coverUrl}
             alt={resource.title}
             loading="lazy"
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            onError={(e) => {
-              // Hide broken image and fall back to stylized gradient
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            onError={() => {
+              setImageError(true);
             }}
           />
         ) : (

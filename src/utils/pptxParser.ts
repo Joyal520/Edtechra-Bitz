@@ -209,3 +209,250 @@ export async function parsePptx(fileBuffer: ArrayBuffer, fileName: string = 'Pre
     slides
   };
 }
+
+/**
+ * In-memory cache for extracted PPTX covers from URLs so each presentation is only parsed once
+ */
+const pptxCoverCache = new Map<string, string>();
+
+export interface ExtractedPptxCover {
+  file: File;
+  blob: Blob;
+  url: string;
+}
+
+/**
+ * Extracts the first page / slide of a PPTX file to use as its cover image.
+ * 1. Checks slide 1 embedded images (standard for exported graphic presentations)
+ * 2. Checks standard PowerPoint thumbnail (docProps/thumbnail.jpeg or .png)
+ * 3. Fallback: Renders a high-resolution 16:9 canvas using the first slide's title and contents
+ */
+export async function extractPptxCover(
+  fileOrBuffer: File | Blob | ArrayBuffer,
+  fileName: string = 'presentation'
+): Promise<ExtractedPptxCover | null> {
+  try {
+    const arrayBuffer =
+      fileOrBuffer instanceof ArrayBuffer
+        ? fileOrBuffer
+        : await (fileOrBuffer as Blob).arrayBuffer();
+
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const domParser = new DOMParser();
+
+    // 1. Check slide 1 relationships
+    let slide1Path = 'ppt/slides/slide1.xml';
+    const presentationRelsXml = await zip.file('ppt/_rels/presentation.xml.rels')?.async('text');
+    const presentationXml = await zip.file('ppt/presentation.xml')?.async('text');
+
+    if (presentationRelsXml && presentationXml) {
+      const presDoc = domParser.parseFromString(presentationXml, 'application/xml');
+      const firstSldId = presDoc.getElementsByTagName('p:sldId')[0];
+      const rId = firstSldId?.getAttribute('r:id');
+
+      if (rId) {
+        const relsDoc = domParser.parseFromString(presentationRelsXml, 'application/xml');
+        const relationships = relsDoc.getElementsByTagName('Relationship');
+        for (let i = 0; i < relationships.length; i++) {
+          if (relationships[i].getAttribute('Id') === rId) {
+            const target = relationships[i].getAttribute('Target') || '';
+            slide1Path = target.startsWith('ppt/') ? target : `ppt/${target.replace(/^\//, '')}`;
+            break;
+          }
+        }
+      }
+    }
+
+    // Look for images related to slide 1
+    const slide1RelsPath = slide1Path.replace('ppt/slides/', 'ppt/slides/_rels/') + '.rels';
+    const slide1RelsXml = await zip.file(slide1RelsPath)?.async('text');
+    let firstImageTarget: string | null = null;
+
+    if (slide1RelsXml) {
+      const relsDoc = domParser.parseFromString(slide1RelsXml, 'application/xml');
+      const relationships = relsDoc.getElementsByTagName('Relationship');
+      for (let i = 0; i < relationships.length; i++) {
+        const rel = relationships[i];
+        const type = rel.getAttribute('Type') || '';
+        if (type.includes('image')) {
+          const target = rel.getAttribute('Target') || '';
+          firstImageTarget = target.includes('media/')
+            ? `ppt/media/${target.split('media/').pop()}`
+            : target;
+          break;
+        }
+      }
+    }
+
+    // If first slide has an image, extract it
+    if (firstImageTarget && zip.file(firstImageTarget)) {
+      const mediaFile = zip.file(firstImageTarget)!;
+      const isPng = firstImageTarget.toLowerCase().endsWith('.png');
+      const mimeType = isPng ? 'image/png' : 'image/jpeg';
+      const blob = await mediaFile.async('blob');
+      const typedBlob = new Blob([blob], { type: mimeType });
+      const cleanBase = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const ext = isPng ? 'png' : 'jpg';
+      const file = new File([typedBlob], `${cleanBase}-cover.${ext}`, { type: mimeType });
+      const url = URL.createObjectURL(typedBlob);
+      return { file, blob: typedBlob, url };
+    }
+
+    // 2. Check standard ppt/media/image1.* as second attempt
+    const image1 = zip.file('ppt/media/image1.png') || zip.file('ppt/media/image1.jpeg') || zip.file('ppt/media/image1.jpg');
+    if (image1) {
+      const isPng = image1.name.toLowerCase().endsWith('.png');
+      const mimeType = isPng ? 'image/png' : 'image/jpeg';
+      const blob = await image1.async('blob');
+      const typedBlob = new Blob([blob], { type: mimeType });
+      const cleanBase = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const ext = isPng ? 'png' : 'jpg';
+      const file = new File([typedBlob], `${cleanBase}-cover.${ext}`, { type: mimeType });
+      const url = URL.createObjectURL(typedBlob);
+      return { file, blob: typedBlob, url };
+    }
+
+    // 3. Check docProps/thumbnail.jpeg or .png
+    const thumbnail = zip.file('docProps/thumbnail.jpeg') || zip.file('docProps/thumbnail.png') || zip.file('docProps/thumbnail.jpg');
+    if (thumbnail) {
+      const isPng = thumbnail.name.toLowerCase().endsWith('.png');
+      const mimeType = isPng ? 'image/png' : 'image/jpeg';
+      const blob = await thumbnail.async('blob');
+      const typedBlob = new Blob([blob], { type: mimeType });
+      const cleanBase = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const ext = isPng ? 'png' : 'jpg';
+      const file = new File([typedBlob], `${cleanBase}-cover.${ext}`, { type: mimeType });
+      const url = URL.createObjectURL(typedBlob);
+      return { file, blob: typedBlob, url };
+    }
+
+    // 4. Fallback: Parse slide 1 title & text, then render a clean 16:9 canvas card
+    let slideTitle = '';
+    const slide1Xml = await zip.file(slide1Path)?.async('text');
+    if (slide1Xml) {
+      const slideDoc = domParser.parseFromString(slide1Xml, 'application/xml');
+      const textNodes = slideDoc.getElementsByTagName('a:t');
+      for (let i = 0; i < textNodes.length; i++) {
+        const t = (textNodes[i].textContent || '').trim();
+        if (t && !slideTitle) {
+          slideTitle = t;
+          break;
+        }
+      }
+    }
+    if (!slideTitle) {
+      slideTitle = fileName.replace(/\.[^/.]+$/, '');
+    }
+
+    // Render canvas in browser environment
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Gradient background
+        const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+        grad.addColorStop(0, '#091533');
+        grad.addColorStop(0.5, '#0d1f4d');
+        grad.addColorStop(1, '#050b1a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1280, 720);
+
+        // Subtle decorative glow
+        const radial = ctx.createRadialGradient(640, 360, 50, 640, 360, 500);
+        radial.addColorStop(0, 'rgba(56, 189, 248, 0.12)');
+        radial.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = radial;
+        ctx.fillRect(0, 0, 1280, 720);
+
+        // Header pill badge
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(100, 120, 220, 50, 25);
+        } else {
+          ctx.rect(100, 120, 220, 50);
+        }
+        ctx.fill();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('PRESENTATION', 210, 145);
+
+        // Title
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 64px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        // Word wrap title
+        const words = slideTitle.split(' ');
+        let line = '';
+        let y = 240;
+        for (let n = 0; n < words.length; n++) {
+          const testLine = line + words[n] + ' ';
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > 1080 && n > 0) {
+            ctx.fillText(line.trim(), 100, y);
+            line = words[n] + ' ';
+            y += 80;
+            if (y > 480) break;
+          } else {
+            line = testLine;
+          }
+        }
+        ctx.fillText(line.trim(), 100, y);
+
+        // Subtitle / Brand
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = '600 28px system-ui, -apple-system, sans-serif';
+        ctx.fillText('EdTechra Educational Presentation', 100, 580);
+
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
+        });
+
+        if (blob) {
+          const cleanBase = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+          const file = new File([blob], `${cleanBase}-cover.jpg`, { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          return { file, blob, url };
+        }
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('[pptxParser] extractPptxCover failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Downloads a PPTX file from a URL and extracts its first slide cover.
+ * Automatically caches results in memory to avoid repeated downloads.
+ */
+export async function extractPptxCoverFromUrl(url: string): Promise<string | null> {
+  if (!url) return null;
+  if (pptxCoverCache.has(url)) {
+    return pptxCoverCache.get(url)!;
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const extracted = await extractPptxCover(buffer, 'presentation');
+    if (extracted?.url) {
+      pptxCoverCache.set(url, extracted.url);
+      return extracted.url;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[pptxParser] Failed to extract cover from URL:', url, err);
+    return null;
+  }
+}

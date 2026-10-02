@@ -12,6 +12,7 @@ import {
 import { LibraryResource, LibraryFileType } from '@/types/library';
 import { libraryService } from '@/services/libraryService';
 import { SUBJECT_OPTIONS, CATEGORY_OPTIONS, GRADE_OPTIONS } from '@/components/library/LibraryFilters';
+import { extractPptxCover } from '@/utils/pptxParser';
 
 interface AdminLibraryModalProps {
   isOpen: boolean;
@@ -110,6 +111,18 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
     setSelectedFile(file);
     setFileType(isPptx ? 'pptx' : 'pdf');
     setError(null);
+
+    // Auto-extract first slide / cover page from PPTX presentation if no manual cover is set
+    if (isPptx && !coverFile) {
+      extractPptxCover(file, file.name).then((extracted) => {
+        if (extracted) {
+          setCoverFile(extracted.file);
+          setCoverPreviewUrl(extracted.url);
+        }
+      }).catch((e) => {
+        console.warn('[AdminLibraryModal] Auto cover extraction skipped:', e);
+      });
+    }
 
     // Auto-fill title if empty
     if (!title.trim()) {
@@ -508,7 +521,9 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
                   {coverPreviewUrl ? 'Change Cover Image' : 'Select Cover Image'}
                 </button>
                 <p className="text-[11px] text-slate-400 font-medium mt-1">
-                  16:9 ratio recommended. JPG, PNG, or WebP up to 10MB.
+                  {fileType === 'pptx' && coverPreviewUrl && !resourceToEdit?.cover_image_url
+                    ? 'Cover automatically captured from Slide 1 of presentation (click Change to replace if desired).'
+                    : '16:9 ratio recommended. JPG, PNG, or WebP up to 10MB.'}
                 </p>
               </div>
             </div>
