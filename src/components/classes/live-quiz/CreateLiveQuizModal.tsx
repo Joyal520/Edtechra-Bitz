@@ -24,7 +24,7 @@ import {
 import { LiveQuizQuestion, LiveQuizDifficulty, LiveQuiz } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { courseStudioService } from '@/services/courseStudioService';
-import { DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
+import { DEFAULT_QUIZ_COVER, extractCoverFromDescription, cleanDescription } from '@/utils/quizCover';
 import {
   generateAiQuizPrompt,
   validateAndParseAiQuiz,
@@ -132,10 +132,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       if (initialQuiz) {
         setMode('manual');
         setManualTitle(initialQuiz.title || '');
-        setManualDescription(initialQuiz.description || '');
+        setManualDescription(cleanDescription(initialQuiz.description || ''));
         setManualCategory(initialQuiz.category || 'General');
         setManualDifficulty(initialQuiz.difficulty || 'Medium');
-        setCoverImageUrl(initialQuiz.cover_image || initialQuiz.cover_image_url || null);
+        setCoverImageUrl(initialQuiz.cover_image || initialQuiz.cover_image_url || extractCoverFromDescription(initialQuiz.description) || null);
         setTimerEnabled(Boolean(initialQuiz.timer_enabled));
         setTimerSeconds(initialQuiz.timer_seconds || 60);
         setVisibility(initialQuiz.visibility || 'private');

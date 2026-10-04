@@ -5,19 +5,48 @@
 export const DEFAULT_QUIZ_COVER = '/images/quiz/default-quiz-cover.jpg';
 
 /**
+ * Extracts embedded cover URL from quiz description if present (e.g. [cover:https://...])
+ */
+export function extractCoverFromDescription(desc?: string | null): string | null {
+  if (!desc) return null;
+  const match = desc.match(/\[cover:\s*(https?:\/\/[^\s\]]+|data:[^\s\]]+|\/[^\s\]]+)\s*\]/i);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Strips the [cover:...] token from quiz description for clean UI presentation
+ */
+export function cleanDescription(desc?: string | null): string {
+  if (!desc) return '';
+  return desc.replace(/\s*\[cover:\s*(https?:\/\/[^\s\]]+|data:[^\s\]]+|\/[^\s\]]+)\s*\]/gi, '').trim();
+}
+
+/**
+ * Encodes cover image URL into quiz description for durable storage in tables without a cover_image column
+ */
+export function encodeDescriptionWithCover(desc?: string | null, coverUrl?: string | null): string {
+  const clean = cleanDescription(desc);
+  if (!coverUrl || !coverUrl.trim()) return clean;
+  return clean ? `${clean}\n[cover:${coverUrl.trim()}]` : `[cover:${coverUrl.trim()}]`;
+}
+
+/**
  * Resolves the cover image for any quiz or session.
  * 1. Uploaded quiz cover image (cover_image, cover_image_url, image_url)
- * 2. Valid existing quiz image URL
- * 3. Default EdTechra image fallback
+ * 2. Embedded cover URL in description ([cover:...])
+ * 3. Valid existing quiz image URL
+ * 4. Default EdTechra image fallback
  */
 export function getQuizCover(quiz?: {
   cover_image?: string | null;
   cover_image_url?: string | null;
   image_url?: string | null;
   thumbnail_url?: string | null;
+  description?: string | null;
 } | null): string {
   if (!quiz) return DEFAULT_QUIZ_COVER;
-  const custom = quiz.cover_image || quiz.cover_image_url || quiz.image_url || quiz.thumbnail_url;
+  const embedded = extractCoverFromDescription(quiz.description);
+  const custom = quiz.cover_image || quiz.cover_image_url || embedded || quiz.image_url || quiz.thumbnail_url;
   if (custom && typeof custom === 'string' && custom.trim().length > 0) {
     const trimmed = custom.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:') || trimmed.startsWith('/')) {

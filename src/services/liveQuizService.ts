@@ -15,6 +15,7 @@ import {
 } from '@/types/liveQuiz';
 import { READY_MADE_QUIZZES } from '@/data/readyMadeQuizzes';
 import { VALID_QUIZ_QUESTION_COUNTS } from '@/utils/aiQuizParser';
+import { extractCoverFromDescription, cleanDescription, encodeDescriptionWithCover } from '@/utils/quizCover';
 import { classroomPointsService } from './classroomPointsService';
 
 class LiveQuizService {
@@ -80,10 +81,14 @@ class LiveQuizService {
               ? 'Created by Teacher'
               : 'Created by EdTechra';
 
+            const embeddedCover = extractCoverFromDescription(q.description);
+            const finalCover = q.cover_image || q.cover_image_url || embeddedCover || null;
+
             return {
               ...q,
-              cover_image: q.cover_image || q.cover_image_url || null,
-              cover_image_url: q.cover_image_url || q.cover_image || null,
+              description: cleanDescription(q.description),
+              cover_image: finalCover,
+              cover_image_url: finalCover,
               visibility: q.visibility || 'private',
               timer_enabled: q.timer_enabled ?? false,
               timer_seconds: q.timer_seconds ?? null,
@@ -188,10 +193,14 @@ class LiveQuizService {
                 }
               } catch {}
 
+              const embeddedFallbackCover = extractCoverFromDescription(qData.description);
+              const finalFallbackCover = qData.cover_image || qData.cover_image_url || embeddedFallbackCover || null;
+
               return {
                 ...qData,
-                cover_image: qData.cover_image || qData.cover_image_url || null,
-                cover_image_url: qData.cover_image_url || qData.cover_image || null,
+                description: cleanDescription(qData.description),
+                cover_image: finalFallbackCover,
+                cover_image_url: finalFallbackCover,
                 visibility: 'private',
                 timer_enabled: qData.timer_enabled ?? false,
                 timer_seconds: qData.timer_seconds ?? null,
@@ -209,10 +218,13 @@ class LiveQuizService {
           if (r2Res.ok) {
             const r2Json = await r2Res.json();
             if (r2Json.success && r2Json.data) {
+              const r2EmbeddedCover = extractCoverFromDescription(r2Json.data.description);
+              const r2FinalCover = r2Json.data.cover_image || r2Json.data.cover_image_url || r2EmbeddedCover || null;
               return {
                 ...r2Json.data,
-                cover_image: r2Json.data.cover_image || r2Json.data.cover_image_url || null,
-                cover_image_url: r2Json.data.cover_image_url || r2Json.data.cover_image || null
+                description: cleanDescription(r2Json.data.description),
+                cover_image: r2FinalCover,
+                cover_image_url: r2FinalCover
               };
             }
           }
@@ -260,10 +272,14 @@ class LiveQuizService {
         }
       }
 
+      const embeddedCover = extractCoverFromDescription(data.description);
+      const finalCover = data.cover_image || data.cover_image_url || embeddedCover || null;
+
       return {
         ...data,
-        cover_image: data.cover_image || data.cover_image_url || null,
-        cover_image_url: data.cover_image_url || data.cover_image || null,
+        description: cleanDescription(data.description),
+        cover_image: finalCover,
+        cover_image_url: finalCover,
         visibility: data.visibility || 'private',
         timer_enabled: data.timer_enabled ?? false,
         timer_seconds: data.timer_seconds ?? null,
@@ -342,6 +358,7 @@ class LiveQuizService {
     // Strictly default to 'private' unless explicitly declared 'common'
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
     const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
+    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage);
 
     // Title Duplicate Protection: Normalize title (trim, collapse spaces, lowercase)
     const normalizedNewTitle = payload.title.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -416,7 +433,7 @@ class LiveQuizService {
       const baseInsertPayload = {
         classroom_id: payload.classroom_id || null,
         title: payload.title.trim(),
-        description: (payload.description || '').trim(),
+        description: encodedDescription,
         category: payload.category || 'General',
         difficulty: payload.difficulty || 'Medium',
         accent_color: payload.accent_color || '#026fc3',
@@ -499,6 +516,7 @@ class LiveQuizService {
       return {
         data: {
           ...quizData,
+          description: cleanDescription(payload.description),
           cover_image: coverImage || quizData.cover_image || null,
           cover_image_url: coverImage || quizData.cover_image || null,
           visibility,
@@ -664,12 +682,13 @@ class LiveQuizService {
 
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
     const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
+    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage);
 
     try {
       // 6. Update quiz header
       const updateHeaderPayload: any = {
         title: payload.title.trim(),
-        description: (payload.description || '').trim(),
+        description: encodedDescription,
         category: payload.category || 'General',
         difficulty: payload.difficulty || 'Medium',
         accent_color: payload.accent_color || '#026fc3',
@@ -685,14 +704,28 @@ class LiveQuizService {
         updateHeaderPayload.classroom_id = payload.classroom_id || null;
       }
 
-      const { data: updatedHeader, error: updateErr } = await supabase
+      let updatedHeader: any = null;
+      const { data: uData, error: updateErr } = await supabase
         .from('live_quizzes')
         .update(updateHeaderPayload)
         .eq('id', quizId)
         .select()
         .single();
 
-      if (updateErr) throw updateErr;
+      if (updateErr) {
+        // Fallback: cover_image column may not exist in production live_quizzes schema
+        delete updateHeaderPayload.cover_image;
+        const { data: fbData, error: fbErr } = await supabase
+          .from('live_quizzes')
+          .update(updateHeaderPayload)
+          .eq('id', quizId)
+          .select()
+          .single();
+        if (fbErr) throw fbErr;
+        updatedHeader = fbData;
+      } else {
+        updatedHeader = uData;
+      }
 
       // 7. Replace questions: delete old, insert new
       await supabase.from('live_quiz_questions').delete().eq('quiz_id', quizId);
@@ -739,6 +772,7 @@ class LiveQuizService {
       return {
         data: {
           ...updatedHeader,
+          description: cleanDescription(payload.description),
           cover_image: coverImage,
           cover_image_url: coverImage,
           visibility,
@@ -961,10 +995,11 @@ class LiveQuizService {
       // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
       // For Scheduled: started_at stores the future scheduled start time
       const startedAt = isScheduled && scheduledStartAt ? new Date(scheduledStartAt).toISOString() : null;
-      const expiresAt = totalTimerEnabled && totalTimerSeconds
-        ? (isScheduled && scheduledStartAt
-            ? new Date(new Date(scheduledStartAt).getTime() + totalTimerSeconds * 1000).toISOString()
-            : new Date(Date.now() + totalTimerSeconds * 1000).toISOString())
+      // IMPORTANT: expires_at must ONLY be set for scheduled sessions during creation.
+      // For instant sessions, expires_at is calculated fresh in startSession when the quiz actually begins,
+      // preventing lobby waiting time from prematurely expiring the quiz!
+      const expiresAt = totalTimerEnabled && totalTimerSeconds && isScheduled && scheduledStartAt
+        ? new Date(new Date(scheduledStartAt).getTime() + totalTimerSeconds * 1000).toISOString()
         : null;
 
       // Generate unique PIN
@@ -1090,26 +1125,37 @@ class LiveQuizService {
     const startMs = Date.now();
     let updatedSession: LiveQuizSession | null = null;
     let initialDurationSec = 20;
+    let calculatedExpiresAt: string | null = null;
     try {
       const existingSession = await this.getSessionById(sessionId);
       if (existingSession?.quiz?.questions?.[0]?.durationSec) {
         initialDurationSec = existingSession.quiz.questions[0].durationSec;
+      }
+      const hasTimer = Boolean(existingSession?.quiz?.timer_enabled || (existingSession as any)?.timer_enabled);
+      const timerSec = hasTimer ? (existingSession?.quiz?.timer_seconds || (existingSession as any)?.timer_seconds || 60) : null;
+      if (hasTimer && timerSec) {
+        calculatedExpiresAt = new Date(startMs + timerSec * 1000).toISOString();
       }
     } catch {}
 
     // 1. Direct Supabase update (Immediate for teacher / session owner)
     if (supabase) {
       try {
+        const updatePayload: any = {
+          status: 'in_progress',
+          started_at: new Date(startMs).toISOString(),
+          current_question_index: 0,
+          question_start_ms: startMs,
+          question_duration_sec: initialDurationSec,
+          correct_answer_index: null
+        };
+        if (calculatedExpiresAt) {
+          updatePayload.expires_at = calculatedExpiresAt;
+        }
+
         const { data, error } = await supabase
           .from('live_quiz_sessions')
-          .update({
-            status: 'in_progress',
-            started_at: new Date(startMs).toISOString(),
-            current_question_index: 0,
-            question_start_ms: startMs,
-            question_duration_sec: initialDurationSec,
-            correct_answer_index: null
-          })
+          .update(updatePayload)
           .eq('id', sessionId)
           .select(`
             *,
@@ -1204,17 +1250,25 @@ class LiveQuizService {
       const startMs = Date.now();
       const existing = await this.getSessionById(sessionId);
       const q0Dur = existing?.quiz?.questions?.[0]?.durationSec || existing?.question_duration_sec || 20;
+      const hasTimer = Boolean(existing?.quiz?.timer_enabled || (existing as any)?.timer_enabled);
+      const timerSec = hasTimer ? (existing?.quiz?.timer_seconds || (existing as any)?.timer_seconds || 60) : null;
+      const recExpiresAt = hasTimer && timerSec ? new Date(startMs + timerSec * 1000).toISOString() : null;
+
+      const recUpdatePayload: any = {
+        status: 'in_progress',
+        started_at: new Date(startMs).toISOString(),
+        current_question_index: 0,
+        question_start_ms: startMs,
+        question_duration_sec: q0Dur,
+        correct_answer_index: null
+      };
+      if (recExpiresAt) {
+        recUpdatePayload.expires_at = recExpiresAt;
+      }
 
       const { data, error } = await supabase
         .from('live_quiz_sessions')
-        .update({
-          status: 'in_progress',
-          started_at: new Date(startMs).toISOString(),
-          current_question_index: 0,
-          question_start_ms: startMs,
-          question_duration_sec: q0Dur,
-          correct_answer_index: null
-        })
+        .update(recUpdatePayload)
         .eq('id', sessionId)
         .select(`
           *,
@@ -1647,7 +1701,7 @@ class LiveQuizService {
     if (!userId) return { error: 'Authentication required' };
 
     try {
-      // 0. Strict Host Check: Host teacher cannot submit student answers
+      // 0. Host Check: Only prevent host submission if multiple other students are participating
       const { data: session } = await supabase
         .from('live_quiz_sessions')
         .select('teacher_id')
@@ -1655,7 +1709,15 @@ class LiveQuizService {
         .maybeSingle();
 
       if (session?.teacher_id && session.teacher_id === userId) {
-        return { error: 'Host teacher cannot submit student answers' };
+        const { count: otherStudents } = await supabase
+          .from('live_quiz_participants')
+          .select('*', { count: 'exact', head: true })
+          .eq('session_id', payload.session_id)
+          .neq('student_id', userId);
+
+        if (otherStudents && otherStudents > 0) {
+          return { error: 'Host teacher cannot submit student answers during multiplayer games' };
+        }
       }
 
       // 1. Primary: Secure Server-Side Stored Procedure

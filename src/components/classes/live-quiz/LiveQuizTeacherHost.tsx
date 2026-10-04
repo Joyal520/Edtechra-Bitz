@@ -147,16 +147,13 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         setTotalStudents((prev) => Math.max(prev, studentCount));
       })
       .on('broadcast', { event: 'student_answered' }, (payload: any) => {
-        const studentId = payload.payload?.student_id;
+        const studentId = payload.payload?.student_id || `anon_${Date.now()}_${Math.random()}`;
         const optIndex = payload.payload?.selected_option_index;
 
-        // Strictly ignore if broadcast comes from host teacher
-        if (studentId && studentId !== session.teacher_id) {
-          if (answeredStudentIdsRef.current.has(studentId)) {
-            return; // Ignore duplicate broadcast from same student
-          }
-          answeredStudentIdsRef.current.add(studentId);
+        if (answeredStudentIdsRef.current.has(studentId)) {
+          return; // Ignore duplicate broadcast from same student
         }
+        answeredStudentIdsRef.current.add(studentId);
 
         const newAnsweredCount = answeredStudentIdsRef.current.size;
         setAnsweredCount(newAnsweredCount);
@@ -166,6 +163,12 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
             ...prev,
             [optIndex]: (prev[optIndex] || 0) + 1
           }));
+        }
+      })
+      .on('broadcast', { event: 'question_started' }, (payload: any) => {
+        const nextIdx = payload?.payload?.qIndex;
+        if (typeof nextIdx === 'number' && nextIdx !== currentQIndex) {
+          setCurrentQIndex(nextIdx);
         }
       })
       .on(
@@ -260,8 +263,8 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     });
   }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast]);
 
-  // Active players count considers registered participants, presence, and actual answers received
-  const activePlayers = Math.max(registeredCount, totalStudents, answeredCount);
+  // Active players count considers presence (connected students), registered participants, and answers received
+  const activePlayers = Math.max(1, totalStudents > 0 ? totalStudents : registeredCount);
 
   // 3. Synchronized countdown timer with authoritative fallback
   useEffect(() => {
@@ -286,21 +289,17 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   useEffect(() => {
     if (phase !== 'question' || isAdvancingRef.current) return;
 
-    // Trigger auto-advance if at least 1 student answered and all expected have submitted
-    if (activePlayers > 0 && answeredCount >= activePlayers) {
-      const elapsedMs = Date.now() - questionStartMs;
-      const minElapsedMs = Math.min(4000, durationSec * 400); // at least 4s or 40% of duration
-      const remainingWaitMs = Math.max(0, minElapsedMs - elapsedMs);
-
+    // Trigger auto-advance if at least 1 student answered and all active have submitted
+    if (answeredCount > 0 && answeredCount >= activePlayers) {
       const timer = setTimeout(() => {
         if (!isAdvancingRef.current) {
           triggerAutomaticRevealAndAdvance();
         }
-      }, remainingWaitMs);
+      }, 1500);
 
       return () => clearTimeout(timer);
     }
-  }, [answeredCount, activePlayers, phase, questionStartMs, durationSec]);
+  }, [answeredCount, activePlayers, phase]);
 
   // 5. Automatic reveal & seamless progression to next question (Idempotent)
   const triggerAutomaticRevealAndAdvance = async () => {

@@ -248,10 +248,30 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const isTotalTimed = Boolean(session.quiz?.timer_enabled);
   const totalDurationSec = session.quiz?.timer_seconds || 60;
 
+  // Determine effective expiration ms safely against stale lobby timestamps
+  const getEffectiveExpirationMs = useCallback((): number | null => {
+    if (!isTotalTimed) return null;
+    const startedMs = session.started_at ? new Date(session.started_at).getTime() : null;
+    const expiresMs = session.expires_at ? new Date(session.expires_at).getTime() : null;
+
+    // If session has started, true expiration is relative to started_at
+    if (startedMs && (!expiresMs || expiresMs <= startedMs)) {
+      return startedMs + (totalDurationSec * 1000);
+    }
+    if (expiresMs) {
+      return expiresMs;
+    }
+    if (startedMs) {
+      return startedMs + (totalDurationSec * 1000);
+    }
+    return null;
+  }, [isTotalTimed, session.started_at, session.expires_at, totalDurationSec]);
+
   const [totalTimeLeft, setTotalTimeLeft] = useState<number>(() => {
     if (!isTotalTimed) return 0;
-    if (session.expires_at) {
-      const remainingMs = new Date(session.expires_at).getTime() - Date.now();
+    const expMs = getEffectiveExpirationMs();
+    if (expMs) {
+      const remainingMs = expMs - Date.now();
       const remainingSec = Math.ceil(remainingMs / 1000);
       if (remainingSec > 0) return remainingSec;
     }
@@ -318,9 +338,15 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     hasTriggeredFeedbackRef.current = null;
     setPointsEarned(0);
 
+    // If total time has not genuinely expired, reset total time expired lock
+    const expMs = getEffectiveExpirationMs();
+    if (!expMs || expMs > Date.now()) {
+      setIsTotalTimeExpired(false);
+    }
+
     const remaining = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
     setQuestionTimeLeft(remaining > 0 ? remaining : duration);
-  }, [session.quiz?.questions, session.question_duration_sec, studentQuestions]);
+  }, [session.quiz?.questions, session.question_duration_sec, studentQuestions, getEffectiveExpirationMs]);
 
   const applyQuestionReveal = useCallback((rData: {
     qIndex?: number;
@@ -669,9 +695,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     if (!isTotalTimed) return;
 
     const interval = setInterval(() => {
+      const expMs = getEffectiveExpirationMs();
       let remaining = 0;
-      if (session.expires_at) {
-        const remainingMs = new Date(session.expires_at).getTime() - Date.now();
+      if (expMs) {
+        const remainingMs = expMs - Date.now();
         remaining = Math.max(0, Math.ceil(remainingMs / 1000));
       } else {
         setTotalTimeLeft((prev) => {
@@ -690,7 +717,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isTotalTimed, session.expires_at]);
+  }, [isTotalTimed, getEffectiveExpirationMs]);
 
   const handleSelectOption = async (displayIndex: number) => {
     if (isLocked || revealData || !questionData || isTotalTimeExpired || questionTimeLeft <= 0) return;
@@ -727,7 +754,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           type: 'broadcast',
           event: 'student_answered',
           payload: {
-            student_id: user?.id,
+            student_id: user?.id || (session as any)?.student_id || 'player_participant',
             qIndex: questionData.qIndex,
             selected_option_index: canonicalIndex
           }
@@ -825,7 +852,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       )}
 
       {/* Total Time Expired Modal / Overlay */}
-      {isTotalTimeExpired && (
+      {isTotalTimed && isTotalTimeExpired && (
         <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center text-center p-6 space-y-3 animate-in fade-in duration-200">
           <div className="w-14 h-14 rounded-3xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center">
             <Clock className="w-7 h-7 animate-pulse" />
