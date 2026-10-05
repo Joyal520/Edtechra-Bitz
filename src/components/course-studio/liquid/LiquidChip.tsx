@@ -26,7 +26,7 @@ export const LiquidChip: React.FC<LiquidChipProps> = ({
         disabled={disabled}
         onClick={onClick}
         title={title || (disabled ? undefined : 'Click to remove')}
-        className={`liquid-chip-placed group ${className}`}
+        className={`liquid-chip-placed word-chip group ${className}`}
       >
         <span className="font-bold tracking-tight text-white select-none">{text}</span>
         {!disabled && (
@@ -44,7 +44,7 @@ export const LiquidChip: React.FC<LiquidChipProps> = ({
       disabled={disabled}
       onClick={onClick}
       title={title || (disabled ? undefined : 'Click to place in sentence')}
-      className={`liquid-chip ${className}`}
+      className={`liquid-chip word-chip ${className}`}
     >
       <span className="font-extrabold tracking-tight text-slate-900 select-none">{text}</span>
     </button>

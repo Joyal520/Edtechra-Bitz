@@ -49,7 +49,7 @@ export const LiquidOption: React.FC<LiquidOptionProps> = ({
       type="button"
       disabled={disabled || isAnswered}
       onClick={onClick}
-      className={`liquid-option ${stateClass} ${className}`}
+      className={`liquid-option ${badge === undefined ? 'no-badge' : ''} ${stateClass} ${className}`}
     >
       {badge !== undefined && (
         <div className={badgeStyle}>
@@ -62,7 +62,7 @@ export const LiquidOption: React.FC<LiquidOptionProps> = ({
           )}
         </div>
       )}
-      <div className="flex-1 text-left font-medium leading-relaxed">{text}</div>
+      <div className="liquid-option-text font-medium leading-relaxed">{text}</div>
     </button>
   );
 };

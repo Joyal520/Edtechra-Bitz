@@ -12,7 +12,12 @@ import {
   Sparkles,
   Check,
   BookOpen,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Trash2,
+  Copy,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import {
   CourseQuestion,
@@ -85,6 +90,14 @@ interface ComprehensiveQuestionRendererProps {
   response?: StudentQuestionResponse;
   onAnswerSubmit: (res: StudentQuestionResponse) => void;
   isStudentView?: boolean;
+  mode?: 'edit' | 'student';
+  onUpdateQuestion?: (updated: CourseQuestion) => void;
+  onDeleteQuestion?: () => void;
+  onDuplicateQuestion?: () => void;
+  onMoveQuestionUp?: () => void;
+  onMoveQuestionDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRendererProps> = ({
@@ -92,7 +105,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   index,
   response,
   onAnswerSubmit,
-  isStudentView: _isStudentView = true
+  isStudentView: _isStudentView = true,
+  mode = 'student',
+  onUpdateQuestion,
+  onDeleteQuestion,
+  onDuplicateQuestion,
+  onMoveQuestionUp,
+  onMoveQuestionDown,
+  canMoveUp,
+  canMoveDown
 }) => {
   // Guarantee unique immutable question ID
   const qId = question.id || `q_fallback_${index}`;
@@ -344,25 +365,124 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       }`}
     >
       {/* CARD HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--theme-border-subtle)]">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge">
+      <div className="question-header pb-3 border-b border-[var(--theme-border-subtle)]">
+        <div className="question-meta flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+          <span className="text-[11px] font-black uppercase tracking-wider text-theme-accent reader-badge whitespace-nowrap">
             QUESTION {String(index + 1).padStart(2, '0')}
           </span>
-          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)]">
-            {qType.replace(/_/g, ' ')}
-          </span>
+          {mode === 'edit' ? (
+            <select
+              value={qType}
+              onChange={e => {
+                const newType = e.target.value as any;
+                let newOpts = question.options;
+                let newCorrect = question.correct_answer;
+                if (newType === 'multiple_choice') {
+                  newOpts = ['Option A', 'Option B', 'Option C', 'Option D'];
+                  newCorrect = 'A';
+                } else if (newType === 'true_false') {
+                  newOpts = ['True', 'False'];
+                  newCorrect = 'True';
+                } else if (newType === 'fill_blank') {
+                  newCorrect = 'Answer';
+                } else if (newType === 'sentence_reordering') {
+                  newCorrect = 'The quick brown fox jumps';
+                  newOpts = ['The', 'quick', 'brown', 'fox', 'jumps'];
+                }
+                onUpdateQuestion?.({
+                  ...question,
+                  question_type: newType,
+                  options: newOpts,
+                  correct_answer: newCorrect
+                });
+              }}
+              className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] focus:outline-none cursor-pointer w-fit"
+            >
+              <option value="multiple_choice">Multiple Choice</option>
+              <option value="multiple_select">Multiple Select</option>
+              <option value="true_false">True / False</option>
+              <option value="sentence_reordering">Sentence Reorder</option>
+              <option value="fill_blank">Fill in Blank</option>
+              <option value="wh_question">WH Question</option>
+              <option value="open_ended">Essay / Open Ended</option>
+            </select>
+          ) : (
+            <span className="question-type text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] w-fit">
+              {qType.replace(/_/g, ' ')}
+            </span>
+          )}
           {question.skill && (
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 dark:bg-sky-900/40 px-2 py-0.5 rounded-md">
+            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 dark:bg-sky-900/40 px-2 py-0.5 rounded-md w-fit truncate">
               {question.skill}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black border border-[var(--theme-border-subtle)]">
-            {question.points || 10} PTS
-          </span>
+        <div className="question-points flex items-center gap-1.5">
+          {mode === 'edit' ? (
+            <label className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 cursor-pointer">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={question.points || 10}
+                onChange={e => onUpdateQuestion?.({ ...question, points: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                className="w-8 bg-transparent text-center font-black focus:outline-none"
+              />
+              <span>PTS</span>
+            </label>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[11px] font-black border border-[var(--theme-border-subtle)] whitespace-nowrap">
+              {question.points || 10} PTS
+            </span>
+          )}
+
+          {mode === 'edit' && (
+            <div className="flex items-center gap-0.5 text-theme-muted">
+              {canMoveUp !== undefined && (
+                <button
+                  type="button"
+                  onClick={onMoveQuestionUp}
+                  disabled={!canMoveUp}
+                  title="Move Question Up"
+                  className="p-1 hover:text-theme-primary disabled:opacity-20 cursor-pointer rounded"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {canMoveDown !== undefined && (
+                <button
+                  type="button"
+                  onClick={onMoveQuestionDown}
+                  disabled={!canMoveDown}
+                  title="Move Question Down"
+                  className="p-1 hover:text-theme-primary disabled:opacity-20 cursor-pointer rounded"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onDuplicateQuestion && (
+                <button
+                  type="button"
+                  onClick={onDuplicateQuestion}
+                  title="Duplicate Question"
+                  className="p-1 hover:text-[#026fc3] cursor-pointer rounded"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {onDeleteQuestion && (
+                <button
+                  type="button"
+                  onClick={onDeleteQuestion}
+                  title="Delete Question"
+                  className="p-1 hover:text-rose-500 cursor-pointer rounded"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -380,43 +500,141 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       )}
 
       {/* QUESTION PROMPT */}
-      <h4 className="text-base sm:text-lg font-bold text-theme-primary leading-snug text-left reader-question">
-        {question.question_text}
-      </h4>
+      {mode === 'edit' ? (
+        <textarea
+          value={question.question_text}
+          onChange={e => onUpdateQuestion?.({ ...question, question_text: e.target.value })}
+          placeholder="Enter question prompt..."
+          rows={2}
+          className="w-full text-base sm:text-lg font-bold text-theme-primary leading-snug p-2.5 rounded-xl border border-dashed border-[#026fc3]/50 focus:border-[#026fc3] focus:outline-none bg-white/50 dark:bg-black/30 resize-y"
+        />
+      ) : (
+        <h4 className="text-base sm:text-lg font-bold text-theme-primary leading-snug text-left reader-question">
+          {question.question_text}
+        </h4>
+      )}
 
       {/* ------------------------------------------------------------------- */}
       {/* TYPE 1: MULTIPLE CHOICE (4-OPTION SINGLE SELECT)                    */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'multiple_choice' && (
-        <div className="space-y-2.5 pt-1">
-          {normalizedOptions.map((opt, oIdx) => {
-            const isSelected = isOptionMatchingStudentAnswer(opt, response?.answer);
-            const isThisTheCorrectAnswer = resolvedCorrect ? resolvedCorrect.id === opt.id : false;
-
-            return (
-              <LiquidOption
-                key={opt.id || oIdx}
-                badge={opt.id}
-                text={opt.text}
-                isSelected={isSelected}
-                isAnswered={isAnswered}
-                isCorrect={isCorrect}
-                isCorrectOption={isThisTheCorrectAnswer}
-                disabled={isAnswered}
+        mode === 'edit' ? (
+          <div className="space-y-2.5 pt-1">
+            {normalizedOptions.map((opt, oIdx) => {
+              const isThisCorrect = resolvedCorrect ? resolvedCorrect.id === opt.id : (question.correct_answer === opt.id || question.correct_answer === opt.text);
+              return (
+                <div
+                  key={opt.id || oIdx}
+                  className={`liquid-option ${isThisCorrect ? 'ring-2 ring-emerald-500 bg-emerald-50/20' : ''}`}
+                >
+                  <button
+                    type="button"
+                    title="Click to set as correct answer"
+                    onClick={() => onUpdateQuestion?.({ ...question, correct_answer: opt.id })}
+                    className={`liquid-option-badge cursor-pointer transition-colors ${
+                      isThisCorrect ? 'bg-emerald-500 text-white border-emerald-600' : 'hover:bg-sky-100 text-slate-700'
+                    }`}
+                  >
+                    {isThisCorrect ? '✓' : opt.id}
+                  </button>
+                  <div className="liquid-option-text flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={opt.text}
+                      onChange={e => {
+                        const newText = e.target.value;
+                        const nextOptions = [...normalizedOptions];
+                        nextOptions[oIdx] = { ...opt, text: newText };
+                        onUpdateQuestion?.({ ...question, options: nextOptions.map(o => o.text) });
+                      }}
+                      placeholder={`Option ${opt.id}`}
+                      className="w-full text-sm font-bold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-[#026fc3] focus:outline-none py-1"
+                    />
+                    {normalizedOptions.length > 2 && (
+                      <button
+                        type="button"
+                        title="Remove option"
+                        onClick={() => {
+                          const nextOptions = normalizedOptions.filter((_, i) => i !== oIdx);
+                          let newCorrect = question.correct_answer;
+                          if (newCorrect === opt.id) {
+                            newCorrect = nextOptions[0]?.id || 'A';
+                          }
+                          onUpdateQuestion?.({
+                            ...question,
+                            options: nextOptions.map(o => o.text),
+                            correct_answer: newCorrect
+                          });
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
                 onClick={() => {
-                  const evalResult = evaluateQuestionAnswer(question, opt.id);
-                  commitAnswer(
-                    opt.id,
-                    evalResult.isCorrect,
-                    evalResult.feedback,
-                    evalResult.isCorrect ? 1 : 0,
-                    evalResult.languageFeedback
-                  );
+                  const nextLetter = String.fromCharCode(65 + normalizedOptions.length);
+                  const nextOptions = [...normalizedOptions.map(o => o.text), `Option ${nextLetter}`];
+                  onUpdateQuestion?.({ ...question, options: nextOptions });
                 }}
-              />
-            );
-          })}
-        </div>
+                className="px-3 py-1.5 rounded-xl border border-dashed border-[#026fc3] text-[#026fc3] hover:bg-[#026fc3]/5 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add Answer</span>
+              </button>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+                <span>Correct Answer:</span>
+                <select
+                  value={question.correct_answer || 'A'}
+                  onChange={e => onUpdateQuestion?.({ ...question, correct_answer: e.target.value })}
+                  className="px-2 py-1 rounded-lg border border-slate-300 bg-white dark:bg-stone-800 text-xs font-black text-emerald-600 focus:outline-none cursor-pointer"
+                >
+                  {normalizedOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.id} ({opt.text.substring(0, 16)}...)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5 pt-1">
+            {normalizedOptions.map((opt, oIdx) => {
+              const isSelected = isOptionMatchingStudentAnswer(opt, response?.answer);
+              const isThisTheCorrectAnswer = resolvedCorrect ? resolvedCorrect.id === opt.id : false;
+
+              return (
+                <LiquidOption
+                  key={opt.id || oIdx}
+                  badge={opt.id}
+                  text={opt.text}
+                  isSelected={isSelected}
+                  isAnswered={isAnswered}
+                  isCorrect={isCorrect}
+                  isCorrectOption={isThisTheCorrectAnswer}
+                  disabled={isAnswered}
+                  onClick={() => {
+                    const evalResult = evaluateQuestionAnswer(question, opt.id);
+                    commitAnswer(
+                      opt.id,
+                      evalResult.isCorrect,
+                      evalResult.feedback,
+                      evalResult.isCorrect ? 1 : 0,
+                      evalResult.languageFeedback
+                    );
+                  }}
+                />
+              );
+            })}
+          </div>
+        )
       )}
 
       {/* ------------------------------------------------------------------- */}
@@ -488,216 +706,294 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* TYPE 3 & 4: TRUE / FALSE & YES / NO                                 */}
       {/* ------------------------------------------------------------------- */}
       {(qType === 'true_false' || qType === 'yes_no') && (
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          {(qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No']).map(val => {
-            const isSelected = response?.answer === val;
-            const isCorrectOption = val.toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
+        mode === 'edit' ? (
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 block">Select Correct Answer:</span>
+            <div className="grid grid-cols-2 gap-3">
+              {(qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No']).map(val => {
+                const isSelected = (question.correct_answer || '').toLowerCase() === val.toLowerCase();
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => onUpdateQuestion?.({ ...question, correct_answer: val })}
+                    className={`py-2.5 px-4 rounded-xl font-bold text-sm border cursor-pointer transition-all flex items-center justify-center gap-2 ${
+                      isSelected
+                        ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white dark:bg-stone-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:border-emerald-400'
+                    }`}
+                  >
+                    <span>{val}</span>
+                    {isSelected && <span className="font-black">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {(qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No']).map(val => {
+              const isSelected = response?.answer === val;
+              const isCorrectOption = val.toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
 
-            return (
-              <LiquidOption
-                key={val}
-                badge={val === 'True' || val === 'Yes' ? '✓' : '✕'}
-                text={val}
-                isSelected={isSelected}
-                isAnswered={isAnswered}
-                isCorrect={isCorrect}
-                isCorrectOption={isCorrectOption}
-                disabled={isAnswered}
-                onClick={() =>
-                  commitAnswer(
-                    val,
-                    isCorrectOption,
-                    isCorrectOption
-                      ? question.explanation || 'Correct!'
-                      : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
-                  )
-                }
-              />
-            );
-          })}
-        </div>
+              return (
+                <LiquidOption
+                  key={val}
+                  badge={val === 'True' || val === 'Yes' ? '✓' : '✕'}
+                  text={val}
+                  isSelected={isSelected}
+                  isAnswered={isAnswered}
+                  isCorrect={isCorrect}
+                  isCorrectOption={isCorrectOption}
+                  disabled={isAnswered}
+                  onClick={() =>
+                    commitAnswer(
+                      val,
+                      isCorrectOption,
+                      isCorrectOption
+                        ? question.explanation || 'Correct!'
+                        : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
+                    )
+                  }
+                />
+              );
+            })}
+          </div>
+        )
       )}
 
       {/* ------------------------------------------------------------------- */}
       {/* TYPE 5: FILL IN THE BLANK                                           */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'fill_blank' && (
-        <div className="space-y-3 pt-1">
-          <div className="flex gap-2.5">
+        mode === 'edit' ? (
+          <div className="space-y-1.5 pt-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 block">Expected Correct Answer:</span>
             <input
               type="text"
-              disabled={isAnswered}
-              value={fillInput}
-              onChange={e => setFillInput(e.target.value)}
-              placeholder="Type your answer here..."
-              className="flex-1 p-3.5 liquid-input text-sm font-bold placeholder:text-slate-400 placeholder:font-normal"
+              value={question.correct_answer || ''}
+              onChange={e => onUpdateQuestion?.({ ...question, correct_answer: e.target.value })}
+              placeholder="e.g. digestive"
+              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-stone-900 focus:outline-none focus:border-[#026fc3]"
             />
-            {!isAnswered && (
-              <LiquidButton
-                variant="primary"
-                size="md"
-                disabled={!fillInput.trim()}
-                onClick={() => {
-                  const isMatch =
-                    fillInput.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
-                  commitAnswer(
-                    fillInput.trim(),
-                    isMatch,
-                    isMatch
-                      ? question.explanation || 'Correct!'
-                      : `Expected: "${question.correct_answer}". ${question.explanation || ''}`
-                  );
-                }}
-              >
-                Check
-              </LiquidButton>
-            )}
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            <div className="flex gap-2.5">
+              <input
+                type="text"
+                disabled={isAnswered}
+                value={fillInput}
+                onChange={e => setFillInput(e.target.value)}
+                placeholder="Type your answer here..."
+                className="flex-1 p-3.5 liquid-input text-sm font-bold placeholder:text-slate-400 placeholder:font-normal"
+              />
+              {!isAnswered && (
+                <LiquidButton
+                  variant="primary"
+                  size="md"
+                  disabled={!fillInput.trim()}
+                  onClick={() => {
+                    const isMatch =
+                      fillInput.trim().toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
+                    commitAnswer(
+                      fillInput.trim(),
+                      isMatch,
+                      isMatch
+                        ? question.explanation || 'Correct!'
+                        : `Expected: "${question.correct_answer}". ${question.explanation || ''}`
+                    );
+                  }}
+                >
+                  Check
+                </LiquidButton>
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {/* ------------------------------------------------------------------- */}
       {/* TYPE 6: SENTENCE & WORD REORDERING                                  */}
       {/* ------------------------------------------------------------------- */}
       {(qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') && (
-        <div className="space-y-4 pt-1">
-          <p className="text-xs sm:text-sm text-theme-secondary font-medium">
-            Click the word chips below to assemble the sentence in the correct order:
-          </p>
-
-          {/* Constructed Sentence Box (Answer Area) */}
-          {/* Constructed Sentence Box (Answer Area - Liquid Glass Workspace) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-sky-800 dark:text-sky-300 uppercase tracking-wider block">
-                Your Ordered Sentence:
-              </span>
-              {selectedTokens.length > 0 && !isAnswered && (
-                <span className="text-[11px] font-semibold text-slate-500">
-                  Tap any word to remove it
-                </span>
-              )}
-            </div>
-            <div className="liquid-answer-workspace" style={{ minHeight: '68px' }}>
-              {selectedTokens.length === 0 ? (
-                <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1.5 px-2">
-                  Click the chips below in order to assemble the sentence...
-                </span>
-              ) : (
-                selectedTokens.map((token) => (
-                  <LiquidChip
-                    key={token.id}
-                    text={token.text}
-                    isPlaced
-                    disabled={isAnswered}
-                    onClick={() => {
-                      if (isAnswered) return;
-                      courseAudio.playClick();
-                      setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
-                      setSentenceTokens(prev => [...prev, token]);
-                    }}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Available Word Chips Area (Liquid Tray) */}
-          <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-              Available Words & Phrases:
+        mode === 'edit' ? (
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
+            <span className="text-[11px] font-black uppercase text-slate-500 block">
+              Full Target Sentence (in correct sequence):
             </span>
-            <div className="liquid-tray-workspace" style={{ minHeight: '68px' }}>
-              {sentenceTokens.length === 0 ? (
-                <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1 px-1">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span>All words placed! Click "Submit Sentence" below.</span>
-                </div>
-              ) : (
-                sentenceTokens.map((token) => (
-                  <LiquidChip
-                    key={token.id}
-                    text={token.text}
-                    disabled={isAnswered}
-                    onClick={() => {
-                      if (isAnswered) return;
-                      courseAudio.playClick();
-                      setSelectedTokens(prev => [...prev, token]);
-                      setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
-                    }}
-                  />
-                ))
-              )}
+            <input
+              type="text"
+              value={question.correct_answer || (Array.isArray(question.options) ? question.options.join(' ') : '')}
+              onChange={e => {
+                const fullSentence = e.target.value;
+                const words = fullSentence.trim().split(/\s+/).filter(Boolean);
+                onUpdateQuestion?.({
+                  ...question,
+                  correct_answer: fullSentence,
+                  options: words
+                });
+              }}
+              placeholder="e.g. Sarah likes tea every day"
+              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+            />
+            <span className="text-[11px] text-slate-400 font-medium block">
+              Word chips available to student:
+            </span>
+            <div className="word-bank">
+              {(question.correct_answer || (Array.isArray(question.options) ? question.options.join(' ') : ''))
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((w, i) => (
+                  <span
+                    key={i}
+                    className="word-chip bg-white dark:bg-slate-800 text-slate-800 dark:text-white border border-slate-300 dark:border-slate-700 px-2.5 py-1 rounded-full text-xs font-bold"
+                  >
+                    {w}
+                  </span>
+                ))}
             </div>
           </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            <p className="text-xs sm:text-sm text-theme-secondary font-medium">
+              Click the word chips below to assemble the sentence in the correct order:
+            </p>
 
-          {!isAnswered && (
-            <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {sentenceTokens.length > 0 ? (
-                  <span>{sentenceTokens.length} word{sentenceTokens.length > 1 ? 's' : ''} remaining to place</span>
-                ) : (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Ready to submit!
+            {/* Constructed Sentence Box (Answer Area - Liquid Glass Workspace) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-sky-800 dark:text-sky-300 uppercase tracking-wider block">
+                  Your Ordered Sentence:
+                </span>
+                {selectedTokens.length > 0 && !isAnswered && (
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    Tap any word to remove it
                   </span>
                 )}
               </div>
-
-              <div className="flex items-center gap-2">
-                {selectedTokens.length > 0 && (
-                  <LiquidButton
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      courseAudio.playClick();
-                      const all = [...selectedTokens, ...sentenceTokens];
-                      const shuffled = [...all].sort(() => 0.5 - Math.random());
-                      setSentenceTokens(shuffled);
-                      setSelectedTokens([]);
-                    }}
-                  >
-                    Reset
-                  </LiquidButton>
+              <div className="liquid-answer-workspace word-bank">
+                {selectedTokens.length === 0 ? (
+                  <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1 px-1">
+                    Click the chips below in order to assemble the sentence...
+                  </span>
+                ) : (
+                  selectedTokens.map((token) => (
+                    <LiquidChip
+                      key={token.id}
+                      text={token.text}
+                      isPlaced
+                      disabled={isAnswered}
+                      onClick={() => {
+                        if (isAnswered) return;
+                        courseAudio.playClick();
+                        setSelectedTokens(prev => prev.filter(t => t.id !== token.id));
+                        setSentenceTokens(prev => [...prev, token]);
+                      }}
+                    />
+                  ))
                 )}
-
-                <LiquidButton
-                  variant="primary"
-                  size="md"
-                  disabled={selectedTokens.length === 0}
-                  onClick={() => {
-                    const studentOrderList = selectedTokens.map(t => t.text.trim());
-                    const builtSentence = studentOrderList.join(' ').trim();
-
-                    const expectedOrderList = extractSentenceCorrectOrder(question);
-                    const expectedFullSentence = expectedOrderList.length > 0
-                      ? expectedOrderList.join(' ').trim()
-                      : String(question.correct_answer || '').trim();
-
-                    // 1. Array comparison against correct_order
-                    const isArrayMatch = expectedOrderList.length > 0 &&
-                      studentOrderList.length === expectedOrderList.length &&
-                      studentOrderList.every((word, i) => word.toLowerCase() === expectedOrderList[i].toLowerCase());
-
-                    // 2. Normalized text match
-                    const cleanBuilt = cleanTextForComparison(builtSentence);
-                    const cleanExpected = cleanTextForComparison(expectedFullSentence);
-                    const isStringMatch = Boolean(cleanBuilt) && cleanBuilt === cleanExpected;
-
-                    const isMatch = isArrayMatch || isStringMatch;
-
-                    const feedbackText = isMatch
-                      ? (question.explanation || 'Perfect sentence sequence!')
-                      : `The correct sentence is: ${expectedFullSentence}. ${question.explanation || ''}`.trim();
-
-                    commitAnswer(builtSentence, isMatch, feedbackText);
-                  }}
-                >
-                  Submit Sentence
-                </LiquidButton>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Available Word Chips Area (Liquid Tray) */}
+            <div className="space-y-2 pt-1">
+              <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                Available Words & Phrases:
+              </span>
+              <div className="liquid-tray-workspace word-bank">
+                {sentenceTokens.length === 0 ? (
+                  <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1 px-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>All words placed! Click "Submit Sentence" below.</span>
+                  </div>
+                ) : (
+                  sentenceTokens.map((token) => (
+                    <LiquidChip
+                      key={token.id}
+                      text={token.text}
+                      disabled={isAnswered}
+                      onClick={() => {
+                        if (isAnswered) return;
+                        courseAudio.playClick();
+                        setSelectedTokens(prev => [...prev, token]);
+                        setSentenceTokens(prev => prev.filter(t => t.id !== token.id));
+                      }}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {!isAnswered && (
+              <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  {sentenceTokens.length > 0 ? (
+                    <span>{sentenceTokens.length} word{sentenceTokens.length > 1 ? 's' : ''} remaining to place</span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Ready to submit!
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedTokens.length > 0 && (
+                    <LiquidButton
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        courseAudio.playClick();
+                        const all = [...selectedTokens, ...sentenceTokens];
+                        const shuffled = [...all].sort(() => 0.5 - Math.random());
+                        setSentenceTokens(shuffled);
+                        setSelectedTokens([]);
+                      }}
+                    >
+                      Reset
+                    </LiquidButton>
+                  )}
+
+                  <LiquidButton
+                    variant="primary"
+                    size="md"
+                    disabled={selectedTokens.length === 0}
+                    onClick={() => {
+                      const studentOrderList = selectedTokens.map(t => t.text.trim());
+                      const builtSentence = studentOrderList.join(' ').trim();
+
+                      const expectedOrderList = extractSentenceCorrectOrder(question);
+                      const expectedFullSentence = expectedOrderList.length > 0
+                        ? expectedOrderList.join(' ').trim()
+                        : String(question.correct_answer || '').trim();
+
+                      // 1. Array comparison against correct_order
+                      const isArrayMatch = expectedOrderList.length > 0 &&
+                        studentOrderList.length === expectedOrderList.length &&
+                        studentOrderList.every((word, i) => word.toLowerCase() === expectedOrderList[i].toLowerCase());
+
+                      // 2. Normalized text match
+                      const cleanBuilt = cleanTextForComparison(builtSentence);
+                      const cleanExpected = cleanTextForComparison(expectedFullSentence);
+                      const isStringMatch = Boolean(cleanBuilt) && cleanBuilt === cleanExpected;
+
+                      const isMatch = isArrayMatch || isStringMatch;
+
+                      const feedbackText = isMatch
+                        ? (question.explanation || 'Perfect sentence sequence!')
+                        : `The correct sentence is: ${expectedFullSentence}. ${question.explanation || ''}`.trim();
+
+                      commitAnswer(builtSentence, isMatch, feedbackText);
+                    }}
+                  >
+                    Submit Sentence
+                  </LiquidButton>
+                </div>
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {/* ------------------------------------------------------------------- */}
@@ -873,6 +1169,22 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               <span>{response.improvements.join(' • ')}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* EDIT MODE: EXPLANATION / FEEDBACK INPUT */}
+      {mode === 'edit' && (
+        <div className="pt-2 border-t border-[var(--theme-border-subtle)] space-y-1">
+          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+            Explanation / Feedback for Students (shown after answering):
+          </label>
+          <input
+            type="text"
+            value={question.explanation || ''}
+            onChange={e => onUpdateQuestion?.({ ...question, explanation: e.target.value })}
+            placeholder="e.g. Water is essential because it aids digestion and transports nutrients..."
+            className="w-full text-xs font-medium text-slate-700 dark:text-slate-300 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-[#026fc3] focus:outline-none py-1"
+          />
         </div>
       )}
     </div>

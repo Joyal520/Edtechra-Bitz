@@ -1595,35 +1595,50 @@ textarea.classroom-announcement-textarea::selection,
 }
 
 /* 2. Liquid Word Chip (Sentence Builder, Vocabulary & Tokens) */
+.word-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.word-chip,
 .liquid-chip {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0.5rem 1.15rem;
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 11px;
   border-radius: 9999px;
   font-weight: 800;
-  font-size: 0.9375rem;
-  line-height: 1.25;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
   color: #0f172a;
   background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
   border: 1.5px solid rgba(56, 189, 248, 0.45);
   box-shadow: 
-    0 3px 10px -1px rgba(2, 111, 195, 0.12),
-    0 1px 3px rgba(15, 23, 42, 0.05),
-    inset 0 1px 1.5px rgba(255, 255, 255, 1),
-    inset 0 -1.5px 3px rgba(2, 111, 195, 0.06);
+    0 2px 6px -1px rgba(2, 111, 195, 0.1),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 1px 1px rgba(255, 255, 255, 1);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   cursor: pointer;
   user-select: none;
+  touch-action: manipulation;
+  box-sizing: border-box;
   transition: 
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-    background 0.2s ease;
+    transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.15s ease;
 }
+.word-chip::before,
 .liquid-chip::before {
   content: '';
   position: absolute;
@@ -1635,26 +1650,35 @@ textarea.classroom-announcement-textarea::selection,
   border-radius: 9999px;
   pointer-events: none;
 }
+.word-chip:hover:not(:disabled),
 .liquid-chip:hover:not(:disabled) {
   color: #026fc3;
   border-color: #0284c7;
   background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%);
   box-shadow: 
-    0 6px 18px -2px rgba(2, 111, 195, 0.26),
-    0 0 12px rgba(56, 189, 248, 0.35),
-    inset 0 1.5px 2px rgba(255, 255, 255, 1);
-  transform: translateY(-2px);
+    0 4px 12px -2px rgba(2, 111, 195, 0.22),
+    0 0 10px rgba(56, 189, 248, 0.3);
+  transform: translateY(-1px);
 }
+.word-chip:active:not(:disabled),
 .liquid-chip:active:not(:disabled) {
-  transform: scale(0.96) translateY(0);
-  box-shadow: 
-    0 2px 6px rgba(2, 111, 195, 0.18),
-    inset 0 1px 3px rgba(2, 111, 195, 0.15);
+  transform: scale(0.96);
+  box-shadow: inset 0 1px 2px rgba(2, 111, 195, 0.15);
 }
+.word-chip:focus-visible,
 .liquid-chip:focus-visible {
   outline: none;
   border-color: #026fc3;
-  box-shadow: 0 0 0 3px rgba(2, 111, 195, 0.35), 0 4px 12px rgba(2, 111, 195, 0.2);
+  box-shadow: 0 0 0 3px rgba(2, 111, 195, 0.35);
+}
+
+@media (max-width: 380px) {
+  .word-chip,
+  .liquid-chip {
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: 13px;
+  }
 }
 
 /* 3. Liquid Placed Chip (Tokens placed in the Answer Construction Area) */
@@ -1663,22 +1687,27 @@ textarea.classroom-announcement-textarea::selection,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  min-height: 44px;
-  padding: 0.5rem 1.1rem;
+  gap: 0.4rem;
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 11px;
   border-radius: 9999px;
   font-weight: 800;
-  font-size: 0.9375rem;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
   color: #ffffff;
   background: linear-gradient(135deg, #026fc3 0%, #0284c7 48%, #0ea5e9 100%);
   border: 1.5px solid rgba(255, 255, 255, 0.38);
   box-shadow: 
-    0 4px 14px rgba(2, 111, 195, 0.32),
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.65),
-    inset 0 -1.5px 3px rgba(1, 61, 107, 0.35);
+    0 3px 10px rgba(2, 111, 195, 0.28),
+    inset 0 1px 1px rgba(255, 255, 255, 0.65);
   cursor: pointer;
   user-select: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: manipulation;
+  box-sizing: border-box;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .liquid-chip-placed::before {
   content: '';
@@ -1694,33 +1723,42 @@ textarea.classroom-announcement-textarea::selection,
 .liquid-chip-placed:hover:not(:disabled) {
   background: linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%);
   border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 
-    0 6px 18px rgba(225, 29, 72, 0.35),
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.7);
-  transform: translateY(-1.5px);
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3);
+  transform: translateY(-1px);
 }
 .liquid-chip-placed:active:not(:disabled) {
   transform: scale(0.96);
 }
 
+@media (max-width: 380px) {
+  .liquid-chip-placed {
+    min-height: 32px;
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+}
+
 /* 4. Liquid Answer Area Workspace */
 .liquid-answer-workspace {
   position: relative;
-  min-height: 72px;
-  padding: 1rem 1.25rem;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(240, 249, 255, 0.75) 0%, rgba(248, 250, 252, 0.92) 100%);
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(240, 249, 255, 0.8) 0%, rgba(248, 250, 252, 0.95) 100%);
   border: 2px dashed rgba(56, 189, 248, 0.55);
   box-shadow: 
-    inset 0 2px 8px rgba(2, 111, 195, 0.06),
-    0 4px 16px -2px rgba(2, 111, 195, 0.05);
+    inset 0 2px 6px rgba(2, 111, 195, 0.05),
+    0 2px 10px -2px rgba(2, 111, 195, 0.04);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.65rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 7px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .liquid-answer-workspace:hover,
 .liquid-answer-workspace:focus-within {
@@ -1728,66 +1766,95 @@ textarea.classroom-announcement-textarea::selection,
   background: linear-gradient(180deg, rgba(235, 248, 255, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%);
   box-shadow: 
     inset 0 2px 10px rgba(2, 111, 195, 0.09),
-    0 0 16px rgba(56, 189, 248, 0.18);
+    0 0 14px rgba(56, 189, 248, 0.16);
 }
 
 /* 5. Liquid Available Chips Container */
 .liquid-tray-workspace {
-  min-height: 72px;
-  padding: 1rem 1.25rem;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 252, 0.96) 100%);
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(248, 250, 252, 0.98) 100%);
   border: 1px solid rgba(203, 213, 225, 0.85);
   box-shadow: 
-    0 4px 16px -2px rgba(15, 23, 42, 0.05),
+    0 2px 10px -2px rgba(15, 23, 42, 0.04),
     inset 0 1px 1px rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.65rem;
+  gap: 7px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* 6. Liquid Option Card (Multiple Choice, True/False, Odd One Out) */
 .liquid-option {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 0.875rem;
+  gap: 10px;
   width: 100%;
-  padding: 0.95rem 1.15rem;
-  border-radius: 20px;
+  max-width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
   font-weight: 700;
+  font-size: 15px;
+  line-height: 1.35;
   color: #0f172a;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border: 1.5px solid rgba(226, 232, 240, 0.9);
   box-shadow: 
-    0 2px 8px rgba(15, 23, 42, 0.04),
+    0 2px 6px rgba(15, 23, 42, 0.04),
     inset 0 1px 1px rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
   user-select: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: manipulation;
+  box-sizing: border-box;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+@media (min-width: 640px) {
+  .liquid-option {
+    padding: 14px 18px;
+    gap: 12px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+}
+
+.liquid-option.no-badge {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.liquid-option-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .liquid-option:hover:not(:disabled) {
   border-color: #38bdf8;
   background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
   box-shadow: 
-    0 6px 18px rgba(2, 111, 195, 0.12),
-    0 0 10px rgba(56, 189, 248, 0.2);
-  transform: translateY(-1.5px);
+    0 4px 14px rgba(2, 111, 195, 0.12),
+    0 0 8px rgba(56, 189, 248, 0.18);
+  transform: translateY(-1px);
 }
 .liquid-option:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.99);
 }
 .liquid-option.is-selected {
   border-color: #026fc3;
   background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
   box-shadow: 
-    0 4px 14px rgba(2, 111, 195, 0.2),
-    0 0 12px rgba(56, 189, 248, 0.3);
+    0 3px 12px rgba(2, 111, 195, 0.18),
+    0 0 10px rgba(56, 189, 248, 0.25);
 }
 .liquid-option.is-correct {
   border-color: #10b981;
@@ -1795,11 +1862,17 @@ textarea.classroom-announcement-textarea::selection,
   color: #ffffff;
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
 }
+.liquid-option.is-correct .liquid-option-text {
+  color: #ffffff;
+}
 .liquid-option.is-incorrect {
   border-color: #ef4444;
   background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
   color: #ffffff;
   box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+.liquid-option.is-incorrect .liquid-option-text {
+  color: #ffffff;
 }
 
 /* 7. Liquid Option Letter Badge */
@@ -1807,17 +1880,77 @@ textarea.classroom-announcement-textarea::selection,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   font-size: 0.8125rem;
   font-weight: 900;
   background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
   border: 1px solid rgba(203, 213, 225, 0.8);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
   color: #0f172a;
-  shrink: 0;
+  flex-shrink: 0;
   transition: all 0.2s ease;
+}
+
+/* Responsive Question Card Header */
+.question-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.question-meta {
+  min-width: 0;
+}
+
+.question-points {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .question-header {
+    grid-template-columns: 1fr auto;
+  }
+  .question-type {
+    margin-top: 3px;
+  }
+}
+
+/* Responsive Video Embed Container */
+.video-container {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  box-sizing: border-box;
+}
+
+.video-container iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Fluid responsive typography */
+.lesson-title,
+.reader-title {
+  font-size: clamp(24px, 5.5vw, 42px);
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+.question-title,
+.reader-question {
+  font-size: clamp(17px, 4.2vw, 24px);
+  line-height: 1.35;
+  overflow-wrap: break-word;
 }
 
 /* 8. Liquid Tab (Course Studio Dashboard Filters & Views) */
