@@ -14,13 +14,15 @@ import {
   AlertTriangle,
   Loader2,
   ArrowLeft,
-  BookOpen
+  BookOpen,
+  Globe
 } from 'lucide-react';
-import { LibraryResource } from '@/types/library';
+import { LibraryResource, LibraryFileType } from '@/types/library';
 import { libraryService } from '@/services/libraryService';
 import { AdminLibraryModal } from '@/components/admin/AdminLibraryModal';
 import { SUBJECT_OPTIONS } from '@/components/library/LibraryFilters';
 import { PdfViewerModal } from '@/components/library/PdfViewerModal';
+import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
 
 export const AdminLibraryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -29,7 +31,7 @@ export const AdminLibraryPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('all');
-  const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'pptx'>('all');
+  const [fileTypeFilter, setFileTypeFilter] = useState<'all' | LibraryFileType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished'>('all');
 
   // Modals state
@@ -38,8 +40,9 @@ export const AdminLibraryPage: React.FC = () => {
   const [resourceToDelete, setResourceToDelete] = useState<LibraryResource | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // PDF Preview Modal
+  // Preview Modals
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
+  const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
 
   const loadResources = useCallback(async () => {
     setLoading(true);
@@ -106,6 +109,8 @@ export const AdminLibraryPage: React.FC = () => {
   const handleOpenPreview = (res: LibraryResource) => {
     if (res.file_type === 'pdf') {
       setActivePdfResource(res);
+    } else if (res.file_type === 'web_blog') {
+      setActiveWebBlogResource(res);
     } else {
       navigate(`/library/present/${res.id}`);
     }
@@ -239,6 +244,7 @@ export const AdminLibraryPage: React.FC = () => {
               <option value="all">All File Types</option>
               <option value="pdf">PDFs only</option>
               <option value="pptx">PowerPoint only</option>
+              <option value="web_blog">Web / Blogs only</option>
             </select>
 
             {/* Status Filter */}
@@ -297,6 +303,8 @@ export const AdminLibraryPage: React.FC = () => {
                               <div className="w-full h-full flex items-center justify-center text-white/50 bg-slate-800">
                                 {res.file_type === 'pptx' ? (
                                   <Presentation className="w-4 h-4 text-amber-400" />
+                                ) : res.file_type === 'web_blog' ? (
+                                  <Globe className="w-4 h-4 text-emerald-400" />
                                 ) : (
                                   <FileText className="w-4 h-4 text-rose-400" />
                                 )}
@@ -318,10 +326,12 @@ export const AdminLibraryPage: React.FC = () => {
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-black text-[10px] uppercase ${
                             res.file_type === 'pptx'
                               ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : res.file_type === 'web_blog'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                               : 'bg-rose-50 text-rose-800 border border-rose-200'
                           }`}
                         >
-                          {res.file_type}
+                          {res.file_type === 'web_blog' ? 'Web / Blog' : res.file_type}
                         </span>
                       </td>
 
@@ -467,6 +477,13 @@ export const AdminLibraryPage: React.FC = () => {
         isOpen={Boolean(activePdfResource)}
         resource={activePdfResource}
         onClose={() => setActivePdfResource(null)}
+      />
+
+      {/* Embedded Web / Blog Viewer Modal */}
+      <WebBlogViewerModal
+        isOpen={Boolean(activeWebBlogResource)}
+        resource={activeWebBlogResource}
+        onClose={() => setActiveWebBlogResource(null)}
       />
 
     </div>

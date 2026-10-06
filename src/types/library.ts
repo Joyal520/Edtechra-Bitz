@@ -2,7 +2,7 @@
 // EDTECHRA LIBRARY: TypeScript Type Definitions
 // ============================================================================
 
-export type LibraryFileType = 'pdf' | 'pptx';
+export type LibraryFileType = 'pdf' | 'pptx' | 'web_blog';
 
 export interface LibraryResource {
   id: string;
@@ -30,6 +30,22 @@ export interface LibraryResource {
   } | null;
 }
 
+export function getNormalizedFileType(res: Partial<LibraryResource> | null | undefined): LibraryFileType {
+  if (!res) return 'pdf';
+  if (
+    res.file_type === 'web_blog' ||
+    res.category === 'Web / Blogs' ||
+    res.file_key?.endsWith('.html') ||
+    res.file_url?.endsWith('.html')
+  ) {
+    return 'web_blog';
+  }
+  if (res.file_type === 'pptx' || res.file_key?.endsWith('.pptx') || res.file_url?.endsWith('.pptx')) {
+    return 'pptx';
+  }
+  return 'pdf';
+}
+
 export type PresentationSessionStatus = 'active' | 'ended' | 'expired';
 
 export interface PresentationSession {
@@ -52,7 +68,7 @@ export interface LibraryFilterState {
   subject: string;
   category: string;
   grade_level: string;
-  file_type: 'all' | 'pdf' | 'pptx';
+  file_type: 'all' | 'pdf' | 'pptx' | 'web_blog';
   published?: 'all' | 'published' | 'unpublished'; // Admin only
 }
 

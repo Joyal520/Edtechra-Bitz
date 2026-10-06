@@ -4,6 +4,7 @@ import {
   Upload,
   FileText,
   Presentation,
+  Globe,
   Image as ImageIcon,
   AlertCircle,
   Loader2,
@@ -85,7 +86,7 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle main PDF/PPTX file selection
+  // Handle main PDF/PPTX/HTML file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,9 +98,13 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
       lowerName.endsWith('.ppt') ||
       file.type.includes('presentation') ||
       file.type.includes('powerpoint');
+    const isHtml =
+      lowerName.endsWith('.html') ||
+      lowerName.endsWith('.htm') ||
+      file.type === 'text/html';
 
-    if (!isPdf && !isPptx) {
-      setError('Please select a valid PDF (.pdf) or PowerPoint (.pptx) file.');
+    if (!isPdf && !isPptx && !isHtml) {
+      setError('Please select a valid PDF (.pdf), PowerPoint (.pptx), or Web / Blog (.html) file.');
       return;
     }
 
@@ -109,7 +114,14 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
     }
 
     setSelectedFile(file);
-    setFileType(isPptx ? 'pptx' : 'pdf');
+    if (isHtml) {
+      setFileType('web_blog');
+      setCategory('Web / Blogs');
+    } else if (isPptx) {
+      setFileType('pptx');
+    } else {
+      setFileType('pdf');
+    }
     setError(null);
 
     // Auto-extract first slide / cover page from PPTX presentation if no manual cover is set
@@ -161,7 +173,7 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
     }
 
     if (!isEditing && !selectedFile) {
-      setError('Please select a PDF or PPTX file to upload.');
+      setError('Please select a PDF, PPTX, or Web / Blog file to upload.');
       return;
     }
 
@@ -186,7 +198,7 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
 
       // 2. Upload Document file if provided
       if (selectedFile) {
-        setUploadProgress(`Uploading ${fileType.toUpperCase()} file to Cloudflare R2...`);
+        setUploadProgress(`Uploading ${fileType === 'web_blog' ? 'Web / Blog' : fileType.toUpperCase()} file to Cloudflare R2...`);
         const fileRes = await libraryService.uploadFileToR2(selectedFile, false);
         finalFileUrl = fileRes.publicUrl;
         finalFileKey = fileRes.objectKey;
@@ -261,7 +273,9 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center">
-              {fileType === 'pptx' ? (
+              {fileType === 'web_blog' ? (
+                <Globe className="w-5 h-5 text-emerald-500" />
+              ) : fileType === 'pptx' ? (
                 <Presentation className="w-5 h-5 text-amber-500" />
               ) : (
                 <FileText className="w-5 h-5 text-rose-500" />
@@ -299,13 +313,13 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
           {/* 1. Main Resource File Dropzone */}
           <div className="space-y-1.5">
             <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-              Resource File {!isEditing && <span className="text-rose-500">*</span>} (PDF or PPTX)
+              Resource File {!isEditing && <span className="text-rose-500">*</span>} (PDF, PPTX, or Web / Blog HTML)
             </label>
 
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+              accept=".pdf,.pptx,.ppt,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/html"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -330,25 +344,25 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
                     {selectedFile.name}
                   </p>
                   <p className="text-[11px] text-slate-500 font-semibold">
-                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {fileType.toUpperCase()}
+                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {fileType === 'web_blog' ? 'Web / Blog' : fileType.toUpperCase()}
                   </p>
                 </div>
               ) : isEditing ? (
                 <div className="space-y-0.5">
                   <p className="text-xs font-black text-slate-700">
-                    Keep existing file ({resourceToEdit?.file_type?.toUpperCase()})
+                    Keep existing file ({resourceToEdit?.file_type === 'web_blog' ? 'Web / Blog' : resourceToEdit?.file_type?.toUpperCase()})
                   </p>
                   <p className="text-[11px] text-slate-400 font-medium">
-                    Click here to replace with a new PDF or PPTX file
+                    Click here to replace with a new PDF, PPTX, or Web / Blog file
                   </p>
                 </div>
               ) : (
                 <div className="space-y-0.5">
                   <p className="text-xs font-black text-slate-800">
-                    Click to select PDF or PowerPoint presentation
+                    Click to select PDF, PowerPoint, or Web / Blog HTML
                   </p>
                   <p className="text-[11px] text-slate-400 font-medium">
-                    Supports .pdf and .pptx up to 100 MB
+                    Supports .pdf, .pptx, and .html up to 100 MB
                   </p>
                 </div>
               )}
@@ -385,8 +399,29 @@ export const AdminLibraryModal: React.FC<AdminLibraryModalProps> = ({
             </div>
           </div>
 
-          {/* 3. Classification: Subject, Category, Grade Level */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* 3. Classification: Type, Subject, Category, Grade Level */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                Content Type
+              </label>
+              <select
+                value={fileType}
+                onChange={(e) => {
+                  const newType = e.target.value as LibraryFileType;
+                  setFileType(newType);
+                  if (newType === 'web_blog' && category !== 'Web / Blogs') {
+                    setCategory('Web / Blogs');
+                  }
+                }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-purple-600 cursor-pointer"
+              >
+                <option value="pdf">PDF Document</option>
+                <option value="pptx">PowerPoint Presentation</option>
+                <option value="web_blog">Web / Blog</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
                 Subject

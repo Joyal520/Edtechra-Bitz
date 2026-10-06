@@ -4,6 +4,7 @@ import {
   X,
   FileText,
   Presentation,
+  Globe,
   RotateCcw
 } from 'lucide-react';
 import { LibraryFilterState } from '@/types/library';
@@ -29,6 +30,7 @@ export const CATEGORY_OPTIONS = [
   'Reference Material',
   'Lesson Notes',
   'Exam Preparation',
+  'Web / Blogs',
   'Other'
 ];
 
@@ -132,6 +134,19 @@ export const LibraryFilters: React.FC<LibraryFiltersProps> = ({
           >
             <Presentation className="w-3.5 h-3.5" />
             <span>PowerPoint</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChange({ ...filters, file_type: 'web_blog' })}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              filters.file_type === 'web_blog'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-emerald-700'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Web / Blogs</span>
           </button>
         </div>
       </div>

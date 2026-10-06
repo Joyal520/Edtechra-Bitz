@@ -9,7 +9,9 @@ import { supabase } from '@/lib/supabase';
 import {
   LibraryResource,
   LibraryFilterState,
-  PresentationSession
+  PresentationSession,
+  LibraryFileType,
+  getNormalizedFileType
 } from '@/types/library';
 
 class LibraryService {
@@ -68,7 +70,13 @@ class LibraryService {
       }
 
       if (filters?.file_type && filters.file_type !== 'all') {
-        query = query.eq('file_type', filters.file_type);
+        if (filters.file_type === 'web_blog') {
+          query = query.or('file_type.eq.web_blog,category.eq.Web / Blogs,file_url.ilike.%.html,file_key.ilike.%.html');
+        } else if (filters.file_type === 'pdf') {
+          query = query.eq('file_type', 'pdf').not('category', 'eq', 'Web / Blogs').not('file_url', 'ilike', '%.html');
+        } else {
+          query = query.eq('file_type', filters.file_type);
+        }
       }
 
       if (filters?.search && filters.search.trim()) {
@@ -82,7 +90,11 @@ class LibraryService {
         return [];
       }
 
-      return (data || []) as LibraryResource[];
+      const rawList = (data || []) as LibraryResource[];
+      return rawList.map(res => ({
+        ...res,
+        file_type: getNormalizedFileType(res)
+      }));
     } catch (err) {
       console.error('[LibraryService] getResources exception:', err);
       return [];
@@ -103,7 +115,11 @@ class LibraryService {
         .maybeSingle();
 
       if (error || !data) return null;
-      return data as LibraryResource;
+      const res = data as LibraryResource;
+      return {
+        ...res,
+        file_type: getNormalizedFileType(res)
+      };
     } catch (err) {
       console.error('[LibraryService] getResourceById error:', err);
       return null;
@@ -120,7 +136,7 @@ class LibraryService {
     subject: string;
     category: string;
     grade_level: string;
-    file_type: 'pdf' | 'pptx';
+    file_type: LibraryFileType;
     file_url: string;
     file_key?: string | null;
     file_size?: number;
@@ -134,7 +150,7 @@ class LibraryService {
     const userId = await this.getUserId();
 
     try {
-      const insertData = {
+      let insertData: any = {
         title: payload.title.trim(),
         description: (payload.description || '').trim(),
         subject: payload.subject.trim() || 'General',
@@ -152,7 +168,7 @@ class LibraryService {
         uploaded_by: userId
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('library_resources')
         .insert(insertData)
         .select(`
@@ -161,11 +177,37 @@ class LibraryService {
         `)
         .single();
 
+      // Graceful fallback if database check constraint does not yet permit 'web_blog'
+      if (error && (error.code === '23514' || error.message?.includes('check constraint')) && payload.file_type === 'web_blog') {
+        console.warn('[LibraryService] Falling back to compatible file_type: pdf with category: Web / Blogs');
+        insertData = {
+          ...insertData,
+          file_type: 'pdf',
+          category: 'Web / Blogs'
+        };
+        const fbResult = await supabase
+          .from('library_resources')
+          .insert(insertData)
+          .select(`
+            *,
+            uploader:profiles!uploaded_by (id, full_name, email)
+          `)
+          .single();
+        data = fbResult.data;
+        error = fbResult.error;
+      }
+
       if (error) {
         return { error: error.message };
       }
 
-      return { data: data as LibraryResource };
+      const res = data as LibraryResource;
+      return {
+        data: {
+          ...res,
+          file_type: getNormalizedFileType(res)
+        }
+      };
     } catch (err: any) {
       return { error: err.message || 'Failed to create library resource.' };
     }

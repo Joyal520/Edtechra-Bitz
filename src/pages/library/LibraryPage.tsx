@@ -4,6 +4,7 @@ import {
   BookOpen,
   FileText,
   Presentation,
+  Globe,
   ShieldCheck,
   Sparkles,
   Loader2,
@@ -14,6 +15,7 @@ import { libraryService } from '@/services/libraryService';
 import { LibraryCard } from '@/components/library/LibraryCard';
 import { LibraryFilters } from '@/components/library/LibraryFilters';
 import { PdfViewerModal } from '@/components/library/PdfViewerModal';
+import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
 import { useAuth } from '@/context/AuthContext';
 
 export const LibraryPage: React.FC = () => {
@@ -35,6 +37,7 @@ export const LibraryPage: React.FC = () => {
 
   // Modal states
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
+  const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
 
   const loadResources = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -56,10 +59,12 @@ export const LibraryPage: React.FC = () => {
   }, [loadResources]);
 
   const handleOpenResource = (res: LibraryResource) => {
-    if (res.file_type === 'pdf') {
-      setActivePdfResource(res);
-    } else if (res.file_type === 'pptx') {
+    if (res.file_type === 'pptx') {
       navigate(`/library/present/${res.id}`);
+    } else if (res.file_type === 'web_blog') {
+      setActiveWebBlogResource(res);
+    } else {
+      setActivePdfResource(res);
     }
   };
 
@@ -70,6 +75,7 @@ export const LibraryPage: React.FC = () => {
   // Quick stats
   const pdfCount = resources.filter((r) => r.file_type === 'pdf').length;
   const pptxCount = resources.filter((r) => r.file_type === 'pptx').length;
+  const webBlogCount = resources.filter((r) => r.file_type === 'web_blog').length;
 
   return (
     <div className="min-h-screen bg-[#fbfbf7] text-slate-900 pb-16">
@@ -150,6 +156,11 @@ export const LibraryPage: React.FC = () => {
               <Presentation className="w-3.5 h-3.5" />
               <span>{pptxCount} Presentations</span>
             </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/60 text-xs font-bold shrink-0">
+              <Globe className="w-3.5 h-3.5" />
+              <span>{webBlogCount} Web / Blogs</span>
+            </div>
           </div>
 
         </div>
@@ -220,6 +231,13 @@ export const LibraryPage: React.FC = () => {
         isOpen={Boolean(activePdfResource)}
         resource={activePdfResource}
         onClose={() => setActivePdfResource(null)}
+      />
+
+      {/* Embedded Web / Blog Viewer Modal */}
+      <WebBlogViewerModal
+        isOpen={Boolean(activeWebBlogResource)}
+        resource={activeWebBlogResource}
+        onClose={() => setActiveWebBlogResource(null)}
       />
 
     </div>
