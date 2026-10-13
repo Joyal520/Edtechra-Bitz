@@ -8,11 +8,9 @@ import {
   Volume2,
   VolumeX,
   ArrowLeft,
-  Clock,
   Layers,
   Lightbulb,
-  Zap,
-  Sparkles
+  Zap
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizParticipant } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -626,8 +624,8 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
             {isScheduled ? (
               <>
-                <span className="font-mono font-black text-lg sm:text-xl text-white tracking-tight drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]">
-                  {remainingSec}s
+                <span className="font-mono font-black text-sm sm:text-base text-white tracking-tight drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]">
+                  {formattedCountdown}
                 </span>
                 <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-400">
                   Starts In
