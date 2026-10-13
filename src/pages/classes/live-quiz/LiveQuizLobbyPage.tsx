@@ -103,7 +103,7 @@ export const LiveQuizLobbyPage: React.FC = () => {
   const isHostTeacher = isTeacher || session.teacher_id === user?.id;
 
   return (
-    <div className="w-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col justify-center items-center p-0 sm:p-4 md:p-6 bg-[#060c1d]">
+    <div className="w-full min-h-[100dvh] overflow-y-auto flex flex-col justify-center items-center p-0 sm:p-4 md:p-6 bg-[#060c1d]">
       <LiveQuizLobby
         session={session}
         isTeacher={isHostTeacher}
