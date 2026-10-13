@@ -62,7 +62,7 @@ const CATEGORY_OPTIONS = [
   'Other'
 ];
 const DIFFICULTY_OPTIONS: LiveQuizDifficulty[] = ['Easy', 'Medium', 'Hard'];
-const TIMER_PRESETS = [30, 60, 90, 120, 300, 600];
+const TIMER_PRESETS = [180, 300, 600, 900, 1200];
 
 type ModalMode = 'ai' | 'manual';
 type AiStep = 'create_prompt' | 'view_prompt' | 'paste_quiz' | 'quiz_ready';
@@ -98,7 +98,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
   // Quiz Timer & Visibility State
   const [timerEnabled, setTimerEnabled] = useState<boolean>(false);
-  const [timerSeconds, setTimerSeconds] = useState<number>(60);
+  const [timerSeconds, setTimerSeconds] = useState<number>(300);
   const [visibility, setVisibility] = useState<'common' | 'private'>('private');
 
   // Generated Prompt State
@@ -137,7 +137,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setManualDifficulty(initialQuiz.difficulty || 'Medium');
         setCoverImageUrl(initialQuiz.cover_image || initialQuiz.cover_image_url || extractCoverFromDescription(initialQuiz.description) || null);
         setTimerEnabled(Boolean(initialQuiz.timer_enabled));
-        setTimerSeconds(initialQuiz.timer_seconds || 60);
+        setTimerSeconds(initialQuiz.timer_seconds || 300);
         setVisibility(initialQuiz.visibility || 'private');
         setManualQuestions(
           initialQuiz.questions && initialQuiz.questions.length > 0
@@ -850,13 +850,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                   {/* Quiz Timer, Visibility & Cover Settings */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     
-                    {/* Quiz Timer */}
+                    {/* Overall Quiz Limit */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-purple-600" />
                           <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                            Quiz Timer
+                            Overall Quiz Limit
                           </span>
                         </div>
                         <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
@@ -869,7 +869,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                                 : 'text-slate-600 hover:text-slate-900'
                             }`}
                           >
-                            No Timer
+                            No Limit
                           </button>
                           <button
                             type="button"
@@ -889,17 +889,17 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                         <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
                           <div className="flex items-center justify-between gap-2">
                             <label className="text-xs font-bold text-slate-700">
-                              Time Limit:
+                              Total Time:
                             </label>
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="number"
-                                min={1}
+                                min={60}
                                 max={36000}
                                 value={timerSeconds}
                                 onChange={(e) => {
                                   const val = parseInt(e.target.value, 10);
-                                  if (!isNaN(val)) setTimerSeconds(Math.max(1, Math.min(36000, val)));
+                                  if (!isNaN(val)) setTimerSeconds(Math.max(60, Math.min(36000, val)));
                                 }}
                                 className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
                               />
@@ -928,10 +928,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                               </button>
                             ))}
                           </div>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            Total session duration. (Each question has its own 20s countdown.)
+                          </p>
                         </div>
                       ) : (
                         <p className="text-[11px] text-slate-400 font-medium pt-1">
-                          No overall time limit. Students can complete at their own pace.
+                          No overall session limit. Questions run with standard 20s countdown.
                         </p>
                       )}
                     </div>
@@ -1431,13 +1434,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
               {/* Quiz Timer, Visibility & Cover Settings (Manual Mode) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 
-                {/* Quiz Timer */}
+                {/* Overall Quiz Limit */}
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-purple-600" />
                       <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Quiz Timer
+                        Overall Quiz Limit
                       </span>
                     </div>
                     <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
@@ -1450,7 +1453,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
                       >
-                        No Timer
+                        No Limit
                       </button>
                       <button
                         type="button"
@@ -1470,17 +1473,17 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                     <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
                       <div className="flex items-center justify-between gap-2">
                         <label className="text-xs font-bold text-slate-700">
-                          Time Limit:
+                          Total Time:
                         </label>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="number"
-                            min={1}
+                            min={60}
                             max={36000}
                             value={timerSeconds}
                             onChange={(e) => {
                               const val = parseInt(e.target.value, 10);
-                              if (!isNaN(val)) setTimerSeconds(Math.max(1, Math.min(36000, val)));
+                              if (!isNaN(val)) setTimerSeconds(Math.max(60, Math.min(36000, val)));
                             }}
                             className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
                           />
@@ -1509,10 +1512,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                           </button>
                         ))}
                       </div>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        Total session duration. (Each question has its own 20s countdown.)
+                      </p>
                     </div>
                   ) : (
                     <p className="text-[11px] text-slate-400 font-medium pt-1">
-                      No overall time limit. Students can complete at their own pace.
+                      No overall session limit. Questions run with standard 20s countdown.
                     </p>
                   )}
                 </div>

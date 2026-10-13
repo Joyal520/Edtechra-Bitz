@@ -989,8 +989,11 @@ class LiveQuizService {
           quiz.cover_image_url = payload.custom_quiz.cover_image_url || payload.custom_quiz.cover_image || null;
         }
       }
+      const firstQDuration = quiz?.questions?.[0]?.durationSec || 20;
       const totalTimerEnabled = Boolean(quiz?.timer_enabled);
-      const totalTimerSeconds = totalTimerEnabled ? (quiz?.timer_seconds || 60) : null;
+      const totalQuestionsCount = Math.max(1, quiz?.questions?.length || 5);
+      const minSafeSec = totalQuestionsCount * (firstQDuration + 10) + 60;
+      const totalTimerSeconds = totalTimerEnabled ? Math.max(quiz?.timer_seconds || 300, minSafeSec) : null;
       const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
       const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
       // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
@@ -1005,8 +1008,6 @@ class LiveQuizService {
 
       // Generate unique PIN
       const pin = this.generatePin();
-
-      const firstQDuration = quiz?.questions?.[0]?.durationSec || 20;
 
       // Clean insertion row matching live_quiz_sessions table schema & check constraints
       // Note: started_at stores the future scheduled time for scheduled sessions
@@ -1133,9 +1134,12 @@ class LiveQuizService {
         initialDurationSec = existingSession.quiz.questions[0].durationSec;
       }
       const hasTimer = Boolean(existingSession?.quiz?.timer_enabled || (existingSession as any)?.timer_enabled);
-      const timerSec = hasTimer ? (existingSession?.quiz?.timer_seconds || (existingSession as any)?.timer_seconds || 60) : null;
+      const timerSec = hasTimer ? (existingSession?.quiz?.timer_seconds || (existingSession as any)?.timer_seconds || 300) : null;
       if (hasTimer && timerSec) {
-        calculatedExpiresAt = new Date(startMs + timerSec * 1000).toISOString();
+        const totalQuestions = Math.max(1, existingSession?.quiz?.questions?.length || 5);
+        const minSafeSec = totalQuestions * (initialDurationSec + 10) + 60;
+        const effectiveTimerSec = Math.max(timerSec, minSafeSec);
+        calculatedExpiresAt = new Date(startMs + effectiveTimerSec * 1000).toISOString();
       }
     } catch {}
 
@@ -1252,8 +1256,14 @@ class LiveQuizService {
       const existing = await this.getSessionById(sessionId);
       const q0Dur = existing?.quiz?.questions?.[0]?.durationSec || existing?.question_duration_sec || 20;
       const hasTimer = Boolean(existing?.quiz?.timer_enabled || (existing as any)?.timer_enabled);
-      const timerSec = hasTimer ? (existing?.quiz?.timer_seconds || (existing as any)?.timer_seconds || 60) : null;
-      const recExpiresAt = hasTimer && timerSec ? new Date(startMs + timerSec * 1000).toISOString() : null;
+      const timerSec = hasTimer ? (existing?.quiz?.timer_seconds || (existing as any)?.timer_seconds || 300) : null;
+      let recExpiresAt: string | null = null;
+      if (hasTimer && timerSec) {
+        const totalQuestions = Math.max(1, existing?.quiz?.questions?.length || 5);
+        const minSafeSec = totalQuestions * (q0Dur + 10) + 60;
+        const effectiveTimerSec = Math.max(timerSec, minSafeSec);
+        recExpiresAt = new Date(startMs + effectiveTimerSec * 1000).toISOString();
+      }
 
       const recUpdatePayload: any = {
         status: 'in_progress',

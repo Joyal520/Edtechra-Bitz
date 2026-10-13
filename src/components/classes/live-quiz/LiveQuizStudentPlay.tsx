@@ -228,7 +228,6 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }
     return totalDurationSec;
   });
-  const [isTotalTimeExpired, setIsTotalTimeExpired] = useState(false);
 
   // ---- finish ---------------------------------------------------------------
   const handleFinished = useCallback(() => {
@@ -458,7 +457,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     };
   }, [revealData, deadlineMs, syncWithDatabase]);
 
-  // ---- total quiz timer ------------------------------------------------------------
+  // ---- total quiz timer (display only; server controls session lifecycle) ----------
   useEffect(() => {
     if (!isTotalTimed) return;
     const interval = setInterval(() => {
@@ -469,18 +468,17 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       }
       setTotalTimeLeft(remaining);
       if (remaining <= 0) {
-        setIsTotalTimeExpired(true);
-        setIsLocked(true);
-        clearInterval(interval);
+        // Sync with authoritative server snapshot when total time reaches 0
+        syncWithDatabase();
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isTotalTimed, getEffectiveExpirationMs]);
+  }, [isTotalTimed, getEffectiveExpirationMs, syncWithDatabase]);
 
   // ---- answer submission --------------------------------------------------------------
   const handleSelectOption = async (displayIndex: number) => {
     // Guard: one in-flight submit, no double taps, no input after server-declared reveal.
-    if (submittingRef.current || isLocked || revealData || !questionData || isTotalTimeExpired) return;
+    if (submittingRef.current || isLocked || revealData || !questionData) return;
 
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
@@ -604,19 +602,6 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       {/* Confetti Celebration Particle Layer (Auto disappears after 1.5s) */}
       {showConfetti && (
         <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={1500} />
-      )}
-
-      {/* Total Time Expired Modal / Overlay */}
-      {isTotalTimed && isTotalTimeExpired && (
-        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center text-center p-6 space-y-3 animate-in fade-in duration-200">
-          <div className="w-14 h-14 rounded-3xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center">
-            <Clock className="w-7 h-7 animate-pulse" />
-          </div>
-          <h3 className="text-xl sm:text-2xl font-black text-white">Time's up!</h3>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-medium">
-            Your answers have been submitted automatically.
-          </p>
-        </div>
       )}
 
       {/* Top Header */}
@@ -744,7 +729,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
             <button
               key={displayIdx}
               type="button"
-              disabled={isLocked || isSubmitting || isRevealed || isTotalTimeExpired}
+              disabled={isLocked || isSubmitting || isRevealed}
               onClick={() => handleSelectOption(displayIdx)}
               className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
             >
