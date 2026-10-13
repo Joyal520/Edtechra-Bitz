@@ -73,7 +73,7 @@ export const LiveQuizHostPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
+    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3 sm:py-6 w-full min-h-[100dvh]">
       {isFinished ? (
         <LiveQuizPodium
           results={finalResults}

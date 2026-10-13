@@ -9,7 +9,10 @@ import {
   VolumeX,
   ArrowLeft,
   Clock,
-  Layers
+  Layers,
+  Lightbulb,
+  Zap,
+  Sparkles
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizParticipant } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -583,73 +586,109 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         </div>
       </div>
 
-      {/* 3. COUNTDOWN (MAIN FOCUS) */}
-      <div className="shrink-0 text-center py-1.5 sm:py-2">
-        {isScheduled ? (
-          <div className="space-y-0.5">
-            <div className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-sky-400 flex items-center justify-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 animate-pulse text-sky-400" />
-              <span>Quiz Starts In</span>
-            </div>
-            <div className="font-mono font-black text-3xl sm:text-4xl text-white tracking-widest drop-shadow-[0_0_15px_rgba(56,189,248,0.45)]">
-              {formattedCountdown}
-            </div>
-          </div>
-        ) : isReady && targetStartMs ? (
-          <div className="space-y-1 py-1">
-            <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 flex items-center justify-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>Starting Quiz Automatically...</span>
-            </div>
-            <div className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto mt-1" />
-          </div>
-        ) : isTeacher ? (
-          <div className="space-y-0.5">
-            <div className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-emerald-400 flex items-center justify-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Lobby is Open</span>
-            </div>
-            <div className="text-xs sm:text-sm font-black text-white">
-              {participants.length > 0 ? `${participants.length} Ready to Play` : 'Waiting for Players to Join'}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            <div className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-widest text-sky-400 flex items-center justify-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-              <span>Waiting for Host</span>
-            </div>
-            <div className="text-xs font-bold text-slate-300">
-              Quiz will start automatically when host begins
-            </div>
-          </div>
-        )}
-      </div>
+      {/* 3. CIRCULAR COUNTDOWN & READINESS (MAIN FOCUS) */}
+      <div className="shrink-0 flex flex-col items-center justify-center py-2 text-center">
+        {/* Circular SVG Timer Ring */}
+        <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
+          <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 96 96">
+            <defs>
+              <linearGradient id="lobbyTimerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#38bdf8" />
+                <stop offset="50%" stopColor="#818cf8" />
+                <stop offset="100%" stopColor="#34d399" />
+              </linearGradient>
+            </defs>
+            {/* Background Track */}
+            <circle
+              cx="48"
+              cy="48"
+              r="38"
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="6"
+              fill="transparent"
+            />
+            {/* Glowing Active Ring */}
+            <circle
+              cx="48"
+              cy="48"
+              r="38"
+              stroke="url(#lobbyTimerGradient)"
+              strokeWidth="6"
+              strokeDasharray={238.76}
+              strokeDashoffset={isScheduled ? 238.76 * (1 - Math.min(1, Math.max(0, remainingSec) / 60)) : 0}
+              strokeLinecap="round"
+              fill="transparent"
+              className="transition-all duration-500"
+            />
+          </svg>
 
-      {/* 4. PLAYER STATUS & PLAYERS JOINED */}
-      <div className="flex-1 min-h-0 flex flex-col bg-white/[0.04] border border-white/10 rounded-2xl p-2.5 sm:p-3.5 backdrop-blur-md">
-        {/* Status Header */}
-        <div className="shrink-0 flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10">
-          <div className="flex items-center gap-1.5 text-xs font-black text-white">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>
-              {participants.length} {participants.length === 1 ? 'Player' : 'Players'} Ready
+          {/* Centered Countdown Text */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            {isScheduled ? (
+              <>
+                <span className="font-mono font-black text-lg sm:text-xl text-white tracking-tight drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]">
+                  {remainingSec}s
+                </span>
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-400">
+                  Starts In
+                </span>
+              </>
+            ) : isReady && targetStartMs ? (
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 animate-pulse">
+                Starting...
+              </span>
+            ) : (
+              <>
+                <span className="font-mono font-black text-base sm:text-lg text-white">
+                  {participants.length}
+                </span>
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-400">
+                  Ready
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Status Text & Readiness Bar */}
+        <div className="w-full max-w-sm mt-2 space-y-1">
+          <div className="flex items-center justify-between text-[11px] font-black">
+            <span className="text-emerald-400 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>✓ {participants.length} {participants.length === 1 ? 'Player' : 'Players'} Ready</span>
+            </span>
+            <span className="text-slate-400">
+              {isTeacher ? 'Host Mode' : 'Ready to Play'}
             </span>
           </div>
-          <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-            Players Joined
+
+          <div className="w-full h-2 bg-slate-900/80 rounded-full overflow-hidden border border-white/10 p-[1px]">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full shadow-[0_0_12px_rgba(52,211,153,0.7)] transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(20, participants.length * 35))}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. PLAYER LIST (INTERNALLY SCROLLABLE) */}
+      <div className="flex-1 min-h-[90px] flex flex-col bg-white/[0.04] border border-white/10 rounded-2xl p-2.5 sm:p-3 backdrop-blur-md overflow-hidden">
+        <div className="shrink-0 flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10">
+          <div className="flex items-center gap-1.5 text-xs font-black text-white">
+            <Users className="w-3.5 h-3.5 text-sky-400" />
+            <span>Players Joined</span>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">
+            {participants.length} Online
           </span>
         </div>
 
-        {/* Players List (Internally Scrollable ONLY) */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/20">
           {participants.length === 0 ? (
-            <div className="h-full min-h-[70px] flex flex-col items-center justify-center text-center p-2 space-y-1">
+            <div className="h-full min-h-[60px] flex flex-col items-center justify-center text-center p-2 space-y-1">
               <Users className="w-5 h-5 text-slate-500 animate-pulse" />
               <p className="text-xs text-slate-400 font-medium">
-                {session.classroom_id
-                  ? 'Waiting for classroom students to join...'
-                  : `Waiting for students to join with PIN ${pin}...`}
+                Waiting for players to join with PIN <span className="font-mono text-sky-300 font-bold">{pin}</span>...
               </p>
             </div>
           ) : (
@@ -675,8 +714,9 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
                       {p.display_name}
                     </span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider shrink-0">
-                    Ready
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5" />
+                    <span>Ready</span>
                   </span>
                 </div>
               );
@@ -685,35 +725,65 @@ export const LiveQuizLobby: React.FC<LiveQuizLobbyProps> = ({
         </div>
       </div>
 
-      {/* 5. HOST CONTROLS (IF TEACHER) */}
-      {isTeacher && (
-        <div className="shrink-0 pt-2 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={isStarting || participants.length === 0}
-            onClick={handleStart}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-sky-500/20 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>
-              {isStarting
-                ? 'Starting...'
-                : participants.length > 0
-                  ? `Start Quiz (${participants.length} Ready)`
-                  : 'Start Quiz'}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={isCancelling || isStarting}
-            onClick={handleCancelSession}
-            className="shrink-0 inline-flex items-center justify-center px-3 py-2.5 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
-          >
-            {isCancelling ? 'Cancelling...' : 'Cancel'}
-          </button>
+      {/* 5. TIPS & ADVICE CARDS (EDUCATIONAL GAMING TIPS) */}
+      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-2 my-1.5">
+        <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 border border-amber-400/25 flex items-start gap-2">
+          <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-[11px] font-black text-amber-300">Tip</div>
+            <p className="text-[10px] text-slate-300 font-medium leading-tight">
+              Answer faster to earn bonus speed points!
+            </p>
+          </div>
         </div>
-      )}
+
+        <div className="p-2 sm:p-2.5 rounded-xl bg-sky-500/10 border border-sky-400/25 flex items-start gap-2">
+          <Zap className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-[11px] font-black text-sky-300">Be Ready</div>
+            <p className="text-[10px] text-slate-300 font-medium leading-tight">
+              Questions advance automatically once all players answer.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 6. BOTTOM ACTION BUTTON */}
+      <div className="shrink-0 pt-1">
+        {isTeacher ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isStarting || participants.length === 0}
+              onClick={handleStart}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 rounded-2xl text-xs sm:text-sm font-black shadow-lg shadow-teal-500/20 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>
+                {isStarting
+                  ? 'Starting Quiz...'
+                  : participants.length > 0
+                    ? `Start Quiz Now (${participants.length} Ready)`
+                    : 'Start Quiz Now'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isCancelling || isStarting}
+              onClick={handleCancelSession}
+              className="shrink-0 inline-flex items-center justify-center px-3 py-3 rounded-2xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {isCancelling ? 'Cancelling...' : 'Cancel'}
+            </button>
+          </div>
+        ) : (
+          <div className="w-full py-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-black text-xs sm:text-sm flex items-center justify-center gap-2 text-center shadow-lg shadow-emerald-500/10">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>Waiting for host to start the quiz...</span>
+          </div>
+        )}
+      </div>
 
     </div>
   );

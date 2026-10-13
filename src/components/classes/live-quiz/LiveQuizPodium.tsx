@@ -7,7 +7,8 @@ import {
   CheckCircle2,
   BarChart3,
   X,
-  ArrowLeft
+  ArrowLeft,
+  Share2
 } from 'lucide-react';
 import { LiveQuizResult, LiveQuizSession, LiveQuiz } from '@/types/liveQuiz';
 import { quizAudioService } from '@/services/quizAudioService';
@@ -66,12 +67,33 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
   const navigate = useNavigate();
   const [showConfetti, setShowConfetti] = useState(true);
   const [showDetailedModal, setShowDetailedModal] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   // Dynamic session and quiz rehydration states
   const [loadedSession, setLoadedSession] = useState<LiveQuizSession | null>(initialSession || null);
   const [loadedQuiz, setLoadedQuiz] = useState<LiveQuiz | null>(initialQuiz || initialSession?.quiz || null);
   const [loadedResults, setLoadedResults] = useState<LiveQuizResult[]>(results);
   const [coverImgSrc, setCoverImgSrc] = useState<string>(() => getQuizCover(initialQuiz || initialSession?.quiz));
+
+  const handleShare = async () => {
+    quizAudioService.playClick();
+    const shareText = `Check out our live quiz results on EdTechra: ${loadedQuiz?.title || 'Classroom Live Quiz'}!`;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'EdTechra Live Quiz Results',
+          text: shareText,
+          url: window.location.href
+        });
+      } catch {}
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(`${shareText}\n${window.location.href}`);
+        setCopiedShare(true);
+        setTimeout(() => setCopiedShare(false), 2000);
+      } catch {}
+    }
+  };
 
   // Determine active session key for idempotent sound execution
   const activeSessionId = sessionId || initialSession?.id || loadedSession?.id || 'quiz_session';
@@ -249,7 +271,7 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. HEADER: BRANDING, STATUS PILL, RETURN ACTION                            */}
+      {/* 1. HEADER: BRANDING, SHARE & EXIT ACTIONS                                 */}
       {/* ========================================================================= */}
       <div className="relative z-10 flex items-center justify-between gap-3 border-b border-white/10 pb-3 sm:pb-4">
         {/* Left: EdTechra Live Quiz Brand */}
@@ -261,26 +283,31 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
           />
           <div>
             <div className="font-black text-white text-sm sm:text-base leading-tight tracking-tight">EdTechra</div>
-            <div className="text-[10px] sm:text-[11px] text-sky-400 font-bold tracking-wide">Live Quiz</div>
+            <div className="text-[10px] sm:text-[11px] text-sky-400 font-bold tracking-wide">Live Quiz Results</div>
           </div>
         </div>
 
-        {/* Center: Game Finished Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/35 text-amber-300 text-[11px] sm:text-xs font-black uppercase tracking-wider shadow-[0_0_12px_rgba(251,191,36,0.25)]">
-          <Trophy className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-          <span>Game Finished</span>
-        </div>
+        {/* Right: Share + Exit Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-slate-200 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Share Quiz Results"
+          >
+            <Share2 className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">{copiedShare ? 'Copied!' : 'Share'}</span>
+          </button>
 
-        {/* Right: Back to Live Quizzes Button */}
-        <button
-          type="button"
-          onClick={handleReturn}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-slate-200 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Back to Live Quizzes</span>
-          <span className="sm:hidden">Exit</span>
-        </button>
+          <button
+            type="button"
+            onClick={handleReturn}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-200 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Exit</span>
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -572,7 +599,73 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. STATISTICS STRIP: 4 METRICS                                             */}
+      {/* 4. LEADERBOARD CARD (DIRECTLY BENEATH PODIUM)                             */}
+      {/* ========================================================================= */}
+      {totalParticipants > 0 && (
+        <div className="relative z-10 w-full max-w-3xl mx-auto my-3 bg-[#0a142c]/90 backdrop-blur-xl border border-sky-500/25 rounded-3xl p-4 sm:p-5 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <h3 className="text-sm sm:text-base font-black text-white tracking-tight">Leaderboard</h3>
+            </div>
+            <span className="text-[11px] font-bold text-slate-400">
+              {totalParticipants} {totalParticipants === 1 ? 'Player' : 'Players'}
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-64 sm:max-h-72 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20">
+            {sorted.map((res, index) => {
+              const rank = index + 1;
+              return (
+                <div
+                  key={res.id || index}
+                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-2xl border transition-all ${
+                    rank === 1
+                      ? 'bg-amber-500/15 border-amber-400/40 shadow-xs'
+                      : rank === 2
+                      ? 'bg-sky-500/15 border-sky-400/30'
+                      : rank === 3
+                      ? 'bg-amber-700/15 border-amber-600/30'
+                      : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={`w-6 text-center font-black font-mono text-xs ${
+                      rank === 1 ? 'text-amber-300' : rank === 2 ? 'text-sky-300' : rank === 3 ? 'text-amber-500' : 'text-slate-400'
+                    }`}>
+                      #{rank}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white overflow-hidden ring-2 ring-white/10 shrink-0">
+                      {res.student?.avatar_url ? (
+                        <img src={res.student.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{getInitials(res.student?.full_name)}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs sm:text-sm font-black text-white truncate">
+                        {res.student?.full_name || `Student ${rank}`}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium">
+                        {res.correct_count ?? 0} of {totalQuestions} correct • {res.accuracy_percentage ?? 0}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="px-2.5 py-1 rounded-xl bg-amber-400/15 text-amber-300 border border-amber-400/30 font-mono font-black text-xs sm:text-sm">
+                      {res.score.toLocaleString()} pts
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. STATISTICS STRIP: 4 METRICS                                             */}
       {/* ========================================================================= */}
       <div className="relative z-10 w-full max-w-3xl mx-auto my-3 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 p-3 sm:p-4 shadow-xl">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center justify-around divide-y sm:divide-y-0 sm:divide-x divide-white/10 text-center">

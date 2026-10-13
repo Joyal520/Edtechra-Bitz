@@ -144,6 +144,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const [pointsEarned, setPointsEarned] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(session.question_duration_sec || 20);
+  const [streak, setStreak] = useState(0);
 
   const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
   const [showConfetti, setShowConfetti] = useState(false);
@@ -444,8 +445,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     if (answerResult.isCorrect) {
       quizAudioService.playCorrect();
       setShowConfetti(true);
+      setStreak((prev) => prev + 1);
     } else {
       quizAudioService.playIncorrect();
+      setStreak(0);
     }
   }, [questionData, answerResult]);
 
@@ -499,22 +502,27 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return () => clearInterval(interval);
   }, [isTotalTimed, getEffectiveExpirationMs, syncWithDatabase]);
 
-  // ---- answer submission --------------------------------------------------------------
-  const handleSelectOption = async (displayIndex: number) => {
-    // Guard: one in-flight submit, no double taps, no input after server-declared reveal.
-    if (submittingRef.current || isLocked || revealData || !questionData) return;
+  // ---- answer selection & submission --------------------------------------------------
+  const handlePickOption = (displayIndex: number) => {
+    if (isLocked || isSubmitting || revealData) return;
+    quizAudioService.playClick();
+    quizAudioService.unlockAudio();
+    setSelectedDisplayIndex(displayIndex);
+  };
+
+  const handleSubmitAnswer = async () => {
+    if (submittingRef.current || isLocked || revealData || !questionData || selectedDisplayIndex === null) return;
 
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
 
-    // Canonical option index (original order) is the single representation sent and graded.
+    const displayIndex = selectedDisplayIndex;
     const canonicalIndex = questionData.permutation?.[displayIndex] ?? displayIndex;
     const submittedForIndex = questionData.qIndex;
 
     submittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
-    setSelectedDisplayIndex(displayIndex);
     setSelectedIndex(canonicalIndex);
     setIsLocked(true);
 
@@ -528,7 +536,6 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       if (!mountedRef.current) return;
 
       if (res.data) {
-        // The question may have changed while the request was in flight; only paint if still current.
         if (activeQIndexRef.current === submittedForIndex) {
           setAnswerResult({ isCorrect: res.data.is_correct, points: res.data.points_awarded });
           setPointsEarned(res.data.points_awarded);
@@ -536,12 +543,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
         if (typeof res.data.current_score === 'number') {
           setTotalScore(res.data.current_score);
         }
-        // Server may have advanced / finished (all answered): refetch authoritative state now.
         if (res.data.advanced || res.data.is_finished || res.data.all_answered) {
           await syncWithDatabase();
         }
       } else {
-        // Real, typed failure. Never disguised as TIME UP; never an ungraded write.
         if (activeQIndexRef.current === submittedForIndex) {
           setSelectedIndex(null);
           setSelectedDisplayIndex(null);
@@ -571,6 +576,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       if (mountedRef.current) setIsSubmitting(false);
     }
   };
+
+  // Auto-submit pending choice if countdown reaches <= 1s
+  useEffect(() => {
+    if (questionTimeLeft <= 1 && selectedDisplayIndex !== null && !isLocked && !isSubmitting && !revealData) {
+      handleSubmitAnswer();
+    }
+  }, [questionTimeLeft, selectedDisplayIndex, isLocked, isSubmitting, revealData]);
 
   const handleToggleSound = () => {
     quizAudioService.playClick();
@@ -620,111 +632,176 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const isSelectedCorrect = Boolean(answerResult?.isCorrect);
   const isSelectedIncorrect = Boolean(answerResult && !answerResult.isCorrect);
 
+  const categoryName = session.quiz?.category || 'Classroom Quiz';
+  const progressPct = Math.round(((questionData.qIndex + 1) / questionData.totalQuestions) * 100);
+
   return (
-    <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6 relative">
+    <div className="w-full max-w-3xl mx-auto bg-gradient-to-b from-[#060c1d] via-[#091532] to-[#040817] text-white rounded-3xl p-3.5 sm:p-6 shadow-2xl border border-sky-500/20 flex flex-col justify-between space-y-3 sm:space-y-4 relative overflow-hidden">
       
-      {/* Confetti Celebration Particle Layer (Auto disappears after 1.5s) */}
+      {/* Confetti Celebration Particle Layer */}
       {showConfetti && (
         <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={1500} />
       )}
 
-      {/* Top Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-white/15 pb-3 flex-wrap">
-        <span className="text-xs font-black uppercase tracking-wider bg-purple-500/30 text-purple-200 px-3 py-1 rounded-full border border-purple-400/30">
-          Question {questionData.qIndex + 1} of {questionData.totalQuestions}
-        </span>
-
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {/* Background Music Toggle Control */}
-          <button
-            type="button"
-            onClick={handleToggleSound}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-all cursor-pointer ${
-              !isMusicMuted
-                ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
-                : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
-            }`}
-            title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
-          >
-            {isMusicMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{isMusicMuted ? 'Muted' : 'Music'}</span>
-          </button>
-
-          {/* Total Quiz Timer (if enabled) */}
-          {isTotalTimed && (
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-all ${
-                totalTimeLeft <= 10
-                  ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
-                  : totalTimeLeft <= 60
-                  ? 'bg-amber-500/30 text-amber-300 border-amber-500'
-                  : 'bg-white/10 text-white border-white/20'
-              }`}
-              title="Total Quiz Time Remaining"
-            >
-              <Hourglass className="w-3.5 h-3.5" />
-              <span>Total: {formatTotalTime(totalTimeLeft)}</span>
+      {/* 1. TOP HEADER & BRANDING */}
+      <div className="space-y-2 border-b border-white/10 pb-3">
+        <div className="flex items-center justify-between gap-2">
+          {/* Brand Logo & Name */}
+          <div className="flex items-center gap-2">
+            <img
+              src="/logo.png"
+              alt="EdTechra"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain drop-shadow-md"
+            />
+            <div className="text-left">
+              <span className="font-black text-white text-sm sm:text-base tracking-tight leading-none block">
+                EDTECHRA
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-sky-400 font-extrabold uppercase tracking-wider leading-none">
+                Live Quiz
+              </span>
             </div>
-          )}
-
-          {/* Current Question Countdown */}
-          <div
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border ${
-              questionTimeLeft <= 5
-                ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
-                : 'bg-white/10 text-white border-white/20'
-            }`}
-            title="Question Timer"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>{questionTimeLeft}s</span>
           </div>
 
-          <div className="text-xs font-black text-amber-300 bg-amber-400/20 px-3 py-1 rounded-full border border-amber-400/30">
-            Score: {totalScore} pts
+          {/* Right Header Controls: Audio & Quiz Timer */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={handleToggleSound}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                !isMusicMuted
+                  ? 'bg-white/10 text-sky-300 border-white/20 hover:bg-white/20'
+                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+              }`}
+              title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
+            >
+              {isMusicMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-sky-400" />}
+              <span className="hidden sm:inline text-[11px]">{isMusicMuted ? 'Muted' : 'Music'}</span>
+            </button>
+
+            {isTotalTimed && (
+              <div
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                  totalTimeLeft <= 10
+                    ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
+                    : 'bg-white/10 text-white border-white/20'
+                }`}
+                title="Total Quiz Time Remaining"
+              >
+                <Hourglass className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-mono">{formatTotalTime(totalTimeLeft)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Question Progress Bar (Glowing Neon Cyan/Sky) */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-black">
+            <span className="text-slate-300">
+              Question <span className="text-white">{questionData.qIndex + 1}</span> of {questionData.totalQuestions}
+            </span>
+            <span className="text-sky-400 font-mono">{progressPct}%</span>
+          </div>
+          <div className="w-full h-2 sm:h-2.5 bg-slate-900/80 rounded-full overflow-hidden border border-white/10 p-[1px]">
+            <div
+              className="h-full bg-gradient-to-r from-sky-400 via-cyan-400 to-indigo-500 rounded-full shadow-[0_0_12px_rgba(56,189,248,0.7)] transition-all duration-300"
+              style={{ width: `${Math.max(4, progressPct)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Badges Row: Category, Streak, Score, Timer */}
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 flex-wrap pt-0.5">
+          {/* Category Pill */}
+          <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black uppercase tracking-wider bg-purple-900/50 text-purple-200 px-2.5 py-0.5 rounded-full border border-purple-400/40 shadow-xs">
+            <span>📖</span>
+            <span className="truncate max-w-[120px] sm:max-w-none">{categoryName}</span>
+          </span>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+            {/* Streak Counter */}
+            <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black bg-amber-500/15 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-400/40 shadow-xs">
+              <span>Streak</span>
+              <span>🔥</span>
+              <span className="font-mono">{streak}</span>
+            </span>
+
+            {/* Score Badge */}
+            <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black text-amber-200 bg-amber-400/20 px-2.5 py-0.5 rounded-full border border-amber-400/40 shadow-xs font-mono">
+              <span>⭐</span>
+              <span>{totalScore} pts</span>
+            </span>
+
+            {/* Question Countdown Timer */}
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black px-2.5 py-0.5 rounded-full border shadow-xs font-mono ${
+                questionTimeLeft <= 5
+                  ? 'bg-rose-500/30 text-rose-300 border-rose-500 animate-pulse'
+                  : 'bg-white/10 text-sky-200 border-white/20'
+              }`}
+            >
+              <Clock className="w-3 h-3 text-sky-400" />
+              <span>{questionTimeLeft}s</span>
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Question Prompt */}
-      <div className="text-center py-4 space-y-2 max-w-3xl mx-auto">
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white leading-tight">
+      {/* 2. QUESTION CARD (With Mascot Avatar Illustration) */}
+      <div className="bg-[#0a142c]/90 backdrop-blur-xl border border-indigo-500/30 rounded-3xl p-4 sm:p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col items-center text-center relative overflow-hidden my-0.5">
+        {/* Subtle radial glow background */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-20 bg-indigo-500/15 blur-2xl pointer-events-none" />
+
+        {/* Mascot Character Avatar Badge */}
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border-2 border-sky-400/50 shadow-[0_0_15px_rgba(56,189,248,0.3)] mb-3 bg-slate-900 shrink-0">
+          <img
+            src="/images/classroom/student-classroom-hero.webp"
+            alt="Mascot"
+            className="w-full h-full object-cover"
+          />
+        </div>
+
+        {/* Question Prompt */}
+        <h2 className="text-base sm:text-xl md:text-2xl font-black text-white leading-snug tracking-tight max-w-2xl px-1">
           {questionData.question}
         </h2>
       </div>
 
-      {/* Reveal Feedback Banner if active */}
+      {/* 3. REVEAL FEEDBACK BANNER (If Active) */}
       {(revealData || answerResult) && (
-        <div className={`p-4 rounded-2xl text-center font-black animate-in zoom-in-95 duration-200 ${
+        <div className={`p-3.5 rounded-2xl text-center font-black animate-in zoom-in-95 duration-200 ${
           isSelectedCorrect
-            ? 'bg-emerald-500/25 border-2 border-emerald-400 text-emerald-300 shadow-xl shadow-emerald-500/20 animate-correct-bounce'
+            ? 'bg-emerald-500/25 border-2 border-emerald-400 text-emerald-200 shadow-xl shadow-emerald-500/20 animate-correct-bounce'
             : isSelectedIncorrect
-            ? 'bg-rose-500/25 border-2 border-rose-400 text-rose-300 shadow-xl shadow-rose-500/20 animate-error-shake'
-            : 'bg-slate-800/60 border border-slate-600 text-slate-300'
+            ? 'bg-rose-500/25 border-2 border-rose-400 text-rose-200 shadow-xl shadow-rose-500/20 animate-error-shake'
+            : 'bg-slate-800/80 border border-slate-600 text-slate-300'
         }`}>
-          <div className="flex items-center justify-center gap-2 text-base">
+          <div className="flex items-center justify-center gap-2 text-sm sm:text-base">
             {isSelectedCorrect ? (
               <>
-                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                <span className="text-emerald-200">Excellent! Correct Answer • +{pointsEarned} Points</span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>Excellent! Correct Answer • +{pointsEarned} Points</span>
               </>
             ) : isSelectedIncorrect ? (
               <>
-                <XCircle className="w-6 h-6 text-rose-400" />
-                <span className="text-rose-200">Incorrect</span>
+                <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                <span>Incorrect Answer</span>
               </>
             ) : (
               <span>Time's Up — No Answer Selected</span>
             )}
           </div>
           {revealData?.explanation && (
-            <p className="text-xs font-medium text-slate-200 mt-1.5 leading-relaxed">{revealData.explanation}</p>
+            <p className="text-xs font-medium text-slate-200 mt-1 leading-relaxed">
+              {revealData.explanation}
+            </p>
           )}
         </div>
       )}
 
-      {/* 4 Interactive Option Cards (Randomized display order per question/session) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-4xl mx-auto w-full">
+      {/* 4. 4 INTERACTIVE FULL-WIDTH OPTION CARDS */}
+      <div className="space-y-2.5 sm:space-y-3 w-full max-w-2xl mx-auto">
         {(questionData.permutation || Array.from({ length: questionData.options?.length || 0 }, (_, i) => i)).map((canonicalIdx, displayIdx) => {
           const opt = questionData.options[canonicalIdx];
           const theme = OPTION_THEMES[displayIdx] || OPTION_THEMES[0];
@@ -733,20 +810,20 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           const isThisOptionCorrect = revealData && canonicalIdx === revealData.correctIndex;
           const isThisOptionIncorrectSelection = isRevealed && isSelected && !isThisOptionCorrect;
 
-          let cardStyling = `${theme.bg}`;
+          let cardStyling = 'bg-[#0c1735]/80 hover:bg-[#12224d] border border-white/10 text-white';
 
           if (isRevealed) {
             if (isSelected && isThisOptionCorrect) {
-              cardStyling = 'bg-emerald-600 ring-4 ring-emerald-300 text-white shadow-2xl shadow-emerald-500/40 scale-[1.02] animate-correct-bounce brightness-110';
+              cardStyling = 'bg-emerald-950/80 border-2 border-emerald-400 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.35)] animate-correct-bounce scale-[1.01]';
             } else if (isThisOptionIncorrectSelection) {
-              cardStyling = 'bg-rose-600 ring-4 ring-rose-400 text-white shadow-xl shadow-rose-600/40 animate-error-shake brightness-100';
+              cardStyling = 'bg-rose-950/80 border-2 border-rose-400 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.35)] animate-error-shake';
             } else if (isThisOptionCorrect) {
-              cardStyling = 'bg-emerald-700/90 ring-4 ring-emerald-400 text-white shadow-md brightness-105';
+              cardStyling = 'bg-emerald-950/70 border-2 border-emerald-400/80 text-emerald-100 shadow-md';
             } else {
-              cardStyling = 'opacity-35 grayscale-[50%] bg-slate-800 text-slate-400';
+              cardStyling = 'opacity-35 grayscale-[50%] bg-slate-900/60 border border-white/5 text-slate-400';
             }
           } else if (isSelected) {
-            cardStyling = `${theme.bg} ring-4 ring-white scale-[1.02] shadow-2xl brightness-110`;
+            cardStyling = 'border-2 border-indigo-400 bg-gradient-to-r from-indigo-950/90 to-blue-950/90 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-[1.01]';
           }
 
           return (
@@ -754,67 +831,86 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
               key={displayIdx}
               type="button"
               disabled={isLocked || isSubmitting || isRevealed}
-              onClick={() => handleSelectOption(displayIdx)}
-              className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
+              onClick={() => handlePickOption(displayIdx)}
+              className={`w-full min-h-[52px] sm:min-h-[58px] p-3 sm:p-4 rounded-2xl font-bold text-left flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer shadow-md ${cardStyling}`}
             >
-              <div className="flex items-center gap-3.5">
-                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-base text-white shrink-0 ${
-                  isRevealed && isThisOptionCorrect
-                    ? 'bg-emerald-400 text-emerald-950 shadow-xs'
-                    : isRevealed && isThisOptionIncorrectSelection
-                    ? 'bg-rose-400 text-rose-950 shadow-xs'
-                    : 'bg-white/20'
-                }`}>
-                  {isRevealed && isThisOptionCorrect ? (
-                    <Check className="w-5 h-5 stroke-[3]" />
-                  ) : isRevealed && isThisOptionIncorrectSelection ? (
-                    <XCircle className="w-5 h-5" />
-                  ) : (
-                    theme.label
-                  )}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                {/* Letter Circle (A, B, C, D) */}
+                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-black text-sm sm:text-base text-white shrink-0 ${theme.bg}`}>
+                  {theme.label}
                 </div>
-                <span className="text-sm sm:text-base text-white">{opt}</span>
+                {/* Option Text */}
+                <span className="text-sm sm:text-base text-white leading-snug break-words">
+                  {opt}
+                </span>
               </div>
 
-              {isSelected && !isRevealed && (
-                <span className="text-[11px] font-black bg-white/30 text-white px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <Lock className="w-3 h-3" />
-                  <span>Locked</span>
-                </span>
-              )}
-
-              {isRevealed && isThisOptionCorrect && (
-                <span className="text-[11px] font-black bg-white/20 text-emerald-100 px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Correct</span>
-                </span>
-              )}
+              {/* Right Selection / State Indicator */}
+              <div className="shrink-0 flex items-center justify-center">
+                {isRevealed && isThisOptionCorrect ? (
+                  <div className="w-6 h-6 rounded-full bg-emerald-400 text-emerald-950 flex items-center justify-center shadow-xs">
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </div>
+                ) : isRevealed && isThisOptionIncorrectSelection ? (
+                  <div className="w-6 h-6 rounded-full bg-rose-400 text-rose-950 flex items-center justify-center shadow-xs">
+                    <XCircle className="w-4 h-4 stroke-[3]" />
+                  </div>
+                ) : isSelected ? (
+                  <div className="w-6 h-6 rounded-full bg-indigo-500 border-2 border-white flex items-center justify-center text-white shadow-[0_0_10px_rgba(99,102,241,0.6)]">
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  </div>
+                ) : (
+                  <div className="w-6 h-6 rounded-full border-2 border-white/20" />
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
-      {/* Footer Lock / Progress Status */}
-      <div className="text-center text-xs text-slate-400 font-bold">
-        {isSubmitting ? (
-          <span className="text-sky-300 font-black animate-pulse">Submitting…</span>
-        ) : submitError && !revealData ? (
-          <span className="text-rose-300 font-black">{submitError}</span>
-        ) : isLocked && !revealData ? (
-          <span className="text-sky-300 font-black animate-pulse">
-            ✓ Answer recorded! Waiting for the other players...
-          </span>
-        ) : questionTimeLeft <= 0 && !revealData ? (
-          <span className="text-amber-300 font-black animate-pulse">
-            ⏳ Checking time with server...
-          </span>
-        ) : !revealData ? (
-          <span>Select an answer card above before the timer expires</span>
-        ) : (
-          <span className="text-slate-300">
-            {isSelectedCorrect ? '🎉 Great job! Points recorded.' : isSelectedIncorrect ? 'Review the explanation above.' : 'Question complete.'}
-          </span>
+      {/* 5. BOTTOM ACTION: PROMINENT SUBMIT BUTTON */}
+      <div className="pt-1 space-y-2 max-w-2xl mx-auto w-full">
+        {submitError && !revealData && (
+          <div className="text-center text-xs text-rose-300 font-bold bg-rose-500/20 border border-rose-500/30 p-2 rounded-xl">
+            {submitError}
+          </div>
         )}
+
+        <button
+          type="button"
+          disabled={selectedDisplayIndex === null || isLocked || isSubmitting || Boolean(revealData)}
+          onClick={handleSubmitAnswer}
+          className={`w-full py-3.5 sm:py-4 rounded-2xl font-black text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+            isLocked && !revealData
+              ? 'bg-sky-500/20 border border-sky-400/40 text-sky-200 cursor-default'
+              : selectedDisplayIndex !== null && !isLocked && !isSubmitting && !revealData
+              ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-indigo-600/30 active:scale-98'
+              : isSubmitting
+              ? 'bg-indigo-600/50 text-indigo-200 cursor-wait'
+              : 'bg-white/10 text-slate-400 border border-white/10 cursor-not-allowed opacity-60'
+          }`}
+        >
+          {isSubmitting ? (
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Submitting Answer...</span>
+            </span>
+          ) : isLocked && !revealData ? (
+            <span className="flex items-center gap-2 text-sky-300">
+              <Lock className="w-4 h-4" />
+              <span>✓ Answer Recorded — Waiting for other players...</span>
+            </span>
+          ) : revealData ? (
+            <span>Next question coming up...</span>
+          ) : selectedDisplayIndex !== null ? (
+            <span className="flex items-center gap-1.5">
+              <span>Submit Answer</span>
+              <span>&gt;</span>
+            </span>
+          ) : (
+            <span>Select an answer above</span>
+          )}
+        </button>
       </div>
 
     </div>
