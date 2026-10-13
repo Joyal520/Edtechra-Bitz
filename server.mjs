@@ -4848,7 +4848,17 @@ app.post('/api/classes/:classroomId/live-quiz/sessions/:sessionId/complete', asy
       liveQuizServerChannels.delete(session.pin);
     }
 
-    res.json({ success: true, message: 'Session completed successfully.' });
+    const { data: finalResultsRows } = await serverSupabase
+      .from('live_quiz_results')
+      .select('*, student:profiles!student_id (id, full_name, avatar_url, email)')
+      .eq('session_id', sessionId)
+      .order('final_rank', { ascending: true });
+
+    res.json({
+      success: true,
+      message: 'Session completed successfully.',
+      data: finalResultsRows || []
+    });
   } catch (error) {
     console.error('Error completing live quiz session:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to complete session.' });

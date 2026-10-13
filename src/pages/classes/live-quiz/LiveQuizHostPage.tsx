@@ -48,8 +48,14 @@ export const LiveQuizHostPage: React.FC = () => {
       if (res.data && res.data.length > 0) {
         setFinalResults(res.data);
       } else {
-        const fallback = await liveQuizService.getResults(sessionId);
-        if (fallback.data) setFinalResults(fallback.data);
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const fallback = await liveQuizService.getResults(sessionId);
+          if (fallback.data && fallback.data.length > 0) {
+            setFinalResults(fallback.data);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
     } catch (err) {
       console.warn('Finish quiz notice:', err);

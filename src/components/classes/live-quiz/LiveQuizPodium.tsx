@@ -106,19 +106,64 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
     const targetSessionId = sessionId || initialSession?.id;
     if (!targetSessionId) return;
 
-    // Load missing results if results array is empty
-    if (!loadedResults || loadedResults.length === 0) {
-      liveQuizService.getResults(targetSessionId).then((res) => {
-        if (res.data && res.data.length > 0) {
+    let isSubscribed = true;
+    let pollTimer: any = null;
+    let attempts = 0;
+
+    const pollResults = async () => {
+      if (!isSubscribed) return;
+      try {
+        const res = await liveQuizService.getResults(targetSessionId);
+        if (res.data && res.data.length > 0 && isSubscribed) {
           setLoadedResults(res.data);
+          return;
         }
-      }).catch(() => {});
+      } catch {}
+
+      attempts++;
+      if (attempts < 6 && isSubscribed) {
+        pollTimer = setTimeout(pollResults, 600);
+      } else if (attempts >= 6 && isSubscribed) {
+        // Fallback: load live participants if live_quiz_results still empty
+        try {
+          const parts = await liveQuizService.getParticipants(targetSessionId);
+          if (parts && parts.length > 0 && isSubscribed) {
+            const fallbackResults: LiveQuizResult[] = parts.map((p, idx) => ({
+              id: p.id,
+              session_id: targetSessionId,
+              classroom_id: loadedSession?.classroom_id || initialSession?.classroom_id || '',
+              teacher_id: loadedSession?.teacher_id || initialSession?.teacher_id || '',
+              student_id: p.student_id,
+              quiz_id: loadedSession?.quiz_id || initialSession?.quiz_id || '',
+              score: p.score || 0,
+              points_awarded: p.score || 0,
+              correct_count: Math.round((p.score || 0) / 10),
+              wrong_count: Math.max(0, 10 - Math.round((p.score || 0) / 10)),
+              total_questions: 10,
+              accuracy_percentage: Math.min(100, Math.round(((p.score || 0) / 100) * 100)),
+              final_rank: idx + 1,
+              created_at: p.joined_at,
+              student: {
+                id: p.student_id,
+                full_name: p.display_name,
+                avatar_url: p.avatar_url,
+                email: ''
+              }
+            }));
+            setLoadedResults(fallbackResults);
+          }
+        } catch {}
+      }
+    };
+
+    if (!loadedResults || loadedResults.length === 0) {
+      pollResults();
     }
 
     // Load session / quiz if quiz is not yet present
     if (!loadedQuiz) {
       liveQuizService.getSessionById(targetSessionId).then((sess) => {
-        if (sess) {
+        if (sess && isSubscribed) {
           setLoadedSession(sess);
           if (sess.quiz) {
             setLoadedQuiz(sess.quiz);
@@ -127,7 +172,12 @@ export const LiveQuizPodium: React.FC<LiveQuizPodiumProps> = ({
         }
       }).catch(() => {});
     }
-  }, [sessionId, initialSession?.id, loadedResults?.length, loadedQuiz]);
+
+    return () => {
+      isSubscribed = false;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [sessionId, initialSession?.id, loadedResults?.length, loadedQuiz, loadedSession?.classroom_id, loadedSession?.teacher_id, loadedSession?.quiz_id, initialSession?.classroom_id, initialSession?.teacher_id, initialSession?.quiz_id]);
 
   // Active quiz reference
   const activeQuiz = loadedQuiz || loadedSession?.quiz;

@@ -230,17 +230,41 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   });
 
   // ---- finish ---------------------------------------------------------------
-  const handleFinished = useCallback(() => {
+  const handleFinished = useCallback(async () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
     quizAudioService.setQuizFinished(true);
     quizAudioService.stopBackgroundMusic();
-    // Idempotent server finalization (results + classroom points); safe if already done.
-    if (session.classroom_id) {
-      fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`, { method: 'POST' }).catch(() => {});
+
+    let results: any[] = [];
+    try {
+      // 1. Await server completion endpoint which computes and returns results
+      const endpoint = session.classroom_id
+        ? `/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`
+        : `/api/live-quiz/sessions/${session.id}/complete`;
+      const res = await fetch(endpoint, { method: 'POST' });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.data) && json.data.length > 0) {
+          results = json.data;
+        }
+      }
+    } catch {}
+
+    // 2. Fallback: query liveQuizService.getResults if endpoint did not return data
+    if (!results || results.length === 0) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const res = await liveQuizService.getResults(session.id);
+        if (res.data && res.data.length > 0) {
+          results = res.data;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+      }
     }
+
     if (onQuizFinishedRef.current) {
-      onQuizFinishedRef.current([]);
+      onQuizFinishedRef.current(results);
     }
   }, [session.classroom_id, session.id]);
 

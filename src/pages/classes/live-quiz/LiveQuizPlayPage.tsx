@@ -102,24 +102,22 @@ export const LiveQuizPlayPage: React.FC = () => {
   };
 
   const handleQuizFinished = useCallback(async (results: any) => {
-    if (Array.isArray(results) && results.length > 0 && results[0]?.student?.full_name) {
-      setFinalResults(results);
-    } else if (sessionId) {
-      try {
-        const { data } = await liveQuizService.getResults(sessionId);
-        if (data && data.length > 0) {
-          setFinalResults(data);
-        } else if (Array.isArray(results) && results.length > 0) {
-          setFinalResults(results);
-        }
-      } catch {
-        if (Array.isArray(results) && results.length > 0) {
-          setFinalResults(results);
-        }
+    let finalData: LiveQuizResult[] = Array.isArray(results) && results.length > 0 ? results : [];
+
+    if (finalData.length === 0 && sessionId) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const { data } = await liveQuizService.getResults(sessionId);
+          if (data && data.length > 0) {
+            finalData = data;
+            break;
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 400));
       }
-    } else if (Array.isArray(results)) {
-      setFinalResults(results);
     }
+
+    setFinalResults(finalData);
     setIsFinished(true);
   }, [sessionId]);
 
