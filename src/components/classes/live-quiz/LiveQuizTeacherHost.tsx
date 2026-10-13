@@ -338,10 +338,17 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     }, REVEAL_DURATION_MS);
   };
 
-  // Helper to actually advance question index or finish quiz
-  const proceedToNextQuestionOrFinish = () => {
+  // Helper to actually advance question index or finish quiz via CAS RPC
+  const proceedToNextQuestionOrFinish = async () => {
     if (currentQIndex < questions.length - 1) {
-      setCurrentQIndex((prev) => prev + 1);
+      const res = await liveQuizService.advanceQuestion(session.id, currentQIndex);
+      if (res.finished) {
+        handleFinishQuiz();
+      } else if (typeof res.next_question_index === 'number') {
+        setCurrentQIndex(res.next_question_index);
+      } else {
+        setCurrentQIndex((prev) => prev + 1);
+      }
     } else {
       handleFinishQuiz();
     }

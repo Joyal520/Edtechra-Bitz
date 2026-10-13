@@ -23,6 +23,7 @@ class QuizAudioService {
   // Background Music singleton instance
   private bgmAudio: HTMLAudioElement | null = null;
   private bgmPlaying = false;
+  private bgmPlayGeneration = 0;
   private autoplayPermissionHandler: (() => void) | null = null;
 
   // Strict Lifecycle State: When true, BGM and gameplay SFX are forbidden from playing/restarting
@@ -48,7 +49,17 @@ class QuizAudioService {
         window.removeEventListener('keydown', unlock);
       };
       window.addEventListener('pointerdown', unlock, { once: true });
-      window.addEventListener('keydown', unlock, { once: true });
+      // Page lifecycle: Pause BGM when tab is hidden or user navigates away
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && this.bgmAudio && this.bgmPlaying) {
+          try { this.bgmAudio.pause(); } catch {}
+          this.bgmPlaying = false;
+        }
+      });
+      window.addEventListener('pagehide', () => {
+        this.stopBackgroundMusic();
+        this.stopActiveEffects();
+      });
     }
   }
 
@@ -223,13 +234,18 @@ class QuizAudioService {
     bgm.volume = this.isMusicMuted() ? 0 : 0.20;
 
     if (!this.bgmPlaying) {
+      const currentGen = ++this.bgmPlayGeneration;
       const playPromise = bgm.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            if (this.isQuizFinished) {
-              // Quiz finished while play promise was resolving - immediately stop!
-              this.stopBackgroundMusic();
+            // Guard: If stopBackgroundMusic was called or generation changed while resolving, abort immediately!
+            if (this.isQuizFinished || this.bgmPlayGeneration !== currentGen) {
+              try {
+                bgm.pause();
+                bgm.currentTime = 0;
+              } catch {}
+              this.bgmPlaying = false;
             } else {
               this.bgmPlaying = true;
             }
@@ -240,12 +256,19 @@ class QuizAudioService {
               window.removeEventListener('pointerdown', this.autoplayPermissionHandler);
             }
 
-            // Autoplay blocked: wait for first user tap to begin playing ONLY if quiz not finished
+            // Autoplay blocked: wait for first user tap to begin playing ONLY if still on same generation and not finished
             this.autoplayPermissionHandler = () => {
-              if (bgm && !this.bgmPlaying && !this.isQuizFinished) {
+              if (bgm && !this.bgmPlaying && !this.isQuizFinished && this.bgmPlayGeneration === currentGen) {
                 bgm.play().then(() => {
-                  this.bgmPlaying = !this.isQuizFinished;
-                  if (this.isQuizFinished) this.stopBackgroundMusic();
+                  if (this.isQuizFinished || this.bgmPlayGeneration !== currentGen) {
+                    try {
+                      bgm.pause();
+                      bgm.currentTime = 0;
+                    } catch {}
+                    this.bgmPlaying = false;
+                  } else {
+                    this.bgmPlaying = true;
+                  }
                 }).catch(() => {});
               }
               if (this.autoplayPermissionHandler && typeof window !== 'undefined') {
@@ -264,6 +287,7 @@ class QuizAudioService {
    * Call when quiz ends, unmounts, or navigates to podium.
    */
   public stopBackgroundMusic(): void {
+    this.bgmPlayGeneration++; // Invalidate any in-flight play promises immediately
     if (this.autoplayPermissionHandler && typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.autoplayPermissionHandler);
       this.autoplayPermissionHandler = null;
@@ -274,8 +298,8 @@ class QuizAudioService {
         this.bgmAudio.pause();
         this.bgmAudio.currentTime = 0;
       } catch {}
-      this.bgmPlaying = false;
     }
+    this.bgmPlaying = false;
   }
 
   /**

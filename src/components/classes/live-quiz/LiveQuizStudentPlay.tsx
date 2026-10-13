@@ -11,7 +11,7 @@ import {
   RotateCcw,
   AlertCircle
 } from 'lucide-react';
-import { LiveQuizSession } from '@/types/liveQuiz';
+import { LiveQuizSession, LiveQuizServerState } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 import { quizAudioService } from '@/services/quizAudioService';
@@ -93,7 +93,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 }) => {
   const { user } = useAuth();
 
-  // Helper to parse options safely
+  // ---- helpers -------------------------------------------------------------
   const parseOptions = (opts: any): string[] => {
     if (Array.isArray(opts)) return opts.map(String);
     if (typeof opts === 'string') {
@@ -107,7 +107,6 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return [];
   };
 
-  // Fisher-Yates shuffle generator to randomize option display order per question/session
   const generatePermutation = (length: number): number[] => {
     const arr = Array.from({ length }, (_, i) => i);
     for (let i = arr.length - 1; i > 0; i--) {
@@ -119,95 +118,58 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return arr;
   };
 
-  // Determine if quiz should be active (in_progress, reveal, OR scheduled time reached)
-  const scheduledTimeStr = session.scheduled_start_at || session.started_at;
-  const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
-  const isPlayingStatus = session.status === 'in_progress' || session.status === 'reveal' || isScheduledTimeReached;
-
-  // Rehydrate initial question immediately if session is playing or scheduled time has arrived
+  // ---- state ---------------------------------------------------------------
+  // AUTHORITY: the server (get_live_quiz_state / submit_live_quiz_answer RPCs) owns the
+  // question index, deadline, reveal and grading. This component only DISPLAYS that state.
   const [questionData, setQuestionData] = useState<{
     qIndex: number;
     question: string;
     options: string[];
     permutation: number[];
     durationSec: number;
-    questionStartMs: number;
-    questionEndsAtMs: number;
+    /** Server-clock deadline (ms). Display-only countdown. */
+    deadlineMs: number;
     totalQuestions: number;
-  } | null>(() => {
-    if (isPlayingStatus) {
-      const idx = session.current_question_index ?? 0;
-      const questions = session.quiz?.questions || [];
-      if (questions.length > 0 && idx >= questions.length) {
-        return null;
-      }
-      const q = questions[idx] || questions[0];
-      if (q) {
-        const opts = parseOptions(q.options);
-        const duration = session.question_duration_sec || q.durationSec || 20;
-        let startMs = Number(session.question_start_ms);
-        // Guard: if startMs is invalid or anchored to an old scheduled timestamp that would immediately expire, anchor to now
-        if (!startMs || isNaN(startMs) || (Date.now() - startMs >= duration * 1000)) {
-          startMs = Date.now();
-        }
-        const endsAtMs = Number((session as any).questionEndsAtMs) || (startMs + duration * 1000);
-        return {
-          qIndex: idx,
-          question: q.question || `Question ${idx + 1}`,
-          options: opts,
-          permutation: generatePermutation(opts.length),
-          durationSec: duration,
-          questionStartMs: startMs,
-          questionEndsAtMs: endsAtMs,
-          totalQuestions: questions.length || 0
-        };
-      }
-    }
-    return null;
-  });
+  } | null>(null);
 
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [, setSelectedIndex] = useState<number | null>(null);
   const [selectedDisplayIndex, setSelectedDisplayIndex] = useState<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
-
-  // Rehydrate initial reveal data if session is already in reveal
-  const [revealData, setRevealData] = useState<{
-    correctIndex: number;
-    explanation?: string;
-  } | null>(() => {
-    if (session.status === 'reveal' && typeof session.correct_answer_index === 'number') {
-      const idx = session.current_question_index ?? 0;
-      const q = session.quiz?.questions?.[idx];
-      return {
-        correctIndex: session.correct_answer_index,
-        explanation: q?.explanation
-      };
-    }
-    return null;
-  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [revealData, setRevealData] = useState<{ correctIndex: number; explanation?: string } | null>(null);
+  // Server-graded result for the current question (single source of truth for feedback)
+  const [answerResult, setAnswerResult] = useState<{ isCorrect: boolean; points: number } | null>(null);
 
   const [pointsEarned, setPointsEarned] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(session.question_duration_sec || 20);
 
-  // Rehydrate initial remaining time
-  const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(() => {
-    const duration = session.question_duration_sec || 20;
-    if (session.status === 'in_progress' && session.question_start_ms) {
-      const elapsed = (Date.now() - Number(session.question_start_ms)) / 1000;
-      const remaining = Math.ceil(duration - elapsed);
-      if (remaining > 0) return remaining;
-    }
-    return duration;
-  });
-
-  // Audio and Visual Celebration Feedback State
   const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
   const [showConfetti, setShowConfetti] = useState(false);
   const hasTriggeredFeedbackRef = useRef<number | null>(null);
 
-  // Proactively fetch student questions if not provided in session
   const [studentQuestions, setStudentQuestions] = useState<any[]>(() => session.quiz?.questions || []);
 
+  // ---- refs ----------------------------------------------------------------
+  const mountedRef = useRef(true);
+  const finishedRef = useRef(false);
+  const submittingRef = useRef(false);
+  const activeQIndexRef = useRef<number | null>(null);
+  const questionsRef = useRef<any[]>(studentQuestions);
+  const permutationsRef = useRef<Map<number, number[]>>(new Map());
+  const syncSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
+  const expirySyncedForRef = useRef<number | null>(null);
+  const onQuizFinishedRef = useRef(onQuizFinished);
+  useEffect(() => {
+    onQuizFinishedRef.current = onQuizFinished;
+  }, [onQuizFinished]);
+  useEffect(() => {
+    questionsRef.current = studentQuestions;
+  }, [studentQuestions]);
+
+  // ---- questions -------------------------------------------------------------
   useEffect(() => {
     if (session.quiz?.questions && session.quiz.questions.length > 0) {
       setStudentQuestions(session.quiz.questions);
@@ -223,47 +185,37 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }
   }, [session.quiz_id, session.quiz?.id, session.quiz?.questions]);
 
-  // Background music lifecycle: start ONLY when active gameplay is loaded with questions, stop on unmount
+  // ---- audio lifecycle: one owner, stopped on unmount ------------------------
+  const hasQuestion = Boolean(questionData);
   useEffect(() => {
-    if (isPlayingStatus && questionData) {
+    if (hasQuestion && !finishedRef.current) {
       quizAudioService.startBackgroundMusic();
     }
     return () => {
       quizAudioService.stopBackgroundMusic();
     };
-  }, [isPlayingStatus, Boolean(questionData)]);
+  }, [hasQuestion]);
 
-  // Stable ref for callbacks & active question index
-  const onQuizFinishedRef = useRef(onQuizFinished);
   useEffect(() => {
-    onQuizFinishedRef.current = onQuizFinished;
-  }, [onQuizFinished]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const activeQIndexRef = useRef<number | null>(questionData?.qIndex ?? null);
-  useEffect(() => {
-    activeQIndexRef.current = questionData?.qIndex ?? null;
-  }, [questionData?.qIndex]);
-
-  // Total Quiz Timer State - ONLY active when timer_enabled is true on the quiz
+  // ---- total quiz timer (optional per-quiz feature; display + lock) -----------
   const isTotalTimed = Boolean(session.quiz?.timer_enabled);
   const totalDurationSec = session.quiz?.timer_seconds || 60;
 
-  // Determine effective expiration ms safely against stale lobby timestamps
   const getEffectiveExpirationMs = useCallback((): number | null => {
     if (!isTotalTimed) return null;
     const startedMs = session.started_at ? new Date(session.started_at).getTime() : null;
     const expiresMs = session.expires_at ? new Date(session.expires_at).getTime() : null;
-
-    // If session has started, true expiration is relative to started_at
     if (startedMs && (!expiresMs || expiresMs <= startedMs)) {
       return startedMs + (totalDurationSec * 1000);
     }
-    if (expiresMs) {
-      return expiresMs;
-    }
-    if (startedMs) {
-      return startedMs + (totalDurationSec * 1000);
-    }
+    if (expiresMs) return expiresMs;
+    if (startedMs) return startedMs + (totalDurationSec * 1000);
     return null;
   }, [isTotalTimed, session.started_at, session.expires_at, totalDurationSec]);
 
@@ -271,325 +223,163 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     if (!isTotalTimed) return 0;
     const expMs = getEffectiveExpirationMs();
     if (expMs) {
-      const remainingMs = expMs - Date.now();
-      const remainingSec = Math.ceil(remainingMs / 1000);
+      const remainingSec = Math.ceil((expMs - Date.now()) / 1000);
       if (remainingSec > 0) return remainingSec;
     }
     return totalDurationSec;
   });
   const [isTotalTimeExpired, setIsTotalTimeExpired] = useState(false);
 
-  // Handlers for state updates
-  const applyQuestionStarted = useCallback((raw: any) => {
-    if (!raw) return;
+  // ---- finish ---------------------------------------------------------------
+  const handleFinished = useCallback(() => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    quizAudioService.setQuizFinished(true);
+    quizAudioService.stopBackgroundMusic();
+    // Idempotent server finalization (results + classroom points); safe if already done.
+    if (session.classroom_id) {
+      fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`, { method: 'POST' }).catch(() => {});
+    }
+    if (onQuizFinishedRef.current) {
+      onQuizFinishedRef.current([]);
+    }
+  }, [session.classroom_id, session.id]);
 
-    const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
-    const totalCount = questions.length || raw.totalQuestions || raw.total_questions || 1;
-    const rawIdx = typeof raw.qIndex === 'number'
-      ? raw.qIndex
-      : (typeof raw.questionIndex === 'number'
-        ? raw.questionIndex
-        : (typeof raw.current_question_index === 'number' ? raw.current_question_index : 0));
+  // ---- apply an authoritative server snapshot ----------------------------------
+  const applyServerState = useCallback((state: LiveQuizServerState) => {
+    if (!mountedRef.current || finishedRef.current) return;
 
-    // Bounds check: if quiz has questions and index is past the end, complete quiz!
-    if (questions.length > 0 && rawIdx >= questions.length) {
-      quizAudioService.setQuizFinished(true);
-      quizAudioService.stopBackgroundMusic();
-      if (onQuizFinishedRef.current) {
-        onQuizFinishedRef.current([]);
-      }
+    if (state.status === 'finished' || state.phase === 'finished') {
+      handleFinished();
       return;
     }
+    if (state.status !== 'in_progress' && state.status !== 'reveal') return;
 
-    const fallbackQ = questions[rawIdx];
-    const resolvedQuestion = raw.question || fallbackQ?.question || `Question ${rawIdx + 1}`;
-    const rawOpts = (Array.isArray(raw.options) && raw.options.length > 0)
-      ? raw.options
-      : fallbackQ?.options;
-    const resolvedOptions = parseOptions(rawOpts);
+    const idx = state.current_question_index ?? 0;
+    const questions = questionsRef.current;
+    const q = questions[idx];
+    if (!q) return; // questions not loaded yet; a sync is re-run once they load
 
-    const duration = raw.durationSec || raw.duration_sec || session.question_duration_sec || fallbackQ?.durationSec || 20;
-    let startMs = Number(raw.questionStartMs || raw.startMs || raw.question_start_ms);
-    let endsAtMs = Number(raw.questionEndsAtMs || raw.endsAtMs);
-
-    // If startMs or endsAtMs would expire the question immediately on start, reset to now
-    if (!startMs || isNaN(startMs) || (Date.now() - startMs >= duration * 1000)) {
-      startMs = Date.now();
-      endsAtMs = startMs + duration * 1000;
-    } else if (!endsAtMs || isNaN(endsAtMs)) {
-      endsAtMs = startMs + duration * 1000;
+    const opts = parseOptions(q.options);
+    let perm = permutationsRef.current.get(idx);
+    if (!perm || perm.length !== opts.length) {
+      perm = generatePermutation(opts.length);
+      permutationsRef.current.set(idx, perm);
     }
 
+    const isNewQuestion = activeQIndexRef.current !== idx;
+    if (isNewQuestion) {
+      activeQIndexRef.current = idx;
+      setSelectedIndex(null);
+      setSelectedDisplayIndex(null);
+      setIsLocked(false);
+      setRevealData(null);
+      setAnswerResult(null);
+      setPointsEarned(0);
+      setShowConfetti(false);
+      setSubmitError(null);
+      hasTriggeredFeedbackRef.current = null;
+      expirySyncedForRef.current = null;
+    }
+
+    const durationSec = state.question_duration_sec || q.durationSec || 20;
     setQuestionData({
-      qIndex: rawIdx,
-      question: resolvedQuestion,
-      options: resolvedOptions,
-      permutation: generatePermutation(resolvedOptions.length),
-      durationSec: duration,
-      questionStartMs: startMs,
-      questionEndsAtMs: endsAtMs,
-      totalQuestions: totalCount
+      qIndex: idx,
+      question: q.question || `Question ${idx + 1}`,
+      options: opts,
+      permutation: perm,
+      durationSec,
+      deadlineMs: Number(state.deadline_ms),
+      totalQuestions: state.total_questions || questions.length || 0
     });
-    setSelectedIndex(null);
-    setSelectedDisplayIndex(null);
-    setIsLocked(false);
-    setRevealData(null);
-    setShowConfetti(false);
-    hasTriggeredFeedbackRef.current = null;
-    setPointsEarned(0);
 
-    // If total time has not genuinely expired, reset total time expired lock
-    const expMs = getEffectiveExpirationMs();
-    if (!expMs || expMs > Date.now()) {
-      setIsTotalTimeExpired(false);
+    // Our own recorded answer (survives refresh, reconnect, late load)
+    if (state.my_answer && typeof state.my_answer.selected_option_index === 'number') {
+      const canonical = state.my_answer.selected_option_index;
+      setSelectedIndex(canonical);
+      setSelectedDisplayIndex(perm.indexOf(canonical));
+      setIsLocked(true);
+      setAnswerResult({ isCorrect: Boolean(state.my_answer.is_correct), points: Number(state.my_answer.points_awarded || 0) });
+      setPointsEarned(Number(state.my_answer.points_awarded || 0));
     }
 
-    const remaining = Math.max(0, Math.ceil((endsAtMs - Date.now()) / 1000));
-    setQuestionTimeLeft(remaining > 0 ? remaining : duration);
-  }, [session.quiz?.questions, session.question_duration_sec, studentQuestions, getEffectiveExpirationMs]);
+    // Reveal is decided by the SERVER (deadline passed). Never inferred from client clock.
+    if (state.phase === 'reveal' && typeof state.correct_index === 'number') {
+      setRevealData({ correctIndex: state.correct_index, explanation: q.explanation });
+      setIsLocked(true);
+    }
+  }, [handleFinished]);
 
-  const applyQuestionReveal = useCallback((rData: {
-    qIndex?: number;
-    correctIndex: number;
-    explanation?: string;
-  }) => {
-    setRevealData(rData);
-    setIsLocked(true);
-  }, []);
-
-  // Ensure Question 1 / current question rehydrates immediately if session prop updates or loads fresh
+  const applyRef = useRef(applyServerState);
   useEffect(() => {
-    const isPlaying = session.status === 'in_progress' || session.status === 'reveal' || isScheduledTimeReached;
-    const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
+    applyRef.current = applyServerState;
+  }, [applyServerState]);
 
-    if (!questionData && isPlaying && questions.length > 0) {
-      const idx = session.current_question_index ?? 0;
-      if (idx >= questions.length) {
-        if (onQuizFinishedRef.current) {
-          onQuizFinishedRef.current([]);
-        }
-        return;
-      }
-      const q = questions[idx] || questions[0];
-      if (q) {
-        applyQuestionStarted({
-          qIndex: idx,
-          question: q.question,
-          options: parseOptions(q.options),
-          durationSec: session.question_duration_sec || q.durationSec || 20,
-          questionStartMs: Number(session.question_start_ms) || Date.now(),
-          totalQuestions: questions.length
-        });
-      }
-    }
-  }, [session, questionData, isScheduledTimeReached, studentQuestions, applyQuestionStarted]);
-
-  // Sync with database helper
+  // ---- single sync path: refetch authoritative state; stale responses dropped ----
   const syncWithDatabase = useCallback(async () => {
-    try {
+    const seq = ++syncSeqRef.current;
+    let state = await liveQuizService.getLiveState(session.id);
+
+    if (!state) {
+      // v3 engine not installed: degrade to a read-only view of the DB row.
       const fresh = await liveQuizService.getSessionById(session.id);
       if (!fresh) return;
-
-      if (fresh.status === 'finished') {
-        quizAudioService.setQuizFinished(true);
-        quizAudioService.stopBackgroundMusic();
-        if (onQuizFinishedRef.current) {
-          onQuizFinishedRef.current([]);
-        }
-        return;
-      }
-
-      if (fresh.status === 'reveal') {
-        const correctIdx = fresh.correct_answer_index;
-        if (typeof correctIdx === 'number') {
-          const q = fresh.quiz?.questions?.[fresh.current_question_index ?? 0];
-          applyQuestionReveal({
-            qIndex: fresh.current_question_index,
-            correctIndex: correctIdx,
-            explanation: q?.explanation
-          });
-        }
-        return;
-      }
-
-      const freshScheduledTime = fresh.scheduled_start_at || fresh.started_at;
-      const freshTimeReached = Boolean(freshScheduledTime && new Date(freshScheduledTime).getTime() <= Date.now());
-      const isFreshPlaying = fresh.status === 'in_progress' || freshTimeReached;
-
-      if (isFreshPlaying) {
-        const idx = fresh.current_question_index ?? 0;
-        const questions = studentQuestions.length > 0 ? studentQuestions : (fresh.quiz?.questions || session.quiz?.questions || []);
-        if (questions.length > 0 && idx >= questions.length) {
-          if (onQuizFinishedRef.current) {
-            onQuizFinishedRef.current([]);
-          }
-          return;
-        }
-
-        // Abandoned session protection: if on last question and time elapsed exceeds duration + 15s
-        if (questions.length > 0 && idx === questions.length - 1 && fresh.question_start_ms) {
-          const qDuration = fresh.question_duration_sec || questions[idx]?.durationSec || 20;
-          const elapsedSec = (Date.now() - Number(fresh.question_start_ms)) / 1000;
-          if (elapsedSec > qDuration + 15) {
-            quizAudioService.setQuizFinished(true);
-            quizAudioService.stopBackgroundMusic();
-            if (session.classroom_id) {
-              fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${session.id}/complete`, { method: 'POST' }).catch(() => {});
-            }
-            if (onQuizFinishedRef.current) {
-              onQuizFinishedRef.current([]);
-            }
-            return;
-          }
-        }
-
-        if (activeQIndexRef.current !== idx || !questionData) {
-          const q = questions[idx] || questions[0];
-          if (q) {
-            applyQuestionStarted({
-              qIndex: idx,
-              question: q.question,
-              options: parseOptions(q.options),
-              durationSec: fresh.question_duration_sec || q.durationSec || 20,
-              questionStartMs: Number(fresh.question_start_ms) || Date.now(),
-              totalQuestions: questions.length
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('[LiveQuizStudentPlay] sync error:', err);
+      const dur = fresh.question_duration_sec || 20;
+      const start = Number(fresh.question_start_ms) || Date.now();
+      state = {
+        server_now_ms: Date.now(),
+        status: fresh.status,
+        phase: fresh.status === 'reveal' ? 'reveal' : fresh.status === 'finished' ? 'finished' : 'active',
+        current_question_index: fresh.current_question_index ?? 0,
+        question_start_ms: start,
+        question_duration_sec: dur,
+        deadline_ms: start + dur * 1000,
+        total_questions: questionsRef.current.length,
+        eligible_count: 0,
+        answered_count: 0,
+        correct_index: fresh.correct_answer_index ?? null,
+        my_answer: null
+      };
     }
-  }, [session.id, session.quiz?.questions, questionData, applyQuestionStarted, applyQuestionReveal]);
 
-  // Active question safety fallback: if questions array is missing on session, fetch immediately
+    if (seq < appliedSeqRef.current) return; // a newer snapshot was already applied
+    appliedSeqRef.current = seq;
+    applyRef.current(state);
+  }, [session.id]);
+
+  // Re-sync when questions finish loading (snapshot may have arrived first)
   useEffect(() => {
-    if (!questionData || !session.quiz?.questions?.length) {
-      liveQuizService.getSessionById(session.id).then((fresh) => {
-        if (fresh?.quiz?.questions?.length) {
-          const idx = fresh.current_question_index ?? 0;
-          const q = fresh.quiz.questions[idx] || fresh.quiz.questions[0];
-          if (q) {
-            applyQuestionStarted({
-              qIndex: idx,
-              question: q.question,
-              options: parseOptions(q.options),
-              durationSec: fresh.question_duration_sec || q.durationSec || 20,
-              questionStartMs: Number(fresh.question_start_ms) || Date.now(),
-              totalQuestions: fresh.quiz.questions.length
-            });
-          }
-        }
-      }).catch(() => {});
+    if (studentQuestions.length > 0) {
+      syncWithDatabase();
     }
-  }, [session.id, questionData, session.quiz?.questions?.length, applyQuestionStarted]);
+  }, [studentQuestions.length, syncWithDatabase]);
 
-  // Check if answer was already submitted for current question (e.g. after refresh or late load)
+  // Running score (authoritative from DB), refreshed whenever the question changes
+  const currentQIdx = questionData?.qIndex;
   useEffect(() => {
-    if (!questionData || !user?.id) return;
-    let isCancelled = false;
-
-    liveQuizService.checkStudentExistingAnswer(session.id, questionData.qIndex, user.id)
-      .then((res) => {
-        if (isCancelled) return;
-        if (res.answered) {
-          setIsLocked(true);
-          if (typeof res.selectedOptionIndex === 'number') {
-            setSelectedIndex(res.selectedOptionIndex);
-          }
-          if (typeof res.pointsAwarded === 'number' && res.pointsAwarded > 0) {
-            setPointsEarned(res.pointsAwarded);
-          }
-        }
-      });
-
+    if (!user?.id) return;
+    let cancelled = false;
+    liveQuizService.getParticipants(session.id).then((ps) => {
+      if (cancelled) return;
+      const me = ps.find((p) => p.student_id === user.id);
+      if (me && typeof me.score === 'number') setTotalScore(me.score);
+    }).catch(() => {});
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
-  }, [questionData?.qIndex, session.id, user?.id]);
+  }, [session.id, user?.id, currentQIdx]);
 
-  // Connect to Supabase Realtime Channel: Broadcast + Postgres Changes
+  // ---- realtime: ONE channel, ONE listener; any change triggers an authoritative refetch ----
   useEffect(() => {
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
 
     channel
-      .on('broadcast', { event: 'question_started' }, (payload: any) => {
-        const data = payload?.payload;
-        if (data) {
-          applyQuestionStarted(data);
-        }
-      })
-      .on('broadcast', { event: 'question_reveal' }, (payload: any) => {
-        const rData = payload?.payload;
-        if (rData) {
-          applyQuestionReveal(rData);
-        }
-      })
-      .on('broadcast', { event: 'quiz_finished' }, (payload: any) => {
-        quizAudioService.setQuizFinished(true);
-        quizAudioService.stopBackgroundMusic();
-        if (onQuizFinishedRef.current) {
-          onQuizFinishedRef.current(payload?.payload?.results || []);
-        }
-      })
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'live_quiz_sessions',
-          filter: `id=eq.${session.id}`
-        },
-        (payload: any) => {
-          const updated = payload.new as Partial<LiveQuizSession>;
-          if (!updated) return;
-
-          if (updated.status === 'finished') {
-            quizAudioService.setQuizFinished(true);
-            quizAudioService.stopBackgroundMusic();
-            if (onQuizFinishedRef.current) {
-              onQuizFinishedRef.current([]);
-            }
-            return;
-          }
-
-          if (updated.status === 'reveal') {
-            const correctIdx = updated.correct_answer_index;
-            if (typeof correctIdx === 'number') {
-              const q = session.quiz?.questions?.[updated.current_question_index ?? 0];
-              applyQuestionReveal({
-                qIndex: updated.current_question_index,
-                correctIndex: correctIdx,
-                explanation: q?.explanation
-              });
-            }
-            return;
-          }
-
-          if (updated.status === 'in_progress') {
-            const newIdx = updated.current_question_index ?? 0;
-            const questions = session.quiz?.questions || [];
-            if (questions.length > 0 && newIdx >= questions.length) {
-              if (onQuizFinishedRef.current) {
-                onQuizFinishedRef.current([]);
-              }
-              return;
-            }
-            if (activeQIndexRef.current !== newIdx || !questionData) {
-              const q = questions[newIdx];
-              if (q) {
-                applyQuestionStarted({
-                  qIndex: newIdx,
-                  question: q.question,
-                  options: parseOptions(q.options),
-                  durationSec: updated.question_duration_sec || q.durationSec || 20,
-                  questionStartMs: Number(updated.question_start_ms) || Date.now(),
-                  totalQuestions: questions.length
-                });
-              }
-            }
-          }
+        { event: 'UPDATE', schema: 'public', table: 'live_quiz_sessions', filter: `id=eq.${session.id}` },
+        () => {
+          syncWithDatabase();
         }
       )
       .subscribe((status) => {
@@ -599,135 +389,109 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       });
 
     return () => {
-      channel.unsubscribe();
+      liveQuizService.removeRealtimeChannel(channel);
     };
-  }, [session.pin, session.id, session.quiz, syncWithDatabase, applyQuestionStarted, applyQuestionReveal]);
+  }, [session.pin, session.id, syncWithDatabase]);
 
-  // Tab visibility, focus, and periodic heartbeat sync
+  // ---- safety refetch (also the presence heartbeat): visibility, focus, 5s ----
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        syncWithDatabase();
-      }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncWithDatabase();
     };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-
-    // Heartbeat: poll every 3.5 seconds to ensure student never falls behind
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('online', onVisible);
     const heartbeat = setInterval(() => {
-      syncWithDatabase();
-    }, 3500);
-
+      if (document.visibilityState === 'visible') syncWithDatabase();
+    }, 5000);
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('online', onVisible);
       clearInterval(heartbeat);
     };
   }, [syncWithDatabase]);
 
-  // Trigger Local Answer Audio and Visual Feedback upon Reveal (Guarded against duplicates)
+  // ---- feedback audio/visual: driven by the SERVER-graded result ------------------
   useEffect(() => {
-    if (!revealData || !questionData) return;
-
+    if (!answerResult || !questionData) return;
     if (hasTriggeredFeedbackRef.current === questionData.qIndex) return;
     hasTriggeredFeedbackRef.current = questionData.qIndex;
 
-    const isCorrect = selectedIndex !== null && selectedIndex === revealData.correctIndex;
-    if (isCorrect) {
+    if (answerResult.isCorrect) {
       quizAudioService.playCorrect();
       setShowConfetti(true);
-    } else if (selectedIndex !== null) {
+    } else {
       quizAudioService.playIncorrect();
     }
-  }, [revealData, questionData, selectedIndex]);
+  }, [questionData, answerResult]);
 
-  // Question synchronized countdown timer
+  // ---- countdown: DISPLAY ONLY, using server-clock estimate -------------------------
+  const deadlineMs = questionData?.deadlineMs;
+  const countdownQIdx = questionData?.qIndex;
   useEffect(() => {
-    if (!questionData || revealData) return;
-
-    const timer = setInterval(() => {
-      const endsAt = questionData.questionEndsAtMs || (questionData.questionStartMs + questionData.durationSec * 1000);
-      const remainingMs = endsAt - Date.now();
-      const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+    if (!deadlineMs || countdownQIdx === undefined) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((deadlineMs - liveQuizService.getServerNowMs()) / 1000));
       setQuestionTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        setIsLocked(true);
-        clearInterval(timer);
-      }
-    }, 250);
-
-    return () => clearInterval(timer);
-  }, [questionData, revealData]);
-
-  // ==========================================================================
-  // AUTONOMOUS PROGRESSION (Zero Teacher Required for Scheduled Quizzes)
-  // ==========================================================================
-
-  // 1. Timer Expiry: Lock answering when question time ends and sync with server
-  useEffect(() => {
-    if (!questionData || revealData) return;
-    if (questionTimeLeft <= 0) {
-      setIsLocked(true);
-      // If reveal hasn't arrived via broadcast, sync with database
-      const timeout = setTimeout(() => {
+      if (remaining <= 0 && expirySyncedForRef.current !== countdownQIdx) {
+        // Ask the server what happened (it decides). One request per question.
+        expirySyncedForRef.current = countdownQIdx;
         syncWithDatabase();
-      }, 1000);
-      return () => clearTimeout(timeout);
-    }
-  }, [questionTimeLeft, questionData, revealData, syncWithDatabase]);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [deadlineMs, countdownQIdx, syncWithDatabase]);
 
-  // 2. Reveal Expiry Fallback: After reveal duration, ensure transition to next question via server state
+  // ---- after reveal, ask the server to move on at its reveal boundary (server decides) ----
   useEffect(() => {
-    if (!revealData || !questionData) return;
+    if (!revealData || !deadlineMs) return;
+    const REVEAL_MS = 3500;
+    const delay = Math.max(250, deadlineMs + REVEAL_MS - liveQuizService.getServerNowMs() + 200);
+    const t1 = setTimeout(() => syncWithDatabase(), delay);
+    const t2 = setTimeout(() => syncWithDatabase(), delay + 1500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [revealData, deadlineMs, syncWithDatabase]);
 
-    // Server advances after 3.5s reveal. If no event arrived after 4.5s, trigger authoritative sync
-    const fallbackSync = setTimeout(() => {
-      syncWithDatabase();
-    }, 4500);
-
-    return () => clearTimeout(fallbackSync);
-  }, [revealData, questionData, syncWithDatabase]);
-
-  // Total Quiz authoritative countdown timer
+  // ---- total quiz timer ------------------------------------------------------------
   useEffect(() => {
     if (!isTotalTimed) return;
-
     const interval = setInterval(() => {
       const expMs = getEffectiveExpirationMs();
       let remaining = 0;
       if (expMs) {
-        const remainingMs = expMs - Date.now();
-        remaining = Math.max(0, Math.ceil(remainingMs / 1000));
-      } else {
-        setTotalTimeLeft((prev) => {
-          remaining = Math.max(0, prev - 1);
-          return remaining;
-        });
+        remaining = Math.max(0, Math.ceil((expMs - liveQuizService.getServerNowMs()) / 1000));
       }
-
       setTotalTimeLeft(remaining);
-
       if (remaining <= 0) {
         setIsTotalTimeExpired(true);
         setIsLocked(true);
         clearInterval(interval);
       }
     }, 1000);
-
     return () => clearInterval(interval);
   }, [isTotalTimed, getEffectiveExpirationMs]);
 
+  // ---- answer submission --------------------------------------------------------------
   const handleSelectOption = async (displayIndex: number) => {
-    if (isLocked || revealData || !questionData || isTotalTimeExpired || questionTimeLeft <= 0) return;
+    // Guard: one in-flight submit, no double taps, no input after server-declared reveal.
+    if (submittingRef.current || isLocked || revealData || !questionData || isTotalTimeExpired) return;
 
     quizAudioService.playClick();
     quizAudioService.unlockAudio();
 
-    // Map display button index back to canonical question option index for 100% stable server scoring
+    // Canonical option index (original order) is the single representation sent and graded.
     const canonicalIndex = questionData.permutation?.[displayIndex] ?? displayIndex;
+    const submittedForIndex = questionData.qIndex;
 
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    setSubmitError(null);
     setSelectedDisplayIndex(displayIndex);
     setSelectedIndex(canonicalIndex);
     setIsLocked(true);
@@ -735,63 +499,54 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     try {
       const res = await liveQuizService.submitAnswer({
         session_id: session.id,
-        question_index: questionData.qIndex,
+        question_index: submittedForIndex,
         selected_option_index: canonicalIndex
       });
 
-      const pts = res.data?.points_awarded || 0;
-      setPointsEarned(pts);
-      if (typeof res.data?.current_score === 'number') {
-        setTotalScore(res.data.current_score);
-      } else if (pts > 0) {
-        setTotalScore((prev) => prev + pts);
-      }
+      if (!mountedRef.current) return;
 
-      // Notify host of response submission via realtime broadcast
-      const channel = liveQuizService.createRealtimeChannel(session.pin);
-      if (channel) {
-        channel.send({
-          type: 'broadcast',
-          event: 'student_answered',
-          payload: {
-            student_id: user?.id || (session as any)?.student_id || 'player_participant',
-            qIndex: questionData.qIndex,
-            selected_option_index: canonicalIndex
-          }
-        }).catch(() => {});
-
-        // If server auto-advanced because all participants answered, broadcast immediately
-        if (res.data?.advanced && typeof res.data?.next_question_index === 'number') {
-          const nextIdx = res.data.next_question_index;
-          const questions = studentQuestions.length > 0 ? studentQuestions : (session.quiz?.questions || []);
-          const nextQ = questions[nextIdx];
-          if (nextQ) {
-            const nextDur = session.question_duration_sec || nextQ.durationSec || 20;
-            const nextStartMs = Date.now();
-            channel.send({
-              type: 'broadcast',
-              event: 'question_started',
-              payload: {
-                qIndex: nextIdx,
-                question: nextQ.question,
-                options: parseOptions(nextQ.options),
-                durationSec: nextDur,
-                questionStartMs: nextStartMs,
-                questionEndsAtMs: nextStartMs + (nextDur * 1000),
-                totalQuestions: questions.length
-              }
-            }).catch(() => {});
-          }
-        } else if (res.data?.is_finished) {
-          channel.send({
-            type: 'broadcast',
-            event: 'quiz_finished',
-            payload: { session_id: session.id }
-          }).catch(() => {});
+      if (res.data) {
+        // The question may have changed while the request was in flight; only paint if still current.
+        if (activeQIndexRef.current === submittedForIndex) {
+          setAnswerResult({ isCorrect: res.data.is_correct, points: res.data.points_awarded });
+          setPointsEarned(res.data.points_awarded);
         }
+        if (typeof res.data.current_score === 'number') {
+          setTotalScore(res.data.current_score);
+        }
+        // Server may have advanced / finished (all answered): refetch authoritative state now.
+        if (res.data.advanced || res.data.is_finished || res.data.all_answered) {
+          await syncWithDatabase();
+        }
+      } else {
+        // Real, typed failure. Never disguised as TIME UP; never an ungraded write.
+        if (activeQIndexRef.current === submittedForIndex) {
+          setSelectedIndex(null);
+          setSelectedDisplayIndex(null);
+          setIsLocked(false);
+        }
+        if (res.code === 'LATE') {
+          setSubmitError('Your answer reached the server after time ran out.');
+        } else if (res.code === 'QUESTION_MISMATCH' || res.code === 'NOT_ACTIVE') {
+          setSubmitError('That question has already moved on.');
+        } else if (res.code === 'ENGINE_NOT_INSTALLED') {
+          setSubmitError('Live quiz server update is not installed yet. Please tell your teacher.');
+        } else {
+          setSubmitError('Could not submit your answer. Please tap an option again.');
+        }
+        await syncWithDatabase();
       }
     } catch (err) {
       console.error('Error submitting answer:', err);
+      if (mountedRef.current && activeQIndexRef.current === submittedForIndex) {
+        setSelectedIndex(null);
+        setSelectedDisplayIndex(null);
+        setIsLocked(false);
+        setSubmitError('Network problem. Please tap an option again.');
+      }
+    } finally {
+      submittingRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
     }
   };
 
@@ -840,8 +595,8 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     );
   }
 
-  const isSelectedCorrect = revealData && selectedIndex !== null && selectedIndex === revealData.correctIndex;
-  const isSelectedIncorrect = revealData && selectedIndex !== null && selectedIndex !== revealData.correctIndex;
+  const isSelectedCorrect = Boolean(answerResult?.isCorrect);
+  const isSelectedIncorrect = Boolean(answerResult && !answerResult.isCorrect);
 
   return (
     <div className="min-h-[85vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden border border-sky-500/20 flex flex-col justify-between space-y-6 relative">
@@ -930,7 +685,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       </div>
 
       {/* Reveal Feedback Banner if active */}
-      {revealData && (
+      {(revealData || answerResult) && (
         <div className={`p-4 rounded-2xl text-center font-black animate-in zoom-in-95 duration-200 ${
           isSelectedCorrect
             ? 'bg-emerald-500/25 border-2 border-emerald-400 text-emerald-300 shadow-xl shadow-emerald-500/20 animate-correct-bounce'
@@ -953,7 +708,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
               <span>Time's Up — No Answer Selected</span>
             )}
           </div>
-          {revealData.explanation && (
+          {revealData?.explanation && (
             <p className="text-xs font-medium text-slate-200 mt-1.5 leading-relaxed">{revealData.explanation}</p>
           )}
         </div>
@@ -989,7 +744,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
             <button
               key={displayIdx}
               type="button"
-              disabled={isLocked || isRevealed || isTotalTimeExpired || questionTimeLeft <= 0}
+              disabled={isLocked || isSubmitting || isRevealed || isTotalTimeExpired}
               onClick={() => handleSelectOption(displayIdx)}
               className={`p-5 rounded-3xl font-black text-left flex items-center justify-between transition-all duration-200 cursor-pointer shadow-lg ${cardStyling}`}
             >
@@ -1032,13 +787,17 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
       {/* Footer Lock / Progress Status */}
       <div className="text-center text-xs text-slate-400 font-bold">
-        {questionTimeLeft <= 0 && !revealData ? (
-          <span className="text-amber-300 font-black animate-pulse">
-            ⏳ Time's up! Revealing correct answer...
-          </span>
+        {isSubmitting ? (
+          <span className="text-sky-300 font-black animate-pulse">Submitting…</span>
+        ) : submitError && !revealData ? (
+          <span className="text-rose-300 font-black">{submitError}</span>
         ) : isLocked && !revealData ? (
           <span className="text-sky-300 font-black animate-pulse">
-            ✓ Answer locked in! Revealing results when timer expires...
+            ✓ Answer recorded! Waiting for the other players...
+          </span>
+        ) : questionTimeLeft <= 0 && !revealData ? (
+          <span className="text-amber-300 font-black animate-pulse">
+            ⏳ Checking time with server...
           </span>
         ) : !revealData ? (
           <span>Select an answer card above before the timer expires</span>

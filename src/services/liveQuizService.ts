@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import {
   LiveQuiz,
   LiveQuizSession,
+  LiveQuizServerState,
   LiveQuizParticipant,
   LiveQuizResult,
   LiveQuizQuestion,
@@ -1321,88 +1322,6 @@ class LiveQuizService {
   }
 
   /**
-   * Computes the deterministic timeline state of a Live Quiz session based on start timestamp
-   * and question durations (with 3.5s reveal per question).
-   */
-  computeSessionTimeline(
-    session: LiveQuizSession,
-    questions: LiveQuizQuestion[],
-    nowMs: number = Date.now()
-  ): {
-    status: 'scheduled' | 'in_progress' | 'reveal' | 'finished';
-    current_question_index: number;
-    question_start_ms: number;
-    question_duration_sec: number;
-    correct_answer_index: number | null;
-    ended_at?: string;
-  } {
-    const startedAt = session.started_at || session.scheduled_start_at;
-    const startMs = startedAt ? new Date(startedAt).getTime() : nowMs;
-
-    if (nowMs < startMs) {
-      return {
-        status: 'scheduled',
-        current_question_index: 0,
-        question_start_ms: startMs,
-        question_duration_sec: session.question_duration_sec || 20,
-        correct_answer_index: null
-      };
-    }
-
-    const sortedQuestions = Array.isArray(questions) ? questions : [];
-    if (sortedQuestions.length === 0) {
-      return {
-        status: (session.status as any) || 'in_progress',
-        current_question_index: session.current_question_index ?? 0,
-        question_start_ms: session.question_start_ms || startMs,
-        question_duration_sec: session.question_duration_sec || 20,
-        correct_answer_index: session.correct_answer_index ?? null
-      };
-    }
-
-    const REVEAL_DURATION_MS = 3500;
-    let cumulativeMs = 0;
-
-    for (let i = 0; i < sortedQuestions.length; i++) {
-      const q = sortedQuestions[i];
-      const durSec = q.durationSec || session.question_duration_sec || 20;
-      const durMs = durSec * 1000;
-      const qStartMs = startMs + cumulativeMs;
-      const qEndMs = qStartMs + durMs;
-      const revealEndMs = qEndMs + REVEAL_DURATION_MS;
-
-      if (nowMs < qEndMs) {
-        return {
-          status: 'in_progress',
-          current_question_index: i,
-          question_start_ms: qStartMs,
-          question_duration_sec: durSec,
-          correct_answer_index: null
-        };
-      } else if (nowMs < revealEndMs) {
-        return {
-          status: 'reveal',
-          current_question_index: i,
-          question_start_ms: qStartMs,
-          question_duration_sec: durSec,
-          correct_answer_index: typeof q.correctIndex === 'number' ? q.correctIndex : 0
-        };
-      }
-
-      cumulativeMs += durMs + REVEAL_DURATION_MS;
-    }
-
-    return {
-      status: 'finished',
-      current_question_index: sortedQuestions.length,
-      question_start_ms: startMs + cumulativeMs,
-      question_duration_sec: 20,
-      correct_answer_index: null,
-      ended_at: new Date(startMs + cumulativeMs).toISOString()
-    };
-  }
-
-  /**
    * Retrieves active session by ID, reconciling with authoritative timeline
    */
   async getSessionById(sessionId: string): Promise<LiveQuizSession | null> {
@@ -1447,42 +1366,20 @@ class LiveQuizService {
           question_duration_sec: q0Dur,
           correct_answer_index: null
         };
-      } else if (
-        sessionObj.status === 'in_progress' ||
-        sessionObj.status === 'reveal'
-      ) {
-        const computed = this.computeSessionTimeline(sessionObj, quiz?.questions || [], now);
-        const hasDiverged =
-          computed.status !== sessionObj.status ||
-          computed.current_question_index !== sessionObj.current_question_index;
-
-        sessionObj = {
-          ...sessionObj,
-          status: computed.status,
-          current_question_index: computed.current_question_index,
-          question_start_ms: computed.question_start_ms,
-          question_duration_sec: computed.question_duration_sec,
-          correct_answer_index: computed.correct_answer_index
-        };
-
-        // Asynchronously update divergence to database
-        if (hasDiverged) {
-          const updatePayload: any = {
-            status: computed.status,
-            current_question_index: computed.current_question_index,
-            question_start_ms: computed.question_start_ms,
-            question_duration_sec: computed.question_duration_sec,
-            correct_answer_index: computed.correct_answer_index
+      } else if (sessionObj.status === 'in_progress' || sessionObj.status === 'reveal') {
+        // Authoritative server snapshot (server clock + lazy expiry). READ-ONLY for the client:
+        // the previous started_at timeline recompute + fire-and-forget write-back reverted
+        // early advances and fought with the RPC. It has been removed.
+        const state = await this.getLiveState(sessionId);
+        if (state) {
+          sessionObj = {
+            ...sessionObj,
+            status: state.status as any,
+            current_question_index: state.current_question_index,
+            question_start_ms: state.question_start_ms,
+            question_duration_sec: state.question_duration_sec,
+            correct_answer_index: state.correct_index ?? null
           };
-          if (computed.status === 'finished') {
-            updatePayload.ended_at = computed.ended_at || new Date().toISOString();
-          }
-          Promise.resolve(
-            supabase
-              .from('live_quiz_sessions')
-              .update(updatePayload)
-              .eq('id', sessionId)
-          ).catch(() => {});
         }
       }
 
@@ -1656,35 +1553,20 @@ class LiveQuizService {
   // ==========================================================================
 
   /**
-   * Teacher starts question
+   * DEPRECATED no-op. Question start/advance is owned by the server state machine
+   * (`advance_live_quiz_question` / `submit_live_quiz_answer`). The previous version wrote the
+   * TEACHER'S Date.now() into question_start_ms, causing clock-skew false TIME UPs and stale
+   * overwrites of the RPC's advance.
    */
-  async startQuestion(payload: {
+  async startQuestion(_payload: {
     session_id: string;
     question_index: number;
     duration_sec: number;
     correct_answer_index?: number;
   }): Promise<{ error?: string }> {
-    if (!supabase) return { error: 'Supabase is not configured' };
-
-    try {
-      const startMs = Date.now();
-      const { error } = await supabase
-        .from('live_quiz_sessions')
-        .update({
-          status: 'in_progress',
-          current_question_index: payload.question_index,
-          question_start_ms: startMs,
-          question_duration_sec: payload.duration_sec,
-          correct_answer_index: null // Keep correct answer hidden until reveal phase!
-        })
-        .eq('id', payload.session_id);
-
-      if (error) throw error;
-      return {};
-    } catch (err: any) {
-      return { error: err.message || 'Failed to advance question' };
-    }
+    return {};
   }
+
 
   /**
    * Student submits an answer to the active question.
@@ -1695,138 +1577,121 @@ class LiveQuizService {
     session_id: string;
     question_index: number;
     selected_option_index: number;
-  }): Promise<{ data?: { is_correct: boolean; points_awarded: number; current_score?: number; all_answered?: boolean; advanced?: boolean; next_question_index?: number; is_finished?: boolean }; error?: string }> {
-    if (!supabase) return { error: 'Supabase is not configured' };
+  }): Promise<{
+    data?: {
+      is_correct: boolean;
+      points_awarded: number;
+      current_score?: number;
+      all_answered?: boolean;
+      advanced?: boolean;
+      next_question_index?: number;
+      is_finished?: boolean;
+      duplicate?: boolean;
+    };
+    error?: string;
+    code?: 'LATE' | 'NOT_ACTIVE' | 'QUESTION_MISMATCH' | 'RPC_ERROR' | 'ENGINE_NOT_INSTALLED' | 'AUTH';
+    current_question_index?: number;
+  }> {
+    if (!supabase) return { error: 'Supabase is not configured', code: 'RPC_ERROR' };
     const userId = await this.getUserId();
-    if (!userId) return { error: 'Authentication required' };
+    if (!userId) return { error: 'Authentication required', code: 'AUTH' };
 
-    try {
-      // 0. Host Check: Only prevent host submission if multiple other students are participating
-      const { data: session } = await supabase
-        .from('live_quiz_sessions')
-        .select('teacher_id')
-        .eq('id', payload.session_id)
-        .maybeSingle();
+    // Single authoritative path: the server RPC validates (server clock), grades,
+    // persists once, scores, and advances atomically. There is NO client-side
+    // fallback write: an ungraded fallback was the root cause of correct answers
+    // being stored as incorrect.
+    const { data: rpcData, error: rpcError } = await supabase.rpc('submit_live_quiz_answer', {
+      p_session_id: payload.session_id,
+      p_question_index: payload.question_index,
+      p_selected_option_index: payload.selected_option_index
+    });
 
-      if (session?.teacher_id && session.teacher_id === userId) {
-        const { count: otherStudents } = await supabase
-          .from('live_quiz_participants')
-          .select('*', { count: 'exact', head: true })
-          .eq('session_id', payload.session_id)
-          .neq('student_id', userId);
+    if (rpcError) {
+      const msg = rpcError.message || 'Failed to submit answer';
+      console.error('[LiveQuizService] submit_live_quiz_answer RPC error:', rpcError);
+      const missing = (rpcError as any).code === 'PGRST202' || /could not find the function/i.test(msg);
+      return { error: msg, code: missing ? 'ENGINE_NOT_INSTALLED' : 'RPC_ERROR' };
+    }
+    if (!rpcData) return { error: 'Empty response from server', code: 'RPC_ERROR' };
 
-        if (otherStudents && otherStudents > 0) {
-          return { error: 'Host teacher cannot submit student answers during multiplayer games' };
-        }
-      }
-
-      // 1. Primary: Secure Server-Side Stored Procedure
-      const { data: rpcData, error: rpcError } = await supabase.rpc('submit_live_quiz_answer', {
-        p_session_id: payload.session_id,
-        p_question_index: payload.question_index,
-        p_selected_option_index: payload.selected_option_index
-      });
-
-      if (!rpcError && rpcData) {
-        return {
-          data: {
-            is_correct: Boolean(rpcData.is_correct),
-            points_awarded: Number(rpcData.points_awarded || 0),
-            current_score: Number(rpcData.current_score || 0),
-            all_answered: Boolean(rpcData.all_answered),
-            advanced: Boolean(rpcData.advanced),
-            next_question_index: typeof rpcData.next_question_index === 'number' ? rpcData.next_question_index : undefined,
-            is_finished: Boolean(rpcData.is_finished)
-          }
-        };
-      }
-
-      // 2. Direct fallback (if stored procedure is not yet applied in local emulator)
-      const serverSubmitMs = Date.now();
-      const { error: ansError } = await supabase
-        .from('live_quiz_answers')
-        .upsert(
-          {
-            session_id: payload.session_id,
-            question_index: payload.question_index,
-            student_id: userId,
-            selected_option_index: payload.selected_option_index,
-            server_submit_ms: serverSubmitMs
-          },
-          { onConflict: 'session_id,question_index,student_id' }
-        );
-
-      if (ansError) throw ansError;
-
-      // Fallback: check if all participants have answered to trigger atomic advance
-      let allAnswered = false;
-      let advanced = false;
-      let isFinished = false;
-      let nextQIndex = payload.question_index;
-
-      try {
-        const { count: partCount } = await supabase
-          .from('live_quiz_participants')
-          .select('*', { count: 'exact', head: true })
-          .eq('session_id', payload.session_id);
-
-        const { count: ansCount } = await supabase
-          .from('live_quiz_answers')
-          .select('*', { count: 'exact', head: true })
-          .eq('session_id', payload.session_id)
-          .eq('question_index', payload.question_index);
-
-        if (partCount && ansCount && ansCount >= partCount) {
-          allAnswered = true;
-          const { data: sess } = await supabase
-            .from('live_quiz_sessions')
-            .select('quiz_id, current_question_index, status')
-            .eq('id', payload.session_id)
-            .single();
-
-          if (sess && sess.current_question_index === payload.question_index) {
-            const { count: totalQuestions } = await supabase
-              .from('live_quiz_questions')
-              .select('*', { count: 'exact', head: true })
-              .eq('quiz_id', sess.quiz_id);
-
-            if (totalQuestions && payload.question_index + 1 >= totalQuestions) {
-              isFinished = true;
-              await this.finishQuiz(payload.session_id);
-            } else {
-              advanced = true;
-              nextQIndex = payload.question_index + 1;
-              await supabase
-                .from('live_quiz_sessions')
-                .update({
-                  current_question_index: nextQIndex,
-                  question_start_ms: Date.now(),
-                  status: 'in_progress',
-                  correct_answer_index: null
-                })
-                .eq('id', payload.session_id);
-            }
-          }
-        }
-      } catch (checkErr) {
-        console.warn('[LiveQuizService] fallback advance check notice:', checkErr);
-      }
-
+    // Typed rejections from the v3 engine (ok === false)
+    if (rpcData.ok === false) {
       return {
-        data: {
-          is_correct: false,
-          points_awarded: 0,
-          all_answered: allAnswered,
-          advanced,
-          next_question_index: nextQIndex,
-          is_finished: isFinished
-        }
+        error: rpcData.code || 'REJECTED',
+        code: rpcData.code,
+        current_question_index:
+          typeof rpcData.current_question_index === 'number' ? rpcData.current_question_index : undefined
       };
-    } catch (err: any) {
-      console.error('[LiveQuizService] submitAnswer error:', err);
-      return { error: err.message || 'Failed to submit answer' };
+    }
+
+    return {
+      data: {
+        is_correct: Boolean(rpcData.is_correct),
+        points_awarded: Number(rpcData.points_awarded || 0),
+        current_score: Number(rpcData.current_score || 0),
+        all_answered: Boolean(rpcData.all_answered),
+        advanced: Boolean(rpcData.advanced),
+        next_question_index:
+          typeof rpcData.next_question_index === 'number' ? rpcData.next_question_index : undefined,
+        is_finished: Boolean(rpcData.is_finished),
+        duplicate: Boolean(rpcData.duplicate)
+      }
+    };
+  }
+
+  /**
+   * Authoritative server snapshot (server clock, index, phase, deadline). Also acts as the
+   * participant heartbeat and lazily applies server-side expiry / all-answered advancement
+   * (no teacher browser required). Returns null if the v3 engine is not installed.
+   */
+  async getLiveState(sessionId: string): Promise<LiveQuizServerState | null> {
+    if (!supabase || !sessionId) return null;
+    try {
+      const t0 = Date.now();
+      const { data, error } = await supabase.rpc('get_live_quiz_state', { p_session_id: sessionId });
+      const t1 = Date.now();
+      if (error || !data) return null;
+      const serverNow = Number(data.server_now_ms);
+      // Offset estimate: server time at mid-flight minus local time at mid-flight.
+      const offset = Number.isFinite(serverNow) ? serverNow - Math.round((t0 + t1) / 2) : 0;
+      this.serverClockOffsetMs = offset;
+      return { ...data, client_offset_ms: offset } as LiveQuizServerState;
+    } catch {
+      return null;
     }
   }
+
+  /** Server time estimate (ms) for DISPLAY purposes only. */
+  serverClockOffsetMs = 0;
+  getServerNowMs(): number {
+    return Date.now() + this.serverClockOffsetMs;
+  }
+
+  /**
+   * Compare-and-swap advance. Host: forced skip. Others: only succeeds if the server
+   * itself considers the question complete. Concurrent calls yield exactly one transition.
+   */
+  async advanceQuestion(
+    sessionId: string,
+    expectedIndex: number
+  ): Promise<{ advanced: boolean; finished: boolean; reason?: string; next_question_index?: number }> {
+    if (!supabase) return { advanced: false, finished: false, reason: 'no_supabase' };
+    const { data, error } = await supabase.rpc('advance_live_quiz_question', {
+      p_session_id: sessionId,
+      p_expected_index: expectedIndex
+    });
+    if (error || !data) {
+      console.error('[LiveQuizService] advance_live_quiz_question error:', error);
+      return { advanced: false, finished: false, reason: 'rpc_error' };
+    }
+    return {
+      advanced: Boolean(data.advanced),
+      finished: Boolean(data.finished),
+      reason: data.reason,
+      next_question_index: data.next_question_index
+    };
+  }
+
 
   /**
    * Teacher triggers answer reveal
@@ -2028,6 +1893,15 @@ class LiveQuizService {
   /**
    * Connects to a Supabase Realtime channel for a Live Quiz session PIN
    */
+  removeRealtimeChannel(channel: RealtimeChannel | null | undefined): void {
+    if (!supabase || !channel) return;
+    try {
+      supabase.removeChannel(channel);
+    } catch {
+      try { channel.unsubscribe(); } catch {}
+    }
+  }
+
   createRealtimeChannel(pin: string): RealtimeChannel | null {
     if (!supabase || !pin) return null;
     const cleanPin = pin.trim();

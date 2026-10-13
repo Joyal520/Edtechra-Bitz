@@ -553,7 +553,7 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
             .from('live_quiz_questions')
             .select('*')
             .eq('quiz_id', session.quiz_id)
-            .order('order_index', { ascending: true });
+            .order('question_index', { ascending: true });
           if (qRows && qRows.length > 0) {
             questions = qRows;
           }
@@ -634,6 +634,12 @@ async function syncActiveLiveQuizSessions(supabaseClient) {
       // 2. Active Session Timeline (in_progress or reveal):
       if (session.started_at && (session.status === 'in_progress' || session.status === 'reveal')) {
         const computed = computeLiveQuizTimeline(session, questions, now);
+
+        // Strict Guard: Never roll back current_question_index if the database has already been
+        // advanced forward (e.g. by RPC auto-advance when all students answered early)!
+        if (computed.current_question_index < session.current_question_index && session.status === 'in_progress') {
+          continue;
+        }
 
         const statusChanged = session.status !== computed.status;
         const indexChanged = session.current_question_index !== computed.current_question_index;

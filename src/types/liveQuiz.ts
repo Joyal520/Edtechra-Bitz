@@ -47,6 +47,26 @@ export interface LiveQuiz {
   } | null;
 }
 
+/** Authoritative snapshot returned by the `get_live_quiz_state` RPC (server clock). */
+export interface LiveQuizServerState {
+  server_now_ms: number;
+  status: string;
+  /** 'active' | 'reveal' (deadline passed, advance pending) | 'finished' | status name */
+  phase: string;
+  current_question_index: number;
+  question_start_ms: number;
+  question_duration_sec: number;
+  deadline_ms: number;
+  total_questions: number;
+  eligible_count: number;
+  answered_count: number;
+  /** Only present once the deadline has passed (reveal phase). */
+  correct_index?: number | null;
+  my_answer?: { selected_option_index: number; is_correct: boolean; points_awarded: number } | null;
+  /** Local estimate of (server clock - client clock), for DISPLAY only. */
+  client_offset_ms?: number;
+}
+
 export interface LiveQuizSession {
   id: string;
   classroom_id: string;

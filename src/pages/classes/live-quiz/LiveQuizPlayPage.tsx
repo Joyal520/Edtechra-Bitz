@@ -5,6 +5,7 @@ import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 import { LiveQuizStudentPlay } from '@/components/classes/live-quiz/LiveQuizStudentPlay';
 import { LiveQuizPodium } from '@/components/classes/live-quiz/LiveQuizPodium';
+import { quizAudioService } from '@/services/quizAudioService';
 
 export const LiveQuizPlayPage: React.FC = () => {
   const { classroomId, sessionId } = useParams<{ classroomId: string; sessionId: string }>();
@@ -17,6 +18,14 @@ export const LiveQuizPlayPage: React.FC = () => {
   const [loading, setLoading] = useState(!initialSession);
   const [isFinished, setIsFinished] = useState(false);
   const [finalResults, setFinalResults] = useState<LiveQuizResult[]>([]);
+
+  // Page-level safety cleanup: always stop BGM and effects when leaving the play route
+  useEffect(() => {
+    return () => {
+      quizAudioService.stopBackgroundMusic();
+      quizAudioService.stopActiveEffects();
+    };
+  }, []);
 
   useEffect(() => {
     if (sessionId) {
