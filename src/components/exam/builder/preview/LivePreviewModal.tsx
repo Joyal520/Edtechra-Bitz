@@ -139,16 +139,23 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
     return flattenedQuestions.some(
       (q) =>
         Boolean((q.question as any).standardType) ||
-        ['correct_wrong', 'cloze', 'find_mistake', 'controlled_answer'].includes(
+        ['correct_wrong', 'cloze', 'cloze_passage', 'find_mistake', 'controlled_answer'].includes(
           (q.question as any).type
         )
     );
   }, [liveAssessment, flattenedQuestions]);
 
-  const handleSelectAnswer = (qId: string, value: any) => {
+  const handleSelectAnswer = (qIdOrMap: string | Record<string, any>, value?: any) => {
+    if (typeof qIdOrMap === 'object' && qIdOrMap !== null) {
+      setMockAnswers((prev) => ({
+        ...prev,
+        ...qIdOrMap
+      }));
+      return;
+    }
     setMockAnswers((prev) => ({
       ...prev,
-      [qId]: value
+      [qIdOrMap]: value
     }));
   };
 
@@ -436,8 +443,16 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 answeredCount={answeredCount}
                 unansweredCount={Math.max(0, totalQuestions - answeredCount)}
                 markedCount={flaggedIds.size}
-                onAnswerChange={(val) => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, val)}
                 onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
+                onAnswerChange={(val, targetQId) => {
+                  if (targetQId) {
+                    handleSelectAnswer(targetQId, val);
+                  } else if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
+                    handleSelectAnswer(val);
+                  } else if (currentQItem?.question?.id) {
+                    handleSelectAnswer(currentQItem.question.id, val);
+                  }
+                }}
                 onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
                 onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
                 onSelectIndex={(idx) => setCurrentIndex(idx)}

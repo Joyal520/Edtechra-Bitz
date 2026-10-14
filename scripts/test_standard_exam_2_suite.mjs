@@ -216,6 +216,90 @@ async function runSuite() {
   assert(publishSrc.includes('SimplePublishModalProps'), 'SimplePublishModal accepts totalQuestions and totalMarks props');
 
   // --------------------------------------------------------------------------
+  // 9. ACCEPTANCE TESTS: CLOZE (BUG 1 & 2) & MATCHING (BUG 4) & ROUTING (BUG 3)
+  // --------------------------------------------------------------------------
+  console.log('\n--- 9. Acceptance Tests: Cloze Dropdown Options & Single Continuous Passage ---');
+
+  const clozeRendererPath = path.join(rootDir, 'src/components/exam/student/standard/ClozeDropdownRenderer.tsx');
+  const clozeRendererSrc = fs.readFileSync(clozeRendererPath, 'utf-8');
+  assert(clozeRendererSrc.includes('ClozeBlankDefinition'), 'ClozeDropdownRenderer defines ClozeBlankDefinition');
+  assert(clozeRendererSrc.includes('blankRegex'), 'ClozeDropdownRenderer uses blankRegex for continuous passage embedding');
+  assert(clozeRendererSrc.includes('matchedBlank?.options'), 'Each dropdown strictly uses matchedBlank.options instead of sharing options');
+
+  // Acceptance Test Data for Cloze
+  const testClozeQuestions = [
+    { id: 'cloze_1', type: 'cloze', blankId: 'blank_1', options: ['entered', 'enter', 'enters', 'entering'], correct_answer: 'entered', marks: 2 },
+    { id: 'cloze_2', type: 'cloze', blankId: 'blank_2', options: ['was showing', 'shows', 'has shown', 'show'], correct_answer: 'was showing', marks: 2 },
+    { id: 'cloze_3', type: 'cloze', blankId: 'blank_3', options: ['saw', 'see', 'seen', 'seeing'], correct_answer: 'saw', marks: 2 },
+    { id: 'cloze_4', type: 'cloze', blankId: 'blank_4', options: ['was', 'were', 'are', 'have'], correct_answer: 'was', marks: 2 },
+    { id: 'cloze_5', type: 'cloze', blankId: 'blank_5', options: ['should', 'could', 'might', 'would'], correct_answer: 'should', marks: 2 }
+  ];
+
+  const studentClozeAnswers = {
+    blank_1: 'entered',
+    blank_2: 'was showing',
+    blank_3: 'saw',
+    blank_4: 'was',
+    blank_5: 'should',
+    cloze_1: 'entered',
+    cloze_2: 'was showing',
+    cloze_3: 'saw',
+    cloze_4: 'was',
+    cloze_5: 'should'
+  };
+
+  const { evaluateDeterministicQuestion } = await import('../server/hybridGradingService.mjs');
+
+  let totalClozeScore = 0;
+  testClozeQuestions.forEach((q) => {
+    const res = evaluateDeterministicQuestion(q, studentClozeAnswers[q.id]);
+    assert(res.is_correct, `Cloze question ${q.id} correctly evaluated`);
+    assert(res.score === 2, `Cloze question ${q.id} awarded 2 marks`);
+    totalClozeScore += res.score;
+  });
+  assert(totalClozeScore === 10, 'Cloze section scores exactly 10 marks total');
+
+  console.log('\n--- 10. Acceptance Tests: Matching All 5 Pairs in 1 Activity ---');
+
+  const matchRendererPath = path.join(rootDir, 'src/components/exam/student/standard/MatchRenderer.tsx');
+  const matchRendererSrc = fs.readFileSync(matchRendererPath, 'utf-8');
+  assert(matchRendererSrc.includes('Column A (Terms)'), 'MatchRenderer renders Column A');
+  assert(matchRendererSrc.includes('Column B (Matches)'), 'MatchRenderer renders Column B');
+  assert(matchRendererSrc.includes('rightOptions'), 'MatchRenderer provides all right choices together');
+
+  // Acceptance Test Data for Matching
+  const testMatchingPairs = [
+    { id: 'match_1', type: 'matching', left: 'write', right: 'wrote', correct_answer: 'wrote', marks: 2 },
+    { id: 'match_2', type: 'matching', left: 'begin', right: 'began', correct_answer: 'began', marks: 2 },
+    { id: 'match_3', type: 'matching', left: 'see', right: 'saw', correct_answer: 'saw', marks: 2 },
+    { id: 'match_4', type: 'matching', left: 'take', right: 'took', correct_answer: 'took', marks: 2 },
+    { id: 'match_5', type: 'matching', left: 'choose', right: 'chose', correct_answer: 'chose', marks: 2 }
+  ];
+
+  const studentMatchingAnswers = {
+    match_1: 'wrote',
+    match_2: 'began',
+    match_3: 'saw',
+    match_4: 'took',
+    match_5: 'chose'
+  };
+
+  let totalMatchingScore = 0;
+  testMatchingPairs.forEach((p) => {
+    const res = evaluateDeterministicQuestion(p, studentMatchingAnswers[p.id]);
+    assert(res.is_correct, `Matching pair ${p.id} (${p.left}->${p.right}) correctly evaluated`);
+    assert(res.score === 2, `Matching pair ${p.id} awarded 2 marks`);
+    totalMatchingScore += res.score;
+  });
+  assert(totalMatchingScore === 10, 'Matching section scores exactly 10 marks total');
+
+  console.log('\n--- 11. Acceptance Tests: Title "The Simple Past" & Question Not Found Prevention ---');
+
+  // Verify ExamSession doesn't use titleStr.includes('simple') to misclassify topics as simple exam template
+  assert(!sessionSrc.includes("titleStr.includes('simple')"), 'ExamSession avoids false positive on titles like "The Simple Past"');
+  assert(!previewSrc.includes("titleStr.includes('simple')"), 'LivePreviewModal avoids false positive on titles like "The Simple Past"');
+
+  // --------------------------------------------------------------------------
   // FINAL REPORT
   // --------------------------------------------------------------------------
   console.log('\n=================================================================');

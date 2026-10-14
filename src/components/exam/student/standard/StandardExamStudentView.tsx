@@ -2,11 +2,12 @@
 // EDTECHRA STANDARD EXAM 2.0: STUDENT VIEWPORT
 // Mobile-First, Controlled 100-Mark Assessment System (40 Questions across 7 Sections)
 // Progressive Difficulty:
-// A. MCQ -> B. Matching -> C. Correct/Wrong -> D. Cloze -> E. Find Mistake ->
-// F. Controlled Answer -> G. Reorder Sentence
+// A. MCQ (10 Qs) -> B. Matching (1 Activity, 5 Pairs) -> C. Correct/Wrong (5 Qs) ->
+// D. Cloze (1 Passage, 5 Blanks) -> E. Find Mistake (5 Qs) ->
+// F. Controlled Answer (5 Qs) -> G. Reorder Sentence (5 Qs)
 // ============================================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,9 +23,9 @@ import { CanonicalExamV1 } from '../../shared/ExamSchema';
 import { FlattenedExamQuestion } from '../../shared/scoringUtilities';
 import { formatTime, SyncState } from '../ExamHeader';
 import { ChoiceRenderer } from './ChoiceRenderer';
-import { MatchRenderer } from './MatchRenderer';
+import { MatchRenderer, MatchingPairItem } from './MatchRenderer';
 import { BinaryChoiceRenderer } from './BinaryChoiceRenderer';
-import { ClozeDropdownRenderer } from './ClozeDropdownRenderer';
+import { ClozeDropdownRenderer, ClozeBlankDefinition } from './ClozeDropdownRenderer';
 import { ErrorTokenRenderer } from './ErrorTokenRenderer';
 import { ControlledInputRenderer } from './ControlledInputRenderer';
 import { SentenceBuilderRenderer } from './SentenceBuilderRenderer';
@@ -39,9 +40,9 @@ export interface StandardExamStudentViewProps {
   timeRemainingSeconds: number;
   syncState?: SyncState;
   answeredCount: number;
-  unansweredCount: number;
+  unansweredCount?: number;
   markedCount: number;
-  onAnswerChange: (val: any) => void;
+  onAnswerChange: (val: any, targetQId?: string) => void;
   onClearAnswer: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -72,9 +73,9 @@ export function resolveStandardType(
   const q = item.question as any;
   const secId = (item.sectionId || '').toLowerCase();
   const secTitle = (item.sectionTitle || '').toLowerCase();
-  const qType = (q.type || '').toLowerCase();
+  const qType = (q.type || q.standardType || '').toLowerCase();
 
-  // Find Mistake
+  // Find Mistake (Section E)
   if (
     q.incorrectToken !== undefined ||
     q.tokenIndex !== undefined ||
@@ -87,7 +88,7 @@ export function resolveStandardType(
     return 'find_mistake';
   }
 
-  // Reorder
+  // Reorder (Section G)
   if (
     Array.isArray(q.correctOrder) ||
     Array.isArray(q.words) ||
@@ -100,19 +101,21 @@ export function resolveStandardType(
     return 'reorder';
   }
 
-  // Cloze Passage
+  // Cloze Passage (Section D)
   if (
     secId.includes('cloze') ||
     secTitle.includes('cloze') ||
     secTitle.includes('section d') ||
     qType === 'cloze' ||
     qType === 'cloze_passage' ||
+    q.blankId !== undefined ||
+    q.blankIndex !== undefined ||
     item.parentPassage !== undefined
   ) {
     return 'cloze';
   }
 
-  // Matching
+  // Matching (Section B)
   if (
     q.left !== undefined ||
     Array.isArray(q.pairs) ||
@@ -124,7 +127,7 @@ export function resolveStandardType(
     return 'matching';
   }
 
-  // Correct or Wrong
+  // Correct or Wrong (Section C)
   if (
     secId.includes('correct_wrong') ||
     secTitle.includes('correct or wrong') ||
@@ -136,7 +139,7 @@ export function resolveStandardType(
     return 'correct_wrong';
   }
 
-  // Controlled Type Answer
+  // Controlled Type Answer (Section F)
   if (
     Array.isArray(q.acceptedAnswers) ||
     Array.isArray(q.accepted_answers) ||
@@ -149,7 +152,7 @@ export function resolveStandardType(
     return 'controlled_answer';
   }
 
-  // Default to MCQ
+  // Default to MCQ (Section A)
   return 'mcq';
 }
 
@@ -162,7 +165,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
   bookmarkedIds,
   timeRemainingSeconds,
   syncState = 'synced',
-  answeredCount,
+  answeredCount: propAnsweredCount,
   markedCount,
   onAnswerChange,
   onClearAnswer,
@@ -176,24 +179,125 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
 }) => {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const totalQuestions = questions.length;
-  const currentItem = questions[currentIndex] || questions[0];
-  const q = currentItem?.question as any;
 
-  const currentType = useMemo(() => resolveStandardType(currentItem), [currentItem]);
+  // Defensive question lookup: guarantee currentItem is safely resolved
+  const currentItem = useMemo(() => {
+    if (!questions || questions.length === 0) return null;
+    if (questions[currentIndex]) return questions[currentIndex];
+    return questions[0];
+  }, [questions, currentIndex]);
+
+  const q = currentItem?.question as any;
+  const currentType = useMemo(() => resolveStandardType(currentItem || undefined), [currentItem]);
+
+  // Section range indices for composite activities (Matching & Cloze)
+  const matchingIndices = useMemo(() => {
+    const list: number[] = [];
+    questions.forEach((item, idx) => {
+      if (resolveStandardType(item) === 'matching') list.push(idx);
+    });
+    return list;
+  }, [questions]);
+
+  const clozeIndices = useMemo(() => {
+    const list: number[] = [];
+    questions.forEach((item, idx) => {
+      if (resolveStandardType(item) === 'cloze') list.push(idx);
+    });
+    return list;
+  }, [questions]);
+
+  // Section B (Matching): Extract all matching items across questions array into one composite activity
+  const matchingPairs: MatchingPairItem[] = useMemo(() => {
+    const matchingItems = questions.filter((item) => resolveStandardType(item) === 'matching');
+    return matchingItems.map((item, idx) => {
+      const qObj = item.question as any;
+      const left = qObj.left || qObj.pair?.left || (qObj.pairs?.[0]?.left) || `Item ${idx + 1}`;
+      const right = qObj.right || qObj.pair?.right || (qObj.pairs?.[0]?.right) || `Match ${idx + 1}`;
+      return {
+        id: qObj.id || `match_${idx + 1}`,
+        left,
+        right,
+        marks: qObj.marks || 2
+      };
+    });
+  }, [questions]);
+
+  // Section D (Cloze): Extract shared passage and all 5 individual blank definitions
+  const clozePassage = useMemo(() => {
+    const clozeSec = exam.sections?.find((s) => {
+      const sId = (s.id || '').toLowerCase();
+      const sTitle = (s.title || '').toLowerCase();
+      return sId.includes('cloze') || sTitle.includes('cloze') || sTitle.includes('section d');
+    });
+    const clozeItems = questions.filter((item) => resolveStandardType(item) === 'cloze');
+    return (
+      clozeSec?.passage ||
+      (clozeItems.find((item) => (item.question as any).passage)?.question as any)?.passage ||
+      clozeItems[0]?.parentPassage ||
+      ''
+    );
+  }, [exam.sections, questions]);
+
+  const clozeBlanks: ClozeBlankDefinition[] = useMemo(() => {
+    const clozeItems = questions.filter((item) => resolveStandardType(item) === 'cloze');
+    return clozeItems.map((item, idx) => {
+      const qObj = item.question as any;
+      const blankId = qObj.blankId || (qObj.blankIndex ? `blank_${qObj.blankIndex}` : `blank_${idx + 1}`);
+      const opts = Array.isArray(qObj.options)
+        ? qObj.options.map((o: any) => (typeof o === 'string' ? o : o.text || o.id || ''))
+        : [];
+      return {
+        id: blankId,
+        questionId: qObj.id,
+        options: opts,
+        correctAnswer: typeof qObj.correctAnswer === 'string' ? qObj.correctAnswer : opts[0] || '',
+        marks: qObj.marks || 2
+      };
+    });
+  }, [questions]);
+
+  // Dynamic answered count across all 40 questions
+  const liveAnsweredCount = useMemo(() => {
+    return questions.filter((item) => {
+      const qObj = item.question as any;
+      const type = resolveStandardType(item);
+      if (type === 'matching') {
+        return Boolean(answers[qObj.id] || (qObj.left && answers[qObj.left]));
+      }
+      if (type === 'cloze') {
+        return Boolean(answers[qObj.id] || (qObj.blankId && answers[qObj.blankId]));
+      }
+      const val = answers[qObj.id];
+      return val !== undefined && val !== null && String(val).trim().length > 0;
+    }).length;
+  }, [questions, answers]);
+
+  const displayedAnsweredCount = propAnsweredCount !== undefined ? Math.max(propAnsweredCount, liveAnsweredCount) : liveAnsweredCount;
+
+  // Active answer check for current question or activity
+  const isCurrentAnswered = useMemo(() => {
+    if (currentType === 'matching') {
+      return matchingPairs.some((p) => Boolean(answers[p.id] || answers[p.left]));
+    }
+    if (currentType === 'cloze') {
+      return clozeBlanks.some((b) => Boolean(answers[b.id] || (b.questionId && answers[b.questionId])));
+    }
+    return (
+      currentAnswer !== undefined &&
+      currentAnswer !== null &&
+      (typeof currentAnswer === 'string'
+        ? currentAnswer.trim().length > 0
+        : Array.isArray(currentAnswer)
+        ? currentAnswer.length > 0
+        : Object.keys(currentAnswer).length > 0)
+    );
+  }, [currentType, matchingPairs, clozeBlanks, answers, currentAnswer]);
+
   const isBookmarked = currentItem ? bookmarkedIds.has(currentItem.question.id) : false;
 
   // Progress percentage
   const progressPercent = totalQuestions > 0 ? Math.round(((currentIndex + 1) / totalQuestions) * 100) : 0;
-
-  // Active answer for current question
-  const isCurrentAnswered =
-    currentAnswer !== undefined &&
-    currentAnswer !== null &&
-    (typeof currentAnswer === 'string'
-      ? currentAnswer.trim().length > 0
-      : Array.isArray(currentAnswer)
-      ? currentAnswer.length > 0
-      : Object.keys(currentAnswer).length > 0);
 
   // Section badge meta
   const sectionMeta = useMemo(() => {
@@ -202,52 +306,113 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
         return {
           label: 'SECTION A • MCQ',
           marksText: '2 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-indigo-50 border-indigo-200 text-indigo-700'
         };
       case 'matching':
         return {
           label: 'SECTION B • MATCHING',
-          marksText: '2 Marks',
+          marksText: '10 Marks',
+          rangeText: matchingIndices.length > 0 ? `Questions ${matchingIndices[0] + 1}–${matchingIndices[matchingIndices.length - 1] + 1} of ${totalQuestions}` : 'Questions 11–15 of 40',
           bg: 'bg-violet-50 border-violet-200 text-violet-700'
         };
       case 'correct_wrong':
         return {
           label: 'SECTION C • CORRECT OR WRONG',
           marksText: '2 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-sky-50 border-sky-200 text-sky-700'
         };
       case 'cloze':
         return {
           label: 'SECTION D • CLOZE PASSAGE',
-          marksText: '2 Marks',
+          marksText: '10 Marks',
+          rangeText: clozeIndices.length > 0 ? `Questions ${clozeIndices[0] + 1}–${clozeIndices[clozeIndices.length - 1] + 1} of ${totalQuestions}` : 'Questions 21–25 of 40',
           bg: 'bg-teal-50 border-teal-200 text-teal-700'
         };
       case 'find_mistake':
         return {
           label: 'SECTION E • FIND THE MISTAKE',
           marksText: '3 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-rose-50 border-rose-200 text-rose-700'
         };
       case 'controlled_answer':
         return {
           label: 'SECTION F • TYPE THE ANSWER',
           marksText: '3 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-amber-50 border-amber-200 text-amber-700'
         };
       case 'reorder':
         return {
           label: 'SECTION G • REORDER SENTENCE',
           marksText: '4 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-purple-50 border-purple-200 text-purple-700'
         };
       default:
         return {
           label: 'EXAM SECTION',
           marksText: '2 Marks',
+          rangeText: `Question ${currentIndex + 1} of ${totalQuestions}`,
           bg: 'bg-slate-100 border-slate-200 text-slate-700'
         };
     }
-  }, [currentType]);
+  }, [currentType, currentIndex, totalQuestions, matchingIndices, clozeIndices]);
+
+  // Section-aware Navigation Handlers
+  const handleSmartPrevious = useCallback(() => {
+    if (currentType === 'matching') {
+      const prevIdx = matchingIndices.length > 0 ? matchingIndices[0] - 1 : currentIndex - 1;
+      onSelectIndex(Math.max(0, prevIdx));
+      return;
+    }
+    if (currentType === 'cloze') {
+      const prevIdx = clozeIndices.length > 0 ? clozeIndices[0] - 1 : currentIndex - 1;
+      onSelectIndex(Math.max(0, prevIdx));
+      return;
+    }
+
+    const prevIdx = currentIndex - 1;
+    if (matchingIndices.includes(prevIdx) && matchingIndices.length > 0) {
+      onSelectIndex(matchingIndices[0]);
+    } else if (clozeIndices.includes(prevIdx) && clozeIndices.length > 0) {
+      onSelectIndex(clozeIndices[0]);
+    } else {
+      onPrevious();
+    }
+  }, [currentType, currentIndex, matchingIndices, clozeIndices, onPrevious, onSelectIndex]);
+
+  const handleSmartNext = useCallback(() => {
+    if (currentType === 'matching') {
+      const nextIdx = matchingIndices.length > 0 ? matchingIndices[matchingIndices.length - 1] + 1 : currentIndex + 1;
+      onSelectIndex(Math.min(totalQuestions - 1, nextIdx));
+      return;
+    }
+    if (currentType === 'cloze') {
+      const nextIdx = clozeIndices.length > 0 ? clozeIndices[clozeIndices.length - 1] + 1 : currentIndex + 1;
+      onSelectIndex(Math.min(totalQuestions - 1, nextIdx));
+      return;
+    }
+
+    const nextIdx = currentIndex + 1;
+    if (matchingIndices.includes(nextIdx) && matchingIndices.length > 0) {
+      onSelectIndex(matchingIndices[0]);
+    } else if (clozeIndices.includes(nextIdx) && clozeIndices.length > 0) {
+      onSelectIndex(clozeIndices[0]);
+    } else {
+      onNext();
+    }
+  }, [currentType, currentIndex, totalQuestions, matchingIndices, clozeIndices, onNext, onSelectIndex]);
+
+  // Is at the end of the examination
+  const isAtExamEnd = useMemo(() => {
+    if (currentType === 'reorder') {
+      return currentIndex >= totalQuestions - 1;
+    }
+    return currentIndex >= totalQuestions - 1;
+  }, [currentType, currentIndex, totalQuestions]);
 
   // Render the specific controlled interaction renderer
   const renderInteraction = () => {
@@ -266,13 +431,32 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
       }
 
       case 'matching': {
-        // Pairs from question or derive from matching items
-        const pairs = q.pairs || (q.left && q.right ? [{ left: q.left, right: q.right }] : []);
         return (
           <MatchRenderer
-            pairs={pairs}
-            currentAnswer={currentAnswer}
-            onAnswerChange={(ans) => onAnswerChange(ans)}
+            pairs={matchingPairs}
+            currentAnswers={answers}
+            onSelectPair={(pairId, leftText, rightText) => {
+              const updated = {
+                ...answers,
+                [pairId]: rightText,
+                [leftText]: rightText
+              };
+              onAnswerChange(updated, pairId);
+            }}
+            onClearPair={(pairId, leftText) => {
+              const updated = { ...answers };
+              delete updated[pairId];
+              delete updated[leftText];
+              onAnswerChange(updated, pairId);
+            }}
+            onResetAll={() => {
+              const updated = { ...answers };
+              matchingPairs.forEach((p) => {
+                delete updated[p.id];
+                delete updated[p.left];
+              });
+              onAnswerChange(updated);
+            }}
           />
         );
       }
@@ -288,19 +472,21 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
       }
 
       case 'cloze': {
-        const passage = q.passage || currentItem.parentPassage || '';
-        const options = q.options || [];
-        const blanks = q.blanks || [];
-        const activeBlankId = q.blankId || (q.blankIndex ? `blank_${q.blankIndex}` : undefined);
-
         return (
           <ClozeDropdownRenderer
-            passage={passage}
-            options={options}
-            blanks={blanks}
-            activeBlankId={activeBlankId}
-            currentAnswer={currentAnswer}
-            onAnswerChange={(ans) => onAnswerChange(ans)}
+            passage={clozePassage}
+            blanks={clozeBlanks}
+            currentAnswers={answers}
+            onSelectBlank={(blankId, questionId, selectedVal) => {
+              const updated = {
+                ...answers,
+                [blankId]: selectedVal
+              };
+              if (questionId) {
+                updated[questionId] = selectedVal;
+              }
+              onAnswerChange(updated, questionId || blankId);
+            }}
           />
         );
       }
@@ -315,7 +501,6 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
             tokens={tokens}
             selectedAnswer={currentAnswer}
             onSelectToken={(tok, idx) => {
-              // Store token and index for deterministic grading
               onAnswerChange({
                 incorrectToken: tok,
                 tokenIndex: idx
@@ -338,12 +523,10 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
       }
 
       case 'reorder': {
-        // Scrambled words list
         let words: string[] = [];
         if (Array.isArray(q.words) && q.words.length > 0) {
           words = q.words;
         } else if (Array.isArray(q.correctOrder)) {
-          // Shuffle deterministically
           words = [...q.correctOrder].sort((a, b) => (a.charCodeAt(0) % 3) - (b.charCodeAt(0) % 3));
         }
 
@@ -364,6 +547,25 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
         );
     }
   };
+
+  if (totalQuestions === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 text-center space-y-3 max-w-sm shadow-xl">
+          <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+          <h2 className="text-base font-black text-slate-800">No Questions Found</h2>
+          <p className="text-xs text-slate-500">This examination does not contain any questions.</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+          >
+            Return
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none antialiased ${isMobilePreview ? 'max-w-md mx-auto shadow-2xl border-x border-slate-300' : ''}`}>
@@ -387,7 +589,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                 {exam.exam.title || 'Standard Examination'}
               </h1>
               <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold text-slate-500">
-                <span>Question {currentIndex + 1} of {totalQuestions}</span>
+                <span>{sectionMeta.rangeText}</span>
                 <span>•</span>
                 <span className="text-indigo-600 font-black">100 Marks</span>
                 {syncState === 'syncing' && (
@@ -429,7 +631,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
               <Grid className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Questions</span>
               <span className="text-[10px] bg-indigo-200/80 px-1.5 py-0.2 rounded-md">
-                {answeredCount}/{totalQuestions}
+                {displayedAnsweredCount}/{totalQuestions}
               </span>
             </button>
           </div>
@@ -465,8 +667,8 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                 </div>
               </div>
 
-              {/* Question Text / Prompt (Hidden if Find Mistake or Controlled which have dedicated cards) */}
-              {currentType !== 'find_mistake' && currentType !== 'controlled_answer' && currentType !== 'correct_wrong' && (
+              {/* Question Text / Prompt (Hidden for Find Mistake, Controlled, Matching, Cloze which have internal headers) */}
+              {currentType !== 'find_mistake' && currentType !== 'controlled_answer' && currentType !== 'correct_wrong' && currentType !== 'matching' && currentType !== 'cloze' && (
                 <div className="space-y-1">
                   <div className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
                     {q.question || `Question ${currentIndex + 1}`}
@@ -539,18 +741,18 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={currentIndex === 0}
-              onClick={onPrevious}
+              disabled={currentIndex === 0 && currentType !== 'matching'}
+              onClick={handleSmartPrevious}
               className="px-3.5 sm:px-5 py-2.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-2xs"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">Previous</span>
             </button>
 
-            {currentIndex < totalQuestions - 1 ? (
+            {!isAtExamEnd ? (
               <button
                 type="button"
-                onClick={onNext}
+                onClick={handleSmartNext}
                 className="px-5 sm:px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20 transition-all active:scale-95"
               >
                 <span>Next</span>
@@ -588,11 +790,11 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                   Examination Questions
                 </h3>
                 <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
-                  <span>{answeredCount} Answered</span>
+                  <span>{displayedAnsweredCount} Answered</span>
                   <span>•</span>
                   <span>{markedCount} Flagged</span>
                   <span>•</span>
-                  <span>{totalQuestions - answeredCount} Remaining</span>
+                  <span>{Math.max(0, totalQuestions - displayedAnsweredCount)} Remaining</span>
                 </div>
               </div>
 
@@ -600,6 +802,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                 type="button"
                 onClick={() => setIsBottomSheetOpen(false)}
                 className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Close sheet"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -609,11 +812,22 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
             <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
               <div className="grid grid-cols-5 sm:grid-cols-8 gap-2">
                 {questions.map((item, idx) => {
-                  const isCurrent = idx === currentIndex;
-                  const isAnswered =
-                    answers[item.question.id] !== undefined &&
-                    answers[item.question.id] !== null &&
-                    answers[item.question.id] !== '';
+                  const itemType = resolveStandardType(item);
+                  const isCurrent =
+                    itemType === 'matching' && currentType === 'matching'
+                      ? true
+                      : itemType === 'cloze' && currentType === 'cloze'
+                      ? true
+                      : idx === currentIndex;
+
+                  const qObj = item.question as any;
+                  const isAns =
+                    itemType === 'matching'
+                      ? Boolean(answers[qObj.id] || (qObj.left && answers[qObj.left]))
+                      : itemType === 'cloze'
+                      ? Boolean(answers[qObj.id] || (qObj.blankId && answers[qObj.blankId]))
+                      : answers[qObj.id] !== undefined && answers[qObj.id] !== null && String(answers[qObj.id]).trim().length > 0;
+
                   const flagged = bookmarkedIds.has(item.question.id);
 
                   return (
@@ -621,27 +835,32 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                       key={item.question.id || idx}
                       type="button"
                       onClick={() => {
-                        onSelectIndex(idx);
+                        if (itemType === 'matching' && matchingIndices.length > 0) {
+                          onSelectIndex(matchingIndices[0]);
+                        } else if (itemType === 'cloze' && clozeIndices.length > 0) {
+                          onSelectIndex(clozeIndices[0]);
+                        } else {
+                          onSelectIndex(idx);
+                        }
                         setIsBottomSheetOpen(false);
                       }}
                       className={`h-11 sm:h-12 rounded-2xl border-2 font-black text-xs sm:text-sm flex flex-col items-center justify-center relative transition-all cursor-pointer active:scale-95 ${
                         isCurrent
                           ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500/20 font-black scale-105'
-                          : isAnswered
+                          : isAns
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
                           : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
                       }`}
                     >
                       <span>{String(idx + 1).padStart(2, '0')}</span>
-
-                      {/* Small Status indicator */}
-                      <span className="text-[9px] -mt-0.5">
-                        {flagged ? '⚑' : isAnswered ? '✓' : '—'}
-                      </span>
-
+                      {isAns && (
+                        <span className="text-[9px] -mt-0.5">
+                          ✓
+                        </span>
+                      )}
                       {/* Bookmark corner badge */}
                       {flagged && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
+                        <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500" />
                       )}
                     </button>
                   );
@@ -649,7 +868,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
               </div>
             </div>
 
-            {/* Bottom Actions */}
+            {/* Sheet Footer */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
               <button
                 type="button"
@@ -666,7 +885,7 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
                 }}
                 className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black cursor-pointer shadow-xs"
               >
-                Review & Submit
+                Finish & Submit
               </button>
             </div>
           </div>

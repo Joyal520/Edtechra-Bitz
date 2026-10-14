@@ -202,7 +202,21 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     }, 1000); // 1-second debounce
   };
 
-  const handleAnswerChange = (val: any) => {
+  const handleAnswerChange = (val: any, targetQId?: string) => {
+    if (targetQId) {
+      const updated = updateAnswerSynchronously(targetQId, val);
+      triggerAutosave(updated, bookmarkedIds);
+      return;
+    }
+
+    if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
+      const updated = { ...answersRef.current, ...val };
+      answersRef.current = updated;
+      setAnswers(updated);
+      triggerAutosave(updated, bookmarkedIds);
+      return;
+    }
+
     const currentQ = flattenedQuestions[currentIndex];
     if (!currentQ) return;
 
@@ -469,12 +483,33 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     });
   }, [exam.sections, flattenedQuestions, currentQ]);
 
-  // Check if exam conforms to Simple Exam template (Hook called unconditionally to preserve hook order)
-  const isSimpleExam = useMemo(() => {
+  // Check if exam conforms to Standard Exam 2.0 template (Hook called unconditionally to preserve hook order)
+  const isStandardExam = useMemo(() => {
     const typeStr = (exam.exam.examType || '').toLowerCase();
     const titleStr = (exam.exam.title || '').toLowerCase();
     const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
-    if (template === 'simple' || typeStr.includes('simple') || titleStr.includes('simple')) {
+    if (template === 'standard' || typeStr.includes('standard') || titleStr.includes('standard exam')) {
+      return true;
+    }
+    if (exam.sections?.length === 7 || flattenedQuestions.length === 40) {
+      return true;
+    }
+    return flattenedQuestions.some(
+      (q) =>
+        Boolean((q.question as any).standardType) ||
+        ['correct_wrong', 'cloze', 'cloze_passage', 'find_mistake', 'controlled_answer'].includes(
+          (q.question as any).type
+        )
+    );
+  }, [exam, flattenedQuestions]);
+
+  // Check if exam conforms to Simple Exam template
+  const isSimpleExam = useMemo(() => {
+    if (isStandardExam) return false;
+    const typeStr = (exam.exam.examType || '').toLowerCase();
+    const titleStr = (exam.exam.title || '').toLowerCase();
+    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
+    if (template === 'simple' || typeStr === 'simple' || typeStr.includes('simple exam') || titleStr.includes('simple exam')) {
       return true;
     }
     const allMCQ =
@@ -484,28 +519,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
       return true;
     }
     return false;
-  }, [exam, flattenedQuestions]);
-
-  // Check if exam conforms to Standard Exam 2.0 template
-  const isStandardExam = useMemo(() => {
-    if (isSimpleExam) return false;
-    const typeStr = (exam.exam.examType || '').toLowerCase();
-    const titleStr = (exam.exam.title || '').toLowerCase();
-    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
-    if (template === 'standard' || typeStr.includes('standard') || titleStr.includes('standard')) {
-      return true;
-    }
-    if (exam.sections.length === 7 || flattenedQuestions.length === 40) {
-      return true;
-    }
-    return flattenedQuestions.some(
-      (q) =>
-        Boolean((q.question as any).standardType) ||
-        ['correct_wrong', 'cloze', 'find_mistake', 'controlled_answer'].includes(
-          (q.question as any).type
-        )
-    );
-  }, [exam, flattenedQuestions, isSimpleExam]);
+  }, [exam, flattenedQuestions, isStandardExam]);
 
   const handleClearCurrentAnswer = () => {
     if (currentQ) {

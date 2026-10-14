@@ -453,6 +453,31 @@ export function validateStandardExamPackage(rawInput: any): StandardValidationRe
       });
     }
 
+    // Section B (Matching) duplicate right answer check
+    if (sIdx === 1 || secId.includes('matching')) {
+      const rights = questions.map((q: any) => String(q.right || q.pair?.right || '').trim()).filter(Boolean);
+      const uniqueRights = new Set(rights);
+      if (questions.length >= 2 && uniqueRights.size === 1) {
+        errors.push({
+          id: `matching_duplicate_rights_${sec.id}`,
+          sectionId: sec.id,
+          message: `Matching Section contains identical right items. All right choices must be distinct.`
+        });
+      }
+    }
+
+    // Section D (Cloze) section-level checks
+    if (sIdx === 3 || secId.includes('cloze')) {
+      const passage = sec.passage || questions.find((q: any) => q.passage)?.passage;
+      if (!passage || !String(passage).trim()) {
+        errors.push({
+          id: `cloze_missing_passage_${sec.id}`,
+          sectionId: sec.id,
+          message: `Cloze Passage Section must define a coherent "passage" containing embedded [blank_X] markers.`
+        });
+      }
+    }
+
     // Validate questions within section
     questions.forEach((q, qIdx) => {
       totalQuestionsFound++;
@@ -728,12 +753,14 @@ export function mapStandardPackageToCanonical(data: any): CanonicalAssessmentV2 
       if (sIdx === 3 || String(sec.id).includes('cloze')) {
         const opts = (q.options || []).map((o: any) => (typeof o === 'string' ? o : o.text || o.id));
         const blankId = q.blankId || `blank_${q.blankIndex || qIdx + 1}`;
+        const passage = sec.passage || q.passage || '';
 
         return {
           id: qId,
           type: 'cloze_passage',
           standardType: 'cloze',
           question: q.question || `Select the correct word for ${blankId}`,
+          passage,
           blankId,
           options: opts,
           correctAnswer: q.correctAnswer || opts[0] || '',
@@ -822,10 +849,11 @@ export function mapStandardPackageToCanonical(data: any): CanonicalAssessmentV2 
       } as any;
     });
 
+    const secPassage = sec.passage || rawQuestions.find((q: any) => q.passage)?.passage;
     return {
       id: secId,
       title: sec.title || EXPECTED_STANDARD_SECTIONS[sIdx]?.title || `Section ${String.fromCharCode(65 + sIdx)}`,
-      passage: sec.passage,
+      passage: secPassage,
       questions: canonicalQuestions
     };
   });

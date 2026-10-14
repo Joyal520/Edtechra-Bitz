@@ -2,72 +2,37 @@ import React from 'react';
 import { ChevronDown, BookOpen } from 'lucide-react';
 
 export interface ClozeBlankDefinition {
-  id: string; // e.g. "blank_1" or "1"
+  id: string; // e.g. "blank_1"
+  questionId?: string; // e.g. "cloze_1"
   options: string[];
-  correctAnswer: string;
+  correctAnswer?: string;
   marks?: number;
 }
 
-interface ClozeDropdownRendererProps {
+export interface ClozeDropdownRendererProps {
   passage: string;
-  // Options for this particular blank if single-blank question
-  options?: string[];
-  // If multiple blanks exist in passage
-  blanks?: ClozeBlankDefinition[];
-  // Active blank ID / index (e.g. "blank_1" or 0)
-  activeBlankId?: string;
-  // Current student answer for this blank (string) or map of all blanks
-  currentAnswer: string | Record<string, string> | undefined;
-  onAnswerChange: (answer: string | Record<string, string>) => void;
+  // Blanks array containing each individual blank's question metadata and its own options array
+  blanks: ClozeBlankDefinition[];
+  // Answers map containing blankId or questionId -> selected string
+  currentAnswers: Record<string, string>;
+  onSelectBlank: (blankId: string, questionId: string | undefined, selectedValue: string) => void;
   disabled?: boolean;
 }
 
 export const ClozeDropdownRenderer: React.FC<ClozeDropdownRendererProps> = ({
   passage,
-  options = [],
   blanks = [],
-  activeBlankId,
-  currentAnswer,
-  onAnswerChange,
+  currentAnswers = {},
+  onSelectBlank,
   disabled = false
 }) => {
-  // Extract answers map
-  const answersMap: Record<string, string> = React.useMemo(() => {
-    if (typeof currentAnswer === 'object' && currentAnswer !== null) {
-      return currentAnswer;
-    }
-    if (typeof currentAnswer === 'string' && activeBlankId) {
-      return { [activeBlankId]: currentAnswer };
-    }
-    if (typeof currentAnswer === 'string') {
-      return { blank_1: currentAnswer };
-    }
-    return {};
-  }, [currentAnswer, activeBlankId]);
+  // Regex matches [blank_1], [blank-1], [blank1], [1], [went v], ____
+  const blankRegex = /(\[blank[_-]?[a-zA-Z0-9]+\]|\[\s*\d+\s*\]|_{3,})/gi;
 
-  const handleSelectValue = (blankKey: string, val: string) => {
-    if (disabled) return;
-    if (typeof currentAnswer === 'string' && (!activeBlankId || activeBlankId === blankKey)) {
-      onAnswerChange(val);
-    } else {
-      const updated = { ...answersMap, [blankKey]: val };
-      // If parent expects a single string for this question
-      if (activeBlankId === blankKey) {
-        onAnswerChange(val);
-      } else {
-        onAnswerChange(updated);
-      }
-    }
-  };
-
-  // Split passage into text segments and embedded blank markers
-  // Matches: [blank_1], [blank_2], [blank-1], [1], [went v], etc.
   const renderedPassage = React.useMemo(() => {
     if (!passage) return null;
 
-    const blankRegex = /(\[blank[_-]?[a-zA-Z0-9]+\]|\[\s*\d+\s*\])/gi;
     const parts = passage.split(blankRegex);
-
     let counter = 0;
 
     return parts.map((part, idx) => {
@@ -85,33 +50,38 @@ export const ClozeDropdownRenderer: React.FC<ClozeDropdownRendererProps> = ({
       }
 
       const blankIndex = counter++;
-      const cleanKey = part.replace(/[\[\]\s]/g, '').toLowerCase();
-      // Match with blanks array or use fallback options
+      const cleanKey = part.replace(/[\[\]\s_]/g, '').toLowerCase();
+
+      // Find corresponding blank object strictly by ID, cleanKey, or index
       const matchedBlank =
-        blanks.find(
-          (b) =>
-            b.id.toLowerCase() === cleanKey ||
-            b.id.toLowerCase() === `blank_${cleanKey}` ||
-            b.id.toLowerCase() === `blank_${blankIndex + 1}`
-        ) || blanks[blankIndex];
+        blanks.find((b) => {
+          const bId = (b.id || '').toLowerCase().replace(/[\[\]\s_]/g, '');
+          return bId === cleanKey || b.id.toLowerCase() === `blank_${cleanKey}`;
+        }) ||
+        blanks.find((b) => b.questionId?.toLowerCase() === cleanKey) ||
+        blanks[blankIndex] ||
+        blanks[0];
 
       const blankKey = matchedBlank?.id || `blank_${blankIndex + 1}`;
-      const blankOptions = matchedBlank?.options?.length ? matchedBlank.options : options;
-      const selectedValue = answersMap[blankKey] || (activeBlankId === blankKey && typeof currentAnswer === 'string' ? currentAnswer : '');
-      const isActive = activeBlankId ? activeBlankId === blankKey || activeBlankId === cleanKey : blankIndex === 0;
+      const questionId = matchedBlank?.questionId;
+      // DYNAMIC OPTIONS: strictly uses this blank's own question object options
+      const blankOptions = matchedBlank?.options?.length ? matchedBlank.options : [];
+
+      const selectedValue =
+        currentAnswers[blankKey] ||
+        (questionId ? currentAnswers[questionId] : '') ||
+        '';
 
       return (
         <span
           key={`blank-${blankKey}-${idx}`}
-          className={`inline-block mx-1.5 my-1 align-middle transition-all ${
-            isActive ? 'ring-2 ring-indigo-500 rounded-xl' : ''
-          }`}
+          className="inline-block mx-1.5 my-1 align-middle transition-all"
         >
           <div className="relative inline-block">
             <select
               value={selectedValue}
               disabled={disabled}
-              onChange={(e) => handleSelectValue(blankKey, e.target.value)}
+              onChange={(e) => onSelectBlank(blankKey, questionId, e.target.value)}
               className={`appearance-none py-1.5 pl-3 pr-8 rounded-xl text-xs sm:text-sm font-bold border-2 cursor-pointer transition-all shadow-2xs ${
                 selectedValue
                   ? 'bg-teal-50 border-teal-500 text-teal-950 font-black'
@@ -132,14 +102,24 @@ export const ClozeDropdownRenderer: React.FC<ClozeDropdownRendererProps> = ({
         </span>
       );
     });
-  }, [passage, blanks, options, answersMap, activeBlankId, currentAnswer, disabled]);
+  }, [passage, blanks, currentAnswers, disabled, onSelectBlank]);
+
+  // Answered blanks count
+  const completedCount = blanks.filter(
+    (b) => Boolean(currentAnswers[b.id] || (b.questionId && currentAnswers[b.questionId]))
+  ).length;
 
   return (
-    <div className="w-full space-y-4 pt-2">
-      <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100">
-          <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Cloze Passage — Select the correct word for each blank:</span>
+    <div className="w-full space-y-4 pt-1">
+      <div className="p-4 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 text-xs font-bold text-slate-500">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-teal-600" />
+            <span className="uppercase tracking-wider">Cloze Passage — Continuous Context:</span>
+          </div>
+          <div className="text-[11px] font-black px-2.5 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200">
+            {completedCount}/{blanks.length} Blanks Filled
+          </div>
         </div>
 
         <div className="text-sm sm:text-base leading-loose font-medium text-slate-900">

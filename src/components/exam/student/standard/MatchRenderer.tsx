@@ -1,123 +1,126 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { GitFork, Check, X, RotateCcw } from 'lucide-react';
 
 export interface MatchingPairItem {
-  id?: string;
-  left: string;
-  right: string;
+  id: string; // e.g. "match_1"
+  left: string; // e.g. "write"
+  right: string; // e.g. "wrote"
+  marks?: number;
 }
 
-interface MatchRendererProps {
+export interface MatchRendererProps {
   pairs: MatchingPairItem[];
-  // Map of left -> right
-  currentAnswer: Record<string, string> | undefined;
-  onAnswerChange: (answer: Record<string, string>) => void;
+  // Answers map containing pair.id or leftText -> selected rightText
+  currentAnswers: Record<string, string>;
+  onSelectPair: (pairId: string, leftText: string, rightText: string) => void;
+  onClearPair: (pairId: string, leftText: string) => void;
+  onResetAll: () => void;
   disabled?: boolean;
 }
 
 export const MatchRenderer: React.FC<MatchRendererProps> = ({
   pairs = [],
-  currentAnswer = {},
-  onAnswerChange,
+  currentAnswers = {},
+  onSelectPair,
+  onClearPair,
+  onResetAll,
   disabled = false
 }) => {
-  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
+  const [selectedLeftId, setSelectedLeftId] = useState<string | null>(null);
 
-  // Stable shuffled right options (deterministic shuffle)
-  const rightOptions = React.useMemo(() => {
+  // Shuffled right options (deterministic shuffle across all pairs)
+  const rightOptions = useMemo(() => {
     const rights = pairs.map((p) => p.right).filter(Boolean);
-    // Shuffle deterministically based on character codes
+    // Deterministic shuffle based on character values
     return [...rights].sort((a, b) => {
-      const codeA = (a.charCodeAt(0) * 17 + a.length) % 100;
-      const codeB = (b.charCodeAt(0) * 17 + b.length) % 100;
+      const codeA = (a.charCodeAt(0) * 17 + a.length * 3) % 100;
+      const codeB = (b.charCodeAt(0) * 17 + b.length * 3) % 100;
       return codeA - codeB;
     });
   }, [pairs]);
 
-  // Which right items have already been paired
-  const matchedRights = React.useMemo(() => {
-    return new Set(Object.values(currentAnswer || {}));
-  }, [currentAnswer]);
+  // Set of right items that have already been matched
+  const matchedRights = useMemo(() => {
+    const matched = new Set<string>();
+    pairs.forEach((p) => {
+      const ans = currentAnswers[p.id] || currentAnswers[p.left];
+      if (ans) matched.add(ans);
+    });
+    return matched;
+  }, [pairs, currentAnswers]);
 
-  const handleSelectLeft = (leftText: string) => {
+  const handleSelectLeft = (pair: MatchingPairItem) => {
     if (disabled) return;
-    if (selectedLeft === leftText) {
-      setSelectedLeft(null);
+    if (selectedLeftId === pair.id) {
+      setSelectedLeftId(null);
     } else {
-      setSelectedLeft(leftText);
+      setSelectedLeftId(pair.id);
     }
   };
 
   const handleSelectRight = (rightText: string) => {
-    if (disabled || !selectedLeft) return;
+    if (disabled || !selectedLeftId) return;
 
-    // Check if rightText was paired with someone else; unlink if so
-    const updated = { ...currentAnswer };
-    for (const [l, r] of Object.entries(updated)) {
-      if (r === rightText) {
-        delete updated[l];
-      }
-    }
+    const currentPair = pairs.find((p) => p.id === selectedLeftId);
+    if (!currentPair) return;
 
-    updated[selectedLeft] = rightText;
-    onAnswerChange(updated);
-    setSelectedLeft(null);
+    onSelectPair(currentPair.id, currentPair.left, rightText);
+    setSelectedLeftId(null);
   };
 
-  const handleClearPair = (leftText: string) => {
+  const handleClearPair = (pair: MatchingPairItem) => {
     if (disabled) return;
-    const updated = { ...currentAnswer };
-    delete updated[leftText];
-    onAnswerChange(updated);
-    if (selectedLeft === leftText) {
-      setSelectedLeft(null);
+    onClearPair(pair.id, pair.left);
+    if (selectedLeftId === pair.id) {
+      setSelectedLeftId(null);
     }
   };
+  const handleRemovePair = handleClearPair;
 
-  const handleResetAll = () => {
-    if (disabled) return;
-    onAnswerChange({});
-    setSelectedLeft(null);
-  };
-
-  const matchedCount = Object.keys(currentAnswer || {}).length;
+  // Count of currently completed pairs
+  const matchedCount = pairs.filter((p) => Boolean(currentAnswers[p.id] || currentAnswers[p.left])).length;
 
   return (
-    <div className="w-full space-y-4 pt-2">
-      {/* Instructions header */}
-      <div className="p-3 rounded-2xl bg-violet-50/80 border border-violet-200/80 flex items-center justify-between text-xs text-violet-950">
+    <div className="w-full space-y-4 pt-1">
+      {/* Top Banner / Instructions */}
+      <div className="p-3.5 rounded-2xl bg-violet-50/90 border border-violet-200 flex items-center justify-between text-xs text-violet-950">
         <div className="flex items-center gap-2 font-bold">
           <GitFork className="w-4 h-4 text-violet-600 shrink-0" />
-          <span>Tap an item in Column A, then tap its match in Column B:</span>
+          <span>Tap an item in Column A, then tap its corresponding match in Column B:</span>
         </div>
         {matchedCount > 0 && !disabled && (
           <button
             type="button"
-            onClick={handleResetAll}
-            className="text-[11px] font-bold text-violet-700 hover:text-rose-600 flex items-center gap-1 cursor-pointer transition-colors"
+            onClick={onResetAll}
+            className="text-[11px] font-bold text-violet-700 hover:text-rose-600 flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-violet-100"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Reset</span>
+            <span>Reset All</span>
           </button>
         )}
       </div>
 
-      {/* Columns: side-by-side on sm screens, stacked on tiny mobile */}
+      {/* Side-by-Side Matching Columns (Stacked gracefully on very narrow mobile) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
-        {/* Column A */}
+        {/* Column A (Terms) */}
         <div className="space-y-2">
-          <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
-            Column A (Terms)
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Column A (Terms)
+            </span>
+            <span className="text-[10px] font-bold text-slate-400">
+              {pairs.length} Items
+            </span>
           </div>
           <div className="space-y-2">
             {pairs.map((p, idx) => {
-              const isSelected = selectedLeft === p.left;
-              const matchedRight = currentAnswer?.[p.left];
+              const isSelected = selectedLeftId === p.id;
+              const matchedRight = currentAnswers[p.id] || currentAnswers[p.left];
 
               return (
                 <div
-                  key={`left-${idx}`}
-                  onClick={() => handleSelectLeft(p.left)}
+                  key={`left-${p.id || idx}`}
+                  onClick={() => handleSelectLeft(p)}
                   className={`p-3 sm:p-3.5 rounded-2xl border-2 text-left cursor-pointer transition-all flex items-center justify-between gap-2.5 min-h-[50px] touch-manipulation ${
                     isSelected
                       ? 'bg-violet-600 text-white border-violet-600 ring-4 ring-violet-200 shadow-sm'
@@ -143,49 +146,62 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
                     </span>
                   </div>
 
-                  {matchedRight && !isSelected && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClearPair(p.left);
-                      }}
-                      className="p-1 rounded-lg text-violet-400 hover:text-rose-600 hover:bg-violet-100/60 transition-colors"
-                      title="Remove match"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  {matchedRight && !isSelected ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] font-bold text-violet-700 bg-violet-100/80 px-2 py-0.5 rounded-md truncate max-w-[110px]">
+                        → {matchedRight}
+                      </span>
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemovePair(p);
+                          }}
+                          className="p-1 rounded-lg text-violet-400 hover:text-rose-600 hover:bg-violet-100 transition-colors"
+                          title="Remove pair"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Column B */}
+        {/* Column B (Matches) */}
         <div className="space-y-2">
-          <div className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
-            Column B (Matches)
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+              Column B (Matches)
+            </span>
+            <span className="text-[10px] font-bold text-slate-400">
+              {rightOptions.length} Matches
+            </span>
           </div>
           <div className="space-y-2">
             {rightOptions.map((rightText, idx) => {
               const letter = String.fromCharCode(65 + idx);
               const isPaired = matchedRights.has(rightText);
-              // Find which left it is paired with
-              const pairedLeft = Object.entries(currentAnswer || {}).find(
-                ([, r]) => r === rightText
-              )?.[0];
+              // Find which left pair this rightText is paired with
+              const pairedPair = pairs.find((p) => {
+                const ans = currentAnswers[p.id] || currentAnswers[p.left];
+                return ans === rightText;
+              });
 
               return (
                 <button
                   key={`right-${idx}`}
                   type="button"
-                  disabled={disabled || !selectedLeft}
+                  disabled={disabled || !selectedLeftId}
                   onClick={() => handleSelectRight(rightText)}
                   className={`w-full p-3 sm:p-3.5 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-2.5 min-h-[50px] touch-manipulation cursor-pointer ${
                     isPaired
                       ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950 shadow-2xs'
-                      : selectedLeft
+                      : selectedLeftId
                       ? 'bg-white border-violet-300 text-slate-800 hover:bg-violet-50/60 ring-2 ring-violet-100'
                       : 'bg-white border-slate-200 text-slate-700 opacity-80'
                   } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
@@ -208,9 +224,9 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
                   {isPaired && (
                     <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 shrink-0">
                       <Check className="w-3.5 h-3.5" />
-                      {pairedLeft && (
-                        <span className="hidden sm:inline max-w-[80px] truncate text-[10px] text-emerald-600">
-                          ({pairedLeft})
+                      {pairedPair && (
+                        <span className="hidden sm:inline max-w-[90px] truncate text-[10px] text-emerald-600">
+                          ({pairedPair.left})
                         </span>
                       )}
                     </div>
@@ -222,35 +238,15 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
         </div>
       </div>
 
-      {/* Active matched pairs summary */}
-      {matchedCount > 0 && (
-        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
-          <div className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">
-            Current Pairs ({matchedCount}/{pairs.length})
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(currentAnswer || {}).map(([l, r]) => (
-              <span
-                key={l}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-slate-800 font-semibold text-xs shadow-2xs"
-              >
-                <span className="font-bold text-violet-700">{l}</span>
-                <span className="text-slate-400">↔</span>
-                <span className="font-bold text-emerald-700">{r}</span>
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => handleClearPair(l)}
-                    className="p-0.5 text-slate-400 hover:text-rose-600 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Matched pairs counter summary */}
+      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+        <span className="font-bold text-slate-600">
+          Matched: <span className="text-indigo-600 font-black">{matchedCount}</span> of {pairs.length} pairs
+        </span>
+        <span className="text-[11px] text-slate-400 font-medium">
+          {matchedCount === pairs.length ? '✓ All pairs matched' : 'Tap item in A, then B'}
+        </span>
+      </div>
     </div>
   );
 };

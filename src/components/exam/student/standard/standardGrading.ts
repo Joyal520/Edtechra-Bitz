@@ -84,8 +84,12 @@ export function gradeStandardQuestion(
     if (rightTerm && studentAnswer) {
       if (typeof studentAnswer === 'string') {
         isCorrect = normalizeText(studentAnswer) === normalizeText(rightTerm);
-      } else if (typeof studentAnswer === 'object' && leftTerm) {
-        isCorrect = normalizeText(studentAnswer[leftTerm]) === normalizeText(rightTerm);
+      } else if (typeof studentAnswer === 'object') {
+        if (question.id && studentAnswer[question.id]) {
+          isCorrect = normalizeText(studentAnswer[question.id]) === normalizeText(rightTerm);
+        } else if (leftTerm && studentAnswer[leftTerm]) {
+          isCorrect = normalizeText(studentAnswer[leftTerm]) === normalizeText(rightTerm);
+        }
       }
     } else if (Array.isArray(question.pairs) && typeof studentAnswer === 'object') {
       const totalPairs = question.pairs.length;
@@ -287,7 +291,7 @@ export function calculateStandardExamScore(
   questions.forEach((qItem) => {
     const q = qItem.question || qItem;
     const qId = q.id;
-    const ans = studentAnswers[qId];
+    const ans = studentAnswers[qId] ?? (q.left ? studentAnswers[q.left] : undefined) ?? (q.blankId ? studentAnswers[q.blankId] : undefined);
     const res = gradeStandardQuestion(q, ans);
     totalScore += res.score;
     maxScore += res.maxScore;

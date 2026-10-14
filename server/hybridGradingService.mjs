@@ -166,11 +166,21 @@ export function evaluateDeterministicQuestion(question, studentAnswer) {
   // 5. Matching
   if (qType === 'matching') {
     let isCorrect = false;
-    if (studentAnswer && typeof studentAnswer === 'object' && question.correct_answer && typeof question.correct_answer === 'object') {
-      const keys = Object.keys(question.correct_answer);
-      isCorrect = keys.every(
-        (k) => String(studentAnswer[k]).trim().toLowerCase() === String(question.correct_answer[k]).trim().toLowerCase()
-      );
+    const targetRight = String(question.right || question.correct_answer || question.correctAnswer || '').trim().toLowerCase();
+
+    if (typeof studentAnswer === 'string' && studentAnswer.trim() && targetRight) {
+      isCorrect = String(studentAnswer).trim().toLowerCase() === targetRight;
+    } else if (studentAnswer && typeof studentAnswer === 'object') {
+      if (question.id && studentAnswer[question.id]) {
+        isCorrect = String(studentAnswer[question.id]).trim().toLowerCase() === targetRight;
+      } else if (question.left && studentAnswer[question.left]) {
+        isCorrect = String(studentAnswer[question.left]).trim().toLowerCase() === targetRight;
+      } else if (question.correct_answer && typeof question.correct_answer === 'object') {
+        const keys = Object.keys(question.correct_answer);
+        isCorrect = keys.length > 0 && keys.every(
+          (k) => String(studentAnswer[k]).trim().toLowerCase() === String(question.correct_answer[k]).trim().toLowerCase()
+        );
+      }
     }
 
     return {
@@ -242,8 +252,10 @@ export function evaluateDeterministicQuestion(question, studentAnswer) {
   }
 
   // 9. Cloze Passage Dropdown
-  if (qType === 'cloze') {
-    const sVal = typeof studentAnswer === 'object' && studentAnswer !== null ? studentAnswer[question.id] || Object.values(studentAnswer)[0] : studentAnswer;
+  if (qType === 'cloze' || qType === 'cloze_passage') {
+    const sVal = typeof studentAnswer === 'object' && studentAnswer !== null
+      ? (studentAnswer[question.id] || (question.blankId && studentAnswer[question.blankId]) || Object.values(studentAnswer)[0])
+      : studentAnswer;
     const sStr = String(sVal ?? '').trim().toLowerCase();
     const cStr = String(question.correct_answer ?? question.correctAnswer ?? '').trim().toLowerCase();
     const isCorrect = sStr === cStr && sStr !== '';
