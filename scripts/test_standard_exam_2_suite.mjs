@@ -299,6 +299,14 @@ async function runSuite() {
   assert(!sessionSrc.includes("titleStr.includes('simple')"), 'ExamSession avoids false positive on titles like "The Simple Past"');
   assert(!previewSrc.includes("titleStr.includes('simple')"), 'LivePreviewModal avoids false positive on titles like "The Simple Past"');
 
+  console.log('\n--- 12. Acceptance Tests: Pair Activity Non-Object Rendering Protection (React Invariant #31) ---');
+  const matchRendererFresh = fs.readFileSync(path.join(rootDir, 'src/components/exam/student/standard/MatchRenderer.tsx'), 'utf-8');
+  assert(matchRendererFresh.includes('getPairRightText'), 'MatchRenderer includes getPairRightText defensive string extractor');
+  assert(matchRendererFresh.includes('matchedRight = getPairRightText(p)'), 'MatchRenderer safely derives matchedRight using getPairRightText');
+  assert(previewSrc.includes('handleSelectAnswer(val)'), 'LivePreviewModal merges dictionary answers directly');
+  const studentViewFresh = fs.readFileSync(path.join(rootDir, 'src/components/exam/student/standard/StandardExamStudentView.tsx'), 'utf-8');
+  assert(!studentViewFresh.includes('onAnswerChange(updated, pairId)'), 'StandardExamStudentView does not pass dictionary as single-key targetQId on matching');
+
   // --------------------------------------------------------------------------
   // FINAL REPORT
   // --------------------------------------------------------------------------

@@ -436,26 +436,24 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
             pairs={matchingPairs}
             currentAnswers={answers}
             onSelectPair={(pairId, leftText, rightText) => {
-              const updated = {
-                ...answers,
+              onAnswerChange({
                 [pairId]: rightText,
                 [leftText]: rightText
-              };
-              onAnswerChange(updated, pairId);
+              });
             }}
             onClearPair={(pairId, leftText) => {
-              const updated = { ...answers };
-              delete updated[pairId];
-              delete updated[leftText];
-              onAnswerChange(updated, pairId);
+              onAnswerChange({
+                [pairId]: '',
+                [leftText]: ''
+              });
             }}
             onResetAll={() => {
-              const updated = { ...answers };
+              const resetMap: Record<string, string> = {};
               matchingPairs.forEach((p) => {
-                delete updated[p.id];
-                delete updated[p.left];
+                resetMap[p.id] = '';
+                resetMap[p.left] = '';
               });
-              onAnswerChange(updated);
+              onAnswerChange(resetMap);
             }}
           />
         );
@@ -478,14 +476,13 @@ export const StandardExamStudentView: React.FC<StandardExamStudentViewProps> = (
             blanks={clozeBlanks}
             currentAnswers={answers}
             onSelectBlank={(blankId, questionId, selectedVal) => {
-              const updated = {
-                ...answers,
+              const updates: Record<string, string> = {
                 [blankId]: selectedVal
               };
               if (questionId) {
-                updated[questionId] = selectedVal;
+                updates[questionId] = selectedVal;
               }
-              onAnswerChange(updated, questionId || blankId);
+              onAnswerChange(updates);
             }}
           />
         );

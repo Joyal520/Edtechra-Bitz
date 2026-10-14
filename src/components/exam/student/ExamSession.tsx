@@ -88,6 +88,12 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
 
   // Synchronously update memory ref and React state to avoid any asynchronous closure lag
   const updateAnswerSynchronously = useCallback((qId: string, val: any) => {
+    if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
+      const updated = { ...answersRef.current, ...val };
+      answersRef.current = updated;
+      setAnswers(updated);
+      return updated;
+    }
     const updated = { ...answersRef.current, [qId]: val };
     answersRef.current = updated;
     setAnswers(updated);
@@ -203,16 +209,16 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
   };
 
   const handleAnswerChange = (val: any, targetQId?: string) => {
-    if (targetQId) {
-      const updated = updateAnswerSynchronously(targetQId, val);
-      triggerAutosave(updated, bookmarkedIds);
-      return;
-    }
-
     if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
       const updated = { ...answersRef.current, ...val };
       answersRef.current = updated;
       setAnswers(updated);
+      triggerAutosave(updated, bookmarkedIds);
+      return;
+    }
+
+    if (targetQId) {
+      const updated = updateAnswerSynchronously(targetQId, val);
       triggerAutosave(updated, bookmarkedIds);
       return;
     }
@@ -656,7 +662,7 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           exam={exam}
           questions={flattenedQuestions}
           currentIndex={currentIndex}
-          currentAnswer={answers[currentQ.question.id]}
+          currentAnswer={typeof answers[currentQ.question.id] === 'string' || Array.isArray(answers[currentQ.question.id]) ? answers[currentQ.question.id] : undefined}
           answers={answers}
           bookmarkedIds={bookmarkedIds}
           timeRemainingSeconds={timeRemainingSeconds}

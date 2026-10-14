@@ -153,6 +153,13 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
       }));
       return;
     }
+    if (value && typeof value === 'object' && !Array.isArray(value) && !('incorrectToken' in value)) {
+      setMockAnswers((prev) => ({
+        ...prev,
+        ...value
+      }));
+      return;
+    }
     setMockAnswers((prev) => ({
       ...prev,
       [qIdOrMap]: value
@@ -436,7 +443,13 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 exam={liveAssessment as any}
                 questions={flattenedQuestions}
                 currentIndex={currentIndex}
-                currentAnswer={currentQItem?.question?.id ? mockAnswers[currentQItem.question.id] : undefined}
+                currentAnswer={
+                  currentQItem?.question?.id
+                    ? typeof mockAnswers[currentQItem.question.id] === 'string' || Array.isArray(mockAnswers[currentQItem.question.id])
+                      ? mockAnswers[currentQItem.question.id]
+                      : undefined
+                    : undefined
+                }
                 answers={mockAnswers}
                 bookmarkedIds={flaggedIds}
                 timeRemainingSeconds={liveTimerSeconds}
@@ -445,10 +458,10 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
                 markedCount={flaggedIds.size}
                 onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
                 onAnswerChange={(val, targetQId) => {
-                  if (targetQId) {
-                    handleSelectAnswer(targetQId, val);
-                  } else if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
+                  if (val && typeof val === 'object' && !Array.isArray(val) && !('incorrectToken' in val)) {
                     handleSelectAnswer(val);
+                  } else if (targetQId) {
+                    handleSelectAnswer(targetQId, val);
                   } else if (currentQItem?.question?.id) {
                     handleSelectAnswer(currentQItem.question.id, val);
                   }

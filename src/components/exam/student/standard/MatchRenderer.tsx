@@ -39,11 +39,23 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
     });
   }, [pairs]);
 
+  // Defensive helper to ensure matching values are always strings and never objects
+  const getPairRightText = (pair: MatchingPairItem): string => {
+    const raw = currentAnswers[pair.id] || currentAnswers[pair.left];
+    if (typeof raw === 'string') return raw;
+    if (raw && typeof raw === 'object') {
+      if (typeof raw[pair.id] === 'string') return raw[pair.id];
+      if (typeof raw[pair.left] === 'string') return raw[pair.left];
+      return '';
+    }
+    return '';
+  };
+
   // Set of right items that have already been matched
   const matchedRights = useMemo(() => {
     const matched = new Set<string>();
     pairs.forEach((p) => {
-      const ans = currentAnswers[p.id] || currentAnswers[p.left];
+      const ans = getPairRightText(p);
       if (ans) matched.add(ans);
     });
     return matched;
@@ -78,7 +90,7 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
   const handleRemovePair = handleClearPair;
 
   // Count of currently completed pairs
-  const matchedCount = pairs.filter((p) => Boolean(currentAnswers[p.id] || currentAnswers[p.left])).length;
+  const matchedCount = pairs.filter((p) => Boolean(getPairRightText(p))).length;
 
   return (
     <div className="w-full space-y-4 pt-1">
@@ -115,7 +127,7 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
           <div className="space-y-2">
             {pairs.map((p, idx) => {
               const isSelected = selectedLeftId === p.id;
-              const matchedRight = currentAnswers[p.id] || currentAnswers[p.left];
+              const matchedRight = getPairRightText(p);
 
               return (
                 <div
@@ -188,7 +200,7 @@ export const MatchRenderer: React.FC<MatchRendererProps> = ({
               const isPaired = matchedRights.has(rightText);
               // Find which left pair this rightText is paired with
               const pairedPair = pairs.find((p) => {
-                const ans = currentAnswers[p.id] || currentAnswers[p.left];
+                const ans = getPairRightText(p);
                 return ans === rightText;
               });
 

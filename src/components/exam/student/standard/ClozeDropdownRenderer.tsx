@@ -67,10 +67,11 @@ export const ClozeDropdownRenderer: React.FC<ClozeDropdownRendererProps> = ({
       // DYNAMIC OPTIONS: strictly uses this blank's own question object options
       const blankOptions = matchedBlank?.options?.length ? matchedBlank.options : [];
 
-      const selectedValue =
+      const rawVal =
         currentAnswers[blankKey] ||
         (questionId ? currentAnswers[questionId] : '') ||
         '';
+      const selectedValue = typeof rawVal === 'string' ? rawVal : '';
 
       return (
         <span
