@@ -390,18 +390,13 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
   const handleApplyPreset = (preset: 'standard' | 'quick' | 'grammar' | 'reading' | 'custom') => {
     setActivePreset(preset);
     if (preset === 'custom') return;
+    if (preset === 'standard') {
+      applyStandardTemplate();
+      return;
+    }
 
     setBlueprintItems((prev) =>
       prev.map((item) => {
-        if (preset === 'standard') {
-          if (item.id === 'mcq') return { ...item, enabled: true, count: 10, marksPerItem: 1 };
-          if (item.id === 'tf') return { ...item, enabled: true, count: 5, marksPerItem: 1 };
-          if (item.id === 'fill_blank') return { ...item, enabled: true, count: 5, marksPerItem: 1 };
-          if (item.id === 'cloze') return { ...item, enabled: true, count: 1, marksPerItem: 5 };
-          if (item.id === 'short_ans') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
-          if (item.id === 'writing') return { ...item, enabled: true, count: 1, marksPerItem: 10 };
-          return { ...item, enabled: false };
-        }
         if (preset === 'quick') {
           if (item.id === 'mcq') return { ...item, enabled: true, count: 5, marksPerItem: 1 };
           if (item.id === 'tf') return { ...item, enabled: true, count: 3, marksPerItem: 1 };
@@ -1344,7 +1339,7 @@ Generate the complete examination JSON now:`;
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     {[
-                      { id: 'standard', label: 'Standard Exam', desc: 'Balanced 40-mark mix' },
+                      { id: 'standard', label: 'Standard Exam', desc: 'Controlled 40 Qs • 100 Marks' },
                       { id: 'quick', label: 'Quick Test', desc: '10-mark fast check' },
                       { id: 'grammar', label: 'Grammar Test', desc: 'Focused syntax drills' },
                       { id: 'reading', label: 'Reading Test', desc: 'Comprehension & Cloze' },
