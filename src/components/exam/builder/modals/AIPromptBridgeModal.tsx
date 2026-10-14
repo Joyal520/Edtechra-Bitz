@@ -1,11 +1,11 @@
 // ============================================================================
-// EDTECHRA ASSESSMENT BUILDER: AI PROMPT BRIDGE MODAL
-// Generates high-fidelity external prompts for ChatGPT/Gemini/Claude and
-// parses AI JSON responses back into live examination structures.
-// Architected for direct replacement with native EdTechra AI generation.
+// EDTECHRA ASSESSMENT BUILDER: AI PROMPT BRIDGE MODAL (STANDARD EXAM 2.0)
+// Generates high-fidelity external prompts for ChatGPT/Gemini/Claude based on
+// the controlled 100-mark Standard Exam Blueprint (7 sections, 40 questions).
+// Validates external AI JSON and imports directly into live examination cards.
 // ============================================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   X,
   Bot,
@@ -19,7 +19,13 @@ import {
 } from 'lucide-react';
 import { StandardExamInput } from '../../shared/assessmentBlueprints';
 import { ExamSection } from '../../shared/ExamSchema';
-import { validateExamJSON, ValidationResult } from '../../teacher/JSONValidator';
+import {
+  buildStandardExamAIPrompt,
+  validateStandardExamPackage,
+  buildStandardCorrectionPrompt,
+  StandardValidationResult
+} from '../../shared/standardExamPackage';
+import { validateExamJSON } from '../../teacher/JSONValidator';
 
 interface AIPromptBridgeModalProps {
   isOpen: boolean;
@@ -34,153 +40,23 @@ export const AIPromptBridgeModal: React.FC<AIPromptBridgeModalProps> = ({
   onClose,
   onImportExam
 }) => {
-  const [copied, setCopied] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [copiedCorrection, setCopiedCorrection] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'paste'>('prompt');
   const [pasteText, setPasteText] = useState('');
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validationResult, setValidationResult] = useState<StandardValidationResult | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const generatedPrompt = useMemo(() => {
-    const {
-      subject = 'English Language',
-      grade = 'Grade 10',
-      topic = 'Simple Present Tense',
-      lessonNotes = '',
-      difficulty = 'Medium',
-      durationMinutes = 45
-    } = input;
-
-    return `You are an expert educational assessment psychometrician and curriculum developer.
-
-Your mission is to generate a comprehensive, pedagogically sound, and valid digital examination following EdTechra's Standard Assessment Blueprint.
-
-================================================================================
-ASSESSMENT PARAMETERS
-================================================================================
-- Subject: ${subject}
-- Grade Level: ${grade}
-- Topic: ${topic}
-- Overall Difficulty: ${difficulty}
-- Target Duration: ${durationMinutes} minutes
-- Standard Pass Threshold: 50%
-
-================================================================================
-TEACHING CONTENT / SOURCE GROUNDING
-================================================================================
-${lessonNotes.trim() ? `"""\n${lessonNotes.trim()}\n"""` : 'Ground questions thoroughly in the standard curriculum guidelines for this topic and grade level.'}
-
-================================================================================
-REQUIRED ASSESSMENT BLUEPRINT & QUESTION DISTRIBUTION
-================================================================================
-You MUST construct a multi-section examination containing the following exact sections:
-
-1. SECTION A: GRAMMAR & CORE LANGUAGE (8 to 10 Questions, 1 Mark each)
-   - Multiple Choice (MCQ)
-   - True / False
-   - Fill in the Blank (with '[blank]' marker and accepted synonyms)
-   - Sentence Completion
-   - Error Correction (Identify and fix syntax/agreement errors)
-   - Sentence Transformation (Rewrite without changing meaning)
-   - Matching Pairs (3 distinct pairs)
-   - Reorder / Sequence (Logical progression or scrambled sentence)
-
-2. SECTION B: READING COMPREHENSION ACTIVITY (1 Passage, 4 Questions, 10 Marks total)
-   - Passage: 150–200 words directly linked to the topic or provided notes.
-   - Questions:
-     * Q1: Direct factual retrieval (Multiple Choice, 2 marks)
-     * Q2: Vocabulary in context (Short Answer, 2 marks)
-     * Q3: Analytical inference (Multiple Choice, 3 marks)
-     * Q4: Critical understanding (Short Answer, 3 marks)
-
-3. SECTION C: LISTENING ACTIVITY (1 Audio Stimulus, 3 Questions, 10 Marks total)
-   - Provide an authentic dialogue or monologue transcript between teacher and students.
-   - Include 3 comprehension questions (MCQ, Fill in Blank, Short Answer) grounded in the transcript.
-
-4. SECTION D: PICTURE DESCRIPTION & GUIDED WRITING (1 Writing Task, 10-15 Marks)
-   - Provide a clear situational prompt describing a visual scene.
-   - Writing task: 80–100 words applying the grammar concepts.
-   - Assessment Rubric: Content (4), Vocabulary (4), Grammar (4), Organization (3).
-
-================================================================================
-OUTPUT FORMAT REQUIREMENTS (CRITICAL)
-================================================================================
-You MUST output ONLY a valid JSON object matching the EdTechra Canonical Assessment Schema (v2.0) below.
-DO NOT wrap the response in conversational pleasantries. Output ONLY the JSON block.
-
-\`\`\`json
-{
-  "schemaVersion": "2.0",
-  "assessmentType": "exam",
-  "exam": {
-    "title": "${subject}: ${topic} Examination",
-    "subject": "${subject}",
-    "grade": "${grade}",
-    "examType": "Standard Exam",
-    "difficulty": "${difficulty}",
-    "topic": "${topic}",
-    "description": "Standard curriculum assessment covering Core Language, Reading, Listening, and Writing.",
-    "instructions": "Attempt all questions. Review your answers before submitting.",
-    "durationMinutes": ${durationMinutes},
-    "passPercentage": 50
-  },
-  "sections": [
-    {
-      "id": "sec_1",
-      "title": "Section A — Grammar & Core Language",
-      "description": "Answer all objective questions testing grammatical precision.",
-      "questions": [
-        {
-          "id": "q1",
-          "type": "multiple_choice",
-          "question": "Question text here?",
-          "options": [
-            { "id": "a", "text": "Correct option" },
-            { "id": "b", "text": "Plausible distractor" },
-            { "id": "c", "text": "Common misconception" },
-            { "id": "d", "text": "Alternative distractor" }
-          ],
-          "correctAnswer": ["a"],
-          "difficulty": "medium",
-          "marks": 1,
-          "required": true,
-          "explanation": "Clear educational explanation."
-        }
-      ]
-    },
-    {
-      "id": "sec_2",
-      "title": "Section B — Reading Comprehension",
-      "description": "Read the text carefully and answer the questions that follow.",
-      "questions": [],
-      "activities": [
-        {
-          "id": "act_reading_1",
-          "activityType": "reading_activity",
-          "title": "Reading Comprehension",
-          "passage": "Rich contextual passage text here...",
-          "questions": [
-            {
-              "id": "q_rc_1",
-              "type": "multiple_choice",
-              "question": "Comprehension question?",
-              "options": [
-                { "id": "a", "text": "Accurate answer" },
-                { "id": "b", "text": "Distractor" }
-              ],
-              "correctAnswer": ["a"],
-              "difficulty": "medium",
-              "marks": 2,
-              "required": true,
-              "explanation": "Explanation from passage."
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-\`\`\`
-
-Generate the full, complete examination JSON now:`;
+    return buildStandardExamAIPrompt({
+      subject: input.subject || 'English Language',
+      grade: input.grade || 'Grade 10',
+      topic: input.topic || 'The Simple Past',
+      medium: 'English',
+      difficulty: input.difficulty || 'Medium',
+      durationMinutes: input.durationMinutes || 60,
+      sourceContent: input.lessonNotes || ''
+    });
   }, [input]);
 
   if (!isOpen) return null;
@@ -188,32 +64,50 @@ Generate the full, complete examination JSON now:`;
   const handleCopyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(generatedPrompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 3000);
     } catch {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 3000);
     }
   };
 
-  const handleValidatePaste = () => {
-    if (!pasteText.trim()) return;
-    const result = validateExamJSON(pasteText);
+  const handleCopyCorrection = async () => {
+    if (!validationResult || validationResult.isValid || validationResult.errors.length === 0) return;
+    const correctionPrompt = buildStandardCorrectionPrompt(validationResult.errors);
+    try {
+      await navigator.clipboard.writeText(correctionPrompt);
+      setCopiedCorrection(true);
+      setTimeout(() => setCopiedCorrection(false), 3000);
+    } catch {
+      setCopiedCorrection(true);
+      setTimeout(() => setCopiedCorrection(false), 3000);
+    }
+  };
+
+  const handleValidatePaste = (textToValidate?: string) => {
+    void validateExamJSON;
+    const raw = textToValidate !== undefined ? textToValidate : pasteText;
+    if (!raw.trim()) {
+      setValidationResult(null);
+      return;
+    }
+    const result = validateStandardExamPackage(raw);
     setValidationResult(result);
   };
 
   const handleImport = () => {
-    if (!validationResult?.isValid || !validationResult.parsedExam) {
+    if (!validationResult?.isValid || !validationResult.canonicalAssessment) {
       handleValidatePaste();
       return;
     }
-    const { sections, exam } = validationResult.parsedExam;
+    const { sections, exam } = validationResult.canonicalAssessment;
     onImportExam(sections, exam);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn overflow-y-auto select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn overflow-y-auto select-none">
       <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
         {/* Header */}
         <div className="p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -224,10 +118,10 @@ Generate the full, complete examination JSON now:`;
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
-                  AI Prompt Bridge
+                  Standard Exam 2.0 AI Bridge
                 </span>
                 <span className="text-slate-300">•</span>
-                <span className="text-xs font-semibold text-slate-500">ChatGPT • Claude • Gemini</span>
+                <span className="text-xs font-semibold text-slate-500">40 Questions • 100 Marks</span>
               </div>
               <h2 className="text-xl font-black text-slate-900 mt-0.5">
                 AI Examination Generator
@@ -287,10 +181,16 @@ Generate the full, complete examination JSON now:`;
                   </div>
                   <p className="leading-relaxed">
                     1. Click <strong>Copy Prompt</strong> below.<br />
-                    2. Paste it into <strong>ChatGPT, Gemini, Claude</strong>, or your preferred AI tool.<br />
-                    3. Copy the JSON generated by the AI and click <strong>Paste AI Exam</strong> above to import it directly into your exam builder.
+                    2. Paste it into <strong>ChatGPT, Gemini, Claude</strong>, or your preferred AI assistant.<br />
+                    3. Copy the returned JSON and click <strong>Paste AI Exam</strong> above to import the 40 questions directly into EdTechra.
                   </p>
                 </div>
+              </div>
+
+              {/* Blueprint Summary Pill */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-700 flex flex-wrap gap-2 items-center justify-between font-semibold">
+                <span>Controlled Blueprint: 7 Sections (A through G)</span>
+                <span className="text-purple-700 font-bold">40 Questions • 100 Marks Total</span>
               </div>
 
               {/* Prompt Text Box */}
@@ -305,8 +205,8 @@ Generate the full, complete examination JSON now:`;
                     onClick={handleCopyPrompt}
                     className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
                   >
-                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copied ? 'Copied to Clipboard!' : 'Copy Prompt'}</span>
+                    {copiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedPrompt ? 'Copied to Clipboard!' : 'Copy Prompt'}</span>
                   </button>
                 </div>
 
@@ -341,8 +241,7 @@ Generate the full, complete examination JSON now:`;
                       const text = await navigator.clipboard.readText();
                       if (text) {
                         setPasteText(text);
-                        const res = validateExamJSON(text);
-                        setValidationResult(res);
+                        handleValidatePaste(text);
                       }
                     } catch {}
                   }}
@@ -354,20 +253,22 @@ Generate the full, complete examination JSON now:`;
               </div>
 
               <textarea
+                ref={textareaRef}
                 rows={10}
                 value={pasteText}
                 onChange={(e) => {
-                  setPasteText(e.target.value);
-                  setValidationResult(null);
+                  const val = e.target.value;
+                  setPasteText(val);
+                  handleValidatePaste(val);
                 }}
                 placeholder="Paste the JSON response from ChatGPT, Gemini, or Claude here (including or excluding ```json code fences)..."
                 className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xs font-mono text-slate-900 placeholder:text-slate-500 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-purple-500 leading-relaxed resize-y"
               />
 
-              {/* Validation Feedback */}
+              {/* Validation Feedback & Action Buttons */}
               {validationResult && (
                 <div
-                  className={`p-4 rounded-2xl border text-xs space-y-2 animate-fadeIn ${
+                  className={`p-4 rounded-2xl border text-xs space-y-3 animate-fadeIn ${
                     validationResult.isValid
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                       : 'bg-rose-50 border-rose-200 text-rose-900'
@@ -382,24 +283,60 @@ Generate the full, complete examination JSON now:`;
                       )}
                       <span>
                         {validationResult.isValid
-                          ? 'Valid EdTechra Assessment JSON'
-                          : `Validation Found Issues (${validationResult.errors.length})`}
+                          ? 'Valid EdTechra Standard Exam 2.0 Package'
+                          : `Validation Issues Found (${validationResult.errors.length})`}
                       </span>
                     </div>
 
                     {validationResult.stats && (
                       <span className="text-[11px] font-mono font-bold text-slate-700">
-                        {validationResult.stats.questionCount} Questions • {validationResult.stats.sectionCount} Sections
+                        {validationResult.stats.totalQuestions} Questions • {validationResult.stats.sectionsCount} Sections • {validationResult.stats.totalMarks} Marks
                       </span>
                     )}
                   </div>
 
                   {validationResult.errors.length > 0 && (
-                    <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-700 font-medium">
-                      {validationResult.errors.map((err, idx) => (
-                        <li key={idx}>{err.message}</li>
-                      ))}
-                    </ul>
+                    <div className="space-y-3">
+                      <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-700 font-medium max-h-40 overflow-y-auto">
+                        {validationResult.errors.map((err, idx) => (
+                          <li key={idx}>
+                            {err.questionId ? `[${err.questionId}] ` : ''}
+                            {err.message}
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* Explicit Fix with AI, Edit JSON, Cancel Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-rose-200/80">
+                        <button
+                          type="button"
+                          onClick={handleCopyCorrection}
+                          className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                        >
+                          {copiedCorrection ? <Check className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                          <span>{copiedCorrection ? 'Correction Prompt Copied!' : 'Fix with AI'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => textareaRef.current?.focus()}
+                          className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          Edit JSON
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setValidationResult(null);
+                            setPasteText('');
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -410,7 +347,7 @@ Generate the full, complete examination JSON now:`;
         {/* Footer */}
         <div className="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <div className="text-[11px] text-slate-500 font-medium hidden sm:block">
-            Designed to seamlessly transition to native EdTechra AI generation.
+            Strict validation ensures zero empty sections and exact 100 marks.
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
@@ -425,7 +362,7 @@ Generate the full, complete examination JSON now:`;
             {activeTab === 'paste' ? (
               <button
                 type="button"
-                disabled={!pasteText.trim()}
+                disabled={!pasteText.trim() || !validationResult?.isValid}
                 onClick={handleImport}
                 className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-purple-600/20 cursor-pointer transition-all active:scale-95 disabled:opacity-40"
               >
@@ -438,8 +375,8 @@ Generate the full, complete examination JSON now:`;
                 onClick={handleCopyPrompt}
                 className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-purple-600/20 cursor-pointer transition-all active:scale-95"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Copied!' : 'Copy Prompt'}</span>
+                {copiedPrompt ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedPrompt ? 'Copied!' : 'Copy Prompt'}</span>
               </button>
             )}
           </div>

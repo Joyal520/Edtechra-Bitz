@@ -304,10 +304,10 @@ routine, universal truth, agreement, singular, plural, frequency adverbs (always
             <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1 text-slate-700">
               <div className="font-bold text-indigo-950">
-                Automatic Assessment Blueprint Included
+                Standard Exam 2.0 Controlled Blueprint (40 Questions • 100 Marks)
               </div>
               <p className="leading-relaxed">
-                EdTechra automatically creates Section A (Grammar & Language), Section B (Reading Passage & Questions), Section C (Listening Track & Questions), and Section D (Picture Description & Writing). You will not need to configure question types manually.
+                EdTechra generates exactly 7 progressive sections: Section A (MCQ, 10 Qs × 2m), Section B (Matching, 5 Qs × 2m), Section C (Correct/Wrong, 5 Qs × 2m), Section D (Cloze Passage, 5 Qs × 2m), Section E (Find the Mistake, 5 Qs × 3m), Section F (Controlled Type Answer, 5 Qs × 3m), and Section G (Reorder Sentence, 5 Qs × 4m).
               </p>
             </div>
           </div>

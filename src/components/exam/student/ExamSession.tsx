@@ -22,6 +22,7 @@ import { SubmitDialog } from './SubmitDialog';
 import { ExamInstructions } from './ExamInstructions';
 import { ExamResultView } from './ExamResultView';
 import { SimpleExamStudentView } from './SimpleExamStudentView';
+import { StandardExamStudentView } from './standard';
 import { playAnswerClickSound } from '@/utils/examSoundUtils';
 
 export interface ExamSessionAttemptData {
@@ -485,6 +486,27 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
     return false;
   }, [exam, flattenedQuestions]);
 
+  // Check if exam conforms to Standard Exam 2.0 template
+  const isStandardExam = useMemo(() => {
+    if (isSimpleExam) return false;
+    const typeStr = (exam.exam.examType || '').toLowerCase();
+    const titleStr = (exam.exam.title || '').toLowerCase();
+    const template = (exam as any).exam_template || (exam.exam as any)?.exam_template;
+    if (template === 'standard' || typeStr.includes('standard') || titleStr.includes('standard')) {
+      return true;
+    }
+    if (exam.sections.length === 7 || flattenedQuestions.length === 40) {
+      return true;
+    }
+    return flattenedQuestions.some(
+      (q) =>
+        Boolean((q.question as any).standardType) ||
+        ['correct_wrong', 'cloze', 'find_mistake', 'controlled_answer'].includes(
+          (q.question as any).type
+        )
+    );
+  }, [exam, flattenedQuestions, isSimpleExam]);
+
   const handleClearCurrentAnswer = () => {
     if (currentQ) {
       handleAnswerChange(undefined);
@@ -548,6 +570,87 @@ export const ExamSession: React.FC<ExamSessionProps> = ({
           markedCount={markedCount}
           onAnswerChange={handleAnswerChange}
           onAnswerWithAutoAdvance={handleAnswerWithAutoAdvance}
+          onClearAnswer={() => handleAnswerChange(undefined)}
+          onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+          onNext={() => setCurrentIndex((prev) => Math.min(flattenedQuestions.length - 1, prev + 1))}
+          onSelectIndex={(idx) => setCurrentIndex(idx)}
+          onToggleBookmark={handleToggleBookmark}
+          onSubmit={() => setShowSubmitConfirm(true)}
+          onClose={onClose}
+        />
+
+        {/* Submit Confirmation Dialog */}
+        <SubmitDialog
+          isOpen={showSubmitConfirm}
+          totalQuestions={flattenedQuestions.length}
+          answeredCount={answeredCount}
+          unansweredCount={unansweredCount}
+          markedForReviewCount={markedCount}
+          isSubmitting={isSubmitting}
+          onClose={() => setShowSubmitConfirm(false)}
+          onConfirmSubmit={() => performSubmission()}
+        />
+
+        {/* In-App Error Notification Modal */}
+        {sessionErrorMessage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+            <div className="bg-[#0b142c] border border-rose-500/50 rounded-3xl w-full max-w-md p-6 sm:p-7 shadow-2xl space-y-5 text-white text-center">
+              <div className="w-14 h-14 rounded-3xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-white">Notice</h3>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {sessionErrorMessage}
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSessionErrorMessage(null)}
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm cursor-pointer shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Render dedicated Standard Exam 2.0 student UI when applicable
+  if (isStandardExam && currentQ) {
+    return (
+      <div className="relative min-h-screen bg-slate-900">
+        {/* Preview Watermark Badge if Teacher is Previewing */}
+        {isPreview && (
+          <div className="bg-amber-50 border-b border-amber-200 py-1.5 px-4 text-center text-xs font-bold text-amber-900 flex items-center justify-center gap-2">
+            <span>TEACHER PREVIEW MODE — Standard Exam 2.0 (Scores not recorded)</span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="underline text-amber-950 hover:text-indigo-600 font-semibold cursor-pointer ml-2"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+
+        <StandardExamStudentView
+          exam={exam}
+          questions={flattenedQuestions}
+          currentIndex={currentIndex}
+          currentAnswer={answers[currentQ.question.id]}
+          answers={answers}
+          bookmarkedIds={bookmarkedIds}
+          timeRemainingSeconds={timeRemainingSeconds}
+          syncState={syncState}
+          answeredCount={answeredCount}
+          unansweredCount={unansweredCount}
+          markedCount={markedCount}
+          onAnswerChange={handleAnswerChange}
           onClearAnswer={() => handleAnswerChange(undefined)}
           onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
           onNext={() => setCurrentIndex((prev) => Math.min(flattenedQuestions.length - 1, prev + 1))}

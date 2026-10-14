@@ -16,11 +16,16 @@ export const DETERMINISTIC_QUESTION_TYPES = [
   'mcq',
   'multiple_choice',
   'true_false',
+  'correct_wrong',
   'fill_blank',
   'multiple_select',
   'matching',
   'ordering',
-  'numeric'
+  'numeric',
+  'cloze',
+  'find_mistake',
+  'controlled_answer',
+  'reorder'
 ];
 
 /**
@@ -212,6 +217,117 @@ export function evaluateDeterministicQuestion(question, studentAnswer) {
       max_score: marks,
       grading_method: 'deterministic',
       feedback: isCorrect ? 'Correct!' : (question.explanation || `Incorrect value. Expected: ${question.correct_answer}`)
+    };
+  }
+
+  // 8. Correct or Wrong
+  if (qType === 'correct_wrong') {
+    const sStr = String(studentAnswer ?? '').trim().toUpperCase();
+    const cStr = String(question.correct_answer ?? question.correctAnswer ?? '').trim().toUpperCase();
+    const isCorrect = (sStr === cStr) ||
+      (sStr === 'CORRECT' && (cStr === 'TRUE' || cStr === 'T')) ||
+      (sStr === 'WRONG' && (cStr === 'FALSE' || cStr === 'F')) ||
+      (sStr === 'TRUE' && cStr === 'CORRECT') ||
+      (sStr === 'FALSE' && cStr === 'WRONG');
+
+    return {
+      question_id: question.id,
+      student_answer: studentAnswer,
+      is_correct: isCorrect,
+      score: isCorrect ? marks : 0,
+      max_score: marks,
+      grading_method: 'deterministic',
+      feedback: isCorrect ? 'Correct!' : (question.explanation || `Incorrect. The statement is ${cStr}.`)
+    };
+  }
+
+  // 9. Cloze Passage Dropdown
+  if (qType === 'cloze') {
+    const sVal = typeof studentAnswer === 'object' && studentAnswer !== null ? studentAnswer[question.id] || Object.values(studentAnswer)[0] : studentAnswer;
+    const sStr = String(sVal ?? '').trim().toLowerCase();
+    const cStr = String(question.correct_answer ?? question.correctAnswer ?? '').trim().toLowerCase();
+    const isCorrect = sStr === cStr && sStr !== '';
+
+    return {
+      question_id: question.id,
+      student_answer: studentAnswer,
+      is_correct: isCorrect,
+      score: isCorrect ? marks : 0,
+      max_score: marks,
+      grading_method: 'deterministic',
+      feedback: isCorrect ? 'Correct!' : (question.explanation || `Incorrect. Expected: ${question.correct_answer || question.correctAnswer}`)
+    };
+  }
+
+  // 10. Find the Mistake
+  if (qType === 'find_mistake') {
+    const targetToken = String(question.incorrect_token || question.incorrectToken || question.target || '').trim().toLowerCase();
+    const targetIndex = question.token_index ?? question.tokenIndex;
+
+    let isCorrect = false;
+    if (typeof studentAnswer === 'number' && targetIndex !== undefined) {
+      isCorrect = Number(studentAnswer) === Number(targetIndex);
+    } else {
+      const sToken = String(studentAnswer ?? '').trim().toLowerCase();
+      isCorrect = sToken === targetToken && sToken !== '';
+    }
+
+    return {
+      question_id: question.id,
+      student_answer: studentAnswer,
+      is_correct: isCorrect,
+      score: isCorrect ? marks : 0,
+      max_score: marks,
+      grading_method: 'deterministic',
+      feedback: isCorrect ? 'Correct! Mistake identified.' : (question.explanation || `Incorrect. The mistake was "${targetToken}".`)
+    };
+  }
+
+  // 11. Controlled Type the Answer
+  if (qType === 'controlled_answer') {
+    const normStudent = normalizeAnswerText(studentAnswer);
+    const primaryAns = question.correct_answer || question.answer || question.correctAnswer || '';
+    const normCorrect = normalizeAnswerText(primaryAns);
+
+    let isCorrect = normStudent === normCorrect && normStudent !== '';
+    const accepted = question.accepted_answers || question.acceptedAnswers;
+    if (!isCorrect && Array.isArray(accepted)) {
+      isCorrect = accepted.some((ans) => normalizeAnswerText(ans) === normStudent);
+    }
+
+    return {
+      question_id: question.id,
+      student_answer: studentAnswer,
+      is_correct: isCorrect,
+      score: isCorrect ? marks : 0,
+      max_score: marks,
+      grading_method: 'deterministic',
+      feedback: isCorrect ? 'Correct!' : (question.explanation || `Incorrect. Expected: ${primaryAns}`)
+    };
+  }
+
+  // 12. Reorder the Sentence
+  if (qType === 'reorder') {
+    let isCorrect = false;
+    const correctArr = question.correct_order || question.correctOrder;
+    const correctStr = String(question.correct_answer || question.correctAnswer || (Array.isArray(correctArr) ? correctArr.join(' ') : '')).trim().toLowerCase();
+
+    if (Array.isArray(studentAnswer) && Array.isArray(correctArr)) {
+      isCorrect = JSON.stringify(studentAnswer.map(s => String(s).trim().toLowerCase())) ===
+                  JSON.stringify(correctArr.map(s => String(s).trim().toLowerCase()));
+    } else {
+      const sStr = Array.isArray(studentAnswer) ? studentAnswer.join(' ').trim().toLowerCase() : String(studentAnswer ?? '').trim().toLowerCase();
+      isCorrect = normalizeAnswerText(sStr) === normalizeAnswerText(correctStr);
+    }
+
+    return {
+      question_id: question.id,
+      student_answer: studentAnswer,
+      is_correct: isCorrect,
+      score: isCorrect ? marks : 0,
+      max_score: marks,
+      grading_method: 'deterministic',
+      feedback: isCorrect ? 'Correct sentence structure!' : (question.explanation || `Incorrect. Expected: ${correctStr}`)
     };
   }
 

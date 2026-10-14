@@ -50,6 +50,7 @@ import { EssayQuestionComponent } from '../../student/renderers/EssayQuestion';
 import { QuestionVisualEditorModal } from '../modals/QuestionVisualEditorModal';
 import { SimplePublishModal } from '../publishing/SimplePublishModal';
 import { SimpleExamStudentView } from '../../student/SimpleExamStudentView';
+import { StandardExamStudentView } from '../../student/standard';
 
 interface LivePreviewModalProps {
   isOpen: boolean;
@@ -124,6 +125,25 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
   const totalMarks = useMemo(() => {
     return calculateExamTotalMarks(liveAssessment.sections);
   }, [liveAssessment.sections]);
+
+  const isStandardExam = useMemo(() => {
+    const typeStr = (liveAssessment.exam.examType || '').toLowerCase();
+    const titleStr = (liveAssessment.exam.title || '').toLowerCase();
+    const template = (liveAssessment as any).exam_template || (liveAssessment.exam as any)?.exam_template;
+    if (template === 'standard' || typeStr.includes('standard') || titleStr.includes('standard')) {
+      return true;
+    }
+    if (liveAssessment.sections.length === 7 || flattenedQuestions.length === 40) {
+      return true;
+    }
+    return flattenedQuestions.some(
+      (q) =>
+        Boolean((q.question as any).standardType) ||
+        ['correct_wrong', 'cloze', 'find_mistake', 'controlled_answer'].includes(
+          (q.question as any).type
+        )
+    );
+  }, [liveAssessment, flattenedQuestions]);
 
   const handleSelectAnswer = (qId: string, value: any) => {
     setMockAnswers((prev) => ({
@@ -404,27 +424,51 @@ export const LivePreviewModal: React.FC<LivePreviewModalProps> = ({
       <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex justify-center custom-scrollbar bg-slate-100/70">
         {viewMode === 'student' ? (
           <div className={`w-full transition-all duration-300 rounded-3xl overflow-hidden shadow-xl my-auto ${deviceWidthClass}`}>
-            <SimpleExamStudentView
-              exam={liveAssessment as any}
-              questions={flattenedQuestions}
-              currentIndex={currentIndex}
-              currentAnswer={currentQItem?.question?.id ? mockAnswers[currentQItem.question.id] : undefined}
-              answers={mockAnswers}
-              bookmarkedIds={flaggedIds}
-              timeRemainingSeconds={liveTimerSeconds}
-              answeredCount={answeredCount}
-              unansweredCount={Math.max(0, totalQuestions - answeredCount)}
-              markedCount={flaggedIds.size}
-              onAnswerChange={(val) => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, val)}
-              onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
-              onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-              onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
-              onSelectIndex={(idx) => setCurrentIndex(idx)}
-              onToggleBookmark={() => currentQItem?.question?.id && handleToggleFlag(currentQItem.question.id)}
-              onSubmit={() => setIsPublishModalOpen(true)}
-              onClose={onClose}
-              isMobilePreview={device === 'mobile'}
-            />
+            {isStandardExam ? (
+              <StandardExamStudentView
+                exam={liveAssessment as any}
+                questions={flattenedQuestions}
+                currentIndex={currentIndex}
+                currentAnswer={currentQItem?.question?.id ? mockAnswers[currentQItem.question.id] : undefined}
+                answers={mockAnswers}
+                bookmarkedIds={flaggedIds}
+                timeRemainingSeconds={liveTimerSeconds}
+                answeredCount={answeredCount}
+                unansweredCount={Math.max(0, totalQuestions - answeredCount)}
+                markedCount={flaggedIds.size}
+                onAnswerChange={(val) => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, val)}
+                onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
+                onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
+                onSelectIndex={(idx) => setCurrentIndex(idx)}
+                onToggleBookmark={() => currentQItem?.question?.id && handleToggleFlag(currentQItem.question.id)}
+                onSubmit={() => setIsPublishModalOpen(true)}
+                onClose={onClose}
+                isMobilePreview={device === 'mobile'}
+              />
+            ) : (
+              <SimpleExamStudentView
+                exam={liveAssessment as any}
+                questions={flattenedQuestions}
+                currentIndex={currentIndex}
+                currentAnswer={currentQItem?.question?.id ? mockAnswers[currentQItem.question.id] : undefined}
+                answers={mockAnswers}
+                bookmarkedIds={flaggedIds}
+                timeRemainingSeconds={liveTimerSeconds}
+                answeredCount={answeredCount}
+                unansweredCount={Math.max(0, totalQuestions - answeredCount)}
+                markedCount={flaggedIds.size}
+                onAnswerChange={(val) => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, val)}
+                onClearAnswer={() => currentQItem?.question?.id && handleSelectAnswer(currentQItem.question.id, undefined)}
+                onPrevious={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                onNext={() => setCurrentIndex((prev) => Math.min(totalQuestions - 1, prev + 1))}
+                onSelectIndex={(idx) => setCurrentIndex(idx)}
+                onToggleBookmark={() => currentQItem?.question?.id && handleToggleFlag(currentQItem.question.id)}
+                onSubmit={() => setIsPublishModalOpen(true)}
+                onClose={onClose}
+                isMobilePreview={device === 'mobile'}
+              />
+            )}
           </div>
         ) : (
           <div

@@ -41,6 +41,85 @@ import {
   normalizeQuestionType,
   ValidationResult
 } from '../../teacher/JSONValidator';
+import {
+  buildStandardExamAIPrompt,
+  validateStandardExamPackage,
+  buildStandardCorrectionPrompt
+} from '../../shared/standardExamPackage';
+
+export const STANDARD_EXAM_BLUEPRINT_ITEMS: TeacherBlueprintItem[] = [
+  {
+    id: 'mcq',
+    type: 'multiple_choice',
+    name: 'MCQ',
+    category: 'core',
+    description: '10 questions × 2 marks',
+    enabled: true,
+    count: 10,
+    marksPerItem: 2
+  },
+  {
+    id: 'matching',
+    type: 'matching',
+    name: 'Matching',
+    category: 'core',
+    description: '5 questions × 2 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 2
+  },
+  {
+    id: 'correct_wrong',
+    type: 'true_false',
+    name: 'Correct or Wrong',
+    category: 'core',
+    description: '5 questions × 2 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 2
+  },
+  {
+    id: 'cloze',
+    type: 'cloze_passage',
+    name: 'Cloze Passage',
+    category: 'core',
+    description: '5 questions × 2 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 2,
+    isActivity: true
+  },
+  {
+    id: 'find_mistake',
+    type: 'error_correction',
+    name: 'Find the Mistake',
+    category: 'core',
+    description: '5 questions × 3 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 3
+  },
+  {
+    id: 'controlled_answer',
+    type: 'fill_in_blank',
+    name: 'Controlled Type the Answer',
+    category: 'core',
+    description: '5 questions × 3 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 3
+  },
+  {
+    id: 'reorder',
+    type: 'reorder',
+    name: 'Reorder the Sentence',
+    category: 'core',
+    description: '5 questions × 4 marks',
+    enabled: true,
+    count: 5,
+    marksPerItem: 4
+  }
+];
 
 export interface AIExamWizardProps {
   isOpen: boolean;
@@ -392,17 +471,8 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
   };
 
   const applyStandardTemplate = () => {
-    setActivePreset('custom');
-    setBlueprintItems((prev) =>
-      prev.map((item) => {
-        if (item.id === 'mcq') return { ...item, enabled: true, count: 15, marksPerItem: 2 };
-        if (item.id === 'tf') return { ...item, enabled: true, count: 5, marksPerItem: 2 };
-        if (item.id === 'fill_blank') return { ...item, enabled: true, count: 8, marksPerItem: 2 };
-        if (item.id === 'short_ans') return { ...item, enabled: true, count: 12, marksPerItem: 2 };
-        if (item.id === 'reading') return { ...item, enabled: true, count: 1, marksPerItem: 20 };
-        return { ...item, enabled: false, count: item.id === 'error_corr' ? 0 : item.count };
-      })
-    );
+    setActivePreset('standard');
+    setBlueprintItems(STANDARD_EXAM_BLUEPRINT_ITEMS);
   };
 
   const applyAdvancedTemplate = () => {
@@ -433,6 +503,18 @@ export const AIExamGeneratorWizard: React.FC<AIExamWizardProps> = ({
 
   // Generate Grounded AI Prompt
   const generatedAIPrompt = useMemo(() => {
+    if (selectedTemplate === 'standard') {
+      return buildStandardExamAIPrompt({
+        subject,
+        topic: contentTitle,
+        grade,
+        medium: 'English',
+        difficulty,
+        durationMinutes,
+        sourceContent: contentText
+      });
+    }
+
     const activeBlueprint = blueprintItems.filter((i) => i.enabled);
     const blueprintDescription = activeBlueprint
       .map(
@@ -718,12 +800,19 @@ Generate the complete examination JSON now:`;
   // Handle Copy Correction Prompt
   const handleCopyCorrection = async () => {
     if (!validationResult || validationResult.isValid) return;
-    const correctionPrompt = generateCorrectionPrompt(
-      validationResult.errors,
-      validationResult.warnings,
-      pastedJson,
-      validationResult.blueprintDiff
-    );
+    let correctionPrompt = '';
+    if (selectedTemplate === 'standard') {
+      correctionPrompt = buildStandardCorrectionPrompt(
+        validationResult.errors.map((e) => ({ id: e.id, message: e.message }))
+      );
+    } else {
+      correctionPrompt = generateCorrectionPrompt(
+        validationResult.errors,
+        validationResult.warnings,
+        pastedJson,
+        validationResult.blueprintDiff
+      );
+    }
     try {
       await navigator.clipboard.writeText(correctionPrompt);
       setCopiedCorrection(true);
@@ -741,6 +830,26 @@ Generate the complete examination JSON now:`;
       return null;
     }
     try {
+      if (selectedTemplate === 'standard') {
+        const stdRes = validateStandardExamPackage(jsonStr);
+        const res: ValidationResult = {
+          isValid: stdRes.isValid,
+          errors: stdRes.errors.map((e) => ({ id: e.id, message: e.message })),
+          warnings: (stdRes.warnings || []).map((w, idx) => ({ id: `warn_${idx}`, message: w })),
+          parsedExam: stdRes.canonicalAssessment as any,
+          blueprintDiff: stdRes.stats ? {
+            expectedTotalQuestions: 40,
+            actualTotalQuestions: stdRes.stats.totalQuestions,
+            expectedTotalMarks: 100,
+            actualTotalMarks: stdRes.stats.totalMarks,
+            expectedBreakdown: { mcq: 10, matching: 5, true_false: 5, cloze_passage: 5, error_correction: 5, fill_in_blank: 5, reorder: 5 },
+            actualBreakdown: { mcq: 10, matching: 5, true_false: 5, cloze_passage: 5, error_correction: 5, fill_in_blank: 5, reorder: 5 }
+          } : undefined
+        };
+        setValidationResult(res);
+        return res;
+      }
+
       const activeBlueprint = blueprintItems.filter((i) => i.enabled);
       const res = validateExamAgainstBlueprint(jsonStr, {
         totalQuestions,
@@ -777,11 +886,11 @@ Generate the complete examination JSON now:`;
             title: result.parsedExam.exam.title || `${subject}: ${contentTitle || 'Exam'}`,
             subject: result.parsedExam.exam.subject || subject,
             grade: result.parsedExam.exam.grade || grade,
-            examType: selectedTemplate === 'simple' ? 'Simple Exam' : selectedTemplate === 'advanced' ? 'Advanced Exam' : result.parsedExam.exam.examType || 'Standard Exam',
+            examType: selectedTemplate === 'simple' ? 'Simple Exam' : selectedTemplate === 'standard' ? 'Standard Exam' : selectedTemplate === 'advanced' ? 'Advanced Exam' : result.parsedExam.exam.examType || 'Standard Exam',
             difficulty: difficulty,
             durationMinutes: durationMinutes,
             passPercentage: passPercentage,
-            randomizeQuestions: questionOrder === 'shuffle',
+            randomizeQuestions: selectedTemplate === 'standard' ? false : questionOrder === 'shuffle',
             showMarksImmediately: showResults === 'immediately',
             showCorrectAnswers: answerFeedback === 'after_submission'
           },
@@ -995,19 +1104,19 @@ Generate the complete examination JSON now:`;
                     <div className="space-y-2 pt-3 border-t border-indigo-100 text-xs text-slate-600">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span>~50 questions — Mixed types</span>
+                        <span>40 questions — 7 controlled sections</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span>MCQ, Fill-in-blank, Short answer</span>
+                        <span>MCQ, Matching, Correct/Wrong, Cloze</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span>Reading comprehension</span>
+                        <span>Find Mistake, Controlled Type, Reorder</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span>Mobile-friendly • Progressive difficulty</span>
+                        <span>Mobile-first • Progressive difficulty</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -1217,37 +1326,49 @@ Generate the complete examination JSON now:`;
                 </p>
               </div>
 
-              {/* Presets Selector Bar */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Recommended Exam Presets
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {[
-                    { id: 'standard', label: 'Standard Exam', desc: 'Balanced 40-mark mix' },
-                    { id: 'quick', label: 'Quick Test', desc: '10-mark fast check' },
-                    { id: 'grammar', label: 'Grammar Test', desc: 'Focused syntax drills' },
-                    { id: 'reading', label: 'Reading Test', desc: 'Comprehension & Cloze' },
-                    { id: 'custom', label: 'Custom', desc: 'Tailored by you' }
-                  ].map((p) => {
-                    const isActive = activePreset === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleApplyPreset(p.id as any)}
-                        className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                          isActive
-                            ? 'bg-indigo-600 text-white ring-2 ring-indigo-600/30'
-                            : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
-                      >
-                        <span>{p.label}</span>
-                      </button>
-                    );
-                  })}
+              {/* Presets Selector Bar or Standard Blueprint Notice */}
+              {selectedTemplate === 'standard' ? (
+                <div className="p-4 rounded-2xl bg-indigo-50/90 border border-indigo-200 flex items-center justify-between text-xs text-indigo-950 font-bold">
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <span>Standard Exam 2.0 Controlled Blueprint (7 Sections • Progressive Difficulty)</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-indigo-700 bg-white px-2.5 py-1 rounded-xl border border-indigo-200">
+                    Default 100-Mark Blueprint
+                  </span>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Recommended Exam Presets
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      { id: 'standard', label: 'Standard Exam', desc: 'Balanced 40-mark mix' },
+                      { id: 'quick', label: 'Quick Test', desc: '10-mark fast check' },
+                      { id: 'grammar', label: 'Grammar Test', desc: 'Focused syntax drills' },
+                      { id: 'reading', label: 'Reading Test', desc: 'Comprehension & Cloze' },
+                      { id: 'custom', label: 'Custom', desc: 'Tailored by you' }
+                    ].map((p) => {
+                      const isActive = activePreset === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleApplyPreset(p.id as any)}
+                          className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                            isActive
+                              ? 'bg-indigo-600 text-white ring-2 ring-indigo-600/30'
+                              : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span>{p.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Totals Summary Bar */}
               <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex items-center justify-between text-xs text-indigo-950 font-bold">
@@ -1263,7 +1384,9 @@ Generate the complete examination JSON now:`;
                 </div>
 
                 <div className="text-[11px] font-semibold text-indigo-800">
-                  {enabledTypesCount} Question Types Selected
+                  {selectedTemplate === 'standard'
+                    ? 'TOTAL: 40 QUESTIONS • 100 MARKS'
+                    : `${enabledTypesCount} Question Types Selected`}
                 </div>
               </div>
 
@@ -1901,14 +2024,36 @@ Generate the complete examination JSON now:`;
                       </div>
 
                       {!validationResult.isValid && (
-                        <button
-                          type="button"
-                          onClick={handleCopyCorrection}
-                          className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
-                        >
-                          {copiedCorrection ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedCorrection ? 'Copied Prompt!' : 'Copy Correction Prompt'}</span>
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCopyCorrection}
+                            className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                          >
+                            {copiedCorrection ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            <span>{copiedCorrection ? 'Copied Prompt!' : 'Fix with AI'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const textarea = document.querySelector('textarea[placeholder*="Paste the JSON response"]') as HTMLTextAreaElement | null;
+                              textarea?.focus();
+                            }}
+                            className="px-3 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
+                          >
+                            Edit JSON
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setValidationResult(null);
+                              setPastedJson('');
+                            }}
+                            className="px-3 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       )}
                     </div>
 

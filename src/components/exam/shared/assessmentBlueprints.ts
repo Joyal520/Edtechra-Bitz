@@ -14,6 +14,7 @@ import {
   MultipleChoiceQuestion
 } from './ExamSchema';
 import { THEME_PRESETS } from './themePresets';
+import { generateStandardExam2Blueprint } from './standardExamPackage';
 
 export interface StandardExamInput {
   subject: string;
@@ -65,6 +66,10 @@ export function extractKeywordsFromNotes(notes: string = ''): string[] {
  * - Section D: Picture Description & Guided Writing (Visual prompt + rubric + writing task)
  */
 export function generateStandardExamBlueprint(input: StandardExamInput): CanonicalAssessmentV2 {
+  return generateStandardExam2Blueprint(input);
+}
+
+export function _legacyGenerateStandardExamBlueprint(input: StandardExamInput): CanonicalAssessmentV2 {
   const {
     subject = 'English Language',
     grade = 'Grade 10',
