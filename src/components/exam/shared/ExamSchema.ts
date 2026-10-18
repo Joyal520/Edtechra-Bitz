@@ -6,7 +6,9 @@
 
 import { AssessmentThemeConfig } from './themePresets';
 
-export type AssessmentType = 'exam' | 'survey';
+export type ResponseSubType = 'poll' | 'survey' | 'feedback';
+
+export type AssessmentType = 'exam' | 'survey' | 'response' | 'poll' | 'feedback';
 
 export type SupportedQuestionType =
   // Google Forms Core Types
@@ -21,6 +23,14 @@ export type SupportedQuestionType =
   | 'date'
   | 'time'
   | 'file_upload'
+  // EdTechra Response Studio Types (Poll / Survey / Feedback)
+  | 'single_choice'
+  | 'multiple_selection'
+  | 'yes_no'
+  | 'rating'
+  | 'ranking'
+  | 'likert'
+  | 'long_text'
   // EdTechra Educational & Language Types
   | 'true_false'
   | 'fill_in_blank'
@@ -412,6 +422,22 @@ export interface SurveySettings {
   thankYouMessage?: string;
   redirectUrl?: string;
   confirmationBadgeText?: string;
+  // EdTechra Response Studio settings
+  responseType?: ResponseSubType;
+  pollType?: string;
+  feedbackStyle?: string;
+  language?: string;
+  targetAudience?: 'entire_class' | 'selected_students';
+  selectedStudentIds?: string[];
+  allowSeeResults?: boolean;
+  allowChangeResponse?: boolean;
+  trackResponses?: boolean;
+  deadline?: string | null;
+  requiredQuestions?: boolean;
+  questionSelectionMode?: 'auto' | 'manual';
+  selectedQuestionTypes?: string[];
+  additionalInstructions?: string;
+  topic?: string;
 }
 
 export interface ExamMetadata {

@@ -620,6 +620,137 @@ class ClassroomExamService {
   }
 
   /**
+   * Submits a Poll, Survey, or Feedback response (No grading, marks = 0)
+   */
+  async submitSurveyResponse(payload: {
+    examId: string;
+    classroomId: string;
+    answers: Record<string, any>;
+    allowChangeResponse?: boolean;
+  }): Promise<{ data?: any; error?: string; updated?: boolean }> {
+    if (!payload.examId) {
+      return { error: 'Assessment ID is required.' };
+    }
+
+    const cleanAnswers = sanitizeAnswersForPayload(payload.answers || {});
+
+    // 1. Try backend endpoint first
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch('/api/exam-engine?action=submit-survey-response', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify({
+          examId: payload.examId,
+          classroomId: payload.classroomId,
+          answers: cleanAnswers,
+          allowChangeResponse: Boolean(payload.allowChangeResponse),
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success) {
+          return { data: json.result || json.data || json, updated: Boolean(json.updated) };
+        }
+      }
+    } catch (e) {
+      console.warn('[ClassroomExamService] submitSurveyResponse API fallback to Supabase:', e);
+    }
+
+    // 2. Direct Supabase fallback
+    if (!supabase) return { error: 'Database connection unavailable.' };
+    const userId = await this.getUserId();
+    if (!userId) return { error: 'You must be signed in to submit a response.' };
+
+    try {
+      const { data: existing } = await supabase
+        .from('classroom_exam_results')
+        .select('*')
+        .eq('exam_id', payload.examId)
+        .eq('student_id', userId)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        if (payload.allowChangeResponse) {
+          const { data: updatedRow, error: updateErr } = await supabase
+            .from('classroom_exam_results')
+            .update({
+              answers: cleanAnswers,
+              submitted_at: new Date().toISOString(),
+            })
+            .eq('id', existing.id)
+            .select()
+            .single();
+
+          if (updateErr) throw updateErr;
+          return { data: updatedRow, updated: true };
+        }
+        return { data: existing, updated: false };
+      }
+
+      const { data: insertedRow, error: insertErr } = await supabase
+        .from('classroom_exam_results')
+        .insert({
+          exam_id: payload.examId,
+          classroom_id: payload.classroomId,
+          student_id: userId,
+          score: 0,
+          total_marks: 0,
+          percentage: 0,
+          passed: true,
+          status: 'completed',
+          answers: cleanAnswers,
+          submitted_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (insertErr) throw insertErr;
+      return { data: insertedRow, updated: false };
+    } catch (err: any) {
+      console.error('[ClassroomExamService] submitSurveyResponse error:', err);
+      return { error: err?.message || 'Failed to submit response.' };
+    }
+  }
+
+  /**
+   * Fetches anonymized answer payloads for live Poll result charts
+   */
+  async getSurveyPublicResults(examId: string, classroomId?: string): Promise<Array<{ id: string; answers: Record<string, any>; submitted_at?: string }>> {
+    if (!examId) return [];
+
+    try {
+      const results = await this.getExamResults(examId, classroomId);
+      if (Array.isArray(results) && results.length > 0) {
+        return results.map((r: any) => ({
+          id: r.id,
+          answers: r.answers || {},
+          submitted_at: r.submitted_at || r.created_at,
+        }));
+      }
+    } catch {
+      // Fallback below
+    }
+
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase
+        .from('classroom_exam_results')
+        .select('id, answers, submitted_at')
+        .eq('exam_id', examId);
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Saves or updates a v2.0 CanonicalAssessment in classroom_exams
    */
   async saveAssessmentV2(params: {
@@ -634,7 +765,13 @@ class ClassroomExamService {
 
     try {
       const { assessment, classroomId, examId, status } = params;
-      const totalMarks = assessment.assessmentType === 'survey' ? 0 : assessment.sections.reduce(
+      const isSurveyLike =
+        assessment.assessmentType === 'survey' ||
+        assessment.assessmentType === 'response' ||
+        assessment.assessmentType === 'poll' ||
+        assessment.assessmentType === 'feedback';
+
+      const totalMarks = isSurveyLike ? 0 : assessment.sections.reduce(
         (acc, s) => acc + (s.questions?.reduce((qAcc, q) => qAcc + (q.marks || 1), 0) || 0),
         0
       );
@@ -642,7 +779,7 @@ class ClassroomExamService {
       const flatQuestions = assessment.sections.flatMap((s) => s.questions || []);
 
       if (status === 'published' && flatQuestions.length === 0) {
-        return { error: 'Cannot publish an examination with 0 questions. Please add questions before publishing.' };
+        return { error: 'Cannot publish an assessment with 0 questions. Please add questions before publishing.' };
       }
 
       // Safe defaults for NOT NULL JSONB columns in public.classroom_exams
@@ -654,11 +791,12 @@ class ClassroomExamService {
       let safeSurveySettings: Record<string, any> = {};
       if (assessment.surveySettings && typeof assessment.surveySettings === 'object' && Object.keys(assessment.surveySettings).length > 0) {
         safeSurveySettings = assessment.surveySettings;
-      } else if (assessment.assessmentType === 'survey') {
+      } else if (isSurveyLike) {
         safeSurveySettings = {
           isAnonymous: false,
-          collectEmail: true,
+          collectEmail: false,
           oneResponsePerUser: true,
+          responseType: assessment.exam?.examType || 'survey',
           thankYouMessage: 'Thank you for your valuable response!'
         };
       } else {
@@ -674,12 +812,12 @@ class ClassroomExamService {
         title: assessment.exam.title.trim() || 'Untitled Assessment',
         description: (assessment.exam.description || '').trim(),
         instructions: (assessment.exam.instructions || '').trim(),
-        assessment_type: assessment.assessmentType || 'exam',
-        duration_minutes: assessment.exam.durationMinutes || 60,
+        assessment_type: isSurveyLike ? 'survey' : 'exam',
+        duration_minutes: isSurveyLike ? 0 : (assessment.exam.durationMinutes || 60),
         total_marks: totalMarks,
-        pass_marks: Math.round(totalMarks * ((assessment.exam.passPercentage || 60) / 100)),
+        pass_marks: isSurveyLike ? 0 : Math.round(totalMarks * ((assessment.exam.passPercentage || 60) / 100)),
         starts_at: startsAt,
-        ends_at: assessment.exam.endsAt || (startsAt ? new Date(new Date(startsAt).getTime() + (Number(assessment.exam.durationMinutes) || 60) * 60 * 1000).toISOString() : null),
+        ends_at: assessment.exam.endsAt || (!isSurveyLike && startsAt ? new Date(new Date(startsAt).getTime() + (Number(assessment.exam.durationMinutes) || 60) * 60 * 1000).toISOString() : null),
         theme_config: safeThemeConfig,
         brand_kit: safeBrandKit,
         branching_logic: safeBranching,
@@ -734,6 +872,7 @@ class ClassroomExamService {
       if (error || !data) return null;
 
       const assessmentType = data.assessment_type || 'exam';
+      const surveySettings = data.survey_settings && Object.keys(data.survey_settings).length > 0 ? data.survey_settings : undefined;
       const sections = (Array.isArray(data.questions_json) && data.questions_json.length > 0)
         ? data.questions_json
         : (data.sections || [
@@ -751,11 +890,11 @@ class ClassroomExamService {
           title: data.title || 'Untitled Assessment',
           subject: data.subject || 'General',
           grade: data.grade || 'Grade 10',
-          examType: data.exam_type || 'quiz',
+          examType: surveySettings?.responseType || data.exam_type || (assessmentType === 'survey' ? 'survey' : 'quiz'),
           difficulty: data.difficulty || 'medium',
           description: data.description || '',
           instructions: data.instructions || '',
-          durationMinutes: data.duration_minutes || 60,
+          durationMinutes: data.duration_minutes ?? (assessmentType === 'survey' ? 0 : 60),
           passPercentage: data.pass_marks && data.total_marks ? Math.round((data.pass_marks / data.total_marks) * 100) : 60,
           maxAttempts: data.max_attempts || 1,
           randomizeQuestions: Boolean(data.randomize_questions),
@@ -767,7 +906,7 @@ class ClassroomExamService {
         },
         theme: data.theme_config && Object.keys(data.theme_config).length > 0 ? data.theme_config : undefined,
         brandKit: data.brand_kit && Object.keys(data.brand_kit).length > 0 ? data.brand_kit : undefined,
-        surveySettings: data.survey_settings && Object.keys(data.survey_settings).length > 0 ? data.survey_settings : undefined,
+        surveySettings,
         sections
       };
 

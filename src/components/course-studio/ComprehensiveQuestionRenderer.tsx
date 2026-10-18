@@ -17,7 +17,9 @@ import {
   Trash2,
   Copy,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Undo2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   CourseQuestion,
@@ -34,7 +36,10 @@ import {
   evaluateQuestionAnswer,
   cleanTextForComparison
 } from '@/utils/questionGrading';
+import { shuffleWordsGuaranteed } from '@/utils/questionSchemaValidator';
 import { LiquidButton, LiquidChip, LiquidOption } from '@/components/course-studio/liquid';
+import { DraggableOrderingQuestion } from './DraggableOrderingQuestion';
+import { ClozePassageQuestion } from './ClozePassageQuestion';
 
 interface SentenceToken {
   id: string;
@@ -117,7 +122,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 }) => {
   // Guarantee unique immutable question ID
   const qId = question.id || `q_fallback_${index}`;
-  const qType = question.question_type || (question as any).type || 'multiple_choice';
+  const rawQType = question.question_type || (question as any).type || 'multiple_choice';
+  const qType = (rawQType as string) === 'open_ended' ? 'essay' : rawQType;
 
   // Normalize options array with stable identifiers
   const rawOptionsSource = question.options || (question as any).items || (question as any).correct_order;
@@ -140,6 +146,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   // Local interaction states strictly keyed to this instance
   const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [fillInput, setFillInput] = useState<string>('');
+  const [shortAnswerInput, setShortAnswerInput] = useState<string>('');
   const [sentenceTokens, setSentenceTokens] = useState<SentenceToken[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<SentenceToken[]>([]);
   const [openEndedText, setOpenEndedText] = useState<string>('');
@@ -162,21 +169,20 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       }
 
       const itemsList = extractSentenceTokens(question);
+      const canonicalOrder = extractSentenceCorrectOrder(question);
       const tokenObjects: SentenceToken[] = itemsList.map((text, idx) => ({
         id: `tok_${qId}_${idx}_${text.substring(0, 12).replace(/\s+/g, '_')}`,
         text
       }));
 
-      // Deterministic Fisher-Yates shuffle for display (ensuring order changes if > 1 item)
+      // Guarantee shuffled order is not identical to canonical order
       if (tokenObjects.length > 1) {
-        const shuffled = [...tokenObjects];
-        for (let attempt = 0; attempt < 5; attempt++) {
-          for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-          }
-          const isIdentical = shuffled.every((t, i) => t.id === tokenObjects[i].id);
-          if (!isIdentical) break;
+        let shuffled = shuffleWordsGuaranteed(tokenObjects);
+        if (
+          canonicalOrder.length === shuffled.length &&
+          shuffled.every((t, i) => t.text.toLowerCase() === canonicalOrder[i].toLowerCase())
+        ) {
+          shuffled = shuffleWordsGuaranteed(shuffled);
         }
         setSentenceTokens(shuffled);
       } else {
@@ -225,7 +231,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   };
 
   // --------------------------------------------------------------------------
-  // 2. OPEN-ENDED AI EVALUATOR SUBMISSION
+  // 2. OPEN-ENDED AI EVALUATOR SUBMISSION (ESSAY)
   // --------------------------------------------------------------------------
   const handleEvaluateOpenEnded = async () => {
     if (!openEndedText.trim()) return;
@@ -280,6 +286,80 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       onAnswerSubmit(res);
     } catch (err: any) {
       setAiError(err.message || 'AI evaluation temporarily unavailable. Please retry.');
+    } finally {
+      setIsEvaluatingAi(false);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // 2B. SHORT ANSWER EVALUATOR SUBMISSION (0 TO 10 MARKS)
+  // --------------------------------------------------------------------------
+  const handleEvaluateShortAnswer = async () => {
+    const trimmed = shortAnswerInput.trim();
+    if (!trimmed || isAnswered || isEvaluatingAi) return;
+
+    setIsEvaluatingAi(true);
+    setAiError(null);
+
+    const maxScore = question.points || 10;
+    const expectedAns = String(
+      question.expected_answer ||
+      question.correct_answer ||
+      (typeof question.options === 'object' && !Array.isArray(question.options) && (question.options as any)?.expected_answer) ||
+      ''
+    ).trim();
+
+    const acceptableAnswers: string[] = Array.isArray(question.acceptable_answers) && question.acceptable_answers.length > 0
+      ? question.acceptable_answers
+      : Array.isArray(question.options)
+      ? question.options.map((o: any) => typeof o === 'string' ? o : String(o?.text || '')).filter(Boolean)
+      : (expectedAns ? [expectedAns] : []);
+
+    try {
+      const evaluation = await courseStudioService.evaluateQuestionAnswer({
+        question_text: question.question_text,
+        student_answer: trimmed,
+        expected_answer: expectedAns,
+        acceptable_answers: acceptableAnswers,
+        evaluation_criteria: question.evaluation_criteria || question.evaluation?.criteria || ['comprehension', 'accuracy', 'key_details'],
+        passage: passageText || question.explanation || '',
+        max_score: maxScore
+      });
+
+      const finalScore = typeof evaluation.score === 'number'
+        ? Math.max(0, Math.min(maxScore, Math.round(evaluation.score)))
+        : (evaluation.correct ? maxScore : 0);
+      const isPass = evaluation.correct || finalScore >= Math.ceil(maxScore * 0.6);
+
+      if (isPass) {
+        courseAudio.playCorrectSound();
+        triggerConfettiBurst(null);
+      } else {
+        courseAudio.playIncorrectSound();
+      }
+
+      const res: StudentQuestionResponse = {
+        questionId: qId,
+        answer: trimmed,
+        status: isPass ? 'correct' : 'incorrect',
+        score: finalScore,
+        maxScore,
+        feedback: evaluation.feedback || (isPass ? (question.explanation || 'Great short answer!') : `Expected answer: "${expectedAns}". ${question.explanation || ''}`),
+        languageFeedback: evaluation.languageFeedback || null,
+        evaluatedAt: new Date().toISOString()
+      };
+
+      onAnswerSubmit(res);
+    } catch (err: any) {
+      // Fallback to local semantic/keyword grading
+      const fallbackResult = evaluateQuestionAnswer(question, trimmed);
+      commitAnswer(
+        trimmed,
+        fallbackResult.isCorrect,
+        fallbackResult.feedback || (fallbackResult.isCorrect ? (question.explanation || 'Correct!') : `Expected key idea: "${expectedAns}". ${question.explanation || ''}`),
+        fallbackResult.isCorrect ? 1 : 0,
+        fallbackResult.languageFeedback
+      );
     } finally {
       setIsEvaluatingAi(false);
     }
@@ -375,40 +455,55 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               value={qType}
               onChange={e => {
                 const newType = e.target.value as any;
-                let newOpts = question.options;
+                let newOpts: any = question.options;
                 let newCorrect = question.correct_answer;
+                let newExpected = question.expected_answer;
+                let newAcceptable = question.acceptable_answers;
                 if (newType === 'multiple_choice') {
                   newOpts = ['Option A', 'Option B', 'Option C', 'Option D'];
                   newCorrect = 'A';
                 } else if (newType === 'true_false') {
                   newOpts = ['True', 'False'];
                   newCorrect = 'True';
+                } else if (newType === 'short_answer') {
+                  newCorrect = question.correct_answer || 'Sample expected answer from the lesson';
+                  newExpected = newCorrect;
+                  newAcceptable = [newCorrect];
+                  newOpts = [newCorrect];
                 } else if (newType === 'fill_blank') {
                   newCorrect = 'Answer';
                 } else if (newType === 'sentence_reordering') {
-                  newCorrect = 'The quick brown fox jumps';
-                  newOpts = ['The', 'quick', 'brown', 'fox', 'jumps'];
+                  newCorrect = 'Students learn key concepts from the video lesson';
+                  newOpts = ['Students', 'learn', 'key', 'concepts', 'from', 'the', 'video', 'lesson'];
                 }
                 onUpdateQuestion?.({
                   ...question,
                   question_type: newType,
                   options: newOpts,
-                  correct_answer: newCorrect
+                  correct_answer: newCorrect,
+                  expected_answer: newExpected,
+                  acceptable_answers: newAcceptable,
+                  points: question.points || 10
                 });
               }}
-              className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] focus:outline-none cursor-pointer w-fit"
+              className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-white text-[#172033] border border-[#CBD5E1] focus:outline-none focus:border-[#026fc3] cursor-pointer w-fit shadow-2xs"
             >
-              <option value="multiple_choice">Multiple Choice</option>
-              <option value="multiple_select">Multiple Select</option>
-              <option value="true_false">True / False</option>
-              <option value="sentence_reordering">Sentence Reorder</option>
-              <option value="fill_blank">Fill in Blank</option>
-              <option value="wh_question">WH Question</option>
-              <option value="open_ended">Essay / Open Ended</option>
+              <option value="multiple_choice" className="bg-white text-[#172033]">Multiple Choice</option>
+              <option value="true_false" className="bg-white text-[#172033]">True / False</option>
+              <option value="short_answer" className="bg-white text-[#172033]">Short Answer</option>
+              <option value="sentence_reordering" className="bg-white text-[#172033]">Sentence Ordering</option>
+              <option value="fill_blank" className="bg-white text-[#172033]">Fill in Blank</option>
+              <option value="wh_question" className="bg-white text-[#172033]">WH Question</option>
+              <option value="multiple_select" className="bg-white text-[#172033]">Multiple Select</option>
+              <option value="ordering" className="bg-white text-[#172033]">Story / Step Ordering</option>
+              <option value="cloze_passage" className="bg-white text-[#172033]">Cloze Passage</option>
+              <option value="essay" className="bg-white text-[#172033]">Essay / Open Ended</option>
             </select>
           ) : (
             <span className="question-type text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] w-fit">
-              {qType.replace(/_/g, ' ')}
+              {qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'word_ordering'
+                ? 'Sentence Ordering'
+                : qType.replace(/_/g, ' ')}
             </span>
           )}
           {question.skill && (
@@ -943,6 +1038,23 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                     <LiquidButton
                       variant="secondary"
                       size="sm"
+                      icon={<Undo2 className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        courseAudio.playClick();
+                        const lastToken = selectedTokens[selectedTokens.length - 1];
+                        setSelectedTokens(prev => prev.slice(0, -1));
+                        setSentenceTokens(prev => [...prev, lastToken]);
+                      }}
+                    >
+                      Undo
+                    </LiquidButton>
+                  )}
+
+                  {selectedTokens.length > 0 && (
+                    <LiquidButton
+                      variant="secondary"
+                      size="sm"
+                      icon={<RotateCcw className="w-3.5 h-3.5" />}
                       onClick={() => {
                         courseAudio.playClick();
                         const all = [...selectedTokens, ...sentenceTokens];
@@ -1087,17 +1199,87 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 9: OPEN-ENDED WITH AI EVALUATION (ESSAY / SHORT ANSWER)        */}
+      {/* TYPE 9A: SHORT ANSWER (CONCISE LESSON ANSWER WITH MARKS & RUBRIC)   */}
       {/* ------------------------------------------------------------------- */}
-      {(qType === 'short_answer' || qType === 'essay') && (
+      {qType === 'short_answer' && (
+        mode === 'edit' ? (
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
+            <div>
+              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+                Expected Answer (Answer Key):
+              </span>
+              <input
+                type="text"
+                value={question.expected_answer || question.correct_answer || ''}
+                onChange={e => onUpdateQuestion?.({
+                  ...question,
+                  correct_answer: e.target.value,
+                  expected_answer: e.target.value,
+                  acceptable_answers: question.acceptable_answers || [e.target.value]
+                })}
+                placeholder="e.g. The police were called."
+                className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+              />
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+                Marking Guidance / Teacher Rubric:
+              </span>
+              <textarea
+                rows={2}
+                value={question.explanation || ''}
+                onChange={e => onUpdateQuestion?.({ ...question, explanation: e.target.value })}
+                placeholder="e.g. Award 10 marks if student mentions police were notified."
+                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            <textarea
+              rows={3}
+              disabled={isAnswered || isEvaluatingAi}
+              value={shortAnswerInput}
+              onChange={e => setShortAnswerInput(e.target.value)}
+              placeholder="Write your short answer here (1-2 sentences)..."
+              className="w-full p-3.5 liquid-textarea text-base font-sans leading-relaxed placeholder:text-slate-400"
+            />
+
+            {aiError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{aiError}</span>
+              </div>
+            )}
+
+            {!isAnswered && (
+              <LiquidButton
+                variant="primary"
+                size="md"
+                disabled={!shortAnswerInput.trim() || isEvaluatingAi}
+                loading={isEvaluatingAi}
+                onClick={handleEvaluateShortAnswer}
+                icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+              >
+                {isEvaluatingAi ? 'Evaluating Answer...' : 'Submit Short Answer'}
+              </LiquidButton>
+            )}
+          </div>
+        )
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TYPE 9B: ESSAY / EXTENDED RESPONSE                                  */}
+      {/* ------------------------------------------------------------------- */}
+      {qType === 'essay' && (
         <div className="space-y-3 pt-1">
           <textarea
-            rows={4}
+            rows={5}
             disabled={isAnswered || isEvaluatingAi}
             value={openEndedText}
             onChange={e => setOpenEndedText(e.target.value)}
-            placeholder="Write your explanation or response here..."
-            className="w-full p-3.5 liquid-textarea text-sm font-sans leading-relaxed placeholder:text-slate-400"
+            placeholder="Write your essay response here (at least 50 words)..."
+            className="w-full p-3.5 liquid-textarea text-base font-sans leading-relaxed placeholder:text-slate-400"
           />
 
           {aiError && (
@@ -1120,6 +1302,44 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             </LiquidButton>
           )}
         </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TYPE 9C: STORY / CHRONOLOGICAL ORDERING                             */}
+      {/* ------------------------------------------------------------------- */}
+      {qType === 'ordering' && (
+        <DraggableOrderingQuestion
+          question={question}
+          isLocked={isAnswered}
+          isSubmitting={isEvaluatingAi}
+          selectedAnswer={typeof response?.answer === 'string' ? response.answer : undefined}
+          feedback={response ? { isCorrect, showExplanation: isAnswered, selected: String(response.answer || '') } : undefined}
+          onEvaluateAnswer={(q, ans) => {
+            const canonicalOrder = (q.options || []).join('|||');
+            const isMatch = ans.trim() === canonicalOrder.trim();
+            commitAnswer(
+              ans,
+              isMatch,
+              isMatch ? (q.explanation || 'Chronological order is correct!') : `Chronological sequence was incorrect. ${q.explanation || ''}`
+            );
+          }}
+        />
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TYPE 9D: CLOZE READING PASSAGE WITH INLINE BLANKS                    */}
+      {/* ------------------------------------------------------------------- */}
+      {qType === 'cloze_passage' && (
+        <ClozePassageQuestion
+          question={question}
+          isLocked={isAnswered}
+          isSubmitting={isEvaluatingAi}
+          selectedAnswer={typeof response?.answer === 'string' ? response.answer : undefined}
+          feedback={response ? { isCorrect, showExplanation: isAnswered } : null}
+          onEvaluateAnswer={(q, ans) => {
+            commitAnswer(ans, true, q.explanation || 'Cloze passage completed!');
+          }}
+        />
       )}
 
       {/* ------------------------------------------------------------------- */}

@@ -3548,7 +3548,10 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             submitted_at,
             status,
             report_r2_key,
-            exam:classroom_exams(id, title, duration_minutes, pass_marks, total_marks)
+            is_survey_response,
+            answers,
+            survey_response,
+            exam:classroom_exams(id, title, duration_minutes, pass_marks, total_marks, assessment_type, exam_type, survey_settings)
           `)
           .eq('classroom_id', classroomId)
           .eq('student_id', studentId)
@@ -3986,13 +3989,43 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     const allPercentages = [];
     (formattedTasks || []).forEach((t) => { if (t.percentage != null) allPercentages.push(Number(t.percentage)); });
     (quizResults || []).forEach((q) => { if (q.accuracy_percentage != null) allPercentages.push(Number(q.accuracy_percentage)); });
-    (examResults || []).forEach((e) => { if (e.percentage != null) allPercentages.push(Number(e.percentage)); });
+    
+    // Separate academic exams and surveys/feedback
+    const academicExamResults = [];
+    const feedbackResponseResults = [];
+
+    (examResults || []).forEach((e) => {
+      const isSurvey = Boolean(e.is_survey_response) || 
+        e.exam?.assessment_type === 'survey' || 
+        ['poll', 'survey', 'feedback'].includes(e.exam?.exam_type) ||
+        ['poll', 'survey', 'feedback'].includes(e.exam?.survey_settings?.responseType);
+
+      if (isSurvey) {
+        const trackResponses = e.exam?.survey_settings?.trackResponses !== false;
+        if (trackResponses) {
+          const respType = e.exam?.survey_settings?.responseType || e.exam?.exam_type || 'survey';
+          feedbackResponseResults.push({
+            id: e.id,
+            exam_id: e.exam_id,
+            title: e.exam?.title || 'Survey / Feedback',
+            type: respType,
+            status: 'Completed',
+            submitted_at: e.submitted_at,
+            answers: e.answers || e.survey_response?.answers || {}
+          });
+        }
+      } else {
+        academicExamResults.push(e);
+        if (e.percentage != null) allPercentages.push(Number(e.percentage));
+      }
+    });
+
     (ocrEvals || []).forEach((o) => { if (o.percentage != null) allPercentages.push(Number(o.percentage)); });
     (challengeSubs || []).forEach((c) => { if (c.percentage != null) allPercentages.push(Number(c.percentage)); });
 
     const totalActivities = (formattedTasks?.length || 0) +
       (quizResults?.length || 0) +
-      (examResults?.length || 0) +
+      academicExamResults.length +
       (ocrEvals?.length || 0) +
       (challengeSubs?.length || 0);
 
@@ -4086,7 +4119,7 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     });
 
     // Format exams for My Results
-    const formattedExams = (examResults || []).map((e) => ({
+    const formattedExams = academicExamResults.map((e) => ({
       id: e.id,
       title: e.exam?.title || 'Assessment Exam',
       score: e.score,
@@ -4191,7 +4224,8 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
           tasks: formattedTasks,
           quizzes: formattedQuizzes,
           exams: formattedExams,
-          competitions: formattedCompetitions
+          competitions: formattedCompetitions,
+          feedback_responses: feedbackResponseResults
         },
         corrected_work: correctedWork,
         topics: topicMastery,

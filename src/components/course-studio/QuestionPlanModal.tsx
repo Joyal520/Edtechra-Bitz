@@ -48,8 +48,44 @@ interface Props {
   lessonText: string;
   hasVideo: boolean;
   hasImage: boolean;
+  initialVideoTranscript?: string;
   onImportQuestions: (questions: CourseQuestion[]) => void;
 }
+
+export const DEFAULT_10_QUESTION_VIDEO_PLAN: QuestionPlanItem[] = [
+  {
+    id: 'plan_mcq_3',
+    type: 'multiple_choice',
+    count: 3,
+    difficulty: 'medium',
+    points: 10,
+    instructions: 'Test factual understanding of key concepts taught in the video.'
+  },
+  {
+    id: 'plan_tf_3',
+    type: 'true_false',
+    count: 3,
+    difficulty: 'medium',
+    points: 10,
+    instructions: 'Test comprehension of statements made in the video.'
+  },
+  {
+    id: 'plan_sa_3',
+    type: 'short_answer',
+    count: 3,
+    difficulty: 'medium',
+    points: 10,
+    instructions: 'Direct questions requiring 1-2 sentence answers based on the video transcript with expected answer key.'
+  },
+  {
+    id: 'plan_so_1',
+    type: 'sentence_builder',
+    count: 1,
+    difficulty: 'medium',
+    points: 10,
+    instructions: 'Reconstruct a memorable key sentence from the transcript using shuffled word tokens.'
+  }
+];
 
 export const QuestionPlanModal: React.FC<Props> = ({
   isOpen,
@@ -62,22 +98,25 @@ export const QuestionPlanModal: React.FC<Props> = ({
   lessonText,
   hasVideo,
   hasImage,
+  initialVideoTranscript,
   onImportQuestions
 }) => {
   const [tab, setTab] = useState<'plan' | 'prompt' | 'import'>('plan');
   
   // Question Plan state
-  const [planItems, setPlanItems] = useState<QuestionPlanItem[]>([
-    {
-      id: '1',
-      type: 'multiple_choice',
-      count: 5,
-      difficulty: 'medium',
-      points: 10,
-      instructions: ''
-    }
-  ]);
-  const [videoTranscript, setVideoTranscript] = useState('');
+  const [planItems, setPlanItems] = useState<QuestionPlanItem[]>(() => 
+    hasVideo ? DEFAULT_10_QUESTION_VIDEO_PLAN : [
+      {
+        id: '1',
+        type: 'multiple_choice',
+        count: 5,
+        difficulty: 'medium',
+        points: 10,
+        instructions: ''
+      }
+    ]
+  );
+  const [videoTranscript, setVideoTranscript] = useState(initialVideoTranscript || '');
   const [imageDescription, setImageDescription] = useState('');
   const [teacherInstructions, setTeacherInstructions] = useState('');
   const [cefrLevel, setCefrLevel] = useState<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'>('A1');
@@ -96,8 +135,14 @@ export const QuestionPlanModal: React.FC<Props> = ({
       setTab('plan');
       setValidationResult(null);
       setCopied(false);
+      if (initialVideoTranscript && !videoTranscript) {
+        setVideoTranscript(initialVideoTranscript);
+      }
+      if (hasVideo && planItems.length === 1 && planItems[0].type === 'multiple_choice' && planItems[0].count === 5) {
+        setPlanItems(DEFAULT_10_QUESTION_VIDEO_PLAN);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialVideoTranscript, hasVideo]);
 
   if (!isOpen) return null;
 
@@ -377,14 +422,26 @@ export const QuestionPlanModal: React.FC<Props> = ({
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleAddPlanItem}
-                    className="px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Question Set</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPlanItems(DEFAULT_10_QUESTION_VIDEO_PLAN)}
+                      title="Reset plan to standard 10-question assessment: 3 MCQ, 3 True/False, 3 Short Answer, 1 Sentence Ordering (100 Marks)"
+                      className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>10-Q Blueprint (100 pts)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAddPlanItem}
+                      className="px-3.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] border border-sky-200 text-xs font-black flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Add Question Set</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">

@@ -36,13 +36,14 @@ interface StudentMyLearningProps {
 interface UnifiedResultItem {
   id: string;
   title: string;
-  category: 'task' | 'quiz' | 'exam' | 'competition';
+  category: 'task' | 'quiz' | 'exam' | 'competition' | 'feedback';
   score: number | null;
   maxScore: number | null;
   percentage: number | null;
   date: string;
   status: string;
   feedback?: string | null;
+  feedbackType?: string;
   isAiGraded?: boolean;
   writingEvaluation?: any;
   r2ResultPath?: string | null;
@@ -64,7 +65,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
   const [data, setData] = useState<StudentLearningResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [resultFilter, setResultFilter] = useState<'all' | 'task' | 'quiz' | 'exam' | 'competition'>('all');
+  const [resultFilter, setResultFilter] = useState<'all' | 'task' | 'quiz' | 'exam' | 'feedback' | 'competition'>('all');
   const [expandedQuizId, setExpandedQuizId] = useState<string | null>(null);
 
   // Modal State
@@ -170,6 +171,20 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
         date: c.submitted_at,
         status: c.status,
         feedback: c.feedback
+      });
+    });
+
+    (data.results.feedback_responses || []).forEach((f) => {
+      list.push({
+        id: `feedback-${f.id}`,
+        title: f.title,
+        category: 'feedback',
+        score: null,
+        maxScore: null,
+        percentage: null,
+        date: f.submitted_at,
+        status: f.status || 'Completed',
+        feedbackType: f.type
       });
     });
 
@@ -385,6 +400,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
               { id: 'task', label: 'Tasks' },
               { id: 'quiz', label: 'Quizzes' },
               { id: 'exam', label: 'Exams' },
+              { id: 'feedback', label: 'Polls & Feedback' },
               { id: 'competition', label: 'Competitions' }
             ].map((tab) => (
               <button
@@ -438,8 +454,12 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                       </div>
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                            {result.category}
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            result.category === 'feedback'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {result.category === 'feedback' ? (result.feedbackType || 'Feedback') : result.category}
                           </span>
                           {result.isAiGraded && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">

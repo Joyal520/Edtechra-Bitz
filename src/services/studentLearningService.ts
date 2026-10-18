@@ -70,6 +70,16 @@ export interface StudentCompetitionResult {
   submitted_at: string;
 }
 
+export interface StudentFeedbackResponseItem {
+  id: string;
+  exam_id: string;
+  title: string;
+  type: 'poll' | 'survey' | 'feedback' | string;
+  status: string;
+  submitted_at: string;
+  answers: Record<string, any>;
+}
+
 export interface StudentCorrectedWorkItem {
   id: string;
   title: string;
@@ -147,6 +157,7 @@ export interface StudentLearningResponse {
     quizzes: StudentQuizResult[];
     exams: StudentExamResult[];
     competitions: StudentCompetitionResult[];
+    feedback_responses?: StudentFeedbackResponseItem[];
   };
   corrected_work: StudentCorrectedWorkItem[];
   topics: StudentTopicProgress[];

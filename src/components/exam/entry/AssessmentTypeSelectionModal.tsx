@@ -102,9 +102,9 @@ export const AssessmentTypeSelectionModal: React.FC<AssessmentTypeSelectionModal
             </button>
           </div>
 
-          {/* SURVEY CARD */}
+          {/* FEEDBACK & RESPONSE CARD */}
           <div
-            onClick={() => onSelectType('survey')}
+            onClick={() => onSelectType('response')}
             className="p-6 rounded-3xl bg-gradient-to-b from-[#0f233b] to-[#0a192c] border-2 border-teal-600/50 hover:border-teal-400 cursor-pointer transition-all hover:scale-[1.02] hover:shadow-2xl hover:shadow-teal-600/20 group flex flex-col justify-between space-y-6 relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl group-hover:bg-teal-500/20 transition-all pointer-events-none" />
@@ -116,13 +116,13 @@ export const AssessmentTypeSelectionModal: React.FC<AssessmentTypeSelectionModal
 
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/40 text-[10px] font-black uppercase tracking-wider text-teal-300">
-                  Feedback & Polls
+                  Polls • Surveys • Feedback
                 </div>
                 <h3 className="text-xl font-black text-white group-hover:text-teal-300 transition-colors">
-                  SURVEY
+                  FEEDBACK &amp; RESPONSE
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Collect student opinions, course feedback, polls, and registrations without marks or pressure.
+                  Collect opinions, feedback, preferences, and student responses.
                 </p>
               </div>
 
@@ -130,15 +130,15 @@ export const AssessmentTypeSelectionModal: React.FC<AssessmentTypeSelectionModal
               <div className="space-y-2 pt-2 border-t border-blue-900/60 text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>No grading, marks, or pass/fail stress</span>
+                  <span>Polls</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Conditional branching logic & section jumps</span>
+                  <span>Surveys</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Anonymous responses & visual distribution charts</span>
+                  <span>Feedback forms</span>
                 </div>
               </div>
             </div>
@@ -147,7 +147,7 @@ export const AssessmentTypeSelectionModal: React.FC<AssessmentTypeSelectionModal
               type="button"
               className="w-full py-3.5 px-5 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-teal-600/30 group-hover:bg-teal-500 transition-all"
             >
-              <span>Create Survey</span>
+              <span>Create</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>

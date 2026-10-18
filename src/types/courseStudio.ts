@@ -180,10 +180,15 @@ export interface TextImageBlockContent {
 export interface TextVideoBlockContent {
   title?: string;
   text: string;
+  url?: string;
+  transcript?: string;
+  show_transcript_to_students?: boolean;
   video?: {
     url: string;
     video_id?: string;
     title?: string;
+    transcript?: string;
+    show_transcript_to_students?: boolean;
     is_short?: boolean;
     position: 'left' | 'right' | 'above' | 'below';
     size?: 'medium' | 'large';
@@ -205,6 +210,8 @@ export interface YouTubeBlockContent {
   video_id: string;
   url: string;
   title?: string;
+  transcript?: string;
+  show_transcript_to_students?: boolean;
   is_short: boolean;
   start_seconds?: number;
   position?: 'left' | 'right' | 'center';

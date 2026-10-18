@@ -236,7 +236,13 @@ export const CourseContentRenderer: React.FC<Props> = ({
     } else if (type === 'image') {
       content = { url: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=80', caption: 'Story illustration' };
     } else if (type === 'video' || type === 'youtube_video' || type === 'text_video') {
-      content = { title: 'Lesson Video', text: '', video: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', position: 'above' } };
+      content = {
+        title: 'Video Lesson Title',
+        text: '',
+        transcript: '',
+        show_transcript: false,
+        video: { url: '', position: 'above' }
+      };
     }
 
     const newBlock: CourseBlock = {
@@ -521,68 +527,162 @@ export const CourseContentRenderer: React.FC<Props> = ({
           ) {
             const item = content as any;
             const vidUrl = item.video?.url || item.url || item.video_id || '';
+            const vidTitle = item.title || 'Video Lesson';
+            const vidTranscript = item.transcript || item.video?.transcript || '';
+            const showTranscriptToStudents = Boolean(item.show_transcript || item.video?.show_transcript);
             const bodyText = item.text || item.markdown || '';
             const embedUrl = getYouTubeEmbedUrl(vidUrl);
 
             if (isEditMode) {
               return renderBlockWrapper(
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Video className="w-4 h-4 text-sky-500 shrink-0" />
+                <div className="space-y-3.5 p-3.5 rounded-2xl bg-white/70 dark:bg-stone-900/70 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                  {/* Video Title */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                      Video Lesson Title:
+                    </label>
                     <input
                       type="text"
-                      value={vidUrl}
-                      onChange={e => {
-                        const nextUrl = e.target.value;
-                        if (item.video) {
-                          updateBlockContent(idx, { ...item, video: { ...item.video, url: nextUrl } });
-                        } else {
-                          updateBlockContent(idx, { ...item, url: nextUrl });
-                        }
-                      }}
-                      placeholder="Paste YouTube Video URL (e.g. https://www.youtube.com/watch?v=...)"
-                      className="flex-1 p-2 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-stone-900 focus:outline-none focus:border-[#026fc3]"
+                      value={item.title || ''}
+                      onChange={e => updateBlockContent(idx, { ...item, title: e.target.value })}
+                      placeholder="e.g. Understanding the Present Perfect Tense"
+                      className="w-full p-2.5 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
                     />
                   </div>
+
+                  {/* Video URL */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                      Video URL:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Video className="w-4 h-4 text-sky-500 shrink-0" />
+                      <input
+                        type="text"
+                        value={vidUrl}
+                        onChange={e => {
+                          const nextUrl = e.target.value;
+                          if (item.video) {
+                            updateBlockContent(idx, { ...item, video: { ...item.video, url: nextUrl } });
+                          } else {
+                            updateBlockContent(idx, { ...item, url: nextUrl });
+                          }
+                        }}
+                        placeholder="Paste YouTube Video URL (e.g. https://www.youtube.com/watch?v=...)"
+                        className="flex-1 p-2 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 16:9 Responsive Video Preview */}
                   {embedUrl ? (
-                    <div className="video-container shadow-md">
+                    <div className="video-container shadow-md rounded-2xl overflow-hidden aspect-video w-full">
                       <iframe
                         src={embedUrl}
-                        title={item.title || 'Lesson Video'}
+                        title={vidTitle}
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
                       />
                     </div>
                   ) : (
-                    <div className="w-full h-32 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-400 font-medium">
-                      Enter a valid YouTube URL to preview video
+                    <div className="w-full aspect-video rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-400 font-medium">
+                      Enter a valid YouTube URL to preview 16:9 video
                     </div>
                   )}
-                  {bodyText !== undefined && (
-                    <CanvaInlineTextEditor
-                      value={bodyText}
-                      onChange={newText => updateBlockContent(idx, { ...item, text: newText })}
-                      placeholder="Notes or prompt for students watching this video..."
-                      surfaceBgColor={activeTheme.cardBgHex || '#ffffff'}
+
+                  {/* Video Transcript (Part 4 requirement) */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Video Transcript (Used to generate practice questions):</span>
+                      </label>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {vidTranscript.length} characters
+                      </span>
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={vidTranscript}
+                      onChange={e => {
+                        const newTr = e.target.value;
+                        updateBlockContent(idx, {
+                          ...item,
+                          transcript: newTr,
+                          video: item.video ? { ...item.video, transcript: newTr } : { url: vidUrl, transcript: newTr }
+                        });
+                      }}
+                      placeholder="Paste the video transcript here. EdTechra will use the transcript to create practice questions based on the actual lesson content."
+                      className="w-full p-3 text-xs font-mono leading-relaxed rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3] placeholder:text-slate-400"
                     />
+                    <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 dark:text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={showTranscriptToStudents}
+                          onChange={e => updateBlockContent(idx, { ...item, show_transcript: e.target.checked })}
+                          className="w-3.5 h-3.5 rounded text-[#026fc3]"
+                        />
+                        <span>Show transcript to students (hidden by default)</span>
+                      </label>
+
+                      {onOpenAddQuestions && (
+                        <button
+                          type="button"
+                          onClick={onOpenAddQuestions}
+                          disabled={!vidTranscript.trim() || vidTranscript.trim().length < 30}
+                          title={!vidTranscript.trim() ? 'Paste video transcript first' : 'Generate questions from transcript'}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Generate Practice Questions (10 Qs • 100 Marks)</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {bodyText !== undefined && (
+                    <div className="pt-1">
+                      <CanvaInlineTextEditor
+                        value={bodyText}
+                        onChange={newText => updateBlockContent(idx, { ...item, text: newText })}
+                        placeholder="Notes or prompt for students watching this video..."
+                        surfaceBgColor={activeTheme.cardBgHex || '#ffffff'}
+                      />
+                    </div>
                   )}
                 </div>
               );
             }
 
             return (
-              <figure key={block.id || idx} className="w-full my-4 sm:my-6 space-y-2">
+              <figure key={block.id || idx} className="w-full my-4 sm:my-6 space-y-2.5">
+                {vidTitle && (
+                  <h3 className="text-base sm:text-lg font-black text-theme-primary reader-h2">
+                    {vidTitle}
+                  </h3>
+                )}
                 {embedUrl && (
-                  <div className="video-container shadow-md">
+                  <div className="video-container shadow-md rounded-2xl overflow-hidden aspect-video w-full -mx-2 sm:mx-0">
                     <iframe
                       src={embedUrl}
-                      title={item.title || 'Lesson Video'}
+                      title={vidTitle}
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     />
                   </div>
                 )}
                 {bodyText && <FormattedLessonText text={bodyText} textScale={textScale} />}
+                {showTranscriptToStudents && vidTranscript && (
+                  <details className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-theme-secondary mt-2">
+                    <summary className="font-bold text-theme-primary cursor-pointer select-none">
+                      View Video Transcript
+                    </summary>
+                    <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap opacity-90 font-mono">
+                      {vidTranscript}
+                    </p>
+                  </details>
+                )}
               </figure>
             );
           }

@@ -264,3 +264,10 @@ export const THEME_PRESETS: Record<string, AssessmentThemeConfig> = {
 };
 
 export const DEFAULT_THEME_PRESET = THEME_PRESETS.modern_academy;
+
+export function getThemePreset(presetId?: string): AssessmentThemeConfig {
+  if (presetId && THEME_PRESETS[presetId]) {
+    return THEME_PRESETS[presetId];
+  }
+  return DEFAULT_THEME_PRESET;
+}

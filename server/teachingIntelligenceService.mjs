@@ -1154,11 +1154,13 @@ export async function getRecentExamReportsForClassroom({ serverSupabase, classro
   }
 
   try {
-    // 1. Fetch exams for this classroom
+    // 1. Fetch exams for this classroom (excluding non-exam surveys, polls, and feedback)
     const { data: exams, error: examsErr } = await serverSupabase
       .from('classroom_exams')
-      .select('id, title, description, classroom_id, total_marks, pass_marks, status, created_at, published_at, starts_at, ends_at')
+      .select('id, title, description, classroom_id, total_marks, pass_marks, status, created_at, published_at, starts_at, ends_at, assessment_type, exam_type')
       .eq('classroom_id', classroomId)
+      .neq('assessment_type', 'survey')
+      .not('exam_type', 'in', '("poll","survey","feedback")')
       .order('created_at', { ascending: false });
 
     if (examsErr) throw examsErr;

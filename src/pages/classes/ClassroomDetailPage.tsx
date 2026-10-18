@@ -2013,18 +2013,29 @@ export const ClassroomDetailPage: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {visibleExams.map((exam) => {
                         const isSurveyItem = (exam as any).assessment_type === 'survey';
+                        const responseType = (exam as any).survey_settings?.responseType || (exam as any).exam_type || (isSurveyItem ? 'survey' : 'exam');
+                        const isPoll = responseType === 'poll';
+                        const isFeedback = responseType === 'feedback';
+                        const isSurvey = responseType === 'survey' || isSurveyItem;
+                        const isResponseAssessment = isPoll || isFeedback || isSurvey;
 
                         return (
                           <div key={exam.id} className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between">
                             <div>
                               <div className="flex items-center justify-between gap-2">
                                 <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                  isSurveyItem ? 'text-amber-700 bg-amber-50' : 'text-indigo-700 bg-indigo-50'
+                                  isPoll
+                                    ? 'text-sky-700 bg-sky-50'
+                                    : isFeedback
+                                    ? 'text-rose-700 bg-rose-50'
+                                    : isSurvey
+                                    ? 'text-amber-700 bg-amber-50'
+                                    : 'text-indigo-700 bg-indigo-50'
                                 }`}>
-                                  {isSurveyItem ? 'Survey' : `${exam.duration_minutes} Mins`}
+                                  {isPoll ? 'Poll' : isFeedback ? 'Feedback' : isSurvey ? 'Survey' : `${exam.duration_minutes} Mins`}
                                 </span>
                                 <span className="text-xs font-extrabold text-slate-600">
-                                  {isSurveyItem ? 'Feedback / Poll' : `${exam.total_marks} Marks Total`}
+                                  {isPoll ? 'Quick Response' : isFeedback ? 'Student Feedback' : isSurvey ? 'Feedback / Survey' : `${exam.total_marks} Marks Total`}
                                 </span>
                               </div>
 
@@ -2037,7 +2048,7 @@ export const ClassroomDetailPage: React.FC = () => {
                             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                               {exam.latest_result ? (
                                 <span className="text-xs font-black text-emerald-600 truncate">
-                                  {isSurveyItem
+                                  {isResponseAssessment
                                     ? 'Submitted'
                                     : `Score: ${exam.latest_result.score} / ${exam.total_marks} (${exam.latest_result.percentage}%)`}
                                 </span>
@@ -2099,12 +2110,20 @@ export const ClassroomDetailPage: React.FC = () => {
                                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                       : (exam.starts_at && new Date(exam.starts_at).getTime() > Date.now())
                                       ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                      : isPoll
+                                      ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                                      : isFeedback
+                                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
                                       : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                                   }`}
                                 >
                                   {exam.latest_result
                                     ? 'View Result'
-                                    : isSurveyItem
+                                    : isPoll
+                                    ? 'Take Poll'
+                                    : isFeedback
+                                    ? 'Give Feedback'
+                                    : isSurvey
                                     ? 'Take Survey'
                                     : (exam.starts_at && new Date(exam.starts_at).getTime() > Date.now())
                                     ? 'Scheduled'

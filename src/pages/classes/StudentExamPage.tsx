@@ -24,6 +24,7 @@ import { CanonicalExamV1 } from '@/components/exam/shared/ExamSchema';
 import { ExamSession, ExamSessionAttemptData } from '@/components/exam/student/ExamSession';
 import { ExamResultView } from '@/components/exam/student/ExamResultView';
 import { ExamWaitingScreen } from '@/components/exam/student/ExamWaitingScreen';
+import { StudentResponseView } from '@/components/exam/response/StudentResponseView';
 
 export const StudentExamPage: React.FC = () => {
   const { classroomId, examId, assessmentId } = useParams<{
@@ -395,6 +396,55 @@ export const StudentExamPage: React.FC = () => {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDER: Non-Exam Assessment (POLL / SURVEY / FEEDBACK)
+  // Dedicated Mobile-First Student Experience (Parts 11 & 12)
+  // --------------------------------------------------------------------------
+  const isResponseStudioAssessment =
+    examRecord?.assessment_type === 'survey' ||
+    ['poll', 'survey', 'feedback', 'response'].includes(String(examRecord?.exam_type || '').toLowerCase()) ||
+    Boolean(examRecord?.survey_settings?.responseType);
+
+  if (isResponseStudioAssessment) {
+    const canonicalV2: any = {
+      schemaVersion: '2.0',
+      assessmentType: 'survey',
+      exam: {
+        title: examRecord?.title || 'Classroom Feedback & Response',
+        subject: examRecord?.subject || 'General',
+        grade: examRecord?.grade || 'General',
+        examType: examRecord?.exam_type || 'feedback',
+        difficulty: 'mixed',
+        description: examRecord?.description || '',
+        instructions: examRecord?.instructions || '',
+        durationMinutes: 0,
+        passPercentage: 0,
+        showMarksImmediately: false,
+        showCorrectAnswers: false,
+      },
+      surveySettings: examRecord?.survey_settings || {},
+      sections: canonicalExam.sections,
+      theme: examRecord?.theme_config,
+      brandKit: examRecord?.brand_kit
+    };
+
+    return (
+      <StudentResponseView
+        examId={effectiveExamId}
+        classroomId={classroomId || examRecord?.classroom_id}
+        assessment={canonicalV2}
+        existingResult={studentResult}
+        onExit={() => {
+          if (classroomId) navigate(`/classes/${classroomId}`);
+          else navigate('/classes');
+        }}
+        onSubmitted={() => {
+          loadExam(true);
+        }}
+      />
     );
   }
 

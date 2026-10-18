@@ -8,6 +8,7 @@ import { ClassroomExam } from '@/types/classroom';
 import { CanonicalExamV1 } from './shared/ExamSchema';
 import { AssessmentBuilder } from './builder/AssessmentBuilder';
 import { ExamResultsDashboard } from './teacher/ExamResultsDashboard';
+import { SurveyResultsDashboard } from './results/SurveyResultsDashboard';
 import { ExamSession, ExamSessionAttemptData } from './student/ExamSession';
 import { ExamResultView } from './student/ExamResultView';
 import { examPlatformService } from '@/services/examPlatformService';
@@ -187,6 +188,33 @@ export const ExamPlatformModal: React.FC<ExamPlatformModalProps> = ({
             <div className="p-12 text-center text-slate-400 text-sm font-semibold bg-[#0b142c] rounded-3xl border border-blue-800">
               Loading student results...
             </div>
+          ) : activeExam?.assessment_type === 'survey' ||
+              ['poll', 'survey', 'feedback', 'response'].includes(String(activeExam?.exam_type || '').toLowerCase()) ||
+              Boolean(activeExam?.survey_settings?.responseType) ? (
+            <SurveyResultsDashboard
+              assessment={(freshAssessment as any) || (canonicalActiveExam as any) || {
+                schemaVersion: '2.0',
+                assessmentType: 'survey',
+                exam: {
+                  title: activeExam?.title || 'Survey & Response',
+                  subject: activeExam?.subject || 'General',
+                  grade: activeExam?.grade || 'General',
+                  examType: activeExam?.exam_type || 'feedback',
+                  difficulty: 'mixed',
+                  description: activeExam?.description || '',
+                  instructions: activeExam?.instructions || '',
+                  durationMinutes: 0,
+                  passPercentage: 0,
+                  showMarksImmediately: false,
+                  showCorrectAnswers: false,
+                },
+                sections: canonicalActiveExam?.sections || [],
+                surveySettings: activeExam?.survey_settings || {}
+              }}
+              responses={resultsList}
+              onRefresh={loadExamResults}
+              onClose={onClose}
+            />
           ) : (
             <ExamResultsDashboard
               exam={activeExam}

@@ -7,7 +7,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { AssessmentBuilder } from '@/components/exam/builder/AssessmentBuilder';
-import { CanonicalAssessmentV2, AssessmentType } from '@/components/exam/shared/ExamSchema';
+import { ResponseStudioBuilder } from '@/components/exam/response/ResponseStudioBuilder';
+import { isResponseAssessment } from '@/components/exam/response/responseStudioSchema';
+import { CanonicalAssessmentV2, AssessmentType, ResponseSubType } from '@/components/exam/shared/ExamSchema';
 import { classroomExamService } from '@/services/classroomExamService';
 import { THEME_PRESETS } from '@/components/exam/shared/themePresets';
 import { Loader2 } from 'lucide-react';
@@ -20,8 +22,20 @@ export const AssessmentBuilderPage: React.FC = () => {
 
   const [loading, setLoading] = useState(Boolean(assessmentId));
   const [loadedAssessment, setLoadedAssessment] = useState<CanonicalAssessmentV2 | undefined>(undefined);
+  const [savedExamId, setSavedExamId] = useState<string | undefined>(assessmentId);
 
-  const initialType: AssessmentType = searchParams.get('type') === 'survey' ? 'survey' : 'exam';
+  const rawTypeParam = (searchParams.get('type') || '').toLowerCase();
+  const isResponseParam = ['response', 'poll', 'survey', 'feedback'].includes(rawTypeParam);
+  const initialSubType: ResponseSubType | null =
+    rawTypeParam === 'poll' || rawTypeParam === 'survey' || rawTypeParam === 'feedback'
+      ? (rawTypeParam as ResponseSubType)
+      : null;
+
+  const initialType: AssessmentType = isResponseParam ? 'survey' : 'exam';
+
+  useEffect(() => {
+    setSavedExamId(assessmentId);
+  }, [assessmentId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -70,7 +84,7 @@ export const AssessmentBuilderPage: React.FC = () => {
 
     try {
       const res = await classroomExamService.saveAssessmentV2({
-        examId: assessmentId,
+        examId: savedExamId || assessmentId,
         classroomId,
         assessment,
         status: isPublished ? 'published' : 'draft'
@@ -79,6 +93,10 @@ export const AssessmentBuilderPage: React.FC = () => {
       if (res.error) {
         alert(`Error saving assessment: ${res.error}`);
         return;
+      }
+
+      if (res.data?.id && !savedExamId) {
+        setSavedExamId(res.data.id);
       }
 
       if (isPublished) {
@@ -109,15 +127,34 @@ export const AssessmentBuilderPage: React.FC = () => {
     );
   }
 
-  // If new assessment, generate initial template matching requested type
+  // Route to EdTechra Response Studio for Poll / Survey / Feedback
+  const shouldUseResponseStudio =
+    isResponseParam || (loadedAssessment && isResponseAssessment(loadedAssessment));
+
+  if (shouldUseResponseStudio) {
+    return (
+      <ResponseStudioBuilder
+        key={assessmentId || rawTypeParam || 'response-new'}
+        classroomId={classroomId || ''}
+        initialSubType={initialSubType}
+        initialAssessment={loadedAssessment || null}
+        onSave={async (assessment, status) => {
+          await handleSaveAssessment(assessment, status === 'published');
+        }}
+        onCancel={handleBack}
+      />
+    );
+  }
+
+  // If new exam assessment, generate initial template matching requested type
   const fallbackAssessment: CanonicalAssessmentV2 = {
     schemaVersion: '2.0',
     assessmentType: initialType,
     exam: {
-      title: initialType === 'survey' ? 'Classroom Feedback Survey' : 'Unit Examination',
+      title: 'Unit Examination',
       subject: 'General',
       grade: 'Grade 10',
-      examType: initialType === 'survey' ? 'survey' : 'quiz',
+      examType: 'quiz',
       difficulty: 'Medium',
       durationMinutes: 45,
       passPercentage: 60,
@@ -142,7 +179,7 @@ export const AssessmentBuilderPage: React.FC = () => {
       {
         id: 'sec_1',
         title: 'Section 1',
-        description: initialType === 'survey' ? 'Please answer honestly.' : 'Answer all questions in this section.',
+        description: 'Answer all questions in this section.',
         questions: []
       }
     ]

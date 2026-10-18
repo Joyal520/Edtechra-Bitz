@@ -1331,8 +1331,12 @@ export const CoursePreviewPage: React.FC = () => {
           episodeId={selectedEpisode.id}
           courseId={course.id}
           lessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
-          hasVideo={currentBlocks.some((b: any) => b.block_type === 'video')}
-          hasImage={currentBlocks.some((b: any) => b.block_type === 'image')}
+          hasVideo={currentBlocks.some((b: any) => ['video', 'youtube_video', 'text_video'].includes(b.block_type))}
+          hasImage={currentBlocks.some((b: any) => ['image', 'text_image'].includes(b.block_type))}
+          initialVideoTranscript={(() => {
+            const vb = currentBlocks.find((b: any) => ['video', 'youtube_video', 'text_video'].includes(b.block_type));
+            return (vb?.content as any)?.transcript || (vb?.content as any)?.video?.transcript || '';
+          })()}
           onImportQuestions={imported => {
             const next = [...currentQuestions, ...imported];
             handleQuestionsChange(next);

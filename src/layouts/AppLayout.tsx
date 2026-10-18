@@ -40,8 +40,11 @@ export const AppLayout: React.FC = () => {
   const isLiveQuizRoute = location.pathname.includes('/live-quiz/');
   const isLiveQuizLobby = location.pathname.includes('/live-quiz/lobby/');
   const isPresentationViewer = location.pathname.includes('/library/present');
+  const isCourseStudioWorkspace =
+    /^\/course-studio\/[^/]+(\/preview)?$/.test(location.pathname) ||
+    location.pathname.includes('/courses/');
   const isReaderPage =
-    location.pathname.includes('/courses/') ||
+    isCourseStudioWorkspace ||
     location.pathname.includes('/preview') ||
     location.pathname.includes('/assessments/builder') ||
     isPresentationViewer ||
@@ -58,6 +61,19 @@ export const AppLayout: React.FC = () => {
     setIosModalOpen,
     triggerInstall
   } = usePWAInstall();
+
+  // Lock document/body scroll when inside full-screen Course Studio workspace
+  useEffect(() => {
+    if (!isCourseStudioWorkspace) return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, [isCourseStudioWorkspace]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -111,7 +127,7 @@ export const AppLayout: React.FC = () => {
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isLiveQuizRoute ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isCourseStudioWorkspace ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isLiveQuizRoute ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
       
       {/* ========================================================================= */}
       {/* FLOATING NAVIGATION HEADER                                                */}
@@ -674,7 +690,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main Page Body */}
-      <main className={`flex-1 w-full relative ${isHomePage || isPresentationViewer ? 'h-full overflow-hidden flex flex-col' : ''}`}>
+      <main className={`flex-1 w-full relative ${isHomePage || isPresentationViewer || isCourseStudioWorkspace ? 'h-full min-h-0 overflow-hidden flex flex-col' : ''}`}>
         <Outlet />
       </main>
 

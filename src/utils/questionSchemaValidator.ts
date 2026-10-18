@@ -74,6 +74,8 @@ export const IMPLEMENTED_QUESTION_TYPES: Set<QuestionType> = new Set([
   'matching',
   'ordering',
   'sentence_builder',
+  'sentence_reordering',
+  'word_ordering',
   'short_answer',
   'wh_question',
   'comprehension',
@@ -765,6 +767,7 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
   const planTypes = (plan?.items || []).map(item => item.type);
   const seenTypes = new Set<string>();
+  const sentenceOrderingAliases = new Set(['sentence_reordering', 'sentence_builder', 'word_ordering']);
 
   parsed.question_sets.forEach((qSet: any, setIdx: number) => {
     if (!qSet.type || !validTypes.includes(qSet.type)) {
@@ -772,7 +775,16 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       return;
     }
 
-    const typeKey = qSet.type as QuestionType;
+    let typeKey = qSet.type as QuestionType;
+    // Normalize sentence ordering aliases to match plan if needed
+    if (sentenceOrderingAliases.has(typeKey) && planTypes.length > 0) {
+      const matchingPlanOrdering = planTypes.find(pt => sentenceOrderingAliases.has(pt));
+      if (matchingPlanOrdering) {
+        typeKey = matchingPlanOrdering;
+        qSet.type = matchingPlanOrdering;
+      }
+    }
+
     const label = QUESTION_TYPE_LABELS[typeKey] || typeKey;
 
     // 1. Duplicate Type Protection
@@ -808,10 +820,16 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       const promptCandidate = q.question || q.questionText || q.prompt || q.statement || q.sentence || '';
       if (!q.question && promptCandidate) q.question = promptCandidate;
 
-      const correctCandidate = q.correct_answer !== undefined ? q.correct_answer : (q.correctAnswer !== undefined ? q.correctAnswer : (q.answer !== undefined ? q.answer : q.expected_answer));
+      const correctCandidate = q.correct_answer !== undefined
+        ? q.correct_answer
+        : (q.correctAnswer !== undefined
+          ? q.correctAnswer
+          : (q.answer !== undefined
+            ? q.answer
+            : (q.expected_answer !== undefined ? q.expected_answer : q.correct_sentence)));
       if (q.correct_answer === undefined && correctCandidate !== undefined) q.correct_answer = correctCandidate;
 
-      const optionsCandidate = q.options || q.choices || q.pairs || q.items;
+      const optionsCandidate = q.options || q.choices || q.pairs || q.items || q.words;
       if (!q.options && optionsCandidate) q.options = optionsCandidate;
 
       if (typeKey === 'multiple_choice') {
@@ -846,16 +864,24 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
           errors.push(`${qNum}: Matching question requires "pairs" array with left/right items.`);
         }
       } else if (typeKey === 'ordering' || typeKey === 'sentence_reordering' || typeKey === 'sentence_builder' || typeKey === 'word_ordering') {
-        if (!q.question) q.question = 'Put the words in the correct order.';
-        const itemsCandidate = q.items || q.options || q.correct_order;
+        if (!q.question) q.question = 'Arrange the words in the correct order to form a meaningful sentence from the lesson.';
+        let itemsCandidate = q.items || q.options || q.words || q.correct_order;
+        if ((!Array.isArray(itemsCandidate) || itemsCandidate.length < 2) && (q.correct_sentence || q.correct_answer)) {
+          const fallbackSentence = String(q.correct_sentence || q.correct_answer || '').trim();
+          if (fallbackSentence.split(/\s+/).length >= 2) {
+            itemsCandidate = fallbackSentence.split(/\s+/);
+            q.words = itemsCandidate;
+            q.options = itemsCandidate;
+          }
+        }
         if (!Array.isArray(itemsCandidate) || itemsCandidate.length < 2) {
-          errors.push(`${qNum}: Requires "items" or "correct_order" array with at least 2 words/phrases.`);
+          errors.push(`${qNum}: Requires "items", "words", or "correct_order" array with at least 2 words/phrases.`);
         }
       } else if (typeKey === 'short_answer') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
           errors.push(`${qNum}: Missing "question" text.`);
         }
-        if (!q.correct_answer && (!Array.isArray(q.acceptable_answers) || q.acceptable_answers.length === 0)) {
+        if (!q.correct_answer && !q.expected_answer && (!Array.isArray(q.acceptable_answers) || q.acceptable_answers.length === 0)) {
           errors.push(`${qNum}: Missing "correct_answer" or "acceptable_answers".`);
         }
       } else if (typeKey === 'wh_question' || typeKey === 'comprehension') {
@@ -907,9 +933,12 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
   if (plan && plan.items.length > 0) {
     plan.items.forEach(planItem => {
       const label = QUESTION_TYPE_LABELS[planItem.type] || planItem.type;
-      const qSet = parsed.question_sets.find((s: any) => s.type === planItem.type);
+      const qSet = parsed.question_sets.find((s: any) =>
+        s.type === planItem.type ||
+        (sentenceOrderingAliases.has(planItem.type) && sentenceOrderingAliases.has(s.type))
+      );
 
-      if (!seenTypes.has(planItem.type) || !qSet || !Array.isArray(qSet.questions) || qSet.questions.length === 0) {
+      if (!qSet || !Array.isArray(qSet.questions) || qSet.questions.length === 0) {
         errors.push(`Missing required question set: ${label}.`);
         return;
       }
@@ -981,7 +1010,9 @@ export function convertValidatedJsonToCourseQuestions(
     (qSet.questions || []).forEach((q: any) => {
       let qText = q.question || q.statement || q.sentence || '';
       let optionsList: any = [];
-      let correctAnswerStr = String(q.correct_answer ?? '');
+      let correctAnswerStr = String(q.correct_answer ?? q.expected_answer ?? q.correct_sentence ?? '');
+      let expectedAnswerStr: string | undefined = undefined;
+      let acceptableAnswersList: string[] | undefined = undefined;
       let passageText: string | undefined = undefined;
       let blanksList: ClozeBlank[] | undefined = undefined;
       let imageUrl: string | undefined = undefined;
@@ -1087,17 +1118,28 @@ export function convertValidatedJsonToCourseQuestions(
       } else if (qType === 'ordering' || qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'word_ordering') {
         const rawItems = q.items || q.options || q.words || q.correct_order || [];
         optionsList = Array.isArray(rawItems)
-          ? rawItems.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || ''))
+          ? rawItems.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
           : [];
         const rawCorrect = q.correct_order || q.correctOrder || q.items || [];
         const correctList = Array.isArray(rawCorrect)
-          ? rawCorrect.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || ''))
+          ? rawCorrect.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
           : [];
-        correctAnswerStr = q.correct_answer || correctList.join(' ') || (optionsList.length > 0 ? optionsList.join(' ') : '');
-      } else if (qType === 'short_answer') {
-        if (Array.isArray(q.acceptable_answers)) {
-          optionsList = q.acceptable_answers;
+        correctAnswerStr = String(q.correct_answer || q.correct_sentence || correctList.join(' ') || (optionsList.length > 0 ? optionsList.join(' ') : '')).trim();
+        if (optionsList.length === 0 && correctAnswerStr) {
+          optionsList = correctAnswerStr.split(/\s+/).filter(Boolean);
         }
+      } else if (qType === 'short_answer') {
+        expectedAnswerStr = String(q.expected_answer || q.correct_answer || q.answer || '').trim();
+        const rawAcceptable: string[] = Array.isArray(q.acceptable_answers)
+          ? q.acceptable_answers.map((a: any) => String(a).trim()).filter(Boolean)
+          : (expectedAnswerStr ? [expectedAnswerStr] : []);
+        if (expectedAnswerStr && !rawAcceptable.includes(expectedAnswerStr)) {
+          acceptableAnswersList = [expectedAnswerStr, ...rawAcceptable];
+        } else {
+          acceptableAnswersList = rawAcceptable;
+        }
+        correctAnswerStr = expectedAnswerStr || (acceptableAnswersList && acceptableAnswersList[0]) || '';
+        optionsList = acceptableAnswersList || [];
       } else if (qType === 'cloze_passage') {
         passageText = q.passage || '';
         blanksList = Array.isArray(q.blanks) ? q.blanks : [];
@@ -1130,9 +1172,11 @@ export function convertValidatedJsonToCourseQuestions(
         question_type: qType,
         options: optionsList,
         correct_answer: correctAnswerStr,
+        expected_answer: expectedAnswerStr,
+        acceptable_answers: acceptableAnswersList,
         items: optionsList,
         correct_order: (Array.isArray(q.correct_order) ? q.correct_order : Array.isArray(q.correctOrder) ? q.correctOrder : optionsList),
-        explanation: q.explanation || '',
+        explanation: q.explanation || q.marking_guidance || q.rubric || '',
         skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : 'Comprehension'),
         concept: q.concept || 'General',
         difficulty: (q.difficulty as DifficultyLevel) || 'medium',
@@ -1143,10 +1187,315 @@ export function convertValidatedJsonToCourseQuestions(
         image_url: imageUrl,
         min_words: minWords,
         max_words: maxWords,
-        evaluation_criteria: criteriaList
+        evaluation_criteria: criteriaList,
+        evaluation: qType === 'short_answer' ? {
+          method: 'ai_semantic',
+          ai_evaluated: true,
+          criteria: ['comprehension', 'accuracy', 'key_details'],
+          maxScore: points
+        } : undefined
       });
     });
   });
 
   return result;
 }
+
+/**
+ * Default 10-Question Video Assessment Plan (100 Total Marks):
+ * - 3 Multiple Choice (10 marks each = 30 marks)
+ * - 3 True or False (10 marks each = 30 marks)
+ * - 3 Short Answer (10 marks each = 30 marks)
+ * - 1 Sentence Ordering (10 marks each = 10 marks)
+ */
+export function createDefaultVideoAssessmentPlanItems(): QuestionPlanItem[] {
+  const ts = Date.now();
+  return [
+    {
+      id: `plan_mcq_${ts}_1`,
+      type: 'multiple_choice',
+      count: 3,
+      points: 10,
+      difficulty: 'medium',
+      instructions: 'Create 3 multiple-choice questions testing key concepts, definitions, and factual details from the video transcript.'
+    },
+    {
+      id: `plan_tf_${ts}_2`,
+      type: 'true_false',
+      count: 3,
+      points: 10,
+      difficulty: 'easy',
+      instructions: 'Create 3 true/false statements verifying factual accuracy directly from the video transcript.'
+    },
+    {
+      id: `plan_sa_${ts}_3`,
+      type: 'short_answer',
+      count: 3,
+      points: 10,
+      difficulty: 'medium',
+      ai_evaluated: true,
+      instructions: 'Create 3 short-answer comprehension questions with clear expected answers, acceptable alternatives, and marking guidance.'
+    },
+    {
+      id: `plan_so_${ts}_4`,
+      type: 'sentence_reordering',
+      count: 1,
+      points: 10,
+      difficulty: 'medium',
+      instructions: 'Create 1 sentence-ordering question using an important sentence from the video transcript.'
+    }
+  ];
+}
+
+/**
+ * Deterministic shuffle helper that guarantees the shuffled array is not in canonical order.
+ */
+export function shuffleWordsGuaranteed<T>(items: T[]): T[] {
+  if (items.length <= 1) return [...items];
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  const isIdentical = copy.every((item, idx) => item === items[idx]);
+  if (isIdentical) {
+    // Swap first and last (or first two distinct elements)
+    const swapIdx = copy.findIndex((item) => item !== copy[0]);
+    if (swapIdx > 0) {
+      [copy[0], copy[swapIdx]] = [copy[swapIdx], copy[0]];
+    } else {
+      copy.reverse();
+    }
+  }
+  return copy;
+}
+
+/**
+ * Deterministic Transcript-Grounded 10-Question Assessment Generator (100 Marks Total).
+ * Used as a reliable fallback or supplement when AI endpoints are unavailable so that
+ * questions are ALWAYS 100% grounded in the teacher's pasted video transcript.
+ */
+export function generateTranscriptGrounded10Questions(
+  transcript: string,
+  lessonTitle: string = 'Video Lesson',
+  episodeId: string = 'ep_temp',
+  courseId: string = 'course_temp'
+): CourseQuestion[] {
+  const cleaned = String(transcript || '')
+    .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, ' ')
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Split transcript into clean sentences
+  const rawSentences = cleaned
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(s => s.replace(/^[-•*]\s*/, '').trim())
+    .filter(s => s.length >= 25 && s.split(/\s+/).length >= 5);
+
+  const sentences = rawSentences.length > 0
+    ? rawSentences
+    : [cleaned.slice(0, 200).trim() || `In ${lessonTitle}, students learn the core concepts explained in the video.`];
+
+  const getSentence = (idx: number): string => sentences[idx % sentences.length];
+
+  // Extract content keywords (4+ chars, non-stopwords) across the transcript
+  const stopWords = new Set([
+    'that', 'this', 'with', 'from', 'have', 'will', 'your', 'they', 'their', 'what',
+    'when', 'where', 'which', 'while', 'about', 'there', 'these', 'those', 'into',
+    'more', 'some', 'such', 'than', 'then', 'them', 'were', 'been', 'being', 'also',
+    'very', 'just', 'like', 'only', 'over', 'under', 'after', 'before', 'because',
+    'through', 'between', 'during', 'without', 'within', 'would', 'could', 'should'
+  ]);
+
+  const extractKeywords = (sentence: string): string[] => {
+    return sentence
+      .replace(/[^a-zA-Z0-9\s'-]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length >= 4 && !stopWords.has(w.toLowerCase()));
+  };
+
+  const allKeywords = Array.from(
+    new Set(sentences.flatMap(s => extractKeywords(s)))
+  );
+
+  const questions: CourseQuestion[] = [];
+  const now = Date.now();
+  let orderIndex = 0;
+
+  // ---------------------------------------------------------------------------
+  // 1-3: 3 MULTIPLE CHOICE QUESTIONS (10 marks each = 30 marks)
+  // ---------------------------------------------------------------------------
+  for (let i = 0; i < 3; i++) {
+    const targetSentence = getSentence(i * Math.max(1, Math.floor(sentences.length / 3)));
+    const words = extractKeywords(targetSentence);
+    const focusTerm = words[0] || lessonTitle;
+
+    // Build 3 distractors from other sentences or altered claims
+    const otherSentence1 = getSentence(i + 1);
+    const otherSentence2 = getSentence(i + 2);
+    const otherWords = allKeywords.filter(w => !targetSentence.toLowerCase().includes(w.toLowerCase()));
+
+    const correctStatement = targetSentence.length > 140 ? `${targetSentence.slice(0, 137)}...` : targetSentence;
+    const distractor1 = otherWords.length >= 2
+      ? targetSentence.replace(new RegExp(`\\b${focusTerm}\\b`, 'i'), otherWords[0]) !== targetSentence
+        ? targetSentence.replace(new RegExp(`\\b${focusTerm}\\b`, 'i'), otherWords[0])
+        : `The lesson states that ${otherWords[0]} completely replaces ${focusTerm} in every situation.`
+      : `The lesson states that ${focusTerm} is never used in this context.`;
+    const distractor2 = otherSentence1 !== targetSentence
+      ? `According to the video, ${focusTerm} is unrelated to: ${otherSentence1.slice(0, 90)}`
+      : `The video explains that ${focusTerm} has the opposite effect in all examples.`;
+    const distractor3 = otherSentence2 !== targetSentence && otherSentence2 !== otherSentence1
+      ? `The speaker concludes that ${otherWords[1] || 'none of the examples'} apply to ${focusTerm}.`
+      : `The transcript states that ${focusTerm} should always be avoided.`;
+
+    const rawOpts = [correctStatement, distractor1, distractor2, distractor3];
+    const shuffledOpts = shuffleWordsGuaranteed(rawOpts);
+    const formattedOpts = shuffledOpts.map((text, idx) => ({
+      id: String.fromCharCode(65 + idx),
+      text
+    }));
+    const correctOpt = formattedOpts.find(o => o.text === correctStatement) || formattedOpts[0];
+
+    questions.push({
+      id: `q_${now}_${orderIndex}`,
+      episode_id: episodeId,
+      course_id: courseId,
+      question_text: i === 0
+        ? `According to the video lesson "${lessonTitle}", which of the following statements is accurate?`
+        : i === 1
+        ? `What does the lesson transcript state regarding "${focusTerm}"?`
+        : `Which key point is directly supported by the video transcript?`,
+      question_type: 'multiple_choice',
+      options: formattedOpts,
+      correct_answer: correctOpt.id,
+      explanation: `Transcript reference: "${targetSentence}"`,
+      skill: 'Video Comprehension',
+      concept: focusTerm,
+      difficulty: i === 2 ? 'hard' : 'medium',
+      points: 10,
+      order_index: orderIndex++
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4-6: 3 TRUE / FALSE QUESTIONS (10 marks each = 30 marks)
+  // ---------------------------------------------------------------------------
+  for (let i = 0; i < 3; i++) {
+    const baseSentence = getSentence(i + 3);
+    const isTrueStatement = i !== 1; // Q4: True, Q5: False, Q6: True
+    let statementText = baseSentence;
+
+    if (!isTrueStatement) {
+      // Create a clear false statement by negating or swapping a key term
+      if (/\b(is|are|was|were|can|will|should|must|does|do|has|have)\b/i.test(baseSentence)) {
+        statementText = baseSentence.replace(
+          /\b(is|are|was|were|can|will|should|must|does|do|has|have)\b/i,
+          (match) => `${match} never`
+        );
+      } else {
+        statementText = `The video lesson states that the following claim is false: ${baseSentence}`;
+      }
+    }
+
+    questions.push({
+      id: `q_${now}_${orderIndex}`,
+      episode_id: episodeId,
+      course_id: courseId,
+      question_text: statementText,
+      question_type: 'true_false',
+      options: ['True', 'False'],
+      correct_answer: isTrueStatement ? 'True' : 'False',
+      explanation: isTrueStatement
+        ? `True — This statement matches the video transcript: "${baseSentence}"`
+        : `False — The video transcript actually states: "${baseSentence}"`,
+      skill: 'Fact Verification',
+      concept: lessonTitle,
+      difficulty: 'easy',
+      points: 10,
+      order_index: orderIndex++
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7-9: 3 SHORT ANSWER QUESTIONS (10 marks each = 30 marks)
+  // ---------------------------------------------------------------------------
+  for (let i = 0; i < 3; i++) {
+    const sourceSentence = getSentence(i + 6);
+    const keywords = extractKeywords(sourceSentence);
+    const keyTopic = keywords.slice(0, 2).join(' ') || lessonTitle;
+    const acceptable = Array.from(
+      new Set([
+        sourceSentence,
+        keywords.slice(0, 4).join(' '),
+        ...keywords.slice(0, 3)
+      ].filter(Boolean))
+    );
+
+    questions.push({
+      id: `q_${now}_${orderIndex}`,
+      episode_id: episodeId,
+      course_id: courseId,
+      question_text: i === 0
+        ? `Based on the video transcript, explain the main point discussed about "${keyTopic}".`
+        : i === 1
+        ? `In your own words, summarize what the lesson states regarding "${keyTopic}".`
+        : `According to the speaker in the video, what is important to understand about "${keyTopic}"?`,
+      question_type: 'short_answer',
+      options: acceptable,
+      correct_answer: sourceSentence,
+      expected_answer: sourceSentence,
+      acceptable_answers: acceptable,
+      explanation: `Full marks (10/10) for explaining the key idea from the transcript: "${sourceSentence}". Key terms to include: ${keywords.slice(0, 5).join(', ')}.`,
+      skill: 'Short Answer Comprehension',
+      concept: keyTopic,
+      difficulty: 'medium',
+      points: 10,
+      order_index: orderIndex++,
+      evaluation: {
+        method: 'ai_semantic',
+        ai_evaluated: true,
+        criteria: ['comprehension', 'accuracy', 'key_details'],
+        maxScore: 10
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 10: 1 SENTENCE ORDERING QUESTION (10 marks = 10 marks)
+  // ---------------------------------------------------------------------------
+  const candidateOrderingSentence =
+    sentences.find(s => {
+      const wc = s.split(/\s+/).length;
+      return wc >= 6 && wc <= 14;
+    }) ||
+    sentences[0]
+      .split(/\s+/)
+      .slice(0, 10)
+      .join(' ');
+
+  const cleanOrderingSentence = candidateOrderingSentence.replace(/\s+/g, ' ').trim();
+  const canonicalTokens = cleanOrderingSentence.split(/\s+/).filter(Boolean);
+  const shuffledTokens = shuffleWordsGuaranteed(canonicalTokens);
+
+  questions.push({
+    id: `q_${now}_${orderIndex}`,
+    episode_id: episodeId,
+    course_id: courseId,
+    question_text: 'Arrange the words in the correct order to form a sentence from the video lesson.',
+    question_type: 'sentence_reordering',
+    options: shuffledTokens,
+    items: shuffledTokens,
+    correct_order: canonicalTokens,
+    correct_answer: cleanOrderingSentence,
+    explanation: `Correct sentence from the lesson transcript: "${cleanOrderingSentence}"`,
+    skill: 'Sentence Structure & Recall',
+    concept: lessonTitle,
+    difficulty: 'medium',
+    points: 10,
+    order_index: orderIndex++
+  });
+
+  return questions;
+}
+
