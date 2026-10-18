@@ -94,7 +94,10 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const answeredStudentIdsRef = useRef<Set<string>>(new Set());
 
   const activeQuestion = questions[currentQIndex];
-  const durationSec = activeQuestion?.durationSec || 20;
+  const durationSec = session.quiz?.timer_enabled === false
+    ? 86400
+    : (session.quiz?.timer_seconds || activeQuestion?.durationSec || 20);
+  const isQuestionTimed = session.quiz?.timer_enabled !== false && durationSec < 3600;
 
   // Background music lifecycle: start on mount when quiz is active, stop on unmount
   useEffect(() => {
@@ -273,7 +276,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
   // 3. Synchronized countdown timer with authoritative fallback
   useEffect(() => {
-    if (phase !== 'question' || isPaused) return;
+    if (!isQuestionTimed || phase !== 'question' || isPaused) return;
 
     const timer = setInterval(() => {
       const elapsed = (Date.now() - questionStartMs) / 1000;
@@ -288,7 +291,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     }, 500);
 
     return () => clearInterval(timer);
-  }, [phase, questionStartMs, durationSec, isPaused]);
+  }, [isQuestionTimed, phase, questionStartMs, durationSec, isPaused]);
 
   // 4. Condition A check: When all active students have answered -> Automatically advance with grace period!
   useEffect(() => {
@@ -603,16 +606,23 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-lg bg-[#E5F2FF] text-[#10245A] font-extrabold text-xs">
-              10 pts
+              {questions.length > 0 ? Math.round(100 / questions.length) : 10} pts
             </span>
-            <span
-              className={`inline-flex items-center gap-1 font-extrabold text-sm tabular-nums ${
-                timeLeft <= 5 ? 'text-[#F43F7A] animate-pulse' : 'text-[#087CF5]'
-              }`}
-            >
-              <Clock className="w-4 h-4" />
-              <span>{timeLeft}s</span>
-            </span>
+            {isQuestionTimed ? (
+              <span
+                className={`inline-flex items-center gap-1 font-extrabold text-sm tabular-nums ${
+                  timeLeft <= 5 ? 'text-[#F43F7A] animate-pulse' : 'text-[#087CF5]'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>{timeLeft}s</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-extrabold text-xs text-[#64748B]">
+                <Clock className="w-3.5 h-3.5" />
+                <span>No Timer</span>
+              </span>
+            )}
           </div>
         </div>
       </div>

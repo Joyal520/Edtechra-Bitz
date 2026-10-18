@@ -250,7 +250,7 @@ export interface QuizProgressProps {
   totalQuestions: number;
   category: string;
   points: number;
-  questionTimeLeft: number;
+  questionTimeLeft?: number | null;
   streak?: number;
 }
 
@@ -294,7 +294,9 @@ export const QuizProgress: React.FC<QuizProgressProps> = ({
           <span className="px-2.5 py-1 rounded-lg bg-[#E5F2FF] text-[#10245A] font-extrabold text-xs sm:text-sm tabular-nums">
             {points} pts
           </span>
-          <Timer seconds={questionTimeLeft} variant="inline" urgentThreshold={5} />
+          {typeof questionTimeLeft === 'number' && questionTimeLeft < 3600 && (
+            <Timer seconds={questionTimeLeft} variant="inline" urgentThreshold={5} />
+          )}
         </div>
       </div>
     </div>

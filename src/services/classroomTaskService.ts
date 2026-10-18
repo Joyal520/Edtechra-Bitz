@@ -32,6 +32,8 @@ class ClassroomTaskClientService {
     classroomId: string;
     title: string;
     subtitle?: string;
+    writingType?: string;
+    requiredWordLength?: number;
     instructions?: string;
     category?: TaskCategory;
     points?: number;

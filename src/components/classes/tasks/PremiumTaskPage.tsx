@@ -21,6 +21,7 @@ import {
 } from '@/types/classroomTask';
 import type { EvaluationPhase } from './StudentTaskModal';
 import { optimizeImageForOCR } from '@/utils/imageOptimizer';
+import { countWords } from '@/utils/writingInstructionGenerator';
 
 interface PremiumTaskPageProps {
   task: ClassroomTask;
@@ -94,6 +95,15 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
   const questions: TaskQuestion[] = Array.isArray(task.questions) ? task.questions : [];
   const contentBlocks = Array.isArray(task.content_blocks) ? task.content_blocks : [];
+
+  const requiredWordLength = Number(
+    task.required_word_length ?? task.settings?.required_word_length ?? 0
+  );
+  const writingTypeLabel =
+    task.writing_type || task.settings?.writing_type || task.subtitle || '';
+  const currentWordCount = countWords(textResponse);
+  const isWordCountMet = requiredWordLength > 0 ? currentWordCount >= requiredWordLength : currentWordCount > 0 || questions.length > 0;
+  const wordsRemaining = requiredWordLength > 0 ? Math.max(0, requiredWordLength - currentWordCount) : 0;
 
   const handleAnswerChange = (questionId: string, val: any) => {
     if (submitted && !task.settings?.allow_retry) return;
@@ -233,19 +243,28 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           {/* Prominent High-Contrast Task Instructions Card */}
           <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white shadow-md space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="px-3 py-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 text-[11px] font-black rounded-full uppercase tracking-wider">
-                TASK INSTRUCTIONS
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-3 py-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 text-[11px] font-black rounded-full uppercase tracking-wider">
+                  TASK INSTRUCTIONS
+                </span>
+                {writingTypeLabel && (
+                  <span className="px-3 py-1 bg-teal-500/25 text-teal-200 border border-teal-400/30 text-[11px] font-black rounded-full">
+                    {writingTypeLabel}
+                  </span>
+                )}
+              </div>
               <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-bold rounded-full">
-                Aim for approximately 50 words
+                {requiredWordLength > 0
+                  ? `Required: At least ${requiredWordLength} words`
+                  : 'Aim for approximately 50 words'}
               </span>
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
-                {task.subtitle || task.title}
+                {writingTypeLabel || task.title}
               </h2>
               {task.instructions && (
-                <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed whitespace-pre-wrap mt-2">
+                <p className="text-sm sm:text-base font-medium text-slate-200 leading-relaxed whitespace-pre-wrap mt-2">
                   {task.instructions}
                 </p>
               )}
@@ -403,13 +422,13 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                       {(q.type === 'short_answer' || q.type === 'paragraph' || q.type === 'essay' || q.type === 'creative_writing' || q.type === 'open_ended') && (
                         <div className="pt-1 pl-0 sm:pl-8 space-y-1">
                           <textarea
-                            rows={3}
+                            rows={4}
                             disabled={submitted && !task.settings?.allow_retry}
                             value={currentAns || ''}
                             onChange={(e) => handleAnswerChange(q.id, e.target.value)}
                             placeholder="Write your explanation or response here..."
                             style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                            className="w-full p-3 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 leading-relaxed"
+                            className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-sm font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-hidden focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 leading-relaxed"
                           />
                         </div>
                       )}
@@ -476,15 +495,15 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
           {/* Submission Box for tasks allowing responses or handwritten work (shown when not yet evaluated) */}
           {!isTaskEvaluated && task.category !== 'resource' && (!submitted || isTaskFailed) && (
-            <div className="p-3.5 sm:p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4">
+            <div className="p-4 sm:p-6 rounded-2xl border-2 border-slate-200 bg-slate-50/90 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider block">
-                    Submit your Task
+                  <span className="text-sm font-black text-slate-900 uppercase tracking-wider block">
+                    Your Response
                   </span>
-                  <p className="text-[11px] text-slate-500 font-medium">
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
                     {task.settings?.submission_method === 'text'
-                      ? 'Type your response directly into the field below.'
+                      ? 'Type your response directly into the writing area below.'
                       : task.settings?.submission_method === 'upload'
                       ? 'Upload a clear photo of your handwritten paper or worksheet.'
                       : 'You can type your answer or upload a clear photo of your handwritten work.'}
@@ -495,7 +514,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setSubmissionMode('text')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         submissionMode === 'text'
                           ? 'bg-teal-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
@@ -506,7 +525,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setSubmissionMode('handwritten')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         submissionMode === 'handwritten'
                           ? 'bg-teal-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
@@ -519,19 +538,54 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               </div>
 
               {submissionMode === 'text' ? (
-                <div className="w-full">
+                <div className="w-full space-y-2.5">
                   <textarea
-                    rows={questions.length > 0 ? 4 : 8}
+                    rows={questions.length > 0 ? 6 : 12}
                     disabled={submitted && !isTaskFailed}
                     value={textResponse}
                     onChange={(e) => setTextResponse(e.target.value)}
-                    placeholder="Type your explanation, summary, or response notes here..."
+                    placeholder={
+                      requiredWordLength > 0
+                        ? `Start writing your ${writingTypeLabel ? writingTypeLabel.toLowerCase() : 'response'} here (minimum ${requiredWordLength} words)...`
+                        : 'Type your explanation, summary, or response notes here...'
+                    }
                     style={{ color: '#0f172a', backgroundColor: '#FFFFFF' }}
-                    className="w-full block min-h-[200px] sm:min-h-[240px] p-3.5 sm:p-4 bg-white border-2 border-slate-300 rounded-xl text-base sm:text-sm font-medium text-slate-900 placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 leading-relaxed shadow-xs"
+                    className="w-full block min-h-[260px] sm:min-h-[340px] lg:min-h-[420px] p-4 sm:p-5 lg:p-6 bg-white border-2 border-slate-300 rounded-2xl text-base sm:text-base lg:text-[17px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 leading-relaxed lg:leading-[1.75] shadow-xs resize-y overflow-y-auto"
                   />
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500 px-1 font-medium">
-                    <span>{textResponse ? `${textResponse.trim().split(/\s+/).filter(Boolean).length} words` : '0 words'}</span>
-                    <span>AI-Powered Review & Learning Evidence</span>
+
+                  {/* Live Word Counter & Minimum Requirement Feedback Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span
+                        className={`px-2.5 py-1 rounded-lg text-xs font-black ${
+                          requiredWordLength > 0
+                            ? isWordCountMet
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-100 text-amber-900 border border-amber-200'
+                            : 'bg-slate-100 text-slate-800'
+                        }`}
+                      >
+                        {requiredWordLength > 0
+                          ? `${currentWordCount} / ${requiredWordLength} words`
+                          : `${currentWordCount} ${currentWordCount === 1 ? 'word' : 'words'}`}
+                      </span>
+
+                      {requiredWordLength > 0 && (
+                        <span
+                          className={`text-xs font-bold ${
+                            isWordCountMet ? 'text-emerald-700' : 'text-amber-700'
+                          }`}
+                        >
+                          {isWordCountMet
+                            ? '✓ Ready to submit'
+                            : `${wordsRemaining} more ${wordsRemaining === 1 ? 'word' : 'words'} required`}
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] text-slate-500 font-semibold">
+                      AI-Powered Review & Learning Evidence
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -567,7 +621,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                           Take a photo or upload handwritten worksheet
                         </span>
                         <span className="text-[11px] text-slate-400 font-medium">
-                          Supports JPG, JPEG, PNG, or WEBP (up to 10MB)
+                          Supports JPG, JPEG, PNG, or WEBP (up to 15MB)
                         </span>
                       </div>
                       <input
@@ -650,7 +704,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           </div>
         )}
 
-        {/* EVALUATED STATE: Show structured AI result */}
+        {/* EVALUATED STATE: Show structured AI result (Enhanced Readability Hierarchy) */}
         {isTaskEvaluated && submission && (() => {
           // Extract writing evaluation from submission
           const wEval: any =
@@ -686,35 +740,35 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
           const nextStepText: string = wEval?.next_step || '';
 
           return (
-            <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-500">
 
               {/* Score Header */}
               <div className="p-5 sm:p-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 space-y-3 shadow-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
                         EVALUATION COMPLETE
                       </span>
                       {(submission.is_ai_graded || hasWritingResult) && (
-                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200 flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" />
-                          AI OCR GRADED
+                        <span className="text-xs font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-3 py-1 rounded-full border border-indigo-200 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          AI EVALUATED
                         </span>
                       )}
                     </div>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900">{task.title}</h3>
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900">{task.title}</h3>
                     {wEval?.concept && (
-                      <div className="text-xs font-bold text-teal-800">
+                      <div className="text-sm font-bold text-teal-800">
                         Topic: <span className="text-teal-900">{wEval.concept}</span>
                       </div>
                     )}
                   </div>
 
                   {pctVal != null && (
-                    <div className="text-left sm:text-right shrink-0 bg-white/80 backdrop-blur-xs p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
+                    <div className="text-left sm:text-right shrink-0 bg-white/90 backdrop-blur-xs p-4 rounded-2xl border border-emerald-200 shadow-2xs">
                       <div className="text-2xl sm:text-3xl font-black text-emerald-700">{scoreVal} / {maxVal}</div>
-                      <div className="text-sm font-black text-emerald-600">{pctVal}% Score</div>
+                      <div className="text-sm sm:text-base font-black text-emerald-600">{pctVal}% Score</div>
                     </div>
                   )}
                 </div>
@@ -724,17 +778,17 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               {(hasWritingResult || studentImage || originalText) && (
                 <>
                   {/* Side-by-side comparison on desktop (grid lg:grid-cols-2), stacked on mobile */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     {/* Left: Original Student Work */}
-                    <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between">
-                      <div className="space-y-3">
+                    <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 bg-white space-y-3.5 flex flex-col justify-between">
+                      <div className="space-y-3.5">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <PenLine className="w-4 h-4 text-slate-500" />
-                            <span className="text-xs font-black uppercase tracking-wider text-slate-700">YOUR ORIGINAL WORK</span>
+                            <PenLine className="w-4 h-4 text-slate-600" />
+                            <span className="text-sm font-black uppercase tracking-wider text-slate-800">YOUR ORIGINAL WORK</span>
                           </div>
                           {studentImage && (
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Handwritten Sheet</span>
+                            <span className="text-xs font-bold text-slate-500 uppercase">Handwritten Sheet</span>
                           )}
                         </div>
 
@@ -749,13 +803,13 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                         )}
 
                         {originalText && (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             {studentImage && (
-                              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                                 Transcribed Text
                               </span>
                             )}
-                            <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                            <p className="text-sm sm:text-base lg:text-[17px] font-medium text-slate-800 leading-relaxed lg:leading-[1.75] whitespace-pre-wrap bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-200">
                               {originalText}
                             </p>
                           </div>
@@ -764,19 +818,19 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                     </div>
 
                     {/* Right: Complete Corrected Work */}
-                    <div className="p-4 sm:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/30 space-y-3 flex flex-col justify-between">
-                      <div className="space-y-3">
+                    <div className="p-5 sm:p-6 rounded-2xl border border-emerald-200 bg-emerald-50/30 space-y-3.5 flex flex-col justify-between">
+                      <div className="space-y-3.5">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            <span className="text-xs font-black uppercase tracking-wider text-emerald-800">CORRECTED WORK</span>
+                            <span className="text-sm font-black uppercase tracking-wider text-emerald-800">CORRECTED WORK</span>
                           </div>
-                          <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-100 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-emerald-700 uppercase bg-emerald-100 px-2.5 py-0.5 rounded-full">
                             Polished English
                           </span>
                         </div>
 
-                        <p className="text-xs sm:text-sm font-medium text-emerald-950 leading-relaxed whitespace-pre-wrap bg-white p-4 rounded-xl border border-emerald-200 shadow-2xs">
+                        <p className="text-sm sm:text-base lg:text-[17px] font-medium text-emerald-950 leading-relaxed lg:leading-[1.75] whitespace-pre-wrap bg-white p-4 sm:p-5 rounded-xl border border-emerald-200 shadow-2xs">
                           {correctedText || originalText || 'No text provided.'}
                         </p>
                       </div>
@@ -785,21 +839,21 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                   {/* Rubric Criteria Breakdown if available */}
                   {rubricBreakdown.length > 0 && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-[#C9E5E2] bg-white space-y-3">
-                      <span className="text-xs font-black uppercase tracking-wider text-[#173B3F] block">
+                    <div className="p-5 sm:p-6 rounded-2xl border border-[#C9E5E2] bg-white space-y-3.5">
+                      <span className="text-sm font-black uppercase tracking-wider text-[#173B3F] block">
                         CRITERIA BREAKDOWN
                       </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {rubricBreakdown.map((crit: any, cIdx: number) => (
-                          <div key={cIdx} className="p-3 rounded-xl bg-[#E8F7F5]/40 border border-[#C9E5E2] flex items-center justify-between">
+                          <div key={cIdx} className="p-3.5 rounded-xl bg-[#E8F7F5]/40 border border-[#C9E5E2] flex items-center justify-between">
                             <div>
-                              <span className="text-xs font-bold text-[#173B3F] block">{crit.criterion || crit.name}</span>
+                              <span className="text-sm font-bold text-[#173B3F] block">{crit.criterion || crit.name}</span>
                               {crit.feedback && (
-                                <span className="text-[11px] text-[#36565A] font-medium block mt-0.5">{crit.feedback}</span>
+                                <span className="text-xs sm:text-sm text-[#36565A] font-medium block mt-1 leading-snug">{crit.feedback}</span>
                               )}
                             </div>
                             <div className="text-right shrink-0 ml-3">
-                              <span className="text-xs font-black text-[#087477]">
+                              <span className="text-sm font-black text-[#087477]">
                                 {crit.score}{crit.max != null ? ` / ${crit.max}` : ''}
                               </span>
                             </div>
@@ -810,141 +864,141 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   )}
 
                   {/* Categorized Issues Breakdown (14-point inspection) */}
-                  <div className="p-4 sm:p-6 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-800">DETAILED WRITING ANALYSIS</span>
+                        <span className="text-sm font-black uppercase tracking-wider text-slate-800">DETAILED WRITING ANALYSIS</span>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-500">
+                      <span className="text-xs font-semibold text-slate-500">
                         14-Point English Inspection
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Grammar & Syntax */}
-                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-slate-800">Grammar & Syntax</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <h4 className="text-sm font-black text-slate-800">Grammar & Syntax</h4>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {grammarIssues.length} issue{grammarIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {grammarIssues.length > 0 ? (
-                          <ul className="space-y-2 pt-1">
+                          <ul className="space-y-2.5 pt-1">
                             {grammarIssues.map((err: any, i: number) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original || err.text}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction || err.suggestion}"</span>
                                 </div>
                                 {(err.explanation || err.rule) && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation || err.rule}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation || err.rule}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ No grammar errors detected
                           </p>
                         )}
                       </div>
 
                       {/* Spelling */}
-                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-slate-800">Spelling</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <h4 className="text-sm font-black text-slate-800">Spelling</h4>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {spellingIssues.length} issue{spellingIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {spellingIssues.length > 0 ? (
-                          <ul className="space-y-2 pt-1">
+                          <ul className="space-y-2.5 pt-1">
                             {spellingIssues.map((err: any, i: number) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original || err.text}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction || err.suggestion}"</span>
                                 </div>
                                 {(err.explanation || err.rule) && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation || err.rule}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation || err.rule}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ No spelling mistakes detected
                           </p>
                         )}
                       </div>
 
                       {/* Vocabulary */}
-                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-slate-800">Vocabulary & Word Choice</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <h4 className="text-sm font-black text-slate-800">Vocabulary & Word Choice</h4>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {vocabIssues.length} issue{vocabIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {vocabIssues.length > 0 ? (
-                          <ul className="space-y-2 pt-1">
+                          <ul className="space-y-2.5 pt-1">
                             {vocabIssues.map((err: any, i: number) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ Vocabulary is appropriate
                           </p>
                         )}
                       </div>
 
                       {/* Sentence Structure */}
-                      <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 rounded-xl bg-white border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-slate-800">Sentence Structure</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <h4 className="text-sm font-black text-slate-800">Sentence Structure</h4>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {structureIssues.length} issue{structureIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {structureIssues.length > 0 ? (
-                          <ul className="space-y-2 pt-1">
+                          <ul className="space-y-2.5 pt-1">
                             {structureIssues.map((err: any, i: number) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ Sentence structure is clear
                           </p>
                         )}
@@ -953,14 +1007,14 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                     {/* What You Did Well (Strengths) */}
                     {strengthsList.length > 0 && (
-                      <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
-                        <h4 className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <div className="p-4 sm:p-5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                        <h4 className="text-sm font-black text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           <span>WHAT YOU DID WELL</span>
                         </h4>
                         <ul className="space-y-1.5 pl-1">
                           {strengthsList.map((s: string, i: number) => (
-                            <li key={i} className="text-xs text-emerald-950 font-medium flex items-start gap-2">
+                            <li key={i} className="text-sm sm:text-[15px] text-emerald-950 font-medium flex items-start gap-2 leading-relaxed">
                               <span className="text-emerald-600 font-black">•</span>
                               <span>{s}</span>
                             </li>
@@ -971,12 +1025,12 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                     {/* Next Step */}
                     {nextStepText && (
-                      <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1.5">
-                        <h4 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <div className="p-4 sm:p-5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1.5">
+                        <h4 className="text-sm font-black text-indigo-900 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-indigo-600" />
                           <span>NEXT STEP</span>
                         </h4>
-                        <p className="text-xs text-indigo-950 font-medium leading-relaxed">
+                        <p className="text-sm sm:text-[15px] text-indigo-950 font-medium leading-relaxed">
                           {nextStepText}
                         </p>
                       </div>
@@ -985,18 +1039,18 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
 
                   {/* AI Feedback */}
                   {(wEval?.feedback || submission.teacher_feedback) && (
-                    <div className="p-4 sm:p-5 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-2">
+                    <div className="p-5 sm:p-6 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-2.5">
                       <div className="flex items-center gap-2">
                         <MessageSquare className="w-4 h-4 text-sky-600" />
-                        <span className="text-xs font-black uppercase tracking-wider text-sky-800">PEDAGOGICAL FEEDBACK</span>
+                        <span className="text-sm font-black uppercase tracking-wider text-sky-800">DETAILED FEEDBACK</span>
                       </div>
-                      <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+                      <p className="text-sm sm:text-base lg:text-[17px] font-medium text-slate-800 leading-relaxed lg:leading-[1.75] whitespace-pre-wrap">
                         {wEval?.feedback || submission.teacher_feedback}
                       </p>
                       {wEval?.skills && wEval.skills.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {wEval.skills.map((skill: string, i: number) => (
-                            <span key={i} className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200">
+                            <span key={i} className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full border border-indigo-200">
                               {skill}
                             </span>
                           ))}
@@ -1044,9 +1098,13 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
               ) : (
                 <button
                   type="button"
-                  disabled={isSubmitting || (submissionMode === 'handwritten' && !handwrittenBase64)}
+                  disabled={
+                    isSubmitting ||
+                    (submissionMode === 'handwritten' && !handwrittenBase64) ||
+                    (submissionMode === 'text' && !isWordCountMet)
+                  }
                   onClick={handleSubmit}
-                  className="w-full sm:w-auto px-6 py-3 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm sm:text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-3 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm sm:text-xs font-black shadow-md shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>
@@ -1056,7 +1114,7 @@ export const PremiumTaskPage: React.FC<PremiumTaskPageProps> = ({
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Submit your Task</span>
+                      <span>Submit Work</span>
                     </>
                   )}
                 </button>

@@ -320,7 +320,7 @@ export const AppLayout: React.FC = () => {
                   }`}
                   aria-label="User Profile Menu"
                 >
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1.5px] shadow-2xs shrink-0 overflow-hidden">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00d2ff] via-[#0ea5e9] to-[#2563eb] p-[1.5px] shadow-[0_0_12px_rgba(14,165,233,0.45)] shrink-0 overflow-hidden">
                     {avatarUrl ? (
                       <img
                         src={avatarUrl}
@@ -494,13 +494,15 @@ export const AppLayout: React.FC = () => {
             {user && (
               <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-amber-100 text-slate-800 font-bold text-xs flex items-center justify-center">
-                      {initials}
-                    </div>
-                  )}
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#00d2ff] via-[#0ea5e9] to-[#2563eb] p-[1.5px] shadow-[0_0_12px_rgba(14,165,233,0.4)] shrink-0 overflow-hidden">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt={displayName} className="w-full h-full rounded-full object-cover bg-amber-100" />
+                    ) : (
+                      <div className="w-full h-full rounded-full bg-amber-100 text-slate-800 font-bold text-xs flex items-center justify-center">
+                        {initials}
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <div className="font-extrabold text-xs text-slate-900">{displayName}</div>
                     <div className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">{user.email}</div>

@@ -24,7 +24,6 @@ import {
   OptimizationResult,
   validateImageFile
 } from '@/utils/imageOptimizer';
-import { postService } from '@/services/postService';
 
 interface UserSettingsModalProps {
   isOpen: boolean;
@@ -119,45 +118,70 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
   const handleCropComplete = async (cropResult: OptimizationResult) => {
     setCropFile(null);
     setIsUploadingPhoto(true);
-    setUploadPercent(10);
+    setUploadPercent(15);
     setErrorMessage(null);
+    setSaveSuccess(false);
 
     try {
       const token = session?.access_token || null;
 
-      // 1. Request presigned URL from backend
-      const presignRes = await fetch('/api/profile/presign-avatar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          contentType: cropResult.format === 'png' ? 'image/png' : 'image/webp',
-          size: cropResult.blob.size
-        })
+      // Convert optimized blob to base64 DataURL
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read cropped image.'));
+        reader.readAsDataURL(cropResult.blob);
       });
 
-      if (!presignRes.ok) {
-        const err = await presignRes.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to initialize avatar upload.');
+      setUploadPercent(45);
+
+      let finalAvatarUrl = dataUrl;
+      const contentType =
+        cropResult.format === 'png'
+          ? 'image/png'
+          : cropResult.format === 'jpeg'
+            ? 'image/jpeg'
+            : 'image/webp';
+
+      // Upload via server-side endpoint (bypasses browser CORS to R2 and persists to DB)
+      try {
+        const uploadRes = await fetch('/api/profile/upload-avatar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            imageBase64: dataUrl,
+            contentType
+          })
+        });
+
+        const payload = await uploadRes.json().catch(() => ({}));
+        if (uploadRes.ok && payload?.data?.publicUrl) {
+          finalAvatarUrl = payload.data.publicUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('[UserSettingsModal] Server R2 upload fallback to optimized DataURL:', uploadErr);
       }
 
-      const { data: presignedData } = await presignRes.json();
-      setUploadPercent(40);
+      setUploadPercent(85);
+      setSelectedAvatarUrl(finalAvatarUrl);
 
-      // 2. Direct upload to R2
-      await postService.uploadBlobToR2(
-        presignedData.uploadUrl,
-        presignedData.signedHeaders || { 'Content-Type': presignedData.contentType },
-        cropResult.blob,
-        (percent) => {
-          setUploadPercent(40 + Math.round(percent * 0.5));
-        }
-      );
+      // Immediately persist the new avatar URL to profile + auth metadata so UI updates everywhere
+      const saveRes = await updateUserProfile({
+        avatar_url: finalAvatarUrl
+      });
+
+      if (saveRes.error) {
+        throw new Error(saveRes.error);
+      }
 
       setUploadPercent(100);
-      setSelectedAvatarUrl(presignedData.publicUrl);
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 3000);
     } catch (err: any) {
       console.error('[UserSettingsModal] Avatar upload error:', err);
       setErrorMessage(err.message || 'Failed to upload avatar. Please try again.');
@@ -290,7 +314,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
 
                 <div className="flex items-center gap-4">
                   {/* Current Avatar Preview */}
-                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2.5px] shadow-sm shrink-0">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-[#00d2ff] via-[#0ea5e9] to-[#2563eb] p-[2.5px] shadow-[0_0_16px_rgba(14,165,233,0.45)] shrink-0">
                     <div className="w-full h-full rounded-[22px] bg-amber-100 flex items-center justify-center font-black text-2xl overflow-hidden">
                       {selectedAvatarUrl ? (
                         <img

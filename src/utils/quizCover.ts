@@ -14,20 +14,39 @@ export function extractCoverFromDescription(desc?: string | null): string | null
 }
 
 /**
- * Strips the [cover:...] token from quiz description for clean UI presentation
+ * Checks whether a quiz description contains the [UNTRACKED] marker.
+ * Defaults to true (tracked) unless explicitly marked [UNTRACKED].
  */
-export function cleanDescription(desc?: string | null): string {
-  if (!desc) return '';
-  return desc.replace(/\s*\[cover:\s*(https?:\/\/[^\s\]]+|data:[^\s\]]+|\/[^\s\]]+)\s*\]/gi, '').trim();
+export function extractTrackQuizFromDescription(desc?: string | null): boolean {
+  if (!desc) return true;
+  return !/\[UNTRACKED\]/i.test(desc);
 }
 
 /**
- * Encodes cover image URL into quiz description for durable storage in tables without a cover_image column
+ * Strips the [cover:...] and [UNTRACKED] tokens from quiz description for clean UI presentation
  */
-export function encodeDescriptionWithCover(desc?: string | null, coverUrl?: string | null): string {
+export function cleanDescription(desc?: string | null): string {
+  if (!desc) return '';
+  return desc
+    .replace(/\s*\[cover:\s*(https?:\/\/[^\s\]]+|data:[^\s\]]+|\/[^\s\]]+)\s*\]/gi, '')
+    .replace(/\s*\[UNTRACKED\]\s*/gi, ' ')
+    .trim();
+}
+
+/**
+ * Encodes cover image URL and tracking flag into quiz description for durable storage
+ */
+export function encodeDescriptionWithCover(
+  desc?: string | null,
+  coverUrl?: string | null,
+  trackQuiz?: boolean
+): string {
   const clean = cleanDescription(desc);
-  if (!coverUrl || !coverUrl.trim()) return clean;
-  return clean ? `${clean}\n[cover:${coverUrl.trim()}]` : `[cover:${coverUrl.trim()}]`;
+  const parts: string[] = [];
+  if (clean) parts.push(clean);
+  if (trackQuiz === false) parts.push('[UNTRACKED]');
+  if (coverUrl && coverUrl.trim()) parts.push(`[cover:${coverUrl.trim()}]`);
+  return parts.join('\n');
 }
 
 /**

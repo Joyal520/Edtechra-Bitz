@@ -3,6 +3,7 @@ import { X, Upload, FileText, CheckCircle2, Paperclip, Trash2 } from 'lucide-rea
 import { Assignment, AssignmentAttachment } from '@/types/classroom';
 import { assignmentService } from '@/services/assignmentService';
 import { supabase } from '@/lib/supabase';
+import { countWords } from '@/utils/writingInstructionGenerator';
 
 interface StudentSubmitModalProps {
   isOpen: boolean;
@@ -37,6 +38,26 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !assignment) return null;
+
+  const requiredWordLength = Number(
+    assignment.required_word_length ??
+      (assignment as any).settings?.required_word_length ??
+      0
+  );
+  const writingType =
+    assignment.writing_type ||
+    (assignment as any).settings?.writing_type ||
+    assignment.subtitle ||
+    '';
+  const currentWordCount = countWords(textResponse);
+  const isWordCountMet =
+    attachments.length > 0
+      ? true
+      : requiredWordLength > 0
+      ? currentWordCount >= requiredWordLength
+      : currentWordCount > 0;
+  const wordsRemaining =
+    requiredWordLength > 0 ? Math.max(0, requiredWordLength - currentWordCount) : 0;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -117,6 +138,13 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
       return;
     }
 
+    if (attachments.length === 0 && requiredWordLength > 0 && currentWordCount < requiredWordLength) {
+      setErrorMessage(
+        `Your response has ${currentWordCount} words, which is below the minimum required length of ${requiredWordLength} words.`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await assignmentService.submitAssignment({
@@ -141,33 +169,58 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div 
-        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200 edtechra-light-surface text-slate-900"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
+      <div
+        className="bg-white rounded-3xl max-w-2xl w-full p-5 sm:p-7 lg:p-8 shadow-2xl border border-slate-100 relative overflow-hidden animate-in zoom-in-95 duration-200 edtechra-light-surface text-slate-900 my-auto max-h-[92vh] overflow-y-auto"
         data-light-surface="true"
         data-theme-mode="light"
       >
-        
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-          <div>
-            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-              isAlreadySubmitted ? 'bg-emerald-100 text-emerald-800' : 'text-[#026fc3] bg-blue-50'
-            }`}>
-              {isAlreadySubmitted ? 'Task Completed' : 'Submit Task'}
-            </span>
-            <h2 className="text-base font-black text-slate-900 mt-1 line-clamp-1">
+        <div className="flex items-start justify-between pb-4 border-b border-slate-100 gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md ${
+                  isAlreadySubmitted ? 'bg-emerald-100 text-emerald-800' : 'text-[#026fc3] bg-blue-50'
+                }`}
+              >
+                {isAlreadySubmitted ? 'Task Completed' : 'Submit Task'}
+              </span>
+              {writingType && (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+                  {writingType}
+                </span>
+              )}
+              {requiredWordLength > 0 && (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                  Min {requiredWordLength} words
+                </span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-lg font-black text-slate-900 mt-1">
               {assignment.title}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Task Instructions Summary */}
+        {assignment.instructions && (
+          <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+              Task Instructions
+            </span>
+            <p className="text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+              {assignment.instructions}
+            </p>
+          </div>
+        )}
 
         {/* COMPLETED / SUBMITTED READ-ONLY VIEW */}
         {isAlreadySubmitted ? (
@@ -196,7 +249,7 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
               )}
 
               {existingSub?.teacher_feedback && (
-                <p className="text-xs text-emerald-800 font-medium italic pt-1">
+                <p className="text-xs sm:text-sm text-emerald-800 font-medium italic pt-1 leading-relaxed">
                   &ldquo;{existingSub.teacher_feedback}&rdquo;
                 </p>
               )}
@@ -207,7 +260,7 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
               <label className="block text-xs font-extrabold text-slate-700">
                 Your Submitted Response
               </label>
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm sm:text-base font-medium text-slate-800 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
                 {existingSub?.text_response || 'No written text was submitted.'}
               </div>
             </div>
@@ -264,17 +317,59 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
-                  Your Response / Notes
-                </label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                    Your Response
+                  </label>
+                  {requiredWordLength > 0 && (
+                    <span className="text-[11px] font-bold text-slate-500">
+                      Required minimum: {requiredWordLength} words
+                    </span>
+                  )}
+                </div>
                 <textarea
-                  rows={4}
+                  rows={8}
                   value={textResponse}
                   onChange={(e) => setTextResponse(e.target.value)}
-                  placeholder="Type your answer, summary, or response here..."
-                  className="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-300 focus:border-[#026fc3] rounded-2xl text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#026fc3]/20 transition-all resize-none shadow-2xs select-text"
+                  placeholder={
+                    requiredWordLength > 0
+                      ? `Type your answer here (at least ${requiredWordLength} words)...`
+                      : 'Type your answer, summary, or response here...'
+                  }
+                  className="w-full min-h-[240px] sm:min-h-[300px] lg:min-h-[360px] p-4 sm:p-5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border-2 border-slate-300 focus:border-[#026fc3] rounded-2xl text-base sm:text-base lg:text-[17px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-[#026fc3]/15 transition-all resize-y leading-relaxed lg:leading-[1.75] shadow-2xs select-text overflow-y-auto"
                 />
+
+                {/* Live Word Count & Minimum Status Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-lg text-xs font-black ${
+                        requiredWordLength > 0
+                          ? isWordCountMet
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-100 text-amber-900 border border-amber-200'
+                          : 'bg-slate-200/70 text-slate-800'
+                      }`}
+                    >
+                      {requiredWordLength > 0
+                        ? `${currentWordCount} / ${requiredWordLength} words`
+                        : `${currentWordCount} ${currentWordCount === 1 ? 'word' : 'words'}`}
+                    </span>
+
+                    {requiredWordLength > 0 && (
+                      <span
+                        className={`text-xs font-bold ${
+                          isWordCountMet ? 'text-emerald-700' : 'text-amber-700'
+                        }`}
+                      >
+                        {isWordCountMet
+                          ? '✓ Ready to submit'
+                          : `${wordsRemaining} more ${wordsRemaining === 1 ? 'word' : 'words'} required`}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Attachment list */}
@@ -344,8 +439,8 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || isUploading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                  disabled={isSubmitting || isUploading || !isWordCountMet}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-xl text-xs font-extrabold shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   <FileText className="w-3.5 h-3.5" />
                   <span>{isSubmitting ? 'Submitting...' : 'Submit Work'}</span>

@@ -16,7 +16,7 @@ import {
 } from '@/types/liveQuiz';
 import { READY_MADE_QUIZZES } from '@/data/readyMadeQuizzes';
 import { VALID_QUIZ_QUESTION_COUNTS } from '@/utils/aiQuizParser';
-import { extractCoverFromDescription, cleanDescription, encodeDescriptionWithCover } from '@/utils/quizCover';
+import { extractCoverFromDescription, extractTrackQuizFromDescription, cleanDescription, encodeDescriptionWithCover } from '@/utils/quizCover';
 import { classroomPointsService } from './classroomPointsService';
 
 class LiveQuizService {
@@ -84,6 +84,7 @@ class LiveQuizService {
 
             const embeddedCover = extractCoverFromDescription(q.description);
             const finalCover = q.cover_image || q.cover_image_url || embeddedCover || null;
+            const trackQuiz = q.track_quiz === false ? false : extractTrackQuizFromDescription(q.description);
 
             return {
               ...q,
@@ -91,8 +92,9 @@ class LiveQuizService {
               cover_image: finalCover,
               cover_image_url: finalCover,
               visibility: q.visibility || 'private',
-              timer_enabled: q.timer_enabled ?? false,
-              timer_seconds: q.timer_seconds ?? null,
+              timer_enabled: q.timer_enabled ?? true,
+              timer_seconds: q.timer_seconds ?? (q.questions?.[0]?.duration_sec || 20),
+              track_quiz: trackQuiz,
               is_owner: isOwner,
               creator_name: creatorName,
               questions: (q.questions || []).sort((a: any, b: any) => a.question_index - b.question_index).map((item: any) => ({
@@ -117,8 +119,9 @@ class LiveQuizService {
     const filteredReadyMade: LiveQuiz[] = READY_MADE_QUIZZES.filter((q) => !customIds.has(q.id)).map((q) => ({
       ...q,
       visibility: 'common' as const,
-      timer_enabled: false,
-      timer_seconds: null,
+      timer_enabled: true,
+      timer_seconds: q.questions?.[0]?.durationSec || 20,
+      track_quiz: true,
       is_owner: false,
       creator_name: 'Created by EdTechra'
     }));
@@ -152,8 +155,9 @@ class LiveQuizService {
       return {
         ...readyMade,
         visibility: 'common',
-        timer_enabled: false,
-        timer_seconds: null,
+        timer_enabled: true,
+        timer_seconds: readyMade.questions?.[0]?.durationSec || 20,
+        track_quiz: true,
         is_owner: false,
         creator_name: 'Created by EdTechra'
       };
@@ -196,6 +200,7 @@ class LiveQuizService {
 
               const embeddedFallbackCover = extractCoverFromDescription(qData.description);
               const finalFallbackCover = qData.cover_image || qData.cover_image_url || embeddedFallbackCover || null;
+              const fallbackTrackQuiz = qData.track_quiz === false ? false : extractTrackQuizFromDescription(qData.description);
 
               return {
                 ...qData,
@@ -203,8 +208,9 @@ class LiveQuizService {
                 cover_image: finalFallbackCover,
                 cover_image_url: finalFallbackCover,
                 visibility: 'private',
-                timer_enabled: qData.timer_enabled ?? false,
-                timer_seconds: qData.timer_seconds ?? null,
+                timer_enabled: qData.timer_enabled ?? true,
+                timer_seconds: qData.timer_seconds ?? (studentQuestions[0]?.durationSec || 20),
+                track_quiz: fallbackTrackQuiz,
                 is_owner: false,
                 creator_name: 'Created by Teacher',
                 questions: studentQuestions
@@ -221,11 +227,13 @@ class LiveQuizService {
             if (r2Json.success && r2Json.data) {
               const r2EmbeddedCover = extractCoverFromDescription(r2Json.data.description);
               const r2FinalCover = r2Json.data.cover_image || r2Json.data.cover_image_url || r2EmbeddedCover || null;
+              const r2TrackQuiz = r2Json.data.track_quiz === false ? false : extractTrackQuizFromDescription(r2Json.data.description);
               return {
                 ...r2Json.data,
                 description: cleanDescription(r2Json.data.description),
                 cover_image: r2FinalCover,
-                cover_image_url: r2FinalCover
+                cover_image_url: r2FinalCover,
+                track_quiz: r2TrackQuiz
               };
             }
           }
@@ -275,6 +283,7 @@ class LiveQuizService {
 
       const embeddedCover = extractCoverFromDescription(data.description);
       const finalCover = data.cover_image || data.cover_image_url || embeddedCover || null;
+      const trackQuiz = data.track_quiz === false ? false : extractTrackQuizFromDescription(data.description);
 
       return {
         ...data,
@@ -282,8 +291,9 @@ class LiveQuizService {
         cover_image: finalCover,
         cover_image_url: finalCover,
         visibility: data.visibility || 'private',
-        timer_enabled: data.timer_enabled ?? false,
-        timer_seconds: data.timer_seconds ?? null,
+        timer_enabled: data.timer_enabled ?? true,
+        timer_seconds: data.timer_seconds ?? (questionsList[0]?.durationSec || 20),
+        track_quiz: trackQuiz,
         is_owner: isOwner,
         creator_name: creatorName,
         questions: questionsList
@@ -340,26 +350,30 @@ class LiveQuizService {
     visibility?: 'private' | 'common';
     timer_enabled?: boolean;
     timer_seconds?: number | null;
+    track_quiz?: boolean;
   }): Promise<{ data?: LiveQuiz; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
     const userId = await this.getUserId();
 
-    // Server-side validation of timer
-    let timerEnabled = Boolean(payload.timer_enabled);
+    // Per-Question Timer Validation
+    const timerEnabled = payload.timer_enabled !== false;
     let timerSeconds: number | null = null;
     if (timerEnabled) {
-      const parsedSec = Number(payload.timer_seconds);
+      const parsedSec = Number(payload.timer_seconds ?? payload.questions?.[0]?.durationSec ?? 20);
       if (isNaN(parsedSec) || parsedSec <= 0 || !Number.isInteger(parsedSec)) {
-        timerSeconds = 60; // Fallback to standard 60s
+        timerSeconds = 20; // Default 20s per question
       } else {
-        timerSeconds = Math.min(36000, Math.max(1, Math.floor(parsedSec)));
+        timerSeconds = Math.min(3600, Math.max(5, Math.floor(parsedSec)));
       }
     }
+
+    const perQuestionDurationSec = timerEnabled && timerSeconds ? timerSeconds : 86400;
+    const trackQuiz = payload.track_quiz !== false;
 
     // Strictly default to 'private' unless explicitly declared 'common'
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
     const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
-    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage);
+    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage, trackQuiz);
 
     // Title Duplicate Protection: Normalize title (trim, collapse spaces, lowercase)
     const normalizedNewTitle = payload.title.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -429,8 +443,13 @@ class LiveQuizService {
       }
     }
 
+    const normalizedQuestions = payload.questions.map((q) => ({
+      ...q,
+      durationSec: perQuestionDurationSec
+    }));
+
     try {
-      // 1. Insert quiz header (with fallback if cover_image column not yet migrated)
+      // 1. Insert quiz header (with fallback if cover_image or track_quiz column not yet migrated)
       const baseInsertPayload = {
         classroom_id: payload.classroom_id || null,
         title: payload.title.trim(),
@@ -448,20 +467,22 @@ class LiveQuizService {
       let quizData: any = null;
       let quizError: any = null;
 
-      if (coverImage) {
-        const attempt = await supabase
-          .from('live_quizzes')
-          .insert({
-            ...baseInsertPayload,
-            cover_image: coverImage
-          })
-          .select()
-          .single();
-        quizData = attempt.data;
-        quizError = attempt.error;
-      }
+      // Attempt 1: with track_quiz and cover_image (if provided)
+      const attempt1Payload: any = {
+        ...baseInsertPayload,
+        track_quiz: trackQuiz,
+        ...(coverImage ? { cover_image: coverImage } : {})
+      };
+      const attempt1 = await supabase
+        .from('live_quizzes')
+        .insert(attempt1Payload)
+        .select()
+        .single();
+      quizData = attempt1.data;
+      quizError = attempt1.error;
 
-      if (!quizData && (!coverImage || quizError)) {
+      // Attempt 2: fallback without cover_image / track_quiz if schema hasn't been migrated yet
+      if (!quizData && quizError) {
         const fallbackAttempt = await supabase
           .from('live_quizzes')
           .insert(baseInsertPayload)
@@ -473,14 +494,14 @@ class LiveQuizService {
 
       if (quizError) throw quizError;
 
-      // 2. Insert normalized questions
-      const questionRows = payload.questions.map((q, idx) => ({
+      // 2. Insert normalized questions with per-question duration
+      const questionRows = normalizedQuestions.map((q, idx) => ({
         quiz_id: quizData.id,
         question_index: idx,
         question_text: q.question,
         options: q.options,
         correct_index: q.correctIndex,
-        duration_sec: q.durationSec || 20,
+        duration_sec: perQuestionDurationSec,
         explanation: q.explanation || null
       }));
 
@@ -492,7 +513,6 @@ class LiveQuizService {
         console.warn('live_quiz_questions batch insert error:', questionsError.message);
       }
 
-      // 3. Persist to Cloudflare R2 backup
       // 3. Persist full Quiz Object to Cloudflare R2 storage
       try {
         await fetch('/api/live-quiz/save-r2', {
@@ -505,7 +525,8 @@ class LiveQuizService {
               visibility,
               timer_enabled: timerEnabled,
               timer_seconds: timerSeconds,
-              questions: payload.questions,
+              track_quiz: trackQuiz,
+              questions: normalizedQuestions,
               storage_provider: 'cloudflare_r2'
             }
           })
@@ -523,9 +544,10 @@ class LiveQuizService {
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerSeconds,
+          track_quiz: trackQuiz,
           is_owner: true,
           creator_name: 'Created by You',
-          questions: payload.questions
+          questions: normalizedQuestions
         }
       };
     } catch (err: any) {
@@ -559,8 +581,9 @@ class LiveQuizService {
       difficulty: original.difficulty,
       accent_color: original.accent_color,
       questions: original.questions,
-      timer_enabled: original.timer_enabled ?? false,
-      timer_seconds: original.timer_seconds ?? null,
+      timer_enabled: original.timer_enabled ?? true,
+      timer_seconds: original.timer_seconds ?? (original.questions?.[0]?.durationSec || 20),
+      track_quiz: original.track_quiz !== false,
       visibility: 'private',
       is_public: false
     });
@@ -585,6 +608,7 @@ class LiveQuizService {
       visibility?: 'private' | 'common';
       timer_enabled?: boolean;
       timer_seconds?: number | null;
+      track_quiz?: boolean;
     }
   ): Promise<{ data?: LiveQuiz; error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
@@ -669,21 +693,29 @@ class LiveQuizService {
       }
     }
 
-    // 5. Timer and visibility
-    const timerEnabled = Boolean(payload.timer_enabled);
+    // 5. Per-Question Timer, tracking, and visibility
+    const timerEnabled = payload.timer_enabled !== false;
     let timerSeconds: number | null = null;
     if (timerEnabled) {
-      const parsedSec = Number(payload.timer_seconds);
+      const parsedSec = Number(payload.timer_seconds ?? payload.questions?.[0]?.durationSec ?? 20);
       if (isNaN(parsedSec) || parsedSec <= 0 || !Number.isInteger(parsedSec)) {
-        timerSeconds = 60;
+        timerSeconds = 20;
       } else {
-        timerSeconds = Math.min(36000, Math.max(1, Math.floor(parsedSec)));
+        timerSeconds = Math.min(3600, Math.max(5, Math.floor(parsedSec)));
       }
     }
 
+    const perQuestionDurationSec = timerEnabled && timerSeconds ? timerSeconds : 86400;
+    const trackQuiz = payload.track_quiz !== false;
+
     const visibility = payload.visibility === 'common' ? 'common' : 'private';
     const coverImage = (payload.cover_image || payload.cover_image_url || '').trim() || null;
-    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage);
+    const encodedDescription = encodeDescriptionWithCover(payload.description, coverImage, trackQuiz);
+
+    const normalizedQuestions = payload.questions.map((q) => ({
+      ...q,
+      durationSec: perQuestionDurationSec
+    }));
 
     try {
       // 6. Update quiz header
@@ -697,6 +729,7 @@ class LiveQuizService {
         visibility,
         timer_enabled: timerEnabled,
         timer_seconds: timerSeconds,
+        track_quiz: trackQuiz,
         cover_image: coverImage,
         updated_at: new Date().toISOString()
       };
@@ -714,8 +747,9 @@ class LiveQuizService {
         .single();
 
       if (updateErr) {
-        // Fallback: cover_image column may not exist in production live_quizzes schema
+        // Fallback: cover_image or track_quiz column may not exist in production live_quizzes schema
         delete updateHeaderPayload.cover_image;
+        delete updateHeaderPayload.track_quiz;
         const { data: fbData, error: fbErr } = await supabase
           .from('live_quizzes')
           .update(updateHeaderPayload)
@@ -731,13 +765,13 @@ class LiveQuizService {
       // 7. Replace questions: delete old, insert new
       await supabase.from('live_quiz_questions').delete().eq('quiz_id', quizId);
 
-      const questionRows = payload.questions.map((q, idx) => ({
+      const questionRows = normalizedQuestions.map((q, idx) => ({
         quiz_id: quizId,
         question_index: idx,
         question_text: q.question,
         options: q.options,
         correct_index: q.correctIndex ?? 0,
-        duration_sec: q.durationSec || 20,
+        duration_sec: perQuestionDurationSec,
         explanation: q.explanation || null
       }));
 
@@ -761,7 +795,8 @@ class LiveQuizService {
               visibility,
               timer_enabled: timerEnabled,
               timer_seconds: timerSeconds,
-              questions: payload.questions,
+              track_quiz: trackQuiz,
+              questions: normalizedQuestions,
               storage_provider: 'cloudflare_r2'
             }
           })
@@ -779,9 +814,10 @@ class LiveQuizService {
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerSeconds,
+          track_quiz: trackQuiz,
           is_owner: true,
           creator_name: 'Created by You',
-          questions: payload.questions
+          questions: normalizedQuestions
         }
       };
     } catch (err: any) {
@@ -989,11 +1025,14 @@ class LiveQuizService {
           quiz.cover_image_url = payload.custom_quiz.cover_image_url || payload.custom_quiz.cover_image || null;
         }
       }
-      const firstQDuration = quiz?.questions?.[0]?.durationSec || 20;
-      const totalTimerEnabled = Boolean(quiz?.timer_enabled);
+      const isTimerEnabled = quiz?.timer_enabled !== false;
+      const firstQDuration = isTimerEnabled
+        ? (quiz?.timer_seconds || quiz?.questions?.[0]?.durationSec || 20)
+        : 86400;
+      const totalTimerEnabled = isTimerEnabled;
       const totalQuestionsCount = Math.max(1, quiz?.questions?.length || 5);
-      const minSafeSec = totalQuestionsCount * (firstQDuration + 10) + 60;
-      const totalTimerSeconds = totalTimerEnabled ? Math.max(quiz?.timer_seconds || 300, minSafeSec) : null;
+      const minSafeSec = totalQuestionsCount * (firstQDuration + 15) + 120;
+      const totalTimerSeconds = totalTimerEnabled ? minSafeSec : null;
       const isScheduled = Boolean(payload.is_scheduled && payload.scheduled_start_at);
       const scheduledStartAt = isScheduled ? payload.scheduled_start_at! : null;
       // For Launch Now: started_at MUST be null until teacher clicks Start Quiz
@@ -1130,16 +1169,18 @@ class LiveQuizService {
     let calculatedExpiresAt: string | null = null;
     try {
       const existingSession = await this.getSessionById(sessionId);
-      if (existingSession?.quiz?.questions?.[0]?.durationSec) {
+      const isTimed = existingSession?.quiz?.timer_enabled !== false;
+      if (!isTimed) {
+        initialDurationSec = 86400;
+      } else if (existingSession?.quiz?.timer_seconds) {
+        initialDurationSec = existingSession.quiz.timer_seconds;
+      } else if (existingSession?.quiz?.questions?.[0]?.durationSec) {
         initialDurationSec = existingSession.quiz.questions[0].durationSec;
       }
-      const hasTimer = Boolean(existingSession?.quiz?.timer_enabled || (existingSession as any)?.timer_enabled);
-      const timerSec = hasTimer ? (existingSession?.quiz?.timer_seconds || (existingSession as any)?.timer_seconds || 300) : null;
-      if (hasTimer && timerSec) {
+      if (isTimed) {
         const totalQuestions = Math.max(1, existingSession?.quiz?.questions?.length || 5);
-        const minSafeSec = totalQuestions * (initialDurationSec + 10) + 60;
-        const effectiveTimerSec = Math.max(timerSec, minSafeSec);
-        calculatedExpiresAt = new Date(startMs + effectiveTimerSec * 1000).toISOString();
+        const minSafeSec = totalQuestions * (initialDurationSec + 15) + 120;
+        calculatedExpiresAt = new Date(startMs + minSafeSec * 1000).toISOString();
       }
     } catch {}
 
@@ -1254,15 +1295,15 @@ class LiveQuizService {
     try {
       const startMs = Date.now();
       const existing = await this.getSessionById(sessionId);
-      const q0Dur = existing?.quiz?.questions?.[0]?.durationSec || existing?.question_duration_sec || 20;
-      const hasTimer = Boolean(existing?.quiz?.timer_enabled || (existing as any)?.timer_enabled);
-      const timerSec = hasTimer ? (existing?.quiz?.timer_seconds || (existing as any)?.timer_seconds || 300) : null;
+      const isTimed = existing?.quiz?.timer_enabled !== false;
+      const q0Dur = isTimed
+        ? (existing?.quiz?.timer_seconds || existing?.quiz?.questions?.[0]?.durationSec || existing?.question_duration_sec || 20)
+        : 86400;
       let recExpiresAt: string | null = null;
-      if (hasTimer && timerSec) {
+      if (isTimed) {
         const totalQuestions = Math.max(1, existing?.quiz?.questions?.length || 5);
-        const minSafeSec = totalQuestions * (q0Dur + 10) + 60;
-        const effectiveTimerSec = Math.max(timerSec, minSafeSec);
-        recExpiresAt = new Date(startMs + effectiveTimerSec * 1000).toISOString();
+        const minSafeSec = totalQuestions * (q0Dur + 15) + 120;
+        recExpiresAt = new Date(startMs + minSafeSec * 1000).toISOString();
       }
 
       const recUpdatePayload: any = {

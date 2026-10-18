@@ -84,11 +84,20 @@ export interface Assignment {
   id: string;
   classroom_id: string;
   title: string;
+  subtitle?: string | null;
+  writing_type?: string | null;
+  required_word_length?: number | null;
   instructions: string;
   assignment_type: AssignmentType;
   points: number;
   due_date?: string | null;
   attachment_urls: AssignmentAttachment[];
+  settings?: {
+    writing_type?: string | null;
+    required_word_length?: number | null;
+    submission_method?: 'text' | 'upload' | 'both';
+    [key: string]: any;
+  } | null;
   created_by: string;
   status: AssignmentStatus;
   is_deleted: boolean;
@@ -161,6 +170,7 @@ export interface ClassroomMessage {
   is_pinned: boolean;
   is_deleted: boolean;
   deleted_at?: string | null;
+  expires_at?: string | null;
   created_at: string;
   updated_at: string;
 

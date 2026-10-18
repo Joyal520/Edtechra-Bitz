@@ -302,32 +302,32 @@ export const StructuredAIReportRenderer: React.FC<StructuredAIReportRendererProp
         return (
           <div
             key={sIdx}
-            className={`rounded-3xl p-5 sm:p-6 md:p-7 transition-all duration-200 ${cardStyle}`}
+            className={`rounded-3xl p-5 sm:p-7 md:p-8 transition-all duration-200 ${cardStyle}`}
           >
             {/* Header if present */}
             {section.heading && (
-              <div className="flex items-center justify-between gap-3 pb-3.5 mb-4 border-b border-slate-100">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-white shadow-xs flex items-center justify-center shrink-0 border border-slate-200/60">
+              <div className="flex items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white shadow-xs flex items-center justify-center shrink-0 border border-slate-200/60">
                     {icon}
                   </div>
-                  <h4 className={`text-base sm:text-lg md:text-xl font-black tracking-tight ${headingColor}`}>
+                  <h4 className={`text-lg sm:text-xl md:text-2xl font-black tracking-tight ${headingColor}`}>
                     {section.heading}
                   </h4>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-black uppercase tracking-wider border shadow-2xs ${badgeBg}`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-2xs ${badgeBg}`}>
                   {badgeLabel}
                 </span>
               </div>
             )}
 
-            {/* Paragraphs - Readable Typography (16-18px body, 1.6 line height) */}
+            {/* Paragraphs - Readable Typography (16-18px body, 1.7 line height) */}
             {section.paragraphs && section.paragraphs.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {section.paragraphs.map((p, pIdx) => (
                   <p
                     key={pIdx}
-                    className="text-base sm:text-[16px] md:text-[17px] text-slate-800 font-medium leading-[1.65] max-w-4xl"
+                    className="text-[15px] sm:text-[17px] md:text-[18px] text-slate-800 font-medium leading-[1.7] max-w-4xl"
                   >
                     <InlineMarkdown text={p} />
                   </p>
@@ -337,16 +337,16 @@ export const StructuredAIReportRenderer: React.FC<StructuredAIReportRendererProp
 
             {/* Metric Blocks (e.g. Average performance: 30%, Events analysed: 26) */}
             {section.metrics && section.metrics.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 my-3.5 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 my-4 pt-1">
                 {section.metrics.map((m, mIdx) => (
                   <div
                     key={mIdx}
-                    className="p-3.5 rounded-2xl bg-white/95 border-2 border-slate-200/90 shadow-2xs space-y-1"
+                    className="p-4 rounded-2xl bg-white/95 border-2 border-slate-200/90 shadow-2xs space-y-1"
                   >
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                       {m.label}
                     </span>
-                    <span className="text-xl sm:text-2xl font-black text-slate-900 block">
+                    <span className="text-2xl sm:text-3xl font-black text-slate-900 block">
                       {m.value}
                     </span>
                   </div>
@@ -356,17 +356,17 @@ export const StructuredAIReportRenderer: React.FC<StructuredAIReportRendererProp
 
             {/* Structured bullet list items */}
             {section.items && section.items.length > 0 && (
-              <div className={`space-y-2.5 ${
+              <div className={`space-y-3 ${
                 (section.paragraphs && section.paragraphs.length > 0) || (section.metrics && section.metrics.length > 0)
-                  ? 'mt-3.5 pt-3.5 border-t border-slate-100'
+                  ? 'mt-4 pt-4 border-t border-slate-100'
                   : ''
               }`}>
                 {section.items.map((item, iIdx) => (
                   <div
                     key={iIdx}
-                    className="flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl bg-white/95 border border-slate-200/90 shadow-2xs"
+                    className="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl bg-white/95 border border-slate-200/90 shadow-2xs"
                   >
-                    <div className="w-5 h-5 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
                       {category === 'strengths' ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       ) : category === 'actions' ? (
@@ -379,7 +379,7 @@ export const StructuredAIReportRenderer: React.FC<StructuredAIReportRendererProp
                         <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
                       )}
                     </div>
-                    <div className="text-sm sm:text-base text-slate-800 font-semibold leading-relaxed flex-1">
+                    <div className="text-[15px] sm:text-base md:text-[17px] text-slate-800 font-semibold leading-[1.65] flex-1">
                       <InlineMarkdown text={item} />
                     </div>
                   </div>

@@ -48,6 +48,8 @@ export interface TaskSettings {
   allow_retry: boolean;
   enable_ai_feedback: boolean;
   submission_method?: 'text' | 'upload' | 'both';
+  writing_type?: string | null;
+  required_word_length?: number | null;
 }
 
 export interface ClassroomTask {
@@ -56,6 +58,8 @@ export interface ClassroomTask {
   created_by: string;
   title: string;
   subtitle?: string | null;
+  writing_type?: string | null;
+  required_word_length?: number | null;
   instructions: string;
   category: TaskCategory;
   assignment_type?: string;

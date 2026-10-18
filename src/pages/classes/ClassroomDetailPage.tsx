@@ -407,7 +407,11 @@ export const ClassroomDetailPage: React.FC = () => {
       setStats(statsData);
       setClassroomCourses(coursesData || []);
       setChallenges(challengesData || []);
-      setAnnouncements(announcementsData || []);
+      setAnnouncements(
+        Array.isArray(announcementsData)
+          ? announcementsData
+          : announcementsData?.announcements || []
+      );
     } catch (err) {
       console.error('Error loading classroom:', err);
     } finally {

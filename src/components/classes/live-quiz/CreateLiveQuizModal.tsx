@@ -62,18 +62,18 @@ const CATEGORY_OPTIONS = [
   'Other'
 ];
 const DIFFICULTY_OPTIONS: LiveQuizDifficulty[] = ['Easy', 'Medium', 'Hard'];
-const TIMER_PRESETS = [180, 300, 600, 900, 1200];
+const PER_QUESTION_TIMER_PRESETS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
 
 type ModalMode = 'ai' | 'manual';
 type AiStep = 'create_prompt' | 'view_prompt' | 'paste_quiz' | 'quiz_ready';
 
-function buildDefaultQuestions(count: number): LiveQuizQuestion[] {
+function buildDefaultQuestions(count: number, durationSec = 20): LiveQuizQuestion[] {
   return Array.from({ length: count }, (_, idx) => ({
     id: `q_${Date.now()}_${idx + 1}`,
     question: '',
     options: ['', '', '', ''],
     correctIndex: 0,
-    durationSec: 20,
+    durationSec,
     explanation: ''
   }));
 }
@@ -96,9 +96,11 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [difficulty, setDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [category, setCategory] = useState('Grammar');
 
-  // Quiz Timer & Visibility State
-  const [timerEnabled, setTimerEnabled] = useState<boolean>(false);
-  const [timerSeconds, setTimerSeconds] = useState<number>(300);
+  // Per-Question Timer, Tracking & Visibility State
+  const [timerEnabled, setTimerEnabled] = useState<boolean>(true);
+  const [timerSeconds, setTimerSeconds] = useState<number>(20);
+  const [isCustomTimer, setIsCustomTimer] = useState<boolean>(false);
+  const [trackQuiz, setTrackQuiz] = useState<boolean>(true);
   const [visibility, setVisibility] = useState<'common' | 'private'>('private');
 
   // Generated Prompt State
@@ -115,7 +117,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   const [manualCategory, setManualCategory] = useState('General');
   const [manualDifficulty, setManualDifficulty] = useState<LiveQuizDifficulty>('Medium');
   const [manualDescription, setManualDescription] = useState('');
-  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>(buildDefaultQuestions(5));
+  const [manualQuestions, setManualQuestions] = useState<LiveQuizQuestion[]>(buildDefaultQuestions(5, 20));
 
   // Submission State
   const [isSaving, setIsSaving] = useState(false);
@@ -136,8 +138,15 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setManualCategory(initialQuiz.category || 'General');
         setManualDifficulty(initialQuiz.difficulty || 'Medium');
         setCoverImageUrl(initialQuiz.cover_image || initialQuiz.cover_image_url || extractCoverFromDescription(initialQuiz.description) || null);
-        setTimerEnabled(Boolean(initialQuiz.timer_enabled));
-        setTimerSeconds(initialQuiz.timer_seconds || 300);
+        const firstQSec = initialQuiz.questions?.[0]?.durationSec || 20;
+        const initTimed = initialQuiz.timer_enabled !== false && firstQSec < 3600;
+        const initSec = initTimed
+          ? (initialQuiz.timer_seconds && initialQuiz.timer_seconds <= 600 ? initialQuiz.timer_seconds : firstQSec)
+          : 20;
+        setTimerEnabled(initTimed);
+        setTimerSeconds(initSec);
+        setIsCustomTimer(initTimed && !PER_QUESTION_TIMER_PRESETS.includes(initSec as any));
+        setTrackQuiz(initialQuiz.track_quiz !== false);
         setVisibility(initialQuiz.visibility || 'private');
         setManualQuestions(
           initialQuiz.questions && initialQuiz.questions.length > 0
@@ -146,10 +155,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 question: q.question,
                 options: Array.isArray(q.options) ? [...q.options] : ['', '', '', ''],
                 correctIndex: q.correctIndex ?? 0,
-                durationSec: q.durationSec || 20,
+                durationSec: initTimed ? initSec : 86400,
                 explanation: q.explanation || ''
               }))
-            : buildDefaultQuestions(5)
+            : buildDefaultQuestions(5, initTimed ? initSec : 86400)
         );
       } else {
         setMode('ai');
@@ -159,8 +168,10 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setQuestionCount(10);
         setDifficulty('Medium');
         setCategory('Grammar');
-        setTimerEnabled(false);
-        setTimerSeconds(60);
+        setTimerEnabled(true);
+        setTimerSeconds(20);
+        setIsCustomTimer(false);
+        setTrackQuiz(true);
         setVisibility('private');
         setGeneratedPrompt('');
         setPastedJson('');
@@ -170,7 +181,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         setManualCategory('General');
         setManualDifficulty('Medium');
         setCoverImageUrl(null);
-        setManualQuestions(buildDefaultQuestions(5));
+        setManualQuestions(buildDefaultQuestions(5, 20));
       }
       setError(null);
     }
@@ -311,6 +322,12 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         return;
       }
 
+      const perQSec = timerEnabled ? timerSeconds : 86400;
+      const questionsWithDuration = parsedQuiz.questions.map((q) => ({
+        ...q,
+        durationSec: perQSec
+      }));
+
       let res;
       if (initialQuiz) {
         res = await liveQuizService.updateCustomQuiz(initialQuiz.id, {
@@ -319,12 +336,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
           description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
           category: parsedQuiz.category || category,
           difficulty: parsedQuiz.difficulty || difficulty,
-          questions: parsedQuiz.questions,
+          questions: questionsWithDuration,
           cover_image: coverImageUrl,
           cover_image_url: coverImageUrl,
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerEnabled ? timerSeconds : null,
+          track_quiz: trackQuiz,
           is_public: visibility === 'common'
         });
       } else {
@@ -334,12 +352,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
           description: parsedQuiz.description || `Generated ${parsedQuiz.questions.length}-question interactive quiz.`,
           category: parsedQuiz.category || category,
           difficulty: parsedQuiz.difficulty || difficulty,
-          questions: parsedQuiz.questions,
+          questions: questionsWithDuration,
           cover_image: coverImageUrl,
           cover_image_url: coverImageUrl,
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerEnabled ? timerSeconds : null,
+          track_quiz: trackQuiz,
           is_public: visibility === 'common'
         });
       }
@@ -362,13 +381,14 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
   // Manual Mode: Set question count directly to 5, 10, 20, or 25
   const handleSetManualCount = (targetCount: number) => {
     if (manualQuestions.length === targetCount) return;
+    const perQSec = timerEnabled ? timerSeconds : 86400;
     if (manualQuestions.length < targetCount) {
       const added = Array.from({ length: targetCount - manualQuestions.length }, (_, i) => ({
         id: `q_${Date.now()}_${manualQuestions.length + i + 1}`,
         question: '',
         options: ['', '', '', ''],
         correctIndex: 0,
-        durationSec: 20,
+        durationSec: perQSec,
         explanation: ''
       }));
       setManualQuestions((prev) => [...prev, ...added]);
@@ -390,6 +410,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
       return;
     }
     const nextId = `q${manualQuestions.length + 1}`;
+    const perQSec = timerEnabled ? timerSeconds : 86400;
     setManualQuestions((prev) => [
       ...prev,
       {
@@ -397,7 +418,7 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         question: '',
         options: ['', '', '', ''],
         correctIndex: 0,
-        durationSec: 20,
+        durationSec: perQSec,
         explanation: ''
       }
     ]);
@@ -476,6 +497,12 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
         return;
       }
 
+      const perQSec = timerEnabled ? timerSeconds : 86400;
+      const questionsWithDuration = manualQuestions.map((q) => ({
+        ...q,
+        durationSec: perQSec
+      }));
+
       let res;
       if (initialQuiz) {
         res = await liveQuizService.updateCustomQuiz(initialQuiz.id, {
@@ -484,12 +511,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
           description: manualDescription.trim(),
           category: manualCategory,
           difficulty: manualDifficulty,
-          questions: manualQuestions,
+          questions: questionsWithDuration,
           cover_image: coverImageUrl,
           cover_image_url: coverImageUrl,
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerEnabled ? timerSeconds : null,
+          track_quiz: trackQuiz,
           is_public: visibility === 'common'
         });
       } else {
@@ -499,12 +527,13 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
           description: manualDescription.trim(),
           category: manualCategory,
           difficulty: manualDifficulty,
-          questions: manualQuestions,
+          questions: questionsWithDuration,
           cover_image: coverImageUrl,
           cover_image_url: coverImageUrl,
           visibility,
           timer_enabled: timerEnabled,
           timer_seconds: timerEnabled ? timerSeconds : null,
+          track_quiz: trackQuiz,
           is_public: visibility === 'common'
         });
       }
@@ -847,96 +876,127 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
 
                   </div>
 
-                  {/* Quiz Timer, Visibility & Cover Settings */}
+                  {/* Per-Question Timer, Tracking, Visibility & Cover Settings */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     
-                    {/* Overall Quiz Limit */}
+                    {/* Time Per Question */}
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-purple-600" />
                           <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                            Overall Quiz Limit
+                            Time Per Question
                           </span>
                         </div>
-                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => setTimerEnabled(false)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                              !timerEnabled
-                                ? 'bg-slate-900 text-white shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            No Limit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setTimerEnabled(true)}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                              timerEnabled
-                                ? 'bg-purple-600 text-white shadow-2xs'
-                                : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                          >
-                            Timed
-                          </button>
-                        </div>
+                        <select
+                          aria-label="Time Per Question"
+                          value={!timerEnabled ? 'none' : isCustomTimer ? 'custom' : String(timerSeconds)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'none') {
+                              setTimerEnabled(false);
+                              setIsCustomTimer(false);
+                            } else if (val === 'custom') {
+                              setTimerEnabled(true);
+                              setIsCustomTimer(true);
+                            } else {
+                              const sec = parseInt(val, 10);
+                              setTimerEnabled(true);
+                              setIsCustomTimer(false);
+                              if (!isNaN(sec)) setTimerSeconds(sec);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:ring-2 focus:ring-purple-600 cursor-pointer shadow-2xs"
+                        >
+                          <option value="none">No Timer</option>
+                          <option value="10">10 seconds</option>
+                          <option value="15">15 seconds</option>
+                          <option value="20">20 seconds</option>
+                          <option value="30">30 seconds</option>
+                          <option value="45">45 seconds</option>
+                          <option value="60">60 seconds</option>
+                          <option value="90">90 seconds</option>
+                          <option value="120">120 seconds</option>
+                          <option value="custom">Custom</option>
+                        </select>
                       </div>
 
-                      {timerEnabled ? (
-                        <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between gap-2">
-                            <label className="text-xs font-bold text-slate-700">
-                              Total Time:
-                            </label>
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="number"
-                                min={60}
-                                max={36000}
-                                value={timerSeconds}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10);
-                                  if (!isNaN(val)) setTimerSeconds(Math.max(60, Math.min(36000, val)));
-                                }}
-                                className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
-                              />
-                              <span className="text-xs font-bold text-slate-500">
-                                sec ({Math.floor(timerSeconds / 60)}m {timerSeconds % 60}s)
-                              </span>
-                            </div>
-                          </div>
+                      <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimerEnabled(false);
+                            setIsCustomTimer(false);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                            !timerEnabled
+                              ? 'bg-slate-900 text-white shadow-2xs'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                          }`}
+                        >
+                          No Timer
+                        </button>
+                        {PER_QUESTION_TIMER_PRESETS.map((sec) => (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => {
+                              setTimerEnabled(true);
+                              setIsCustomTimer(false);
+                              setTimerSeconds(sec);
+                            }}
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                              timerEnabled && !isCustomTimer && timerSeconds === sec
+                                ? 'bg-purple-600 text-white shadow-2xs'
+                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                            }`}
+                          >
+                            {sec}s
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimerEnabled(true);
+                            setIsCustomTimer(true);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                            timerEnabled && isCustomTimer
+                              ? 'bg-purple-600 text-white shadow-2xs'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                          }`}
+                        >
+                          Custom
+                        </button>
+                      </div>
 
-                          <div className="flex items-center gap-1 flex-wrap pt-1">
-                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
-                              Presets:
-                            </span>
-                            {TIMER_PRESETS.map((sec) => (
-                              <button
-                                key={sec}
-                                type="button"
-                                onClick={() => setTimerSeconds(sec)}
-                                className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                                  timerSeconds === sec
-                                    ? 'bg-purple-600 text-white shadow-2xs'
-                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
-                                }`}
-                              >
-                                {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
-                              </button>
-                            ))}
+                      {timerEnabled && isCustomTimer && (
+                        <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                          <label className="text-xs font-bold text-slate-700">
+                            Custom Seconds / Q:
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={5}
+                              max={600}
+                              value={timerSeconds}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!isNaN(val)) setTimerSeconds(Math.max(5, Math.min(600, val)));
+                              }}
+                              className="w-20 px-2.5 py-1 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                            />
+                            <span className="text-xs font-bold text-slate-500">sec</span>
                           </div>
-                          <p className="text-[10px] text-slate-400 font-medium">
-                            Total session duration. (Each question has its own 20s countdown.)
-                          </p>
                         </div>
-                      ) : (
-                        <p className="text-[11px] text-slate-400 font-medium pt-1">
-                          No overall session limit. Questions run with standard 20s countdown.
-                        </p>
                       )}
+
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {timerEnabled
+                          ? `Each question counts down from ${timerSeconds}s and auto-advances when time reaches zero.`
+                          : 'No per-question countdown timer.'}
+                      </p>
                     </div>
 
                     {/* Quiz Visibility */}
@@ -1043,6 +1103,24 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                     </div>
 
                   </div>
+
+                  {/* Track This Quiz Option */}
+                  <label className="flex items-start gap-3 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 cursor-pointer hover:bg-indigo-50 transition-colors select-none">
+                    <input
+                      type="checkbox"
+                      checked={trackQuiz}
+                      onChange={(e) => setTrackQuiz(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="block text-xs sm:text-sm font-black text-slate-900">
+                        Track this quiz
+                      </span>
+                      <span className="block text-xs text-slate-600 font-medium">
+                        Track student answers and performance to generate learning insights in My Report.
+                      </span>
+                    </div>
+                  </label>
 
                   {/* Action Button: Generate AI Prompt */}
                   <div className="pt-2 flex items-center justify-end gap-3">
@@ -1431,96 +1509,127 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 />
               </div>
 
-              {/* Quiz Timer, Visibility & Cover Settings (Manual Mode) */}
+              {/* Per-Question Timer, Tracking, Visibility & Cover Settings (Manual Mode) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 
-                {/* Overall Quiz Limit */}
+                {/* Time Per Question */}
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 text-purple-600" />
                       <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Overall Quiz Limit
+                        Time Per Question
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setTimerEnabled(false)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                          !timerEnabled
-                            ? 'bg-slate-900 text-white shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        No Limit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTimerEnabled(true)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                          timerEnabled
-                            ? 'bg-purple-600 text-white shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Timed
-                      </button>
-                    </div>
+                    <select
+                      aria-label="Time Per Question"
+                      value={!timerEnabled ? 'none' : isCustomTimer ? 'custom' : String(timerSeconds)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'none') {
+                          setTimerEnabled(false);
+                          setIsCustomTimer(false);
+                        } else if (val === 'custom') {
+                          setTimerEnabled(true);
+                          setIsCustomTimer(true);
+                        } else {
+                          const sec = parseInt(val, 10);
+                          setTimerEnabled(true);
+                          setIsCustomTimer(false);
+                          if (!isNaN(sec)) setTimerSeconds(sec);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:ring-2 focus:ring-purple-600 cursor-pointer shadow-2xs"
+                    >
+                      <option value="none">No Timer</option>
+                      <option value="10">10 seconds</option>
+                      <option value="15">15 seconds</option>
+                      <option value="20">20 seconds</option>
+                      <option value="30">30 seconds</option>
+                      <option value="45">45 seconds</option>
+                      <option value="60">60 seconds</option>
+                      <option value="90">90 seconds</option>
+                      <option value="120">120 seconds</option>
+                      <option value="custom">Custom</option>
+                    </select>
                   </div>
 
-                  {timerEnabled ? (
-                    <div className="pt-2 border-t border-slate-200/80 space-y-2.5 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="text-xs font-bold text-slate-700">
-                          Total Time:
-                        </label>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            min={60}
-                            max={36000}
-                            value={timerSeconds}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              if (!isNaN(val)) setTimerSeconds(Math.max(60, Math.min(36000, val)));
-                            }}
-                            className="w-20 px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
-                          />
-                          <span className="text-xs font-bold text-slate-500">
-                            sec ({Math.floor(timerSeconds / 60)}m {timerSeconds % 60}s)
-                          </span>
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimerEnabled(false);
+                        setIsCustomTimer(false);
+                      }}
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        !timerEnabled
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                      }`}
+                    >
+                      No Timer
+                    </button>
+                    {PER_QUESTION_TIMER_PRESETS.map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => {
+                          setTimerEnabled(true);
+                          setIsCustomTimer(false);
+                          setTimerSeconds(sec);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                          timerEnabled && !isCustomTimer && timerSeconds === sec
+                            ? 'bg-purple-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTimerEnabled(true);
+                        setIsCustomTimer(true);
+                      }}
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        timerEnabled && isCustomTimer
+                          ? 'bg-purple-600 text-white shadow-2xs'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
+                      }`}
+                    >
+                      Custom
+                    </button>
+                  </div>
 
-                      <div className="flex items-center gap-1 flex-wrap pt-1">
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
-                          Presets:
-                        </span>
-                        {TIMER_PRESETS.map((sec) => (
-                          <button
-                            key={sec}
-                            type="button"
-                            onClick={() => setTimerSeconds(sec)}
-                            className={`px-2 py-0.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                              timerSeconds === sec
-                                ? 'bg-purple-600 text-white shadow-2xs'
-                                : 'bg-white text-slate-600 border border-slate-200 hover:bg-purple-50'
-                            }`}
-                          >
-                            {sec >= 60 ? `${sec / 60}m` : `${sec}s`}
-                          </button>
-                        ))}
+                  {timerEnabled && isCustomTimer && (
+                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                      <label className="text-xs font-bold text-slate-700">
+                        Custom Seconds / Q:
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={5}
+                          max={600}
+                          value={timerSeconds}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) setTimerSeconds(Math.max(5, Math.min(600, val)));
+                          }}
+                          className="w-20 px-2.5 py-1 bg-white border border-purple-300 rounded-xl text-xs font-black text-purple-950 text-center focus:ring-2 focus:ring-purple-600 focus:outline-none"
+                        />
+                        <span className="text-xs font-bold text-slate-500">sec</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium">
-                        Total session duration. (Each question has its own 20s countdown.)
-                      </p>
                     </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-400 font-medium pt-1">
-                      No overall session limit. Questions run with standard 20s countdown.
-                    </p>
                   )}
+
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {timerEnabled
+                      ? `Each question counts down from ${timerSeconds}s and auto-advances when time reaches zero.`
+                      : 'No per-question countdown timer.'}
+                  </p>
                 </div>
 
                 {/* Quiz Visibility */}
@@ -1627,6 +1736,24 @@ export const CreateLiveQuizModal: React.FC<CreateLiveQuizModalProps> = ({
                 </div>
 
               </div>
+
+              {/* Track This Quiz Option */}
+              <label className="flex items-start gap-3 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 cursor-pointer hover:bg-indigo-50 transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={trackQuiz}
+                  onChange={(e) => setTrackQuiz(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="block text-xs sm:text-sm font-black text-slate-900">
+                    Track this quiz
+                  </span>
+                  <span className="block text-xs text-slate-600 font-medium">
+                    Track student answers and performance to generate learning insights in My Report.
+                  </span>
+                </div>
+              </label>
 
               {/* 100-Point Target Selector for Manual Editor */}
               <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-slate-50 rounded-2xl border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

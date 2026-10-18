@@ -48,6 +48,15 @@ interface UnifiedResultItem {
   isAiGraded?: boolean;
   writingEvaluation?: any;
   r2ResultPath?: string | null;
+  trackQuiz?: boolean;
+  questionBreakdown?: Array<{
+    question_index: number;
+    question: string;
+    student_answer: string;
+    correct_answer: string;
+    is_correct: boolean;
+    topic?: string;
+  }>;
 }
 
 export const StudentReportModal: React.FC<StudentReportModalProps> = ({
@@ -63,6 +72,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [resultFilter, setResultFilter] = useState<'all' | 'task' | 'quiz' | 'exam' | 'competition'>('all');
+  const [expandedQuizId, setExpandedQuizId] = useState<string | null>(null);
 
   // Sub-modal state for viewing specific corrected work / files
   const [selectedWork, setSelectedWork] = useState<StudentCorrectedWorkItem | null>(null);
@@ -143,7 +153,9 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
         maxScore: q.total_questions,
         percentage: q.percentage,
         date: q.completed_at,
-        status: 'completed'
+        status: 'completed',
+        trackQuiz: q.track_quiz !== false,
+        questionBreakdown: q.track_quiz !== false ? q.question_breakdown : undefined
       });
     });
 
@@ -190,8 +202,11 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
   const achievements = data?.achievements;
   const student = data?.student;
 
+  const strongAreas = topics.filter((t) => t.status === 'strong');
+  const needsPracticeAreas = topics.filter((t) => t.status !== 'strong');
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
       <div
         className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] border border-slate-200 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         role="dialog"
@@ -216,7 +231,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                   <GraduationCap className="w-3 h-3" />
                   <span>My Report</span>
                 </span>
-                <span className="text-xs text-slate-500 font-semibold truncate">
+                <span className="text-xs sm:text-sm text-slate-500 font-semibold truncate">
                   {classroomTitle}
                 </span>
               </div>
@@ -284,7 +299,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('results')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'results'
                 ? 'border-[#026fc3] text-[#026fc3]'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -300,7 +315,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('corrected')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'corrected'
                 ? 'border-[#026fc3] text-[#026fc3]'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -316,7 +331,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('progress')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'progress'
                 ? 'border-[#026fc3] text-[#026fc3]'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -332,7 +347,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('achievements')}
-            className={`pb-3 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            className={`pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
               activeTab === 'achievements'
                 ? 'border-[#026fc3] text-[#026fc3]'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -353,8 +368,8 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
           {loading ? (
             <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-slate-200 p-8 shadow-2xs">
               <Loader2 className="w-8 h-8 text-[#026fc3] animate-spin mx-auto" />
-              <h4 className="text-sm font-bold text-slate-800">Loading your learning results...</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
+              <h4 className="text-sm sm:text-base font-bold text-slate-800">Loading your learning results...</h4>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto font-medium">
                 Gathering your assignments, corrected writing, quizzes, and learning metrics.
               </p>
             </div>
@@ -362,7 +377,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
             <div className="p-8 bg-white border border-slate-200 rounded-3xl text-center space-y-3">
               <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
               <h3 className="text-base font-black text-slate-900">Unable to load report</h3>
-              <p className="text-xs text-slate-600 max-w-md mx-auto">{error}</p>
+              <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">{error}</p>
             </div>
           ) : (
             <>
@@ -371,10 +386,10 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm sm:text-base font-black text-slate-900">
+                      <h3 className="text-base sm:text-lg font-black text-slate-900">
                         Evaluated Activities & Results
                       </h3>
-                      <p className="text-xs text-slate-500 font-medium">
+                      <p className="text-xs sm:text-sm text-slate-500 font-medium">
                         Actual results recorded across your tasks, quizzes, exams and competitions
                       </p>
                     </div>
@@ -412,7 +427,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                       <h4 className="text-sm sm:text-base font-black text-slate-900">
                         No results recorded in this category
                       </h4>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
+                      <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium">
                         Your results will appear here automatically after you complete an activity.
                       </p>
                     </div>
@@ -422,121 +437,188 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                         const matchedCorrected = correctedWork.find(
                           (c) => c.title.toLowerCase() === result.title.toLowerCase()
                         );
+                        const hasQuizBreakdown =
+                          result.category === 'quiz' &&
+                          result.trackQuiz !== false &&
+                          Array.isArray(result.questionBreakdown) &&
+                          result.questionBreakdown.length > 0;
+                        const isQuizExpanded = expandedQuizId === result.id;
 
                         return (
-                          <div
-                            key={result.id}
-                            className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
-                          >
-                            <div className="flex items-start gap-3 min-w-0">
-                              <div className="w-10 h-10 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center shrink-0 mt-0.5">
-                                <FileText className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0 space-y-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                                    {result.category}
-                                  </span>
-                                  {result.isAiGraded && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                      <Sparkles className="w-2.5 h-2.5" />
-                                      <span>AI Evaluated</span>
-                                    </span>
-                                  )}
-                                  {result.date && (
-                                    <span className="text-[11px] text-slate-500 font-medium">
-                                      {new Date(result.date).toLocaleDateString(undefined, {
-                                        month: 'short',
-                                        day: 'numeric'
-                                      })}
-                                    </span>
-                                  )}
+                          <div key={result.id} className="divide-y divide-slate-100">
+                            <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center shrink-0 mt-0.5">
+                                  <FileText className="w-5 h-5" />
                                 </div>
-                                <h4 className="text-sm font-bold text-slate-900 truncate">
-                                  {result.title}
-                                </h4>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                              <div className="text-right">
-                                {result.percentage !== null ? (
-                                  <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
-                                    <span className="text-sm font-black">{Math.round(result.percentage)}%</span>
-                                    {result.score !== null && result.maxScore !== null && (
-                                      <span className="text-[10px] font-bold text-emerald-700">
-                                        ({result.score}/{result.maxScore})
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                      {result.category}
+                                    </span>
+                                    {result.isAiGraded && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        <Sparkles className="w-2.5 h-2.5" />
+                                        <span>AI Evaluated</span>
+                                      </span>
+                                    )}
+                                    {result.category === 'quiz' && result.trackQuiz !== false && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                                        <span>Tracked Quiz</span>
+                                      </span>
+                                    )}
+                                    {result.date && (
+                                      <span className="text-xs text-slate-500 font-medium">
+                                        {new Date(result.date).toLocaleDateString(undefined, {
+                                          month: 'short',
+                                          day: 'numeric'
+                                        })}
                                       </span>
                                     )}
                                   </div>
-                                ) : result.score !== null ? (
-                                  <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
-                                    <span className="text-sm font-black">{result.score}{result.maxScore ? `/${result.maxScore}` : ''}</span>
-                                  </div>
-                                ) : (result.isAiGraded || result.status === 'graded' || result.status === 'completed') ? (
-                                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>AI Graded</span>
-                                  </span>
+                                  <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                                    {result.title}
+                                  </h4>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                <div className="text-right">
+                                  {result.percentage !== null ? (
+                                    <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                                      <span className="text-sm sm:text-base font-black">{Math.round(result.percentage)}%</span>
+                                      {result.score !== null && result.maxScore !== null && (
+                                        <span className="text-xs font-bold text-emerald-700">
+                                          ({result.score}/{result.maxScore})
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : result.score !== null ? (
+                                    <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                                      <span className="text-sm sm:text-base font-black">{result.score}{result.maxScore ? `/${result.maxScore}` : ''}</span>
+                                    </div>
+                                  ) : (result.isAiGraded || result.status === 'graded' || result.status === 'completed') ? (
+                                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      <span>AI Graded</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
+                                      <Clock className="w-3 h-3" />
+                                      <span>Pending Review</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                {hasQuizBreakdown ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedQuizId(isQuizExpanded ? null : result.id)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200 transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>{isQuizExpanded ? 'Hide Questions' : 'Question Insights'}</span>
+                                  </button>
+                                ) : matchedCorrected ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openWorkModal(matchedCorrected, 'work')}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200 transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>View Review</span>
+                                  </button>
+                                ) : (result.writingEvaluation || result.r2ResultPath || result.isAiGraded) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const w = result.writingEvaluation;
+                                      const synthItem: StudentCorrectedWorkItem = {
+                                        id: result.id.replace(/^task-/, ''),
+                                        title: result.title,
+                                        source_type: 'writing_task',
+                                        work_type: 'writing',
+                                        score: result.score,
+                                        max_score: result.maxScore || 100,
+                                        percentage: result.percentage,
+                                        feedback: w?.feedback || result.feedback,
+                                        original_text: w?.original_text,
+                                        corrected_work: w?.corrected_work,
+                                        mistakes: w?.mistakes || [],
+                                        corrections: w?.corrections || [],
+                                        strengths: w?.strengths || [],
+                                        grammar_errors: w?.grammar_errors || [],
+                                        spelling_errors: w?.spelling_errors || [],
+                                        grammar_issues: w?.grammar_issues || (w?.grammar_errors || []).map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' })),
+                                        spelling_issues: w?.spelling_issues || (w?.spelling_errors || []).map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' })),
+                                        sentence_structure_issues: w?.sentence_structure_issues || [],
+                                        vocabulary_issues: w?.vocabulary_issues || [],
+                                        next_step: w?.next_step || '',
+                                        r2_result_path: result.r2ResultPath || null,
+                                        date: result.date
+                                      };
+                                      openWorkModal(synthItem, 'work');
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>View Review</span>
+                                  </button>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
-                                    <Clock className="w-3 h-3" />
-                                    <span>Pending Review</span>
+                                  <span className="text-xs text-slate-400 font-medium italic pr-2">
+                                    Completed
                                   </span>
                                 )}
                               </div>
-
-                              {matchedCorrected ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openWorkModal(matchedCorrected, 'work')}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200 transition-colors cursor-pointer"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View Review</span>
-                                </button>
-                              ) : (result.writingEvaluation || result.r2ResultPath || result.isAiGraded) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const w = result.writingEvaluation;
-                                    const synthItem: StudentCorrectedWorkItem = {
-                                      id: result.id.replace(/^task-/, ''),
-                                      title: result.title,
-                                      source_type: 'writing_task',
-                                      work_type: 'writing',
-                                      score: result.score,
-                                      max_score: result.maxScore || 100,
-                                      percentage: result.percentage,
-                                      feedback: w?.feedback || result.feedback,
-                                      original_text: w?.original_text,
-                                      corrected_work: w?.corrected_work,
-                                      mistakes: w?.mistakes || [],
-                                      corrections: w?.corrections || [],
-                                      strengths: w?.strengths || [],
-                                      grammar_errors: w?.grammar_errors || [],
-                                      spelling_errors: w?.spelling_errors || [],
-                                      grammar_issues: w?.grammar_issues || (w?.grammar_errors || []).map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' })),
-                                      spelling_issues: w?.spelling_issues || (w?.spelling_errors || []).map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' })),
-                                      sentence_structure_issues: w?.sentence_structure_issues || [],
-                                      vocabulary_issues: w?.vocabulary_issues || [],
-                                      next_step: w?.next_step || '',
-                                      r2_result_path: result.r2ResultPath || null,
-                                      date: result.date
-                                    };
-                                    openWorkModal(synthItem, 'work');
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View Review</span>
-                                </button>
-                              ) : (
-                                <span className="text-[11px] text-slate-400 font-medium italic pr-2">
-                                  Completed
-                                </span>
-                              )}
                             </div>
+
+                            {/* Tracked Quiz Question-Level Performance Breakdown */}
+                            {hasQuizBreakdown && isQuizExpanded && (
+                              <div className="p-4 sm:p-5 bg-slate-50/90 space-y-3 animate-in fade-in">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                                    Question-Level Performance ({result.questionBreakdown!.filter((q) => q.is_correct).length} / {result.questionBreakdown!.length} Correct)
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                  {result.questionBreakdown!.map((qb, qIdx) => (
+                                    <div
+                                      key={qIdx}
+                                      className={`p-3.5 rounded-xl border text-xs sm:text-sm space-y-1.5 ${
+                                        qb.is_correct
+                                          ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                                          : 'bg-rose-50/60 border-rose-200 text-rose-950'
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="font-bold leading-snug">
+                                          Q{qb.question_index + 1}. {qb.question}
+                                        </span>
+                                        <span
+                                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase shrink-0 ${
+                                            qb.is_correct ? 'bg-emerald-200/80 text-emerald-900' : 'bg-rose-200/80 text-rose-900'
+                                          }`}
+                                        >
+                                          {qb.is_correct ? 'Correct' : 'Needs Practice'}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-slate-700 space-y-0.5 pt-1">
+                                        <div>
+                                          <span className="font-semibold text-slate-500">Your Answer: </span>
+                                          <span className="font-bold">{qb.student_answer}</span>
+                                        </div>
+                                        {!qb.is_correct && qb.correct_answer && (
+                                          <div>
+                                            <span className="font-semibold text-slate-500">Correct Answer: </span>
+                                            <span className="font-bold text-emerald-700">{qb.correct_answer}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -549,10 +631,10 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
               {activeTab === 'corrected' && (
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm sm:text-base font-black text-slate-900">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
                       Marked Papers & Learning Evidence
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium">
                       Submissions evaluated with teacher remarks, AI handwriting correction, or rubric feedback
                     </p>
                   </div>
@@ -565,7 +647,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                       <h4 className="text-sm sm:text-base font-black text-slate-900">
                         No corrected work available yet
                       </h4>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
+                      <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
                         Corrected assignments, annotated PDFs, and evaluated handwriting will appear here once reviewed.
                       </p>
                     </div>
@@ -576,7 +658,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                         return (
                           <div
                             key={item.id}
-                            className="p-5 bg-white rounded-3xl border border-slate-200 shadow-2xs space-y-4 hover:shadow-md transition-shadow flex flex-col justify-between"
+                            className="p-5 sm:p-6 bg-white rounded-3xl border border-slate-200 shadow-2xs space-y-4 hover:shadow-md transition-shadow flex flex-col justify-between"
                           >
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
@@ -585,17 +667,17 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                                     <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-sky-100 text-[#026fc3]">
                                       {item.source_type.replace('_', ' ')}
                                     </span>
-                                    <span className="text-[10px] font-bold text-slate-500">
+                                    <span className="text-xs font-bold text-slate-500">
                                       {isAi ? 'AI Evaluated' : 'Teacher Reviewed'}
                                     </span>
                                   </div>
-                                  <h4 className="text-sm font-black text-slate-900 truncate">
+                                  <h4 className="text-base font-black text-slate-900 truncate">
                                     {item.title}
                                   </h4>
                                 </div>
 
                                 {item.percentage !== null && item.percentage !== undefined && (
-                                  <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-black text-sm shrink-0">
+                                  <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-black text-sm sm:text-base shrink-0">
                                     {Math.round(item.percentage)}%
                                   </div>
                                 )}
@@ -603,12 +685,12 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
 
                               {/* Feedback Summary */}
                               {item.feedback ? (
-                                <p className="text-xs text-slate-700 line-clamp-2 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <p className="text-xs sm:text-sm text-slate-700 line-clamp-2 font-medium bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
                                   "{item.feedback}"
                                 </p>
                               ) : item.breakdown?.strengths && Array.isArray(item.breakdown.strengths) && item.breakdown.strengths.length > 0 ? (
-                                <div className="text-xs text-emerald-900 font-medium bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100 flex items-center gap-1.5">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <div className="text-xs sm:text-sm text-emerald-900 font-medium bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                                   <span className="truncate">{item.breakdown.strengths[0]}</span>
                                 </div>
                               ) : null}
@@ -655,13 +737,58 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
               {activeTab === 'progress' && (
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm sm:text-base font-black text-slate-900">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
                       Topic & Skill Progress
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Mastery percentages derived strictly from your completed assignments, quizzes, and exams
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                      Mastery percentages derived from your completed assignments, tracked quizzes, and exams
                     </p>
                   </div>
+
+                  {/* Strong Areas & Needs Practice Summary Cards */}
+                  {topics.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2">
+                        <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Strong Areas</span>
+                        </h4>
+                        {strongAreas.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {strongAreas.map((t, i) => (
+                              <span key={i} className="px-3 py-1 rounded-xl bg-white border border-emerald-200 text-xs sm:text-sm font-bold text-emerald-900 shadow-2xs">
+                                {t.topic} ({Math.round(t.average_percentage)}%)
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs sm:text-sm text-emerald-800 font-medium">
+                            Keep completing activities to build strong mastery areas (80%+).
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+                        <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                          <span>Needs Practice</span>
+                        </h4>
+                        {needsPracticeAreas.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {needsPracticeAreas.map((t, i) => (
+                              <span key={i} className="px-3 py-1 rounded-xl bg-white border border-amber-200 text-xs sm:text-sm font-bold text-amber-900 shadow-2xs">
+                                {t.topic} ({Math.round(t.average_percentage)}%)
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs sm:text-sm text-amber-800 font-medium">
+                            Great job! All tracked topics are currently in your strong mastery zone.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {topics.length === 0 ? (
                     <div className="p-8 sm:p-12 bg-white rounded-3xl border border-slate-200 text-center space-y-3">
@@ -671,8 +798,8 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                       <h4 className="text-sm sm:text-base font-black text-slate-900">
                         No topic mastery data recorded yet
                       </h4>
-                      <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
-                        As you complete coursework and quizzes, your topic mastery progress will automatically calculate here.
+                      <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium">
+                        As you complete coursework and tracked quizzes, your topic mastery progress will automatically calculate here.
                       </p>
                     </div>
                   ) : (
@@ -697,15 +824,15 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                           return (
                             <div
                               key={idx}
-                              className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-3"
+                              className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-3"
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
-                                  <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                                  <h4 className="text-sm sm:text-base font-black text-slate-900 truncate">
                                     {topic.topic}
                                   </h4>
-                                  <div className="text-[11px] text-slate-500 font-semibold">
-                                    {topic.activities_count} activities completed
+                                  <div className="text-xs text-slate-500 font-semibold">
+                                    {topic.activities_count} {topic.activities_count === 1 ? 'activity' : 'activities'} completed
                                   </div>
                                 </div>
 
@@ -717,7 +844,7 @@ export const StudentReportModal: React.FC<StudentReportModalProps> = ({
                               </div>
 
                               <div className="space-y-1">
-                                <div className="flex items-center justify-between text-[11px] font-bold">
+                                <div className="flex items-center justify-between text-xs font-bold">
                                   <span className="text-slate-600">Mastery Level</span>
                                   <span className="text-slate-900">{mastery}%</span>
                                 </div>

@@ -46,6 +46,15 @@ interface UnifiedResultItem {
   isAiGraded?: boolean;
   writingEvaluation?: any;
   r2ResultPath?: string | null;
+  trackQuiz?: boolean;
+  questionBreakdown?: Array<{
+    question_index: number;
+    question: string;
+    student_answer: string;
+    correct_answer: string;
+    is_correct: boolean;
+    topic?: string;
+  }>;
 }
 
 export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
@@ -56,6 +65,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [resultFilter, setResultFilter] = useState<'all' | 'task' | 'quiz' | 'exam' | 'competition'>('all');
+  const [expandedQuizId, setExpandedQuizId] = useState<string | null>(null);
 
   // Modal State
   const [selectedWork, setSelectedWork] = useState<StudentCorrectedWorkItem | null>(null);
@@ -130,7 +140,9 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
         maxScore: q.total_questions,
         percentage: q.percentage,
         date: q.completed_at,
-        status: 'completed'
+        status: 'completed',
+        trackQuiz: q.track_quiz !== false,
+        questionBreakdown: q.track_quiz !== false ? q.question_breakdown : undefined
       });
     });
 
@@ -188,7 +200,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
       <div className="p-8 bg-white border border-slate-200 rounded-3xl text-center space-y-4">
         <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
         <h3 className="text-base font-black text-slate-900">Couldn't load your learning space</h3>
-        <p className="text-xs text-slate-600 max-w-md mx-auto">{error}</p>
+        <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">{error}</p>
         <button
           type="button"
           onClick={fetchLearningData}
@@ -205,6 +217,8 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
   const correctedWork = data?.corrected_work || [];
   const topics = data?.topics || [];
   const achievements = data?.achievements;
+  const strongAreas = topics.filter((t) => t.status === 'strong');
+  const needsPracticeAreas = topics.filter((t) => t.status !== 'strong');
 
   return (
     <div className="space-y-10" id="my-learning-container">
@@ -221,7 +235,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               MY LEARNING
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl">
+            <p className="text-sm sm:text-base text-slate-600 font-medium max-w-xl">
               See your results, progress and learning evidence for {classroomTitle}.
             </p>
           </div>
@@ -260,13 +274,13 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
               1. My Performance
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">Your personal summary</span>
+          <span className="text-xs sm:text-sm text-slate-500 font-semibold">Your personal summary</span>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Overall Score */}
           <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+            <div className="text-xs sm:text-sm font-bold text-slate-600 flex items-center gap-1.5">
               <Award className="w-4 h-4 text-[#026fc3]" />
               <span>Overall Score</span>
             </div>
@@ -277,7 +291,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                   : '—'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium">
               {performance?.overall_percentage !== null && performance?.overall_percentage !== undefined
                 ? 'Calculated across evaluated work'
                 : 'No scored activities yet'}
@@ -286,7 +300,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
 
           {/* Recent Score */}
           <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+            <div className="text-xs sm:text-sm font-bold text-slate-600 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-emerald-600" />
               <span>Recent Score</span>
             </div>
@@ -297,7 +311,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                   : '—'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium">
               {performance?.recent_score !== null && performance?.recent_score !== undefined
                 ? 'Latest evaluation'
                 : 'Awaiting first evaluation'}
@@ -306,7 +320,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
 
           {/* Activities Completed */}
           <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+            <div className="text-xs sm:text-sm font-bold text-slate-600 flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-sky-600" />
               <span>Activities Done</span>
             </div>
@@ -315,20 +329,20 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                 {performance?.activities_completed || 0}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium">
               Tasks, quizzes & exams completed
             </p>
           </div>
 
           {/* Learning Status */}
           <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
-            <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+            <div className="text-xs sm:text-sm font-bold text-slate-600 flex items-center gap-1.5">
               <Target className="w-4 h-4 text-purple-600" />
               <span>Learning Status</span>
             </div>
             <div>
               <span
-                className={`inline-block px-2.5 py-1 rounded-full text-xs font-black ${
+                className={`inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-black ${
                   performance?.learning_status === 'Mastery' || performance?.learning_status === 'Excellent'
                     ? 'bg-emerald-100 text-emerald-800'
                     : performance?.learning_status === 'Progressing' || performance?.learning_status === 'Good Progress'
@@ -341,7 +355,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                 {performance?.learning_status || 'Starting Out'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
+            <p className="text-xs text-slate-500 font-medium">
               {performance?.learning_status === 'Mastery' || performance?.learning_status === 'Excellent'
                 ? 'Exceeding grade benchmarks'
                 : performance?.learning_status === 'Progressing' || performance?.learning_status === 'Good Progress'
@@ -397,7 +411,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
             <h3 className="text-sm sm:text-base font-black text-slate-900">
               No results in this category
             </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium">
               Your results will appear here after you complete a learning activity.
             </p>
           </div>
@@ -408,121 +422,188 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
               const matchedCorrected = correctedWork.find(
                 (c) => c.title.toLowerCase() === result.title.toLowerCase()
               );
+              const hasQuizBreakdown =
+                result.category === 'quiz' &&
+                result.trackQuiz !== false &&
+                Array.isArray(result.questionBreakdown) &&
+                result.questionBreakdown.length > 0;
+              const isQuizExpanded = expandedQuizId === result.id;
 
               return (
-                <div
-                  key={result.id}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center shrink-0 mt-0.5">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                          {result.category}
-                        </span>
-                        {result.isAiGraded && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            <span>AI Evaluated</span>
-                          </span>
-                        )}
-                        {result.date && (
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {new Date(result.date).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </span>
-                        )}
+                <div key={result.id} className="divide-y divide-slate-100">
+                  <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center shrink-0 mt-0.5">
+                        <FileText className="w-5 h-5" />
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 truncate">
-                        {result.title}
-                      </h4>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                    <div className="text-right">
-                      {result.percentage !== null ? (
-                        <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
-                          <span className="text-sm font-black">{Math.round(result.percentage)}%</span>
-                          {result.score !== null && result.maxScore !== null && (
-                            <span className="text-[10px] font-bold text-emerald-700">
-                              ({result.score}/{result.maxScore})
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {result.category}
+                          </span>
+                          {result.isAiGraded && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              <span>AI Evaluated</span>
+                            </span>
+                          )}
+                          {result.category === 'quiz' && result.trackQuiz !== false && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                              <span>Tracked Quiz</span>
+                            </span>
+                          )}
+                          {result.date && (
+                            <span className="text-xs text-slate-500 font-medium">
+                              {new Date(result.date).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric'
+                              })}
                             </span>
                           )}
                         </div>
-                      ) : result.score !== null ? (
-                        <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
-                          <span className="text-sm font-black">{result.score}{result.maxScore ? `/${result.maxScore}` : ''}</span>
-                        </div>
-                      ) : (result.isAiGraded || result.status === 'graded' || result.status === 'completed') ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>AI Graded</span>
-                        </span>
+                        <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                          {result.title}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                      <div className="text-right">
+                        {result.percentage !== null ? (
+                          <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                            <span className="text-sm sm:text-base font-black">{Math.round(result.percentage)}%</span>
+                            {result.score !== null && result.maxScore !== null && (
+                              <span className="text-xs font-bold text-emerald-700">
+                                ({result.score}/{result.maxScore})
+                              </span>
+                            )}
+                          </div>
+                        ) : result.score !== null ? (
+                          <div className="inline-flex items-baseline gap-1 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                            <span className="text-sm sm:text-base font-black">{result.score}{result.maxScore ? `/${result.maxScore}` : ''}</span>
+                          </div>
+                        ) : (result.isAiGraded || result.status === 'graded' || result.status === 'completed') ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>AI Graded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending Review</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {hasQuizBreakdown ? (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedQuizId(isQuizExpanded ? null : result.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>{isQuizExpanded ? 'Hide Questions' : 'Question Insights'}</span>
+                        </button>
+                      ) : matchedCorrected ? (
+                        <button
+                          type="button"
+                          onClick={() => openWorkModal(matchedCorrected, 'work')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200/80 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View Review</span>
+                        </button>
+                      ) : (result.writingEvaluation || result.r2ResultPath || result.isAiGraded) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const w = result.writingEvaluation;
+                            const synthItem: StudentCorrectedWorkItem = {
+                              id: result.id.replace(/^task-/, ''),
+                              title: result.title,
+                              source_type: 'writing_task',
+                              work_type: 'writing',
+                              score: result.score,
+                              max_score: result.maxScore || 100,
+                              percentage: result.percentage,
+                              feedback: w?.feedback || result.feedback,
+                              original_text: w?.original_text,
+                              corrected_work: w?.corrected_work,
+                              mistakes: w?.mistakes || [],
+                              corrections: w?.corrections || [],
+                              strengths: w?.strengths || [],
+                              grammar_errors: w?.grammar_errors || [],
+                              spelling_errors: w?.spelling_errors || [],
+                              grammar_issues: w?.grammar_issues || (w?.grammar_errors || []).map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' })),
+                              spelling_issues: w?.spelling_issues || (w?.spelling_errors || []).map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' })),
+                              sentence_structure_issues: w?.sentence_structure_issues || [],
+                              vocabulary_issues: w?.vocabulary_issues || [],
+                              next_step: w?.next_step || '',
+                              r2_result_path: result.r2ResultPath || null,
+                              date: result.date
+                            };
+                            openWorkModal(synthItem, 'work');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View Review</span>
+                        </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200">
-                          <Clock className="w-3 h-3" />
-                          <span>Pending Review</span>
+                        <span className="text-xs text-slate-400 font-medium italic pr-2">
+                          Completed
                         </span>
                       )}
                     </div>
-
-                    {matchedCorrected ? (
-                      <button
-                        type="button"
-                        onClick={() => openWorkModal(matchedCorrected, 'work')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-[#026fc3] text-xs font-bold border border-sky-200/80 transition-colors cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Review</span>
-                      </button>
-                    ) : (result.writingEvaluation || result.r2ResultPath || result.isAiGraded) ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const w = result.writingEvaluation;
-                          const synthItem: StudentCorrectedWorkItem = {
-                            id: result.id.replace(/^task-/, ''),
-                            title: result.title,
-                            source_type: 'writing_task',
-                            work_type: 'writing',
-                            score: result.score,
-                            max_score: result.maxScore || 100,
-                            percentage: result.percentage,
-                            feedback: w?.feedback || result.feedback,
-                            original_text: w?.original_text,
-                            corrected_work: w?.corrected_work,
-                            mistakes: w?.mistakes || [],
-                            corrections: w?.corrections || [],
-                            strengths: w?.strengths || [],
-                            grammar_errors: w?.grammar_errors || [],
-                            spelling_errors: w?.spelling_errors || [],
-                            grammar_issues: w?.grammar_issues || (w?.grammar_errors || []).map((g: any) => ({ original: g.text || g.original, correction: g.suggestion || g.correction, explanation: g.rule || g.explanation || 'Grammar correction' })),
-                            spelling_issues: w?.spelling_issues || (w?.spelling_errors || []).map((s: any) => ({ original: s.text || s.original, correction: s.suggestion || s.correction, explanation: 'Spelling correction' })),
-                            sentence_structure_issues: w?.sentence_structure_issues || [],
-                            vocabulary_issues: w?.vocabulary_issues || [],
-                            next_step: w?.next_step || '',
-                            r2_result_path: result.r2ResultPath || null,
-                            date: result.date
-                          };
-                          openWorkModal(synthItem, 'work');
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Review</span>
-                      </button>
-                    ) : (
-                      <span className="text-[11px] text-slate-400 font-medium italic pr-2">
-                        Completed
-                      </span>
-                    )}
                   </div>
+
+                  {/* Tracked Quiz Question-Level Performance Breakdown */}
+                  {hasQuizBreakdown && isQuizExpanded && (
+                    <div className="p-4 sm:p-5 bg-slate-50/90 space-y-3 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                          Question-Level Performance ({result.questionBreakdown!.filter((q) => q.is_correct).length} / {result.questionBreakdown!.length} Correct)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {result.questionBreakdown!.map((qb, qIdx) => (
+                          <div
+                            key={qIdx}
+                            className={`p-3.5 rounded-xl border text-xs sm:text-sm space-y-1.5 ${
+                              qb.is_correct
+                                ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                                : 'bg-rose-50/60 border-rose-200 text-rose-950'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="font-bold leading-snug">
+                                Q{qb.question_index + 1}. {qb.question}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase shrink-0 ${
+                                  qb.is_correct ? 'bg-emerald-200/80 text-emerald-900' : 'bg-rose-200/80 text-rose-900'
+                                }`}
+                              >
+                                {qb.is_correct ? 'Correct' : 'Needs Practice'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-700 space-y-0.5 pt-1">
+                              <div>
+                                <span className="font-semibold text-slate-500">Your Answer: </span>
+                                <span className="font-bold">{qb.student_answer}</span>
+                              </div>
+                              {!qb.is_correct && qb.correct_answer && (
+                                <div>
+                                  <span className="font-semibold text-slate-500">Correct Answer: </span>
+                                  <span className="font-bold text-emerald-700">{qb.correct_answer}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -541,7 +622,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
               3. My Corrected Work
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">Marked papers & feedback</span>
+          <span className="text-xs sm:text-sm text-slate-500 font-semibold">Marked papers & feedback</span>
         </div>
 
         {correctedWork.length === 0 ? (
@@ -552,18 +633,18 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
             <h3 className="text-sm sm:text-base font-black text-slate-900">
               No corrected work available yet
             </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
               Corrected assignments and handwritten evaluations with teacher or AI annotations will appear here once reviewed.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {correctedWork.map((item) => {
-              const isAi = item.source_type === 'ocr_handwritten' || item.source_type === 'challenge';
+              const isAi = item.source_type === 'ocr_handwritten' || item.source_type === 'challenge' || item.source_type === 'writing_task' || Boolean(item.corrected_work);
               return (
                 <div
                   key={item.id}
-                  className="p-5 bg-white rounded-3xl border border-slate-200/90 shadow-2xs space-y-4 hover:shadow-md transition-shadow flex flex-col justify-between"
+                  className="p-5 sm:p-6 bg-white rounded-3xl border border-slate-200/90 shadow-2xs space-y-4 hover:shadow-md transition-shadow flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
@@ -572,17 +653,17 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                           <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-sky-100 text-[#026fc3]">
                             {item.source_type.replace('_', ' ')}
                           </span>
-                          <span className="text-[10px] font-bold text-slate-500">
+                          <span className="text-xs font-bold text-slate-500">
                             {isAi ? 'AI Evaluated' : 'Teacher Reviewed'}
                           </span>
                         </div>
-                        <h4 className="text-sm font-black text-slate-900 truncate">
+                        <h4 className="text-base font-black text-slate-900 truncate">
                           {item.title}
                         </h4>
                       </div>
 
                       {item.percentage !== null && item.percentage !== undefined && (
-                        <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-black text-sm shrink-0">
+                        <div className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-black text-sm sm:text-base shrink-0">
                           {Math.round(item.percentage)}%
                         </div>
                       )}
@@ -590,12 +671,12 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
 
                     {/* Summary / Strengths preview */}
                     {item.feedback ? (
-                      <p className="text-xs text-slate-700 line-clamp-2 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <p className="text-xs sm:text-sm text-slate-700 line-clamp-2 font-medium bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
                         "{item.feedback}"
                       </p>
                     ) : item.breakdown?.strengths && Array.isArray(item.breakdown.strengths) && item.breakdown.strengths.length > 0 ? (
-                      <div className="text-xs text-emerald-900 font-medium bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <div className="text-xs sm:text-sm text-emerald-900 font-medium bg-emerald-50/60 p-3 rounded-xl border border-emerald-100 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                         <span className="truncate">{item.breakdown.strengths[0]}</span>
                       </div>
                     ) : null}
@@ -648,8 +729,53 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
               4. My Progress
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-semibold">Mastery by Topic</span>
+          <span className="text-xs sm:text-sm text-slate-500 font-semibold">Mastery by Topic</span>
         </div>
+
+        {/* Strong Areas & Needs Practice Summary Cards */}
+        {topics.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2">
+              <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Strong Areas</span>
+              </h4>
+              {strongAreas.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {strongAreas.map((t, i) => (
+                    <span key={i} className="px-3 py-1 rounded-xl bg-white border border-emerald-200 text-xs sm:text-sm font-bold text-emerald-900 shadow-2xs">
+                      {t.topic} ({Math.round(t.average_percentage)}%)
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-emerald-800 font-medium">
+                  Keep completing activities to build strong mastery areas (80%+).
+                </p>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+              <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                <span>Needs Practice</span>
+              </h4>
+              {needsPracticeAreas.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {needsPracticeAreas.map((t, i) => (
+                    <span key={i} className="px-3 py-1 rounded-xl bg-white border border-amber-200 text-xs sm:text-sm font-bold text-amber-900 shadow-2xs">
+                      {t.topic} ({Math.round(t.average_percentage)}%)
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-amber-800 font-medium">
+                  Great job! All tracked topics are currently in your strong mastery zone.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {topics.length === 0 ? (
           <div className="p-8 sm:p-12 bg-white rounded-3xl border border-slate-200/80 text-center space-y-3">
@@ -659,8 +785,8 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
             <h3 className="text-sm sm:text-base font-black text-slate-900">
               No topic mastery data yet
             </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
-              As you complete subject assignments and quizzes, your topic mastery progress will track here.
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto font-medium">
+              As you complete subject assignments and tracked quizzes, your topic mastery progress will track here.
             </p>
           </div>
         ) : (
@@ -685,15 +811,15 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                 return (
                   <div
                     key={idx}
-                    className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-3"
+                    className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-3"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                        <h4 className="text-sm sm:text-base font-black text-slate-900 truncate">
                           {topic.topic}
                         </h4>
-                        <div className="text-[11px] text-slate-500 font-semibold">
-                          {topic.activities_count} activities completed
+                        <div className="text-xs text-slate-500 font-semibold">
+                          {topic.activities_count} {topic.activities_count === 1 ? 'activity' : 'activities'} completed
                         </div>
                       </div>
 
@@ -705,7 +831,7 @@ export const StudentMyLearning: React.FC<StudentMyLearningProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px] font-bold">
+                      <div className="flex items-center justify-between text-xs font-bold">
                         <span className="text-slate-600">Mastery Level</span>
                         <span className="text-slate-900">{mastery}%</span>
                       </div>

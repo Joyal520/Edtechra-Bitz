@@ -7,7 +7,7 @@
 // - Mobile-first clean feed card layout with compact metadata and priority typography
 // ============================================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Send,
   Pin,
@@ -18,13 +18,16 @@ import {
   Trophy,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   Plus,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Check,
+  Calendar
 } from 'lucide-react';
 import { Classroom, ClassroomMessage, Assignment, ClassroomExam } from '@/types/classroom';
 import { LiveQuizSession } from '@/types/liveQuiz';
-import { classroomMessageService } from '@/services/classroomMessageService';
+import { classroomMessageService, parseMessageExpiration } from '@/services/classroomMessageService';
 
 export type StreamActivityType = 'task' | 'exam' | 'live_quiz' | 'competition' | 'announcement';
 
@@ -147,44 +150,68 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
   onOpenChallenge
 }) => {
   const [newMessage, setNewMessage] = useState('');
+  const [deadline, setDeadline] = useState('');
   const [isPinning, setIsPinning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
-  // Aggregate and enforce strict visibility lifecycle rules
+  // Load persisted read announcement IDs for the current user across refresh & devices
+  useEffect(() => {
+    let mounted = true;
+    classroomMessageService.getUserReadAnnouncementIds(classroomId).then((ids) => {
+      if (mounted) {
+        setReadIds(ids);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [classroomId, messages, announcements]);
+
+  // Aggregate and enforce strict visibility lifecycle rules (Rule A: deadline, Rule B: 3 days)
   const streamItems = useMemo<StreamItem[]>(() => {
-    // If server-provided authoritative announcements are supplied, connect actions and use
+    const isMarkedRead = (itemId: string, rawId?: string) => {
+      if (readIds.has(itemId)) return true;
+      if (rawId && readIds.has(rawId)) return true;
+      if (rawId && readIds.has(`msg-${rawId}`)) return true;
+      return false;
+    };
+
+    // If server-provided authoritative announcements are supplied, connect actions and filter out user-read items
     if (announcements && announcements.length > 0) {
-      return announcements.map((item) => {
-        let onAction: (() => void) | undefined = undefined;
-        if (item.type === 'task') {
-          const task = assignments.find((a) => a.id === item.rawId) || item.rawItem;
-          onAction = task ? () => onOpenTask?.(task) : undefined;
-        } else if (item.type === 'exam') {
-          const exam = exams.find((e) => e.id === item.rawId) || item.rawItem;
-          onAction = exam ? () => onOpenExam?.(exam) : undefined;
-        } else if (item.type === 'live_quiz') {
-          onAction = () => onOpenLiveQuiz?.(item.rawItem || activeLiveQuizSession);
-        } else if (item.type === 'competition') {
-          const ch = challenges.find((c) => c.id === item.rawId) || item.rawItem;
-          onAction = ch ? () => onOpenChallenge?.(ch) : undefined;
-        }
-        return {
-          ...item,
-          onAction
-        };
-      });
+      return announcements
+        .filter((item) => !isMarkedRead(item.id, item.rawId))
+        .map((item) => {
+          let onAction: (() => void) | undefined = undefined;
+          if (item.type === 'task') {
+            const task = assignments.find((a) => a.id === item.rawId) || item.rawItem;
+            onAction = task ? () => onOpenTask?.(task) : undefined;
+          } else if (item.type === 'exam') {
+            const exam = exams.find((e) => e.id === item.rawId) || item.rawItem;
+            onAction = exam ? () => onOpenExam?.(exam) : undefined;
+          } else if (item.type === 'live_quiz') {
+            onAction = () => onOpenLiveQuiz?.(item.rawItem || activeLiveQuizSession);
+          } else if (item.type === 'competition') {
+            const ch = challenges.find((c) => c.id === item.rawId) || item.rawItem;
+            onAction = ch ? () => onOpenChallenge?.(ch) : undefined;
+          }
+          return {
+            ...item,
+            onAction
+          };
+        });
     }
 
     const items: StreamItem[] = [];
     const seenKeys = new Set<string>();
     const nowMs = Date.now();
-    const sevenDaysAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+    const threeDaysAgoMs = nowMs - 3 * 24 * 60 * 60 * 1000;
 
     // 1. Tasks / Assignments
     (assignments || []).forEach((a) => {
       const key = `task-${a.id}`;
-      if (seenKeys.has(key)) return;
+      if (seenKeys.has(key) || isMarkedRead(key, a.id)) return;
 
       const sub = a.my_submission;
       // Real student completion detection from submission record
@@ -200,17 +227,17 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
               Boolean(sub.submitted_at))
         );
 
-      // PART 3 RULE: Student completed task -> immediately remove from Recent Announcements feed
+      // Student completed task -> immediately remove from Recent Announcements feed
       if (!isTeacher && isCompleted) return;
 
-      // PART 3 RULE: Due date passed -> remove from active announcement feed
+      // Rule A: Due date passed -> remove from active announcement feed
       const isOverdue = a.due_date && new Date(a.due_date).getTime() < nowMs;
       if (isOverdue) return;
 
-      // PART 3 RULE: 7-day default visibility rule
+      // Rule B: 3-day default visibility rule if no future due date
       const createdMs = new Date(a.created_at || nowMs).getTime();
       const hasFutureDue = a.due_date && new Date(a.due_date).getTime() >= nowMs;
-      if (createdMs < sevenDaysAgoMs && !hasFutureDue) return;
+      if (createdMs < threeDaysAgoMs && !hasFutureDue) return;
 
       seenKeys.add(key);
 
@@ -252,7 +279,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
     // 2. Exams
     (exams || []).forEach((e) => {
       const key = `exam-${e.id}`;
-      if (seenKeys.has(key)) return;
+      if (seenKeys.has(key) || isMarkedRead(key, e.id)) return;
 
       const result = e.latest_result;
       const isExamCompleted =
@@ -264,16 +291,12 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
               Boolean(result.submitted_at))
         );
 
-      // PART 3 RULE: Student completed exam -> immediately remove from Recent Announcements feed
       if (!isTeacher && isExamCompleted) return;
-
-      // PART 3 RULE: If exam availability expired (ends_at passed) -> remove from announcement feed
       if (e.ends_at && new Date(e.ends_at).getTime() < nowMs) return;
 
-      // PART 3 RULE: 7-day default visibility rule
       const createdMs = new Date(e.created_at || nowMs).getTime();
       const isFutureScheduled = e.starts_at && new Date(e.starts_at).getTime() > nowMs;
-      if (createdMs < sevenDaysAgoMs && !isFutureScheduled) return;
+      if (createdMs < threeDaysAgoMs && !isFutureScheduled) return;
 
       seenKeys.add(key);
 
@@ -308,11 +331,10 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
     if (activeLiveQuizSession) {
       const s = activeLiveQuizSession;
       const key = `livequiz-${s.id}`;
-      if (!seenKeys.has(key)) {
+      if (!seenKeys.has(key) && !isMarkedRead(key, s.id)) {
         const isLive = s.status === 'in_progress' || s.status === 'reveal';
         const isScheduled = s.status === 'scheduled' || Boolean(s.scheduled_start_at);
 
-        // PART 3 RULE: Finished / cancelled quiz -> remove from active announcement feed
         if (s.status !== 'completed' && s.status !== 'finished' && s.status !== 'cancelled') {
           seenKeys.add(key);
           const quizTitle = s.quiz?.title || (classroom?.title ? `${classroom.title} Live Quiz` : 'Live Quiz Game');
@@ -339,7 +361,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
     // 4. Competitions / AI Challenges
     (challenges || []).forEach((c) => {
       const key = `comp-${c.id}`;
-      if (seenKeys.has(key)) return;
+      if (seenKeys.has(key) || isMarkedRead(key, c.id)) return;
 
       const compSub = c.my_submission;
       const isCompCompleted =
@@ -356,7 +378,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
       const createdMs = new Date(c.created_at || nowMs).getTime();
       const hasFutureDue = c.due_date && new Date(c.due_date).getTime() >= nowMs;
-      if (createdMs < sevenDaysAgoMs && !hasFutureDue) return;
+      if (createdMs < threeDaysAgoMs && !hasFutureDue) return;
 
       seenKeys.add(key);
 
@@ -381,13 +403,13 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       });
     });
 
-    // 5. Manual Teacher Messages / Announcements (7-day rule)
+    // 5. Manual Teacher Messages / Announcements (Rule A: deadline, Rule B: 3 days)
     (messages || []).forEach((m) => {
       const key = `msg-${m.id}`;
-      if (seenKeys.has(key)) return;
+      if (seenKeys.has(key) || isMarkedRead(key, m.id)) return;
 
-      const createdMs = new Date(m.created_at || nowMs).getTime();
-      if (createdMs < sevenDaysAgoMs) return;
+      const parsed = parseMessageExpiration(m);
+      if (parsed.expiresAtMs <= nowMs) return;
 
       seenKeys.add(key);
 
@@ -395,8 +417,9 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         id: key,
         type: 'announcement',
         title: m.is_pinned ? '📌 Pinned Announcement' : 'Classroom Announcement',
-        description: m.message,
+        description: parsed.cleanMessage,
         createdAt: m.created_at || new Date().toISOString(),
+        dueDate: parsed.hasExplicitDeadline ? parsed.expiresAtIso : undefined,
         isPinned: Boolean(m.is_pinned),
         authorName: m.teacher?.full_name || 'Class Teacher',
         rawId: m.id,
@@ -419,11 +442,28 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
     messages,
     classroom?.title,
     isTeacher,
+    readIds,
     onOpenTask,
     onOpenExam,
     onOpenLiveQuiz,
     onOpenChallenge
   ]);
+
+  const handleMarkAsRead = async (item: StreamItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Immediately hide from this user's active announcement view
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      next.add(item.id);
+      if (item.rawId) next.add(item.rawId);
+      return next;
+    });
+
+    await classroomMessageService.markAnnouncementAsRead(classroomId, item.id);
+    if (item.type === 'announcement' && item.rawId && item.rawId !== item.id) {
+      await classroomMessageService.markAnnouncementAsRead(classroomId, item.rawId);
+    }
+  };
 
   const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -431,12 +471,26 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
 
     setIsSubmitting(true);
     try {
+      let deadlineIso: string | null = null;
+      if (deadline) {
+        const d = new Date(deadline);
+        if (!isNaN(d.getTime())) {
+          // If only a date was selected without time, set to end of day
+          if (deadline.length === 10) {
+            d.setHours(23, 59, 59, 999);
+          }
+          deadlineIso = d.toISOString();
+        }
+      }
+
       await classroomMessageService.postMessage({
         classroom_id: classroomId,
         message: newMessage.trim(),
-        is_pinned: isPinning
+        is_pinned: isPinning,
+        deadline: deadlineIso
       });
       setNewMessage('');
+      setDeadline('');
       setIsPinning(false);
       setShowComposer(false);
       onMessageUpdated();
@@ -512,27 +566,18 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
       statusBadgeStyle = 'bg-amber-100 text-amber-900 border-amber-300';
     }
 
-    const hasBottomMeta = Boolean(
-      item.scheduledAt ||
-      item.dueDate ||
-      item.points != null ||
-      item.questionCount != null ||
-      item.authorName ||
-      item.scoreText
-    );
-
     return (
       <article
         key={item.id}
         onClick={item.onAction}
-        className={`w-full rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all duration-200 ${cardBg} hover:bg-white ${cardBorderHover} ${
+        className={`w-full rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-all duration-200 ${cardBg} hover:bg-white ${cardBorderHover} ${
           item.onAction ? 'cursor-pointer group' : ''
-        } flex flex-col gap-2.5`}
+        } flex flex-col gap-2`}
       >
-        {/* Top Header: [ICON] TYPE • Status (Left) | Relative Time (Right) */}
+        {/* Top Header: [ICON] TYPE • Status (Left) | Relative Time & Mark as read (Right) */}
         <div className="flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${iconBg}`}>
+            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs ${iconBg}`}>
               {icon}
             </div>
             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-2xs ${typeBadgeStyle}`}>
@@ -544,9 +589,21 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 shrink-0">
-            {formatRelativeTime(item.createdAt)}
-          </span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-semibold text-slate-400">
+              {formatRelativeTime(item.createdAt)}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => handleMarkAsRead(item, e)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+              title="Mark announcement as read and hide from your stream"
+            >
+              <Check className="w-3 h-3 stroke-[2.5]" />
+              <span>Mark as read</span>
+            </button>
+          </div>
         </div>
 
         {/* Middle Row: Title (with Action Arrow) & Description */}
@@ -563,7 +620,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
           </div>
 
           {item.onAction && (
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white border border-slate-200/90 text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-300 flex items-center justify-center shrink-0 shadow-2xs transition-all group-hover:translate-x-0.5 mt-0.5">
+            <div className="w-8 h-8 rounded-full bg-white border border-slate-200/90 text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-300 flex items-center justify-center shrink-0 shadow-2xs transition-all group-hover:translate-x-0.5 mt-0.5">
               <ChevronRight className="w-4 h-4 stroke-[2.5]" />
             </div>
           )}
@@ -576,7 +633,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
                 handleDelete(item.rawId);
               }}
               className="w-8 h-8 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              title="Delete announcement"
+              title="Delete announcement globally"
               aria-label="Delete announcement"
             >
               <Trash2 className="w-4 h-4" />
@@ -585,47 +642,47 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         </div>
 
         {/* Bottom Row: Compact Metadata (Middle dot separated) */}
-        {hasBottomMeta && (
-          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 font-medium pt-1.5 border-t border-slate-200/60">
-            {item.scheduledAt && (
-              <span className="font-semibold text-slate-800">
-                {formatScheduledDate(item.scheduledAt)}
-              </span>
-            )}
-            {item.dueDate && (
-              <span className="font-semibold text-slate-800">
-                {formatDueDate(item.dueDate)}
-              </span>
-            )}
-            {(item.scheduledAt || item.dueDate) && (item.points != null || item.questionCount != null) && (
+        <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 font-medium pt-1.5 border-t border-slate-200/60">
+          {item.scheduledAt && (
+            <span className="font-semibold text-slate-800">
+              {formatScheduledDate(item.scheduledAt)}
+            </span>
+          )}
+          {item.dueDate && (
+            <span className="font-semibold text-slate-800">
+              {item.type === 'announcement'
+                ? `Expires ${new Date(item.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                : formatDueDate(item.dueDate)}
+            </span>
+          )}
+          {(item.scheduledAt || item.dueDate) && (item.points != null || item.questionCount != null) && (
+            <span className="text-slate-300">•</span>
+          )}
+          {item.points != null && (
+            <span>
+              {item.points} {item.type === 'exam' ? 'marks' : 'points'}
+            </span>
+          )}
+          {item.points != null && item.questionCount != null && (
+            <span className="text-slate-300">•</span>
+          )}
+          {item.questionCount != null && (
+            <span>
+              {item.questionCount} {item.questionCount === 1 ? 'question' : 'questions'}
+            </span>
+          )}
+          {item.scoreText && (
+            <>
               <span className="text-slate-300">•</span>
-            )}
-            {item.points != null && (
-              <span>
-                {item.points} {item.type === 'exam' ? 'marks' : 'points'}
-              </span>
-            )}
-            {item.points != null && item.questionCount != null && (
-              <span className="text-slate-300">•</span>
-            )}
-            {item.questionCount != null && (
-              <span>
-                {item.questionCount} {item.questionCount === 1 ? 'question' : 'questions'}
-              </span>
-            )}
-            {item.scoreText && (
-              <>
-                <span className="text-slate-300">•</span>
-                <span className="font-bold text-slate-700">{item.scoreText}</span>
-              </>
-            )}
-            {item.authorName && (
-              <span className="text-slate-500 font-semibold text-[11px]">
-                By {item.authorName}
-              </span>
-            )}
-          </div>
-        )}
+              <span className="font-bold text-slate-700">{item.scoreText}</span>
+            </>
+          )}
+          {item.authorName && (
+            <span className="text-slate-500 font-semibold text-[11px]">
+              By {item.authorName}
+            </span>
+          )}
+        </div>
       </article>
     );
   };
@@ -692,6 +749,37 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
                     </div>
                   </div>
 
+                  {/* Optional Expiration Deadline (Rule A vs Rule B: 3 days default) */}
+                  <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-2.5 space-y-1">
+                    <label className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                        Deadline / Expiration (Optional)
+                      </span>
+                      {deadline && (
+                        <button
+                          type="button"
+                          onClick={() => setDeadline('')}
+                          className="text-[10px] text-rose-600 hover:underline font-semibold"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={deadline}
+                      min={new Date().toISOString().slice(0, 16)}
+                      onChange={(e) => setDeadline(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-sky-400"
+                    />
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {deadline
+                        ? 'Announcement will automatically be removed after this deadline.'
+                        : 'No deadline selected — automatically removed after 3 days.'}
+                    </p>
+                  </div>
+
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <label className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
                       <input
@@ -720,9 +808,9 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Recent Announcements Feed */}
-        <div className="lg:col-span-8 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 border border-sky-100 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.06),0_1px_3px_rgba(15,23,42,0.04)] space-y-4">
+        <div className="lg:col-span-8 bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 border border-sky-100 shadow-[0_4px_20px_-4px_rgba(2,111,195,0.06),0_1px_3px_rgba(15,23,42,0.04)] space-y-3.5">
           {/* Header Row */}
-          <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <span className="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100 animate-pulse" />
               <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
@@ -735,7 +823,7 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
             </span>
           </div>
 
-          {/* Stream Feed Cards */}
+          {/* Stream Feed Cards — Show at most 3 initially, scroll internally when 4+ */}
           {streamItems.length === 0 ? (
             <div className="text-center py-10 sm:py-14 px-4 sm:px-6 space-y-3 bg-[#f8fbff] rounded-2xl border border-dashed border-sky-200/80">
               <div className="w-12 h-12 rounded-2xl bg-sky-50 text-[#0284c7] border border-sky-200 mx-auto flex items-center justify-center shadow-2xs">
@@ -751,8 +839,24 @@ export const ClassroomMessages: React.FC<ClassroomMessagesProps> = ({
               </div>
             </div>
           ) : (
-            <div className="space-y-3 max-h-none sm:max-h-[680px] sm:overflow-y-auto sm:pr-1">
-              {streamItems.map((item) => renderAnnouncementCard(item))}
+            <div className="relative">
+              <div
+                className={`space-y-3 ${
+                  streamItems.length > 3
+                    ? 'max-h-[395px] sm:max-h-[420px] overflow-y-auto pr-1.5 scroll-smooth'
+                    : ''
+                }`}
+              >
+                {streamItems.map((item) => renderAnnouncementCard(item))}
+              </div>
+              {streamItems.length > 3 && (
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-xs font-bold text-sky-700">
+                  <ChevronDown className="w-4 h-4 animate-bounce" />
+                  <span>
+                    Showing 3 of {streamItems.length} announcements • Scroll inside feed to view {streamItems.length - 3} more
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

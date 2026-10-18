@@ -23,6 +23,15 @@ export interface StudentTaskResult {
   writing_evaluation?: any | null;
 }
 
+export interface QuizQuestionBreakdownItem {
+  question_index: number;
+  question: string;
+  student_answer: string;
+  correct_answer: string;
+  is_correct: boolean;
+  topic?: string;
+}
+
 export interface StudentQuizResult {
   id: string;
   title: string;
@@ -32,6 +41,8 @@ export interface StudentQuizResult {
   rank?: number | null;
   percentage: number;
   points_awarded?: number;
+  track_quiz?: boolean;
+  question_breakdown?: QuizQuestionBreakdownItem[];
   completed_at: string;
 }
 

@@ -1734,6 +1734,107 @@ app.post('/api/profile/presign-avatar', async (req, res) => {
   }
 });
 
+// POST /api/profile/upload-avatar - Direct server-side avatar upload to R2 + immediate profile persistence
+app.post('/api/profile/upload-avatar', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required to upload avatar.' });
+    }
+
+    const { imageBase64, contentType = 'image/webp', size } = req.body || {};
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return res.status(400).json({ success: false, error: 'Missing image data for avatar upload.' });
+    }
+
+    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const actualSize = size || buffer.length;
+
+    try {
+      validateImageUpload({ contentType, size: actualSize });
+    } catch (valErr) {
+      return res.status(400).json({ success: false, error: valErr.message });
+    }
+
+    const userId = authData.user.id;
+    const objectKey = buildAvatarObjectKey({
+      userId,
+      contentType
+    });
+
+    let publicUrl = '';
+    try {
+      const uploadRes = await putBinaryContent(objectKey, buffer, contentType);
+      publicUrl = uploadRes.publicUrl;
+    } catch (r2Err) {
+      console.warn('[Avatar Upload] R2 direct binary upload fallback to data URL:', r2Err.message);
+      publicUrl = imageBase64.startsWith('data:')
+        ? imageBase64
+        : `data:${contentType};base64,${cleanBase64}`;
+    }
+
+    // Immediately persist avatar_url to Supabase profiles and Auth metadata
+    const updatePayload = {
+      avatar_url: publicUrl,
+      updated_at: new Date().toISOString()
+    };
+
+    let updatedProfile = {
+      ...authData.profile,
+      ...updatePayload
+    };
+
+    if (serverSupabase) {
+      try {
+        const { data: dbProfile, error: dbErr } = await serverSupabase
+          .from('profiles')
+          .upsert(
+            {
+              id: userId,
+              email: authData.user.email,
+              ...updatePayload
+            },
+            { onConflict: 'id' }
+          )
+          .select()
+          .maybeSingle();
+
+        if (!dbErr && dbProfile) {
+          updatedProfile = dbProfile;
+        }
+      } catch (sbErr) {
+        console.warn('[Avatar Upload] Profile upsert notice:', sbErr.message);
+      }
+
+      try {
+        if (serverSupabase.auth?.admin) {
+          await serverSupabase.auth.admin.updateUserById(userId, {
+            user_metadata: {
+              avatar_url: publicUrl,
+              picture: publicUrl
+            }
+          });
+        }
+      } catch (metaErr) {
+        console.warn('[Avatar Upload] Auth metadata update notice:', metaErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        publicUrl,
+        objectKey,
+        profile: updatedProfile
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/profile/upload-avatar:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to upload profile photo.' });
+  }
+});
+
 // POST /api/profile - Authoritative profile update (full_name, avatar_url, text_size)
 app.post('/api/profile', async (req, res) => {
   try {
@@ -3425,7 +3526,8 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
             final_rank,
             points_awarded,
             created_at,
-            quiz:live_quizzes(id, title)
+            quiz:live_quizzes(*, questions:live_quiz_questions(*)),
+            session:live_quiz_sessions(id, started_at, question_duration_sec)
           `)
           .eq('classroom_id', classroomId)
           .eq('student_id', studentId)
@@ -3498,7 +3600,7 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       safeQuery(
         serverSupabase
           .from('v_classroom_learning_events')
-          .select('topic, percentage, score, max_score, completed_at, activity_type')
+          .select('topic, percentage, score, max_score, completed_at, activity_type, activity_id')
           .eq('classroom_id', classroomId)
           .eq('student_id', studentId)
           .order('completed_at', { ascending: false })
@@ -3535,31 +3637,84 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
     const pts = studentPointsRes?.data || [];
     const allPoints = allPointsRes?.data || [];
 
-    // Calculate Topic Mastery
-    let topicMastery = [];
+    // Helper: check if a quiz has tracking enabled
+    const isQuizTracked = (quizObj) => {
+      if (!quizObj) return true;
+      if (quizObj.track_quiz === false) return false;
+      if (typeof quizObj.description === 'string' && quizObj.description.includes('[UNTRACKED]')) return false;
+      return true;
+    };
+
+    // Identify untracked quiz IDs and session IDs so they are excluded from learning analytics
+    const untrackedQuizIds = new Set();
+    const trackedSessionIds = [];
+    (quizResults || []).forEach((qr) => {
+      if (!isQuizTracked(qr.quiz)) {
+        if (qr.quiz_id) untrackedQuizIds.add(qr.quiz_id);
+        if (qr.session_id) untrackedQuizIds.add(qr.session_id);
+      } else if (qr.session_id) {
+        trackedSessionIds.push(qr.session_id);
+      }
+    });
+
+    // Fetch student's question-level answers ONLY for tracked quizzes
+    let trackedQuizAnswersBySession = new Map();
+    if (trackedSessionIds.length > 0) {
+      try {
+        const { data: ansRows } = await serverSupabase
+          .from('live_quiz_answers')
+          .select('*')
+          .eq('student_id', studentId)
+          .in('session_id', trackedSessionIds);
+        (ansRows || []).forEach((ans) => {
+          if (!trackedQuizAnswersBySession.has(ans.session_id)) {
+            trackedQuizAnswersBySession.set(ans.session_id, []);
+          }
+          trackedQuizAnswersBySession.get(ans.session_id).push(ans);
+        });
+      } catch (_) {}
+    }
+
+    // Calculate Topic Mastery (excluding any untracked quizzes, and ensuring tracked quizzes & writing types are represented)
+    const topicMap = new Map();
+    const addTopicScore = (topicName, pct) => {
+      const cleanTopic = String(topicName || 'General').trim() || 'General';
+      const numPct = Math.max(0, Math.min(100, Number(pct) || 0));
+      if (!topicMap.has(cleanTopic)) {
+        topicMap.set(cleanTopic, { scores: [], count: 0 });
+      }
+      topicMap.get(cleanTopic).scores.push(numPct);
+      topicMap.get(cleanTopic).count++;
+    };
+
     if (events && events.length > 0) {
-      const topicMap = new Map();
       events.forEach((ev) => {
+        if (ev.activity_type === 'live_quiz' && ev.activity_id && untrackedQuizIds.has(ev.activity_id)) {
+          return; // Skip untracked quiz
+        }
         const t = ev.topic || 'General';
         const p = ev.percentage != null ? Number(ev.percentage) : (ev.max_score > 0 ? (ev.score / ev.max_score) * 100 : 0);
-        if (!topicMap.has(t)) {
-          topicMap.set(t, { scores: [], count: 0 });
-        }
-        topicMap.get(t).scores.push(p);
-        topicMap.get(t).count++;
+        addTopicScore(t, p);
       });
-
-      topicMastery = Array.from(topicMap.entries()).map(([topic, stat]) => {
-        const avg = Math.round(stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length);
-        const status = avg >= 80 ? 'strong' : (avg >= 60 ? 'developing' : 'needs_practice');
-        return {
-          topic,
-          average_percentage: avg,
-          activities_count: stat.count,
-          status
-        };
+    } else {
+      // Fallback topic aggregation if view returned empty
+      (quizResults || []).forEach((qr) => {
+        if (!isQuizTracked(qr.quiz)) return;
+        const topic = qr.quiz?.category || qr.quiz?.title || 'Live Quiz';
+        addTopicScore(topic, qr.accuracy_percentage ?? 0);
       });
     }
+
+    const topicMastery = Array.from(topicMap.entries()).map(([topic, stat]) => {
+      const avg = Math.round(stat.scores.reduce((a, b) => a + b, 0) / stat.scores.length);
+      const status = avg >= 80 ? 'strong' : (avg >= 60 ? 'developing' : 'needs_practice');
+      return {
+        topic,
+        average_percentage: avg,
+        activities_count: stat.count,
+        status
+      };
+    });
 
     // Calculate Points & Rank
     let studentPoints = 0;
@@ -3868,18 +4023,67 @@ app.get('/api/classes/:id/my-learning', async (req, res) => {
       }
     });
 
-    // Format quizzes for My Results
-    const formattedQuizzes = (quizResults || []).map((q) => ({
-      id: q.id,
-      title: q.quiz?.title || 'Multiplayer Live Quiz',
-      score: q.score,
-      total_questions: q.total_questions,
-      correct_count: q.correct_count,
-      rank: q.final_rank,
-      percentage: q.accuracy_percentage,
-      points_awarded: q.points_awarded,
-      completed_at: q.created_at
-    }));
+    // Format quizzes for My Results (with Question-Level Performance ONLY for tracked quizzes)
+    const formattedQuizzes = (quizResults || []).map((q) => {
+      const tracked = isQuizTracked(q.quiz);
+      let questionBreakdown = [];
+
+      if (tracked && q.session_id) {
+        const sessionAnswers = trackedQuizAnswersBySession.get(q.session_id) || [];
+        const answerByIdx = new Map();
+        sessionAnswers.forEach((a) => {
+          answerByIdx.set(Number(a.question_index), a);
+        });
+
+        const rawQuestions = Array.isArray(q.quiz?.questions)
+          ? [...q.quiz.questions].sort((a, b) => (a.question_index ?? 0) - (b.question_index ?? 0))
+          : [];
+
+        if (rawQuestions.length > 0) {
+          questionBreakdown = rawQuestions.map((qDef, idx) => {
+            const qIdx = typeof qDef.question_index === 'number' ? qDef.question_index : idx;
+            const studentAns = answerByIdx.get(qIdx);
+            const opts = Array.isArray(qDef.options)
+              ? qDef.options
+              : typeof qDef.options === 'string'
+              ? (() => { try { return JSON.parse(qDef.options); } catch { return []; } })()
+              : [];
+
+            const selectedIdx = studentAns?.selected_option_index ?? null;
+            const correctIdx = typeof qDef.correct_index === 'number' ? qDef.correct_index : (qDef.correctIndex ?? null);
+            const isCorrect = Boolean(studentAns?.is_correct);
+
+            return {
+              question_index: qIdx,
+              question_text: qDef.question_text || qDef.question || `Question ${qIdx + 1}`,
+              selected_option_index: selectedIdx,
+              selected_answer: selectedIdx != null && opts[selectedIdx] !== undefined ? String(opts[selectedIdx]) : 'No Answer (Time Expired)',
+              correct_option_index: correctIdx,
+              correct_answer: correctIdx != null && opts[correctIdx] !== undefined ? String(opts[correctIdx]) : '',
+              is_correct: isCorrect,
+              points_awarded: Number(studentAns?.points_awarded || 0),
+              category: q.quiz?.category || 'General',
+              explanation: qDef.explanation || ''
+            };
+          });
+        }
+      }
+
+      return {
+        id: q.id,
+        title: q.quiz?.title || 'Multiplayer Live Quiz',
+        category: q.quiz?.category || 'General',
+        track_quiz: tracked,
+        score: q.score,
+        total_questions: q.total_questions,
+        correct_count: q.correct_count,
+        rank: q.final_rank,
+        percentage: q.accuracy_percentage,
+        points_awarded: q.points_awarded,
+        completed_at: q.created_at,
+        question_breakdown: tracked ? questionBreakdown : []
+      };
+    });
 
     // Format exams for My Results
     const formattedExams = (examResults || []).map((e) => ({
@@ -7562,6 +7766,8 @@ app.post('/api/classes/tasks', async (req, res) => {
       classroomId,
       title,
       subtitle,
+      writingType,
+      requiredWordLength,
       instructions,
       category = 'assignment',
       points = 100,
@@ -7576,6 +7782,22 @@ app.post('/api/classes/tasks', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Classroom ID and Title are required.' });
     }
 
+    // Validate requiredWordLength if provided
+    const rawWordLen = requiredWordLength ?? settings?.required_word_length;
+    let validatedWordLength = null;
+    if (rawWordLen !== undefined && rawWordLen !== null && String(rawWordLen).trim() !== '') {
+      const parsedLen = Number(rawWordLen);
+      if (!Number.isInteger(parsedLen) || parsedLen <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Required Word Length must be a positive whole number greater than 0.'
+        });
+      }
+      validatedWordLength = parsedLen;
+    }
+
+    const resolvedWritingType = (writingType || settings?.writing_type || subtitle || '').trim() || null;
+
     // Authoritative teacher authorization check
     const isAuthorized = await isTeacherAuthorized(authData, classroomId);
     if (!isAuthorized) {
@@ -7588,36 +7810,64 @@ app.post('/api/classes/tasks', async (req, res) => {
       return res.status(500).json({ success: false, error: 'Supabase client not initialized.' });
     }
 
-    const { data: task, error } = await serverSupabase
+    const baseTaskPayload = {
+      classroom_id: classroomId,
+      created_by: authData.user.id,
+      title: title.trim(),
+      subtitle: resolvedWritingType,
+      instructions: (instructions || '').trim(),
+      category: validCategory,
+      assignment_type: validCategory === 'assignment' ? 'task' : validCategory,
+      points: Number(points) || 100,
+      due_date: dueDate || null,
+      content_blocks: contentBlocks,
+      questions: questions,
+      attachment_urls: attachmentUrls,
+      settings: {
+        show_result_immediately: settings.show_result_immediately ?? true,
+        show_correct_answers: settings.show_correct_answers ?? true,
+        allow_retry: settings.allow_retry ?? false,
+        enable_ai_feedback: settings.enable_ai_feedback ?? true,
+        submission_method: settings.submission_method || 'both',
+        assigned_student_ids: req.body.assignedStudentIds || null,
+        writing_type: resolvedWritingType,
+        required_word_length: validatedWordLength
+      },
+      status: 'published'
+    };
+
+    let task = null;
+    let error = null;
+
+    // Try inserting with explicit writing_type & required_word_length columns first
+    const extAttempt = await serverSupabase
       .from('assignments')
       .insert({
-        classroom_id: classroomId,
-        created_by: authData.user.id,
-        title: title.trim(),
-        subtitle: subtitle?.trim() || null,
-        instructions: (instructions || '').trim(),
-        category: validCategory,
-        assignment_type: validCategory === 'assignment' ? 'task' : validCategory,
-        points: Number(points) || 100,
-        due_date: dueDate || null,
-        content_blocks: contentBlocks,
-        questions: questions,
-        attachment_urls: attachmentUrls,
-        settings: {
-          show_result_immediately: settings.show_result_immediately ?? true,
-          show_correct_answers: settings.show_correct_answers ?? true,
-          allow_retry: settings.allow_retry ?? false,
-          enable_ai_feedback: settings.enable_ai_feedback ?? true,
-          submission_method: settings.submission_method || 'both',
-          assigned_student_ids: req.body.assignedStudentIds || null
-        },
-        status: 'published'
+        ...baseTaskPayload,
+        writing_type: resolvedWritingType,
+        required_word_length: validatedWordLength
       })
       .select(`
         *,
         creator:profiles!created_by (id, full_name, avatar_url)
       `)
       .single();
+
+    if (!extAttempt.error && extAttempt.data) {
+      task = extAttempt.data;
+    } else {
+      // Fallback if migration columns are not yet applied on remote DB
+      const fbAttempt = await serverSupabase
+        .from('assignments')
+        .insert(baseTaskPayload)
+        .select(`
+          *,
+          creator:profiles!created_by (id, full_name, avatar_url)
+        `)
+        .single();
+      task = fbAttempt.data;
+      error = fbAttempt.error;
+    }
 
     if (error) throw error;
 
@@ -7632,10 +7882,283 @@ app.post('/api/classes/tasks', async (req, res) => {
 });
 
 // ============================================================================
-// AUTHORITATIVE RECENT ANNOUNCEMENTS LIFECYCLE API
-// Filters active announcements: 7-day cutoff, student submission status,
-// due date expiration, and exam schedule validity.
+// AUTHORITATIVE ANNOUNCEMENTS LIFECYCLE & SERVER-SIDE EXPIRATION CLEANUP
+// Rule A: Announcement with deadline -> expires_at = teacher_selected_deadline
+// Rule B: Announcement without deadline -> expires_at = created_at + 3 days
+// User-Level Read State: Mark as read hides announcement for that user only
 // ============================================================================
+
+const ANNOUNCEMENT_DEFAULT_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const EXPIRES_META_REGEX = /^\[EXPIRES:([^\]]+)\]\n?/;
+
+function parseAnnouncementRecord(msgRow) {
+  if (!msgRow) return { cleanMessage: '', expiresAtIso: null, hasExplicitDeadline: false };
+  const rawText = String(msgRow.message || '');
+  const match = rawText.match(EXPIRES_META_REGEX);
+  const embeddedExpires = match ? match[1] : null;
+  const cleanMessage = match ? rawText.replace(EXPIRES_META_REGEX, '') : rawText;
+
+  const createdMs = msgRow.created_at ? new Date(msgRow.created_at).getTime() : Date.now();
+  const defaultExpiresIso = new Date(createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS).toISOString();
+
+  const resolvedExpires = msgRow.expires_at || embeddedExpires || defaultExpiresIso;
+  const expiresMs = new Date(resolvedExpires).getTime();
+  const hasExplicitDeadline = Boolean(
+    embeddedExpires ||
+      (msgRow.expires_at && Math.abs(expiresMs - (createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS)) > 60000)
+  );
+
+  return {
+    cleanMessage,
+    expiresAtIso: Number.isFinite(expiresMs) ? new Date(expiresMs).toISOString() : defaultExpiresIso,
+    expiresAtMs: Number.isFinite(expiresMs) ? expiresMs : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS,
+    hasExplicitDeadline
+  };
+}
+
+/**
+ * Server-side automatic cleanup for expired announcements.
+ * Safely deletes expired rows from classroom_messages and cascades/cleans announcement_reads.
+ */
+async function runExpiredAnnouncementsCleanup(classroomId = null) {
+  if (!serverSupabase) return { deletedCount: 0 };
+  let deletedCount = 0;
+
+  try {
+    // 1. Try SQL SECURITY DEFINER cleanup function if installed
+    try {
+      await serverSupabase.rpc('cleanup_expired_announcements');
+    } catch (_) {
+      // Ignore if migration function not yet applied
+    }
+
+    // 2. Authoritative server-side scan & hard delete of expired announcements
+    let query = serverSupabase
+      .from('classroom_messages')
+      .select('id, classroom_id, message, created_at, expires_at');
+
+    if (classroomId) {
+      query = query.eq('classroom_id', classroomId);
+    }
+
+    const { data: rows, error } = await query;
+    if (error && error.message && error.message.includes('expires_at')) {
+      // Fallback query if expires_at column is not migrated yet
+      let fbQuery = serverSupabase
+        .from('classroom_messages')
+        .select('id, classroom_id, message, created_at');
+      if (classroomId) fbQuery = fbQuery.eq('classroom_id', classroomId);
+      const fbRes = await fbQuery;
+      if (fbRes.data) {
+        const nowMs = Date.now();
+        const expiredIds = fbRes.data
+          .filter((r) => parseAnnouncementRecord(r).expiresAtMs <= nowMs)
+          .map((r) => r.id);
+
+        if (expiredIds.length > 0) {
+          await serverSupabase.from('classroom_messages').delete().in('id', expiredIds);
+          try {
+            const prefixedIds = expiredIds.map((id) => `msg-${id}`);
+            await serverSupabase.from('announcement_reads').delete().in('announcement_id', [...expiredIds, ...prefixedIds]);
+          } catch (_) {}
+          deletedCount += expiredIds.length;
+        }
+      }
+      return { deletedCount };
+    }
+
+    if (Array.isArray(rows) && rows.length > 0) {
+      const nowMs = Date.now();
+      const expiredIds = rows
+        .filter((r) => parseAnnouncementRecord(r).expiresAtMs <= nowMs)
+        .map((r) => r.id);
+
+      if (expiredIds.length > 0) {
+        await serverSupabase.from('classroom_messages').delete().in('id', expiredIds);
+        try {
+          const prefixedIds = expiredIds.map((id) => `msg-${id}`);
+          await serverSupabase.from('announcement_reads').delete().in('announcement_id', [...expiredIds, ...prefixedIds]);
+        } catch (_) {}
+        deletedCount += expiredIds.length;
+      }
+    }
+  } catch (err) {
+    console.warn('[Announcements Cleanup] Notice:', err.message);
+  }
+
+  return { deletedCount };
+}
+
+// Schedule periodic server-side cleanup every 15 minutes + initial startup pass
+setTimeout(() => {
+  runExpiredAnnouncementsCleanup().catch(() => {});
+}, 5000);
+setInterval(() => {
+  runExpiredAnnouncementsCleanup().catch(() => {});
+}, 15 * 60 * 1000);
+
+// POST /api/classes/:classroomId/announcements - Create teacher announcement with expiration rule
+app.post('/api/classes/:classroomId/announcements', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    const { message, isPinned = false, deadline = null } = req.body || {};
+
+    if (!classroomId || !message || !String(message).trim()) {
+      return res.status(400).json({ success: false, error: 'Announcement message cannot be empty.' });
+    }
+
+    const isAuthorized = await isTeacherAuthorized(authData, classroomId);
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, error: 'Only teachers can post classroom announcements.' });
+    }
+
+    const nowMs = Date.now();
+    let expiresAtIso = new Date(nowMs + ANNOUNCEMENT_DEFAULT_TTL_MS).toISOString();
+
+    if (deadline) {
+      const deadlineMs = new Date(deadline).getTime();
+      if (!Number.isFinite(deadlineMs)) {
+        return res.status(400).json({ success: false, error: 'Invalid deadline date format.' });
+      }
+      if (deadlineMs <= nowMs) {
+        return res.status(400).json({ success: false, error: 'Announcement deadline must be in the future.' });
+      }
+      expiresAtIso = new Date(deadlineMs).toISOString();
+    }
+
+    const cleanText = String(message).trim();
+
+    let inserted = null;
+    let insertErr = null;
+
+    // Attempt insert with expires_at column
+    const attempt = await serverSupabase
+      .from('classroom_messages')
+      .insert({
+        classroom_id: classroomId,
+        teacher_id: authData.user.id,
+        message: cleanText,
+        is_pinned: Boolean(isPinned),
+        is_deleted: false,
+        expires_at: expiresAtIso
+      })
+      .select(`*, teacher:profiles!teacher_id (id, full_name, avatar_url)`)
+      .single();
+
+    if (!attempt.error && attempt.data) {
+      inserted = attempt.data;
+    } else {
+      // Fallback if expires_at column not yet migrated: embed [EXPIRES:...] header
+      const fallbackMessage = `[EXPIRES:${expiresAtIso}]\n${cleanText}`;
+      const fbAttempt = await serverSupabase
+        .from('classroom_messages')
+        .insert({
+          classroom_id: classroomId,
+          teacher_id: authData.user.id,
+          message: fallbackMessage,
+          is_pinned: Boolean(isPinned),
+          is_deleted: false
+        })
+        .select(`*, teacher:profiles!teacher_id (id, full_name, avatar_url)`)
+        .single();
+      inserted = fbAttempt.data;
+      insertErr = fbAttempt.error;
+    }
+
+    if (insertErr) throw insertErr;
+
+    const parsed = parseAnnouncementRecord(inserted);
+    return res.json({
+      success: true,
+      data: {
+        ...inserted,
+        message: parsed.cleanMessage,
+        expires_at: parsed.expiresAtIso
+      }
+    });
+  } catch (err) {
+    console.error('[POST /api/classes/:classroomId/announcements error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to post announcement.' });
+  }
+});
+
+// POST /api/classes/:classroomId/announcements/read - Mark an announcement as read for current user ONLY
+app.post('/api/classes/:classroomId/announcements/read', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const { classroomId } = req.params;
+    const { announcementId } = req.body || {};
+
+    if (!classroomId || !announcementId) {
+      return res.status(400).json({ success: false, error: 'Announcement ID is required.' });
+    }
+
+    const userId = authData.user.id;
+    const rawIdStr = String(announcementId).trim();
+    const normalizedMsgUuid = rawIdStr.startsWith('msg-') ? rawIdStr.slice(4) : null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedMsgUuid || rawIdStr);
+    const messageIdForFk = normalizedMsgUuid && isUuid ? normalizedMsgUuid : null;
+
+    // 1. Persist in announcement_reads table
+    if (serverSupabase) {
+      try {
+        await serverSupabase
+          .from('announcement_reads')
+          .upsert(
+            {
+              user_id: userId,
+              classroom_id: classroomId,
+              announcement_id: rawIdStr,
+              message_id: messageIdForFk,
+              read_at: new Date().toISOString()
+            },
+            { onConflict: 'user_id,announcement_id' }
+          );
+      } catch (dbErr) {
+        console.warn('[Announcement Read DB Notice]:', dbErr.message);
+      }
+
+      // 2. Also persist in user_metadata.read_announcements as resilient cross-device fallback
+      try {
+        const existingReads = Array.isArray(authData.user.user_metadata?.read_announcements)
+          ? authData.user.user_metadata.read_announcements
+          : [];
+        if (!existingReads.includes(rawIdStr)) {
+          const updatedReads = [...existingReads, rawIdStr].slice(-250);
+          if (serverSupabase.auth?.admin) {
+            await serverSupabase.auth.admin.updateUserById(userId, {
+              user_metadata: {
+                ...authData.user.user_metadata,
+                read_announcements: updatedReads
+              }
+            });
+          }
+        }
+      } catch (metaErr) {
+        console.warn('[Announcement Read Metadata Notice]:', metaErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      announcementId: rawIdStr,
+      readAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[POST /api/classes/:classroomId/announcements/read error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to mark announcement as read.' });
+  }
+});
+
 app.get('/api/classes/:classroomId/announcements', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
@@ -7649,6 +8172,9 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     }
 
     const userId = authData.user.id;
+
+    // 1. Run server-side cleanup of expired announcements first
+    await runExpiredAnnouncementsCleanup(classroomId);
 
     // Check classroom and determine user role
     const { data: classroom, error: cErr } = await serverSupabase
@@ -7666,8 +8192,22 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     const now = new Date();
     const nowIso = now.toISOString();
     const nowMs = now.getTime();
+    const threeDaysAgo = new Date(nowMs - ANNOUNCEMENT_DEFAULT_TTL_MS);
     const sevenDaysAgo = new Date(nowMs - 7 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgoIso = sevenDaysAgo.toISOString();
+
+    // Safe wrapper forannouncement_reads query
+    const fetchUserReads = async () => {
+      try {
+        const { data } = await serverSupabase
+          .from('announcement_reads')
+          .select('announcement_id, message_id')
+          .eq('user_id', userId)
+          .eq('classroom_id', classroomId);
+        return data || [];
+      } catch (_) {
+        return [];
+      }
+    };
 
     // Fetch candidate records in parallel
     const [
@@ -7678,7 +8218,8 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
       { data: messages },
       { data: studentSubmissions },
       { data: studentExamResults },
-      { data: studentChallengeSubs }
+      { data: studentChallengeSubs },
+      userReadsRows
     ] = await Promise.all([
       // 1. Tasks in classroom
       serverSupabase
@@ -7699,7 +8240,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
       // 3. Active / Scheduled Live Quizzes
       serverSupabase
         .from('live_quiz_sessions')
-        .select(`*, quiz:quizzes!quiz_id (id, title, description, questions)`)
+        .select(`*, quiz:live_quizzes!quiz_id (id, title, description)`)
         .eq('classroom_id', classroomId)
         .in('status', ['scheduled', 'lobby', 'in_progress', 'reveal'])
         .order('created_at', { ascending: false })
@@ -7712,13 +8253,12 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         .eq('classroom_id', classroomId)
         .order('created_at', { ascending: false }),
 
-      // 5. Teacher Messages (last 7 days only)
+      // 5. Teacher Messages
       serverSupabase
         .from('classroom_messages')
         .select(`*, teacher:profiles!teacher_id (id, full_name, avatar_url)`)
         .eq('classroom_id', classroomId)
         .eq('is_deleted', false)
-        .gte('created_at', sevenDaysAgoIso)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false }),
 
@@ -7745,8 +8285,28 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
             .from('ai_challenge_submissions')
             .select('id, challenge_id, status, submitted_at')
             .eq('student_id', userId)
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+
+      // 9. User-specific read states
+      fetchUserReads()
     ]);
+
+    // Build set of announcement IDs marked as read by this user
+    const readAnnouncementIds = new Set(
+      Array.isArray(authData.user?.user_metadata?.read_announcements)
+        ? authData.user.user_metadata.read_announcements
+        : []
+    );
+    (userReadsRows || []).forEach((r) => {
+      if (r.announcement_id) readAnnouncementIds.add(String(r.announcement_id));
+      if (r.message_id) {
+        readAnnouncementIds.add(String(r.message_id));
+        readAnnouncementIds.add(`msg-${r.message_id}`);
+      }
+    });
+
+    const isMarkedRead = (key, rawId) =>
+      readAnnouncementIds.has(key) || (rawId && readAnnouncementIds.has(String(rawId)));
 
     const completedTaskIds = new Set(
       (studentSubmissions || [])
@@ -7790,18 +8350,20 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     // A. Tasks
     (tasks || []).forEach(t => {
       const key = `task-${t.id}`;
-      if (seen.has(key)) return;
+      if (seen.has(key) || isMarkedRead(key, t.id)) return;
 
       // 1. Completion rule: if student completed, hide from announcement feed
       if (!isTeacher && completedTaskIds.has(t.id)) return;
 
-      // 2. Due date rule: if past due, hide from active announcement feed
-      if (t.due_date && new Date(t.due_date).getTime() < nowMs) return;
-
-      // 3. 7-day rule: if older than 7 days and no future due date, hide
+      // 2. Expiration rule:
+      // Rule A: If task has a due_date, expires_at = due_date
+      // Rule B: If task has no due_date, expires_at = created_at + 3 days
       const createdMs = new Date(t.created_at || nowIso).getTime();
-      const hasFutureDue = t.due_date && new Date(t.due_date).getTime() >= nowMs;
-      if (createdMs < sevenDaysAgo.getTime() && !hasFutureDue) return;
+      const expiresMs = t.due_date
+        ? new Date(t.due_date).getTime()
+        : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS;
+
+      if (expiresMs <= nowMs) return;
 
       seen.add(key);
       const isDueSoon = t.due_date && (new Date(t.due_date).getTime() - nowMs < 86400000 * 2);
@@ -7813,6 +8375,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         description: t.instructions || 'Complete the assignment and submit your work before the deadline.',
         createdAt: t.created_at || nowIso,
         dueDate: t.due_date || null,
+        expiresAt: new Date(expiresMs).toISOString(),
         points: t.points || 100,
         statusBadge: isDueSoon ? 'Due Soon' : 'Available',
         rawItem: t
@@ -7822,18 +8385,19 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     // B. Exams
     (exams || []).forEach(e => {
       const key = `exam-${e.id}`;
-      if (seen.has(key)) return;
+      if (seen.has(key) || isMarkedRead(key, e.id)) return;
 
       // 1. Completion rule: if student submitted, hide from announcement feed
       if (!isTeacher && completedExamIds.has(e.id)) return;
 
-      // 2. Expiration rule: if exam has ends_at and ends_at < now, hide
-      if (e.ends_at && new Date(e.ends_at).getTime() < nowMs) return;
-
-      // 3. 7-day rule: if older than 7 days and not future scheduled, hide
+      // 2. Expiration rule: if exam has ends_at, expires at ends_at; else created_at + 3 days (unless future scheduled)
       const createdMs = new Date(e.created_at || nowIso).getTime();
       const isFutureScheduled = e.starts_at && new Date(e.starts_at).getTime() > nowMs;
-      if (createdMs < sevenDaysAgo.getTime() && !isFutureScheduled) return;
+      const expiresMs = e.ends_at
+        ? new Date(e.ends_at).getTime()
+        : (isFutureScheduled ? new Date(e.starts_at).getTime() + ANNOUNCEMENT_DEFAULT_TTL_MS : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS);
+
+      if (expiresMs <= nowMs) return;
 
       seen.add(key);
       const qCount = extractQuestionCount(e);
@@ -7845,6 +8409,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         description: e.description || e.instructions || 'Comprehensive timed assessment covering class curriculum.',
         createdAt: e.created_at || nowIso,
         scheduledAt: e.starts_at || null,
+        expiresAt: new Date(expiresMs).toISOString(),
         points: e.total_marks || 100,
         questionCount: qCount,
         durationMinutes: e.duration_minutes || 60,
@@ -7856,13 +8421,19 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     // C. Live Quiz
     (liveQuiz || []).forEach(s => {
       const key = `livequiz-${s.id}`;
-      if (seen.has(key)) return;
+      if (seen.has(key) || isMarkedRead(key, s.id)) return;
       if (s.status === 'completed' || s.status === 'finished' || s.status === 'cancelled') return;
+
+      const createdMs = new Date(s.created_at || nowIso).getTime();
+      const expiresMs = s.expires_at
+        ? new Date(s.expires_at).getTime()
+        : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS;
+      if (expiresMs <= nowMs) return;
 
       seen.add(key);
       const isLive = s.status === 'in_progress' || s.status === 'reveal';
       const isScheduled = s.status === 'scheduled' || Boolean(s.scheduled_start_at);
-      const qCount = s.quiz?.questions?.length || 15;
+      const qCount = s.quiz?.questions?.length || 10;
 
       activeItems.push({
         id: key,
@@ -7872,6 +8443,7 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         description: s.quiz?.description || 'Join the live quiz session and test your knowledge with real-time class leaderboards!',
         createdAt: s.started_at || s.created_at || nowIso,
         scheduledAt: s.scheduled_start_at || s.started_at || null,
+        expiresAt: new Date(expiresMs).toISOString(),
         questionCount: qCount,
         statusBadge: isLive ? 'Live Now' : isScheduled ? 'Starting Soon' : 'Active',
         rawItem: s
@@ -7881,14 +8453,16 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
     // D. Competitions
     (challenges || []).forEach(c => {
       const key = `comp-${c.id}`;
-      if (seen.has(key)) return;
+      if (seen.has(key) || isMarkedRead(key, c.id)) return;
 
       if (!isTeacher && completedChallengeIds.has(c.id)) return;
-      if (c.due_date && new Date(c.due_date).getTime() < nowMs) return;
 
       const createdMs = new Date(c.created_at || nowIso).getTime();
-      const hasFutureDue = c.due_date && new Date(c.due_date).getTime() >= nowMs;
-      if (createdMs < sevenDaysAgo.getTime() && !hasFutureDue) return;
+      const expiresMs = c.due_date
+        ? new Date(c.due_date).getTime()
+        : createdMs + ANNOUNCEMENT_DEFAULT_TTL_MS;
+
+      if (expiresMs <= nowMs) return;
 
       seen.add(key);
       activeItems.push({
@@ -7899,28 +8473,38 @@ app.get('/api/classes/:classroomId/announcements', async (req, res) => {
         description: c.description || c.instructions || 'Submit your creative work for AI-powered evaluation.',
         createdAt: c.created_at || nowIso,
         dueDate: c.due_date || null,
+        expiresAt: new Date(expiresMs).toISOString(),
         points: c.points || 100,
         statusBadge: 'Active',
         rawItem: c
       });
     });
 
-    // E. Teacher Messages (Strict 7-day lifecycle)
+    // E. Teacher Announcements (Rule A: deadline, Rule B: created_at + 3 days)
     (messages || []).forEach(m => {
       const key = `msg-${m.id}`;
-      if (seen.has(key)) return;
-      seen.add(key);
+      if (seen.has(key) || isMarkedRead(key, m.id)) return;
 
+      const parsed = parseAnnouncementRecord(m);
+      if (parsed.expiresAtMs <= nowMs) return;
+
+      seen.add(key);
       activeItems.push({
         id: key,
         rawId: m.id,
         type: 'announcement',
         title: m.is_pinned ? '📌 Pinned Announcement' : 'Classroom Announcement',
-        description: m.message,
+        description: parsed.cleanMessage,
         createdAt: m.created_at || nowIso,
+        dueDate: parsed.hasExplicitDeadline ? parsed.expiresAtIso : null,
+        expiresAt: parsed.expiresAtIso,
         isPinned: Boolean(m.is_pinned),
         authorName: m.teacher?.full_name || 'Class Teacher',
-        rawItem: m
+        rawItem: {
+          ...m,
+          message: parsed.cleanMessage,
+          expires_at: parsed.expiresAtIso
+        }
       });
     });
 
@@ -8194,6 +8778,20 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
     if (tErr || !task) {
       console.warn(`[TaskSubmit] Task not found: ${taskId}`);
       return res.status(404).json({ success: false, error: 'Task not found.', code: 'TASK_NOT_FOUND' });
+    }
+
+    // Validate minimum required word count for typed responses
+    const requiredWords = Number(task.required_word_length || task.settings?.required_word_length || 0);
+    if (!hasHandwrittenWork && (!fileUrls || fileUrls.length === 0) && (!studentAnswers || studentAnswers.length === 0) && requiredWords > 0) {
+      const rawTokens = String(textResponse || '').trim().split(/\s+/).filter(Boolean);
+      const actualWords = rawTokens.filter((tok) => tok.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').length > 0).length;
+      if (actualWords < requiredWords) {
+        return res.status(400).json({
+          success: false,
+          code: 'WORD_COUNT_TOO_SHORT',
+          error: `Your response has ${actualWords} words, but at least ${requiredWords} words are required (${requiredWords - actualWords} more words needed).`
+        });
+      }
     }
 
     // 1. Check existing submission to reuse ID or check duplicate submission

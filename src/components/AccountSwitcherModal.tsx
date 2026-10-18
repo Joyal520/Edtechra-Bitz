@@ -112,7 +112,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
             <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-50/70 via-teal-50/50 to-white border-2 border-emerald-500/30 shadow-xs flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 {/* Avatar */}
-                <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 p-[2px] shadow-2xs shrink-0 overflow-hidden">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#00d2ff] via-[#0ea5e9] to-[#2563eb] p-[2px] shadow-[0_0_12px_rgba(14,165,233,0.45)] shrink-0 overflow-hidden">
                   {currentAvatarUrl ? (
                     <img
                       src={currentAvatarUrl}

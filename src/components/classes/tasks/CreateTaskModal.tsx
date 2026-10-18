@@ -16,6 +16,14 @@ import {
 import { ClassroomMember } from '@/types/classroom';
 import { classroomTaskService } from '@/services/classroomTaskService';
 import { supabase } from '@/lib/supabase';
+import {
+  WRITING_TYPES,
+  WORD_LENGTH_PRESETS,
+  WritingType,
+  generateWritingInstruction,
+  updateInstructionWordCount,
+  validateRequiredWordLength
+} from '@/utils/writingInstructionGenerator';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -35,8 +43,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 }) => {
   // Form State
   const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
-  const [instructions, setInstructions] = useState('');
+  const [writingType, setWritingType] = useState<string>('Creative Writing');
+  const [requiredWordLengthInput, setRequiredWordLengthInput] = useState<string>('50');
+  const [instructions, setInstructions] = useState<string>(() =>
+    generateWritingInstruction('Creative Writing', 50)
+  );
+  const [hasTeacherEditedInstructions, setHasTeacherEditedInstructions] = useState(false);
   const [points, setPoints] = useState<number>(20);
   const [dueDate, setDueDate] = useState('');
   const [submissionMethod, setSubmissionMethod] = useState<'both' | 'text' | 'upload'>('both');
@@ -48,6 +60,30 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleWritingTypeChange = (newType: string) => {
+    setWritingType(newType);
+    const wordCheck = validateRequiredWordLength(requiredWordLengthInput);
+    const wordCount = wordCheck.valid && wordCheck.value ? wordCheck.value : 50;
+    const generated = generateWritingInstruction(newType, wordCount, title);
+    setInstructions(generated);
+    setHasTeacherEditedInstructions(false);
+  };
+
+  const handleWordLengthChange = (rawVal: string) => {
+    // Strip negative signs or non-digit characters immediately if typed
+    const sanitized = rawVal.replace(/[^\d]/g, '');
+    setRequiredWordLengthInput(sanitized);
+
+    const check = validateRequiredWordLength(sanitized);
+    if (check.valid && check.value) {
+      if (!hasTeacherEditedInstructions || !instructions.trim()) {
+        setInstructions(generateWritingInstruction(writingType, check.value, title));
+      } else {
+        setInstructions((prev) => updateInstructionWordCount(prev, check.value!, writingType));
+      }
+    }
+  };
 
   useEffect(() => {
     if (isOpen && classroomId && students.length === 0 && supabase) {
@@ -135,6 +171,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       return;
     }
 
+    const wordValidation = validateRequiredWordLength(requiredWordLengthInput);
+    if (!wordValidation.valid || !wordValidation.value) {
+      setError(wordValidation.error || 'Required Word Length must be a positive whole number.');
+      return;
+    }
+
     if (points <= 0 || isNaN(points)) {
       setError('Total Points must be a positive number.');
       return;
@@ -149,11 +191,17 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     setError(null);
 
     try {
+      const finalInstructions =
+        instructions.trim() ||
+        generateWritingInstruction(writingType, wordValidation.value, title.trim());
+
       const res = await classroomTaskService.createTask({
         classroomId,
         title: title.trim(),
-        subtitle: subtitle.trim() || undefined,
-        instructions: instructions.trim() || undefined,
+        subtitle: writingType.trim() || 'Creative Writing',
+        writingType: writingType.trim() || 'Creative Writing',
+        requiredWordLength: wordValidation.value,
+        instructions: finalInstructions,
         category: 'assignment',
         points: Number(points),
         dueDate: dueDate ? new Date(dueDate).toISOString() : null,
@@ -163,7 +211,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           show_correct_answers: true,
           allow_retry: false,
           enable_ai_feedback: true,
-          submission_method: submissionMethod
+          submission_method: submissionMethod,
+          writing_type: writingType.trim() || 'Creative Writing',
+          required_word_length: wordValidation.value
         }
       });
 
@@ -235,7 +285,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
           )}
 
-          {/* Section 1: Title & Topic */}
+          {/* Section 1: Title, Writing Type, Required Word Length & Auto-Generated Instructions */}
           <div className="bg-white p-5 rounded-3xl border-2 border-[#C9E5E2] shadow-xs space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-black text-[#173B3F] flex items-center gap-1">
@@ -245,28 +295,82 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 type="text"
                 required
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., My Favourite Hobby, Chapter 4 Summary, Math Problem Set"
+                onChange={(e) => {
+                  const newTitle = e.target.value;
+                  setTitle(newTitle);
+                  const check = validateRequiredWordLength(requiredWordLengthInput);
+                  if (!hasTeacherEditedInstructions && check.valid && check.value) {
+                    setInstructions(generateWritingInstruction(writingType, check.value, newTitle));
+                  }
+                }}
+                placeholder="e.g., My Favourite Hobby, A Surprising Day at School, Climate Change Essay"
                 style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
                 className="w-full px-4 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-sm font-black text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Writing Type Dropdown (Replaces Topic / Subtitle) */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-[#173B3F]">
-                  Topic / Subtitle <span className="text-[#36565A] font-semibold">(Optional)</span>
+                  Writing Type <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={subtitle}
-                  onChange={(e) => setSubtitle(e.target.value)}
-                  placeholder="e.g., Creative Writing, Unit 2"
+                <select
+                  value={writingType}
+                  onChange={(e) => handleWritingTypeChange(e.target.value as WritingType)}
                   style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                  className="w-full px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
-                />
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs cursor-pointer"
+                >
+                  {WRITING_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
               </div>
 
+              {/* Required Word Length */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-[#173B3F]">
+                  Required Word Length <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={requiredWordLengthInput}
+                    onChange={(e) => handleWordLengthChange(e.target.value)}
+                    placeholder="50"
+                    style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
+                    className="w-full pl-3.5 pr-16 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
+                  />
+                  <span className="absolute right-3 text-[11px] font-extrabold text-[#36565A] pointer-events-none">
+                    words
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                  {WORD_LENGTH_PRESETS.map((preset) => {
+                    const isActive = Number(requiredWordLengthInput) === preset;
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleWordLengthChange(String(preset))}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-black transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-[#087477] text-white shadow-2xs'
+                            : 'bg-[#E8F7F5] text-[#087477] hover:bg-[#D4EFEC]'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Total Points / Max Score */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-[#173B3F]">
                   Total Points / Max Score <span className="text-rose-500">*</span>
@@ -279,24 +383,45 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   value={points}
                   onChange={(e) => setPoints(Number(e.target.value))}
                   style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                  className="w-full px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
+                  className="w-full px-3.5 py-2.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all shadow-2xs"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-black text-[#173B3F]">
-                Instructions & Prompt <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-black text-[#173B3F]">
+                  Instructions & Prompt <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const check = validateRequiredWordLength(requiredWordLengthInput);
+                    const wc = check.valid && check.value ? check.value : 50;
+                    setInstructions(generateWritingInstruction(writingType, wc, title));
+                    setHasTeacherEditedInstructions(false);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-black text-[#087477] hover:text-[#065e60] bg-[#E8F7F5] px-2.5 py-1 rounded-lg border border-[#C9E5E2] cursor-pointer transition-colors"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Auto-Generate Prompt</span>
+                </button>
+              </div>
               <textarea
                 rows={4}
                 required
                 value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="Give students clear instructions. Example: Write a paragraph about your favourite hobby, describing why you enjoy it and what you have learned from it."
+                onChange={(e) => {
+                  setInstructions(e.target.value);
+                  setHasTeacherEditedInstructions(true);
+                }}
+                placeholder="Give students clear instructions..."
                 style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all resize-none leading-relaxed shadow-2xs"
+                className="w-full p-3.5 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs sm:text-sm font-semibold text-[#172B2F] placeholder:text-[#475569] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all resize-y leading-relaxed shadow-2xs"
               />
+              <p className="text-[11px] text-[#36565A] font-semibold">
+                Automatically generated from your selected Writing Type and Required Word Length. You can freely edit this prompt before assigning.
+              </p>
             </div>
           </div>
 

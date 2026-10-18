@@ -223,7 +223,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return null;
   }, [isTotalTimed, session.started_at, session.expires_at, totalDurationSec]);
 
-  const [totalTimeLeft, setTotalTimeLeft] = useState<number>(() => {
+  const [, setTotalTimeLeft] = useState<number>(() => {
     if (!isTotalTimed) return 0;
     const expMs = getEffectiveExpirationMs();
     if (expMs) {
@@ -295,6 +295,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }
 
     const isNewQuestion = activeQIndexRef.current !== idx;
+    const durationSec = state.question_duration_sec || q.durationSec || session.quiz?.timer_seconds || 20;
     if (isNewQuestion) {
       activeQIndexRef.current = idx;
       setSelectedIndex(null);
@@ -305,11 +306,11 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       setPointsEarned(0);
       setShowConfetti(false);
       setSubmitError(null);
+      setQuestionTimeLeft(durationSec);
       hasTriggeredFeedbackRef.current = null;
       expirySyncedForRef.current = null;
     }
 
-    const durationSec = state.question_duration_sec || q.durationSec || 20;
     setQuestionData({
       qIndex: idx,
       question: q.question || `Question ${idx + 1}`,
@@ -335,7 +336,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
       setRevealData({ correctIndex: state.correct_index, explanation: q.explanation });
       setIsLocked(true);
     }
-  }, [handleFinished]);
+  }, [handleFinished, session.quiz?.timer_seconds]);
 
   const applyRef = useRef(applyServerState);
   useEffect(() => {
@@ -455,37 +456,51 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     }
   }, [questionData, answerResult]);
 
-  // ---- countdown: DISPLAY ONLY, using server-clock estimate -------------------------
+  // ---- Per-Question Countdown: locks answer on 0 and auto-advances to next question ----
   const deadlineMs = questionData?.deadlineMs;
   const countdownQIdx = questionData?.qIndex;
+  const isQuestionTimed = session.quiz?.timer_enabled !== false && (questionData?.durationSec ?? 20) < 3600;
   useEffect(() => {
-    if (!deadlineMs || countdownQIdx === undefined) return;
+    if (!isQuestionTimed || !deadlineMs || countdownQIdx === undefined) return;
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((deadlineMs - liveQuizService.getServerNowMs()) / 1000));
       setQuestionTimeLeft(remaining);
       if (remaining <= 0 && expirySyncedForRef.current !== countdownQIdx) {
-        // Ask the server what happened (it decides). One request per question.
+        // 1. Lock further answers for this question
         expirySyncedForRef.current = countdownQIdx;
+        setIsLocked(true);
+        // 2. Sync with server (enters reveal or advances) and auto-advance to next question
         syncWithDatabase();
+        setTimeout(() => {
+          liveQuizService.advanceQuestion(session.id, countdownQIdx).finally(() => {
+            syncWithDatabase();
+          });
+        }, 1200);
       }
     };
     tick();
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
-  }, [deadlineMs, countdownQIdx, syncWithDatabase]);
+  }, [isQuestionTimed, deadlineMs, countdownQIdx, session.id, syncWithDatabase]);
 
   // ---- after reveal, ask the server to move on at its reveal boundary (server decides) ----
   useEffect(() => {
     if (!revealData || !deadlineMs) return;
     const REVEAL_MS = 3500;
     const delay = Math.max(250, deadlineMs + REVEAL_MS - liveQuizService.getServerNowMs() + 200);
-    const t1 = setTimeout(() => syncWithDatabase(), delay);
+    const t1 = setTimeout(() => {
+      if (typeof countdownQIdx === 'number') {
+        liveQuizService.advanceQuestion(session.id, countdownQIdx).finally(() => syncWithDatabase());
+      } else {
+        syncWithDatabase();
+      }
+    }, delay);
     const t2 = setTimeout(() => syncWithDatabase(), delay + 1500);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [revealData, deadlineMs, syncWithDatabase]);
+  }, [revealData, deadlineMs, countdownQIdx, session.id, syncWithDatabase]);
 
   // ---- total quiz timer (display only; server controls session lifecycle) ----------
   useEffect(() => {
@@ -582,10 +597,10 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
 
   // Auto-submit pending choice if countdown reaches <= 1s
   useEffect(() => {
-    if (questionTimeLeft <= 1 && selectedDisplayIndex !== null && !isLocked && !isSubmitting && !revealData) {
+    if (isQuestionTimed && questionTimeLeft <= 1 && selectedDisplayIndex !== null && !isLocked && !isSubmitting && !revealData) {
       handleSubmitAnswer();
     }
-  }, [questionTimeLeft, selectedDisplayIndex, isLocked, isSubmitting, revealData]);
+  }, [isQuestionTimed, questionTimeLeft, selectedDisplayIndex, isLocked, isSubmitting, revealData]);
 
   const handleToggleSound = () => {
     quizAudioService.playClick();
@@ -606,7 +621,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
         </p>
 
         <div className="flex items-center gap-3 pt-2">
-          {isTotalTimed && <Timer seconds={totalTimeLeft} variant="pill" />}
+          {isQuestionTimed && <Timer seconds={questionTimeLeft} variant="pill" />}
 
           <button
             type="button"
@@ -625,10 +640,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const isSelectedIncorrect = Boolean(answerResult && !answerResult.isCorrect);
 
   const categoryName = session.quiz?.category || 'Grammar';
-  const remainingQuestionsCount = Math.max(0, questionData.totalQuestions - questionData.qIndex - 1);
-  const headerTimerSec = isTotalTimed
-    ? totalTimeLeft
-    : remainingQuestionsCount * (questionData.durationSec || 20) + questionTimeLeft;
+  const headerTimerSec = isQuestionTimed ? questionTimeLeft : null;
 
   const displayPoints = totalScore > 0 ? totalScore : 10;
 
@@ -684,7 +696,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           totalQuestions={questionData.totalQuestions}
           category={categoryName}
           points={displayPoints}
-          questionTimeLeft={questionTimeLeft}
+          questionTimeLeft={isQuestionTimed ? questionTimeLeft : null}
           streak={streak}
         />
 

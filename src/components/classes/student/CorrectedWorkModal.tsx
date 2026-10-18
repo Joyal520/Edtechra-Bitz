@@ -314,7 +314,7 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-50/50 space-y-6">
+        <div className="p-4 sm:p-6 lg:p-7 overflow-y-auto flex-1 bg-slate-50/50 space-y-6">
           
           {/* 1. Tab: Corrected Work */}
           {activeTab === 'work' && (
@@ -324,39 +324,39 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
               {correctedText ? (
                 <div className="space-y-6">
                   {/* Side-by-Side Comparison on Desktop, Stacked on Mobile */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     {/* Left: Original Submission */}
-                    <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-2.5 flex flex-col justify-between shadow-2xs">
-                      <div className="space-y-2">
+                    <div className="p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-3 flex flex-col justify-between shadow-2xs">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                          <span className="text-sm font-black uppercase tracking-wider text-slate-800">
                             YOUR ORIGINAL WORK
                           </span>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase bg-slate-100 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-slate-600 uppercase bg-slate-100 px-2.5 py-0.5 rounded-full">
                             Student Draft
                           </span>
                         </div>
-                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                        <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 text-sm sm:text-base lg:text-[17px] font-medium leading-relaxed lg:leading-[1.75] whitespace-pre-wrap">
                           {originalText || 'No original text recorded.'}
                         </div>
                       </div>
                     </div>
 
                     {/* Right: AI Corrected & Polished Version */}
-                    <div className="p-5 bg-emerald-50/50 border-2 border-emerald-200/80 rounded-2xl space-y-2.5 flex flex-col justify-between shadow-2xs">
-                      <div className="space-y-2">
+                    <div className="p-5 sm:p-6 bg-emerald-50/50 border-2 border-emerald-200/80 rounded-2xl space-y-3 flex flex-col justify-between shadow-2xs">
+                      <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            <span className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                            <span className="text-sm font-black uppercase tracking-wider text-emerald-900">
                               CORRECTED WORK
                             </span>
                           </div>
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
                             Polished English
                           </span>
                         </div>
-                        <div className="p-3.5 bg-white rounded-xl border border-emerald-100 text-emerald-950 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap selection:bg-emerald-100 shadow-2xs">
+                        <div className="p-4 sm:p-5 bg-white rounded-xl border border-emerald-100 text-emerald-950 text-sm sm:text-base lg:text-[17px] font-medium leading-relaxed lg:leading-[1.75] whitespace-pre-wrap selection:bg-emerald-100 shadow-2xs">
                           {correctedText}
                         </div>
                       </div>
@@ -364,141 +364,141 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
                   </div>
 
                   {/* 14-Point English Inspection Breakdown */}
-                  <div className="p-5 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
+                  <div className="p-5 sm:p-6 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                      <h4 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-amber-500" />
                         <span>14-Point English Analysis</span>
                       </h4>
-                      <span className="text-[11px] font-semibold text-slate-500">
+                      <span className="text-xs font-semibold text-slate-500">
                         Detailed feedback & explanations
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Grammar & Syntax */}
-                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800">Grammar & Syntax</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <span className="text-sm font-black text-slate-800">Grammar & Syntax</span>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {grammarIssues.length} issue{grammarIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {grammarIssues.length > 0 ? (
-                          <ul className="space-y-2">
+                          <ul className="space-y-2.5">
                             {grammarIssues.map((err, i) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ No grammar errors detected
                           </p>
                         )}
                       </div>
 
                       {/* Spelling */}
-                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800">Spelling</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <span className="text-sm font-black text-slate-800">Spelling</span>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {spellingIssues.length} issue{spellingIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {spellingIssues.length > 0 ? (
-                          <ul className="space-y-2">
+                          <ul className="space-y-2.5">
                             {spellingIssues.map((err, i) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ No spelling mistakes detected
                           </p>
                         )}
                       </div>
 
                       {/* Vocabulary */}
-                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800">Vocabulary</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <span className="text-sm font-black text-slate-800">Vocabulary</span>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {vocabIssues.length} issue{vocabIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {vocabIssues.length > 0 ? (
-                          <ul className="space-y-2">
+                          <ul className="space-y-2.5">
                             {vocabIssues.map((err, i) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ Vocabulary is appropriate
                           </p>
                         )}
                       </div>
 
                       {/* Sentence Structure */}
-                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2">
+                      <div className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200 space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-800">Sentence Structure</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          <span className="text-sm font-black text-slate-800">Sentence Structure</span>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             {structureIssues.length} issue{structureIssues.length !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {structureIssues.length > 0 ? (
-                          <ul className="space-y-2">
+                          <ul className="space-y-2.5">
                             {structureIssues.map((err, i) => (
-                              <li key={i} className="text-xs text-slate-700 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1">
-                                <div>
+                              <li key={i} className="text-sm text-slate-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+                                <div className="text-sm sm:text-[15px]">
                                   <span className="line-through text-rose-600 font-bold">"{err.original}"</span>
                                   <span className="mx-1.5 text-slate-400 font-bold">→</span>
                                   <span className="text-emerald-700 font-black">"{err.correction}"</span>
                                 </div>
                                 {err.explanation && (
-                                  <p className="text-[11px] text-slate-500 leading-snug">
-                                    <strong className="text-slate-700">Why:</strong> {err.explanation}
+                                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                                    <strong className="text-slate-800">Why:</strong> {err.explanation}
                                   </p>
                                 )}
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/80 p-2 rounded-lg border border-emerald-100">
+                          <p className="text-sm text-emerald-700 font-medium bg-emerald-50/80 p-3 rounded-lg border border-emerald-100">
                             ✓ Sentence structure is clear
                           </p>
                         )}
@@ -507,14 +507,14 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
 
                     {/* What You Did Well (Strengths) */}
                     {strengths.length > 0 && (
-                      <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
-                        <h4 className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <div className="p-4 sm:p-5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                        <h4 className="text-sm font-black text-emerald-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           <span>WHAT YOU DID WELL</span>
                         </h4>
-                        <ul className="space-y-1 pl-1">
+                        <ul className="space-y-1.5 pl-1">
                           {strengths.map((s, i) => (
-                            <li key={i} className="text-xs text-emerald-950 font-medium flex items-start gap-2">
+                            <li key={i} className="text-sm sm:text-[15px] text-emerald-950 font-medium flex items-start gap-2 leading-relaxed">
                               <span className="text-emerald-600 font-black">•</span>
                               <span>{s}</span>
                             </li>
@@ -525,12 +525,12 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
 
                     {/* Next Step */}
                     {nextStepText && (
-                      <div className="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1">
-                        <h4 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <div className="p-4 sm:p-5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1.5">
+                        <h4 className="text-sm font-black text-indigo-900 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-indigo-600" />
                           <span>NEXT STEP</span>
                         </h4>
-                        <p className="text-xs text-indigo-950 font-medium leading-relaxed">
+                        <p className="text-sm sm:text-[15px] text-indigo-950 font-medium leading-relaxed">
                           {nextStepText}
                         </p>
                       </div>
@@ -635,17 +635,17 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
           {activeTab === 'original' && (
             <div className="space-y-4">
               {originalText ? (
-                <div className="p-5 sm:p-6 bg-white border-2 border-slate-200 rounded-2xl space-y-3 shadow-2xs">
+                <div className="p-5 sm:p-6 bg-white border-2 border-slate-200 rounded-2xl space-y-3.5 shadow-2xs">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black uppercase text-slate-700 flex items-center gap-2">
+                    <h4 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
                       <FileText className="w-4 h-4 text-indigo-600" />
                       <span>Original Student Submission</span>
                     </h4>
-                    <span className="text-[11px] font-bold text-slate-500">
+                    <span className="text-xs font-bold text-slate-500">
                       {originalText.trim().split(/\s+/).filter(Boolean).length} words
                     </span>
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-slate-900 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-wrap">
+                  <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-100 text-slate-900 text-sm sm:text-base lg:text-[17px] font-medium leading-relaxed lg:leading-[1.75] whitespace-pre-wrap">
                     {originalText}
                   </div>
                   {correctedText && (
@@ -689,39 +689,39 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
             <div className="space-y-5">
               {/* Overall Feedback Commentary */}
               {item.feedback ? (
-                <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-2 shadow-2xs">
+                <div className="p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-2xs">
                   <div className="flex items-center gap-2 text-slate-800">
                     <Sparkles className="w-4 h-4 text-[#026fc3]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Evaluation Comments</h4>
+                    <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">Evaluation Comments</h4>
                   </div>
-                  <p className="text-xs sm:text-sm text-slate-900 leading-relaxed whitespace-pre-wrap font-medium">
+                  <p className="text-sm sm:text-base lg:text-[17px] text-slate-900 leading-relaxed lg:leading-[1.75] whitespace-pre-wrap font-medium">
                     {item.feedback}
                   </p>
                 </div>
               ) : (
-                <div className="p-4 bg-slate-100/70 border border-slate-200 rounded-2xl text-xs text-slate-500 font-medium text-center">
+                <div className="p-4 bg-slate-100/70 border border-slate-200 rounded-2xl text-sm text-slate-500 font-medium text-center">
                   No written commentary recorded for this submission.
                 </div>
               )}
 
               {/* Rubric Breakdown Progress Bars (if available) */}
               {rubricBreakdown.length > 0 && (
-                <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-3.5 shadow-2xs">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                <div className="p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-2xs">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">
                     Rubric Criteria Breakdown
                   </h4>
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     {rubricBreakdown.map((crit, idx) => {
                       const maxVal = crit.max || 10;
                       const scoreVal = crit.score || 0;
                       const pct = Math.round((scoreVal / maxVal) * 100);
                       return (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                        <div key={idx} className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-700">
                             <span>{crit.criterion}</span>
                             <span className="text-slate-900">{scoreVal} / {maxVal} ({pct}%)</span>
                           </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                             <div
                               className={`h-full transition-all ${
                                 pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-500' : 'bg-rose-500'
@@ -739,77 +739,77 @@ export const CorrectedWorkModal: React.FC<CorrectedWorkModalProps> = ({
               {/* Strengths & Areas to Practice */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Strengths */}
-                <div className="p-4 sm:p-5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2.5">
+                <div className="p-5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
                   <div className="flex items-center gap-2 text-emerald-900">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <h4 className="text-xs font-black uppercase tracking-wider">What You Did Well</h4>
+                    <h4 className="text-sm font-black uppercase tracking-wider">What You Did Well</h4>
                   </div>
                   {strengths.length > 0 ? (
-                    <ul className="space-y-1.5 pl-1">
+                    <ul className="space-y-2 pl-1">
                       {strengths.map((str: string, idx: number) => (
-                        <li key={idx} className="text-xs text-emerald-950 flex items-start gap-2 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                        <li key={idx} className="text-sm sm:text-[15px] text-emerald-950 flex items-start gap-2 font-medium leading-relaxed">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0" />
                           <span>{str}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-emerald-800 italic">Solid submission demonstrating comprehension.</p>
+                    <p className="text-sm text-emerald-800 italic">Solid submission demonstrating comprehension.</p>
                   )}
                 </div>
 
                 {/* Areas to Practice */}
-                <div className="p-4 sm:p-5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2.5">
+                <div className="p-5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
                   <div className="flex items-center gap-2 text-amber-900">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <h4 className="text-xs font-black uppercase tracking-wider">Areas to Practice</h4>
+                    <h4 className="text-sm font-black uppercase tracking-wider">Areas to Practice</h4>
                   </div>
                   {improvements.length > 0 ? (
-                    <ul className="space-y-1.5 pl-1">
+                    <ul className="space-y-2 pl-1">
                       {improvements.map((imp: string, idx: number) => (
-                        <li key={idx} className="text-xs text-amber-950 flex items-start gap-2 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                        <li key={idx} className="text-sm sm:text-[15px] text-amber-950 flex items-start gap-2 font-medium leading-relaxed">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
                           <span>{imp}</span>
                         </li>
                       ))}
                     </ul>
                   ) : mistakesList.length > 0 ? (
-                    <ul className="space-y-1.5 pl-1">
+                    <ul className="space-y-2 pl-1">
                       {mistakesList.slice(0, 3).map((m, idx) => (
-                        <li key={idx} className="text-xs text-amber-950 flex items-start gap-2 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                        <li key={idx} className="text-sm sm:text-[15px] text-amber-950 flex items-start gap-2 font-medium leading-relaxed">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
                           <span>{m.explanation || `Review correction for "${m.original}"`}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-amber-800 italic">No major remedial items highlighted.</p>
+                    <p className="text-sm text-amber-800 italic">No major remedial items highlighted.</p>
                   )}
                 </div>
               </div>
 
               {/* Rubric Criteria if present (legacy object format) */}
               {breakdown.criteria && typeof breakdown.criteria === 'object' && Object.keys(breakdown.criteria).length > 0 && (
-                <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                <div className="p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl space-y-3.5 shadow-2xs">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-slate-800">
                     Rubric & Assessment Criteria
                   </h4>
                   <div className="divide-y divide-slate-100">
                     {Object.entries(breakdown.criteria).map(([criterion, val]: [string, any], idx: number) => (
-                      <div key={idx} className="py-2.5 flex items-start justify-between gap-4 first:pt-0 last:pb-0">
-                        <div className="space-y-0.5">
-                          <div className="text-xs font-bold text-slate-800 capitalize">
+                      <div key={idx} className="py-3 flex items-start justify-between gap-4 first:pt-0 last:pb-0">
+                        <div className="space-y-1">
+                          <div className="text-sm font-bold text-slate-800 capitalize">
                             {criterion.replace(/_/g, ' ')}
                           </div>
                           {typeof val === 'string' && (
-                            <div className="text-[11px] text-slate-600">{val}</div>
+                            <div className="text-xs sm:text-sm text-slate-600">{val}</div>
                           )}
                           {typeof val === 'object' && val?.notes && (
-                            <div className="text-[11px] text-slate-600">{val.notes}</div>
+                            <div className="text-xs sm:text-sm text-slate-600">{val.notes}</div>
                           )}
                         </div>
                         {typeof val === 'object' && val?.score !== undefined && (
-                          <div className="text-xs font-black text-slate-900 shrink-0">
+                          <div className="text-sm font-black text-slate-900 shrink-0">
                             {val.score} {val.max_score ? `/ ${val.max_score}` : 'pts'}
                           </div>
                         )}
