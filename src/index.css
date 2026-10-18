@@ -2018,4 +2018,91 @@ textarea.classroom-announcement-textarea::selection,
   }
 }
 
+/* ========================================================================== */
+/* EDTECHRA LIVE QUIZ PREMIUM LIGHT DESIGN SYSTEM                             */
+/* ========================================================================== */
+
+:root {
+  --edtechra-primary: #087CF5;
+  --edtechra-blue: #087CF5;
+  --edtechra-cyan: #08AEEF;
+  --edtechra-navy: #10245A;
+  --edtechra-light-blue: #EAF7FF;
+  --edtechra-background: #F5FBFF;
+  --edtechra-card: #FFFFFF;
+  --edtechra-border: #DCEBFA;
+  --edtechra-success: #18B981;
+  --edtechra-gold: #F7B928;
+  --edtechra-silver: #AFC2D8;
+  --edtechra-bronze: #E99A62;
+  --edtechra-danger: #F43F7A;
+}
+
+@keyframes lqPodiumRise {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes lqAvatarFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes lqRowSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lqFloatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(3deg);
+  }
+}
+
+.animate-lq-podium-1 {
+  animation: lqPodiumRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.animate-lq-podium-2 {
+  animation: lqPodiumRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.animate-lq-podium-3 {
+  animation: lqPodiumRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+.animate-lq-avatar {
+  animation: lqAvatarFadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+.animate-lq-row {
+  animation: lqRowSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-lq-float {
+  animation: lqFloatSlow 3.5s ease-in-out infinite;
+}
+
+
 

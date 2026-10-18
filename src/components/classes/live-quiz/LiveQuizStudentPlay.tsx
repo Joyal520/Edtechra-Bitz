@@ -1,33 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Clock,
   CheckCircle2,
   XCircle,
-  Lock,
-  Hourglass,
-  Volume2,
-  VolumeX,
-  Check,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  LogOut,
+  Hash,
+  Trophy
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizServerState } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 import { quizAudioService } from '@/services/quizAudioService';
 import { ConfettiCelebration } from './ConfettiCelebration';
+import {
+  QuizHeader,
+  QuizProgress,
+  QuestionCard,
+  AnswerOption,
+  SubmitButton,
+  Timer
+} from './LiveQuizUI';
 
 interface LiveQuizStudentPlayProps {
   session: LiveQuizSession;
   onQuizFinished?: (results: any) => void;
 }
-
-const OPTION_THEMES = [
-  { badgeBg: 'bg-violet-500/15 text-violet-300 border border-violet-500/20', label: 'A' },
-  { badgeBg: 'bg-sky-500/15 text-sky-300 border border-sky-500/20', label: 'B' },
-  { badgeBg: 'bg-amber-500/15 text-amber-300 border border-amber-500/20', label: 'C' },
-  { badgeBg: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20', label: 'D' }
-];
 
 // ---------------------------------------------------------------------------
 // Error Boundary to prevent any blank screen in student player
@@ -59,11 +58,13 @@ class LiveQuizErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryS
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-[60vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-8 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-rose-500/30">
-          <AlertCircle className="w-12 h-12 text-rose-400 animate-pulse" />
-          <h2 className="text-xl font-black">Something went wrong</h2>
-          <p className="text-xs text-slate-300 max-w-sm">
-            We hit an unexpected issue loading the quiz question. Click below to reload your question smoothly.
+        <div className="min-h-[60vh] bg-white text-[#10245A] rounded-[28px] p-8 flex flex-col items-center justify-center text-center space-y-4 shadow-[0_20px_50px_rgba(8,124,245,0.08)] border border-[#DCEBFA] max-w-md mx-auto">
+          <div className="w-14 h-14 rounded-full bg-[#FFF1F5] text-[#F43F7A] flex items-center justify-center">
+            <AlertCircle className="w-8 h-8 animate-pulse" />
+          </div>
+          <h2 className="text-xl font-extrabold text-[#10245A]">Something went wrong</h2>
+          <p className="text-xs sm:text-sm text-[#64748B] max-w-xs font-medium">
+            We hit an unexpected issue loading the quiz question. Tap below to reload smoothly.
           </p>
           <button
             type="button"
@@ -72,9 +73,9 @@ class LiveQuizErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryS
               if (this.props.onReset) this.props.onReset();
               else window.location.reload();
             }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#087CF5] to-[#08AEEF] text-white font-extrabold text-xs sm:text-sm rounded-full shadow-[0_8px_20px_rgba(8,124,245,0.28)] active:scale-95 transition-all cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-4 h-4" />
             <span>Reload Question</span>
           </button>
         </div>
@@ -92,6 +93,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   onQuizFinished
 }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // ---- helpers -------------------------------------------------------------
   const parseOptions = (opts: any): string[] => {
@@ -145,6 +147,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const [totalScore, setTotalScore] = useState(0);
   const [questionTimeLeft, setQuestionTimeLeft] = useState<number>(session.question_duration_sec || 20);
   const [streak, setStreak] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [isMusicMuted, setIsMusicMuted] = useState(() => quizAudioService.isMusicMuted());
   const [showConfetti, setShowConfetti] = useState(false);
@@ -590,36 +593,25 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     setIsMusicMuted(nextMuted);
   };
 
-  const formatTotalTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
   // Fallback Loading / Rehydration View
   if (!questionData || !Array.isArray(questionData.options) || questionData.options.length === 0) {
     return (
-      <div className="min-h-[70vh] bg-gradient-to-br from-[#031528] via-[#092b4e] to-[#0f4477] text-white rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-2xl border border-sky-500/20">
-        <div className="w-12 h-12 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
-        <h2 className="text-xl sm:text-2xl font-black">
+      <div className="w-full max-w-lg mx-auto min-h-[70vh] bg-white text-[#10245A] rounded-[28px] p-8 sm:p-10 flex flex-col items-center justify-center text-center space-y-4 shadow-[0_20px_50px_rgba(8,124,245,0.08)] border border-[#DCEBFA]">
+        <div className="w-12 h-12 border-4 border-[#087CF5] border-t-transparent rounded-full animate-spin mx-auto" />
+        <h2 className="text-xl sm:text-2xl font-extrabold text-[#10245A]">
           Loading Question {((session.current_question_index ?? 0) + 1)}...
         </h2>
-        <p className="text-xs sm:text-sm text-slate-300 max-w-sm font-medium">
-          Synchronizing question data. Question will appear automatically on your screen!
+        <p className="text-xs sm:text-sm text-[#64748B] max-w-xs font-medium">
+          Synchronizing question data. Your question will appear automatically!
         </p>
 
         <div className="flex items-center gap-3 pt-2">
-          {isTotalTimed && (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full border border-white/20 text-xs font-black">
-              <Hourglass className="w-3.5 h-3.5 text-amber-400" />
-              <span>Quiz Timer: {formatTotalTime(totalTimeLeft)}</span>
-            </div>
-          )}
+          {isTotalTimed && <Timer seconds={totalTimeLeft} variant="pill" />}
 
           <button
             type="button"
             onClick={syncWithDatabase}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-sky-400/30 bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 text-xs font-bold transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#BCE3FF] bg-[#EAF7FF] hover:bg-[#D8F0FF] text-[#087CF5] text-xs font-extrabold transition-all cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Refresh Question</span>
@@ -632,259 +624,160 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
   const isSelectedCorrect = Boolean(answerResult?.isCorrect);
   const isSelectedIncorrect = Boolean(answerResult && !answerResult.isCorrect);
 
-  const categoryName = session.quiz?.category || 'Classroom Quiz';
-  const progressPct = Math.round(((questionData.qIndex + 1) / questionData.totalQuestions) * 100);
+  const categoryName = session.quiz?.category || 'Grammar';
+  const remainingQuestionsCount = Math.max(0, questionData.totalQuestions - questionData.qIndex - 1);
+  const headerTimerSec = isTotalTimed
+    ? totalTimeLeft
+    : remainingQuestionsCount * (questionData.durationSec || 20) + questionTimeLeft;
+
+  const displayPoints = totalScore > 0 ? totalScore : 10;
 
   return (
-    <div className="w-full max-w-lg mx-auto min-h-[92vh] sm:min-h-[85vh] flex flex-col justify-between px-2 sm:px-4 py-2 text-white">
-      
+    <div className="relative w-full max-w-[460px] mx-auto my-auto">
       {/* Confetti Celebration Particle Layer */}
       {showConfetti && (
         <ConfettiCelebration onComplete={() => setShowConfetti(false)} durationMs={1500} />
       )}
 
-      {/* 1. TOP HEADER & NAVIGATION */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between gap-3">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center gap-2">
-            <img
-              src="/logo.png"
-              alt="EdTechra"
-              className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-contain"
-            />
-            <span className="font-extrabold text-white text-sm sm:text-base tracking-tight">
-              EDTECHRA
-            </span>
-          </div>
+      {/* Main White Rounded Quiz Card Shell */}
+      <div className="relative bg-white rounded-[28px] p-4 sm:p-6 border border-[#DCEBFA] shadow-[0_20px_50px_rgba(8,124,245,0.08)] space-y-4 sm:space-y-5">
+        {/* 1. HEADER */}
+        <QuizHeader
+          uppercaseBrand={true}
+          isMuted={isMusicMuted}
+          onToggleSound={handleToggleSound}
+          timerSeconds={headerTimerSec}
+          onMenuClick={() => {
+            quizAudioService.playClick();
+            setMenuOpen((prev) => !prev);
+          }}
+        />
 
-          {/* Right Header Controls: Audio & Timer */}
-          <div className="flex items-center gap-2">
+        {/* Quick Menu Popover */}
+        {menuOpen && (
+          <div className="p-3.5 rounded-2xl bg-[#F5FBFF] border border-[#DCEBFA] flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="flex items-center gap-3 text-[#10245A] font-bold">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-[#DCEBFA]">
+                <Hash className="w-3.5 h-3.5 text-[#087CF5]" />
+                <span>PIN: {session.pin}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-[#DCEBFA]">
+                <Trophy className="w-3.5 h-3.5 text-[#F7B928]" />
+                <span>{totalScore} pts</span>
+              </span>
+            </div>
+
             <button
               type="button"
-              onClick={handleToggleSound}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                !isMusicMuted
-                  ? 'bg-slate-800/80 text-sky-400 hover:bg-slate-700/80'
-                  : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-              }`}
-              title={isMusicMuted ? 'Unmute Audio' : 'Mute Audio'}
+              onClick={() => navigate(`/classes/${session.classroom_id}`)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#FFF1F5] hover:bg-[#FFE4EC] text-[#F43F7A] font-extrabold transition-colors cursor-pointer"
             >
-              {isMusicMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Leave</span>
             </button>
-
-            {isTotalTimed && (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800/80 text-slate-300">
-                <Hourglass className="w-3 h-3 text-amber-400" />
-                <span className="font-mono text-[11px]">{formatTotalTime(totalTimeLeft)}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Minimalist Progress Bar */}
-        <div className="w-full h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-sky-400 via-indigo-400 to-violet-500 rounded-full transition-all duration-300"
-            style={{ width: `${Math.max(4, progressPct)}%` }}
-          />
-        </div>
-
-        {/* Typographic Status Row (Clean & Borderless) */}
-        <div className="flex items-center justify-between text-xs pt-0.5">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-300">
-              Question <span className="text-white">{questionData.qIndex + 1}</span> of {questionData.totalQuestions}
-            </span>
-            <span className="text-slate-600">•</span>
-            <span className="font-bold text-indigo-400 uppercase tracking-wider text-[11px]">
-              {categoryName}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {streak > 1 && (
-              <span className="font-bold text-amber-400 flex items-center gap-0.5 text-xs">
-                🔥 {streak}
-              </span>
-            )}
-            <span className="font-mono font-bold text-amber-300 text-xs">
-              {totalScore} pts
-            </span>
-            <span className={`font-mono font-bold text-xs flex items-center gap-1 ${
-              questionTimeLeft <= 5 ? 'text-rose-400 animate-pulse' : 'text-sky-300'
-            }`}>
-              <Clock className="w-3 h-3" />
-              <span>{questionTimeLeft}s</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. QUESTION PRESENTATION (TYPOGRAPHIC FOCUS - NO DECORATIVE IMAGES) */}
-      <div className="my-auto py-6 sm:py-8 text-center sm:text-left">
-        {/* Only display legitimate question image if provided in question data */}
-        {(questionData as any)?.image_url && (
-          <div className="mb-4 max-h-48 overflow-hidden rounded-2xl mx-auto flex items-center justify-center bg-slate-900/50">
-            <img
-              src={(questionData as any).image_url}
-              alt="Question Visual"
-              className="max-h-48 w-auto object-contain rounded-xl"
-            />
           </div>
         )}
 
-        {/* Question Text */}
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-snug">
-          {questionData.question}
-        </h1>
-      </div>
+        {/* 2. PROGRESS BAR & META ROW */}
+        <QuizProgress
+          currentQuestion={questionData.qIndex + 1}
+          totalQuestions={questionData.totalQuestions}
+          category={categoryName}
+          points={displayPoints}
+          questionTimeLeft={questionTimeLeft}
+          streak={streak}
+        />
 
-      {/* 3. REVEAL FEEDBACK (ELEGANT & MINIMALIST) */}
-      {(revealData || answerResult) && (
-        <div className={`py-3 px-4 rounded-2xl text-center font-bold text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-200 mb-3.5 ${
-          isSelectedCorrect
-            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-            : isSelectedIncorrect
-            ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
-            : 'bg-slate-800/80 text-slate-300'
-        }`}>
-          <div className="flex items-center justify-center gap-2">
-            {isSelectedCorrect ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Correct! +{pointsEarned} points</span>
-              </>
-            ) : isSelectedIncorrect ? (
-              <>
-                <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>Incorrect</span>
-              </>
-            ) : (
-              <span>Time's Up</span>
-            )}
-          </div>
-          {revealData?.explanation && (
-            <p className="text-[11px] font-normal text-slate-300 mt-1">
-              {revealData.explanation}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* 4. FOUR INTERACTIVE ANSWER CHOICES */}
-      <div className="space-y-3 w-full">
-        {(questionData.permutation || Array.from({ length: questionData.options?.length || 0 }, (_, i) => i)).map((canonicalIdx, displayIdx) => {
-          const opt = questionData.options[canonicalIdx];
-          const theme = OPTION_THEMES[displayIdx] || OPTION_THEMES[0];
-          const isSelected = selectedDisplayIndex === displayIdx;
-          const isRevealed = Boolean(revealData);
-          const isThisOptionCorrect = revealData && canonicalIdx === revealData.correctIndex;
-          const isThisOptionIncorrectSelection = isRevealed && isSelected && !isThisOptionCorrect;
-
-          let cardStyling = 'bg-[#0f172a]/70 hover:bg-[#152038] border border-white/[0.06] text-slate-100';
-
-          if (isRevealed) {
-            if (isSelected && isThisOptionCorrect) {
-              cardStyling = 'bg-emerald-950/70 border-2 border-emerald-400 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)] scale-[1.01]';
-            } else if (isThisOptionIncorrectSelection) {
-              cardStyling = 'bg-rose-950/70 border-2 border-rose-500 text-rose-100';
-            } else if (isThisOptionCorrect) {
-              cardStyling = 'bg-emerald-950/50 border border-emerald-500/60 text-emerald-100';
-            } else {
-              cardStyling = 'opacity-35 grayscale-[50%] bg-slate-900/40 text-slate-400 border border-transparent';
-            }
-          } else if (isSelected) {
-            cardStyling = 'bg-[#1e1b4b]/80 border-2 border-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.25)] scale-[1.01]';
-          }
-
-          return (
-            <button
-              key={displayIdx}
-              type="button"
-              disabled={isLocked || isSubmitting || isRevealed}
-              onClick={() => handlePickOption(displayIdx)}
-              className={`w-full min-h-[56px] p-3.5 sm:p-4 rounded-2xl text-left flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer ${cardStyling}`}
+        {/* 3. QUESTION CARD & ANSWER OPTIONS */}
+        <QuestionCard
+          question={questionData.question}
+          imageUrl={(questionData as any)?.image_url}
+        >
+          {/* Reveal / Feedback Banner */}
+          {(revealData || answerResult) && (
+            <div
+              className={`py-2.5 px-4 rounded-2xl text-center font-extrabold text-xs sm:text-sm animate-in fade-in zoom-in-95 duration-200 ${
+                isSelectedCorrect
+                  ? 'bg-[#ECFDF5] border border-[#18B981]/40 text-[#065F46]'
+                  : isSelectedIncorrect
+                  ? 'bg-[#FFF1F5] border border-[#F43F7A]/40 text-[#9F1239]'
+                  : 'bg-[#EEF5FC] border border-[#DCEBFA] text-[#10245A]'
+              }`}
             >
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                {/* Letter Circle (A, B, C, D) */}
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 ${theme.badgeBg}`}>
-                  {theme.label}
-                </div>
-                {/* Option Text */}
-                <span className="text-sm sm:text-base font-semibold leading-snug break-words">
-                  {opt}
-                </span>
-              </div>
-
-              {/* Right Selection / State Indicator */}
-              <div className="shrink-0 flex items-center justify-center">
-                {isRevealed && isThisOptionCorrect ? (
-                  <div className="w-5 h-5 rounded-full bg-emerald-400 text-emerald-950 flex items-center justify-center">
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                ) : isRevealed && isThisOptionIncorrectSelection ? (
-                  <div className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center">
-                    <XCircle className="w-3.5 h-3.5 stroke-[3]" />
-                  </div>
-                ) : isSelected ? (
-                  <div className="w-5 h-5 rounded-full bg-indigo-500 border-2 border-indigo-300 flex items-center justify-center text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]">
-                    <Check className="w-3 h-3 stroke-[3]" />
-                  </div>
+              <div className="flex items-center justify-center gap-2">
+                {isSelectedCorrect ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-[#18B981] shrink-0" />
+                    <span>Correct! +{pointsEarned} points</span>
+                  </>
+                ) : isSelectedIncorrect ? (
+                  <>
+                    <XCircle className="w-4 h-4 text-[#F43F7A] shrink-0" />
+                    <span>Incorrect</span>
+                  </>
                 ) : (
-                  <div className="w-5 h-5 rounded-full border-2 border-slate-600/70" />
+                  <span>Time&apos;s Up</span>
                 )}
               </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 5. PRIMARY ACTION ("Submit answer →") */}
-      <div className="pt-5 space-y-2 w-full">
-        {submitError && !revealData && (
-          <div className="text-center text-xs text-rose-300 font-medium py-1.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-            {submitError}
-          </div>
-        )}
-
-        <button
-          type="button"
-          disabled={selectedDisplayIndex === null || isLocked || isSubmitting || Boolean(revealData)}
-          onClick={handleSubmitAnswer}
-          className={`w-full py-4 rounded-2xl font-bold text-sm sm:text-base tracking-wide flex items-center justify-center gap-2 transition-all cursor-pointer ${
-            isLocked && !revealData
-              ? 'bg-sky-500/10 border border-sky-400/20 text-sky-300 cursor-default'
-              : selectedDisplayIndex !== null && !isLocked && !isSubmitting && !revealData
-              ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white shadow-lg shadow-indigo-600/25 active:scale-[0.98]'
-              : isSubmitting
-              ? 'bg-indigo-600/40 text-indigo-200 cursor-wait'
-              : 'bg-slate-800/40 text-slate-500 border border-white/[0.04] cursor-not-allowed'
-          }`}
-        >
-          {isSubmitting ? (
-            <span className="flex items-center gap-2">
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Submitting...</span>
-            </span>
-          ) : isLocked && !revealData ? (
-            <span className="flex items-center gap-2 text-sky-300 text-xs sm:text-sm">
-              <Lock className="w-3.5 h-3.5" />
-              <span>Answer locked • Waiting for players...</span>
-            </span>
-          ) : revealData ? (
-            <span className="text-xs sm:text-sm text-slate-400">Next question coming up...</span>
-          ) : selectedDisplayIndex !== null ? (
-            <span className="flex items-center gap-1.5">
-              <span>Submit answer</span>
-              <span>→</span>
-            </span>
-          ) : (
-            <span>Select an answer above</span>
+              {revealData?.explanation && (
+                <p className="text-[11px] font-semibold text-[#475569] mt-1">
+                  {revealData.explanation}
+                </p>
+              )}
+            </div>
           )}
-        </button>
-      </div>
 
+          {/* 4 Answer Options */}
+          <div className="space-y-2.5 sm:space-y-3 w-full">
+            {(
+              questionData.permutation ||
+              Array.from({ length: questionData.options?.length || 0 }, (_, i) => i)
+            ).map((canonicalIdx, displayIdx) => {
+              const opt = questionData.options[canonicalIdx];
+              const isSelected = selectedDisplayIndex === displayIdx;
+              const isRevealed = Boolean(revealData);
+              const isThisOptionCorrect = Boolean(
+                revealData && canonicalIdx === revealData.correctIndex
+              );
+              const isThisOptionIncorrectSelection = Boolean(
+                isRevealed && isSelected && !isThisOptionCorrect
+              );
+
+              return (
+                <AnswerOption
+                  key={displayIdx}
+                  index={displayIdx}
+                  text={opt}
+                  selected={isSelected}
+                  disabled={isLocked || isSubmitting || isRevealed}
+                  isRevealed={isRevealed}
+                  isCorrectOption={isThisOptionCorrect}
+                  isIncorrectSelection={isThisOptionIncorrectSelection}
+                  onSelect={() => handlePickOption(displayIdx)}
+                />
+              );
+            })}
+          </div>
+
+          {/* 4. SUBMIT BUTTON */}
+          <div className="pt-2 space-y-2 w-full">
+            {submitError && !revealData && (
+              <div className="text-center text-xs text-[#F43F7A] font-bold py-2 px-3 rounded-xl bg-[#FFF1F5] border border-[#FECDD3]">
+                {submitError}
+              </div>
+            )}
+
+            <SubmitButton
+              onClick={handleSubmitAnswer}
+              disabled={selectedDisplayIndex === null}
+              isLoading={isSubmitting}
+              isLocked={isLocked}
+              isReveal={Boolean(revealData)}
+              label="Submit Answer"
+            />
+          </div>
+        </QuestionCard>
+      </div>
     </div>
   );
 };

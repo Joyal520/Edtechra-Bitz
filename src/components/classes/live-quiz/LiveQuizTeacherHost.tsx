@@ -15,7 +15,8 @@ import {
   ArrowRight,
   BarChart2,
   Lightbulb,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizQuestion } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
@@ -29,39 +30,27 @@ interface LiveQuizTeacherHostProps {
 const OPTION_STYLES = [
   {
     label: 'A',
-    gradient: 'from-[#7c3aed] to-[#6d28d9]',
-    border: 'border-purple-400/50',
-    shadow: 'shadow-[0_10px_30px_rgba(124,58,237,0.35)]',
-    badgeText: 'text-purple-700',
-    ring: 'ring-purple-400',
-    glowColor: '#7c3aed'
+    badgeBg: 'bg-[#EDE9FE]',
+    badgeText: 'text-[#6D28D9]',
+    barFill: 'bg-[#EDE9FE]/70'
   },
   {
     label: 'B',
-    gradient: 'from-[#0284c7] to-[#2563eb]',
-    border: 'border-blue-400/50',
-    shadow: 'shadow-[0_10px_30px_rgba(37,99,235,0.35)]',
-    badgeText: 'text-blue-700',
-    ring: 'ring-blue-400',
-    glowColor: '#0284c7'
+    badgeBg: 'bg-[#D8F0FF]',
+    badgeText: 'text-[#0284C7]',
+    barFill: 'bg-[#D8F0FF]/70'
   },
   {
     label: 'C',
-    gradient: 'from-[#ea580c] to-[#d97706]',
-    border: 'border-amber-400/50',
-    shadow: 'shadow-[0_10px_30px_rgba(234,88,12,0.35)]',
-    badgeText: 'text-amber-700',
-    ring: 'ring-amber-400',
-    glowColor: '#ea580c'
+    badgeBg: 'bg-[#FEF0C7]',
+    badgeText: 'text-[#B45309]',
+    barFill: 'bg-[#FEF0C7]/70'
   },
   {
     label: 'D',
-    gradient: 'from-[#059669] to-[#10b981]',
-    border: 'border-emerald-400/50',
-    shadow: 'shadow-[0_10px_30px_rgba(16,185,129,0.35)]',
-    badgeText: 'text-emerald-700',
-    ring: 'ring-emerald-400',
-    glowColor: '#059669'
+    badgeBg: 'bg-[#CBEBFF]',
+    badgeText: 'text-[#087CF5]',
+    barFill: 'bg-[#CBEBFF]/70'
   }
 ];
 
@@ -77,7 +66,12 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   const [answeredCount, setAnsweredCount] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
   const [registeredCount, setRegisteredCount] = useState(0);
-  const [answerDistribution, setAnswerDistribution] = useState<Record<number, number>>({ 0: 0, 1: 0, 2: 0, 3: 0 });
+  const [answerDistribution, setAnswerDistribution] = useState<Record<number, number>>({
+    0: 0,
+    1: 0,
+    2: 0,
+    3: 0
+  });
   const [timeLeft, setTimeLeft] = useState(20);
   const [questionStartMs, setQuestionStartMs] = useState(Date.now());
   const [isPaused, setIsPaused] = useState(false);
@@ -125,12 +119,15 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   // 1. Establish single Realtime channel and presence listener + load participants
   useEffect(() => {
     // Initial fetch of participants from DB to seed student count accurately
-    liveQuizService.getParticipants(session.id).then((parts) => {
-      if (parts && parts.length > 0) {
-        setRegisteredCount(parts.length);
-        setTotalStudents((prev) => Math.max(prev, parts.length));
-      }
-    }).catch(() => {});
+    liveQuizService
+      .getParticipants(session.id)
+      .then((parts) => {
+        if (parts && parts.length > 0) {
+          setRegisteredCount(parts.length);
+          setTotalStudents((prev) => Math.max(prev, parts.length));
+        }
+      })
+      .catch(() => {});
 
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
@@ -142,7 +139,9 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         let studentCount = 0;
         Object.values(state).forEach((presences: any) => {
           // Strictly count students only (exclude teacher / host)
-          studentCount += presences.filter((p: any) => p.role !== 'teacher' && p.student_id !== session.teacher_id).length;
+          studentCount += presences.filter(
+            (p: any) => p.role !== 'teacher' && p.student_id !== session.teacher_id
+          ).length;
         });
         setTotalStudents((prev) => Math.max(prev, studentCount));
       })
@@ -188,7 +187,10 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
             return;
           }
 
-          if (typeof updated.current_question_index === 'number' && updated.current_question_index !== currentQIndex) {
+          if (
+            typeof updated.current_question_index === 'number' &&
+            updated.current_question_index !== currentQIndex
+          ) {
             setCurrentQIndex(updated.current_question_index);
           }
         }
@@ -244,23 +246,26 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
         options: activeQuestion.options,
         durationSec: durationSec,
         questionStartMs: startMs,
-        questionEndsAtMs: startMs + (durationSec * 1000),
+        questionEndsAtMs: startMs + durationSec * 1000,
         totalQuestions: questions.length
       }
     };
 
     // 1. Authoritative DB update FIRST
-    liveQuizService.startQuestion({
-      session_id: session.id,
-      question_index: currentQIndex,
-      duration_sec: durationSec,
-      correct_answer_index: activeQuestion.correctIndex
-    }).then(() => {
-      // 2. Fast-lane Realtime Broadcast
-      safeBroadcast(broadcastPayload);
-    }).catch(() => {
-      safeBroadcast(broadcastPayload);
-    });
+    liveQuizService
+      .startQuestion({
+        session_id: session.id,
+        question_index: currentQIndex,
+        duration_sec: durationSec,
+        correct_answer_index: activeQuestion.correctIndex
+      })
+      .then(() => {
+        // 2. Fast-lane Realtime Broadcast
+        safeBroadcast(broadcastPayload);
+      })
+      .catch(() => {
+        safeBroadcast(broadcastPayload);
+      });
   }, [currentQIndex, session.id, activeQuestion, durationSec, questions.length, safeBroadcast]);
 
   // Active players count considers presence (connected students), registered participants, and answers received
@@ -361,7 +366,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
     }
   }, [currentQIndex, questions.length, isFinishing]);
 
-  // Manual Next Question handler (skips reveal wait if already in reveal, or triggers reveal first)
+  // Manual Next Question handler
   const handleManualNext = () => {
     quizAudioService.playClick();
     if (phase === 'question') {
@@ -406,7 +411,7 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
     try {
       const res = await liveQuizService.finishQuiz(session.id);
-      
+
       safeBroadcast({
         type: 'broadcast',
         event: 'quiz_finished',
@@ -433,89 +438,69 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
 
   if (!activeQuestion) {
     return (
-      <div className="p-12 text-center text-white bg-[#060e24] rounded-3xl border border-sky-500/20">
-        <h2 className="text-xl font-bold">No questions loaded for this quiz.</h2>
+      <div className="p-12 text-center text-[#10245A] bg-white rounded-[28px] border border-[#DCEBFA] shadow-[0_20px_50px_rgba(8,124,245,0.08)]">
+        <h2 className="text-xl font-extrabold">No questions loaded for this quiz.</h2>
       </div>
     );
   }
 
-  // Circular timer calculations
-  const timerRadius = 26;
-  const timerCircumference = 2 * Math.PI * timerRadius;
-  const timerOffset = timerCircumference - (timeLeft / Math.max(durationSec, 1)) * timerCircumference;
-  const answeredPercentage = activePlayers > 0 ? Math.round((answeredCount / activePlayers) * 100) : 0;
+  const answeredPercentage =
+    activePlayers > 0 ? Math.round((answeredCount / activePlayers) * 100) : 0;
+  const progressPct = Math.min(
+    100,
+    Math.max(5, Math.round(((currentQIndex + 1) / Math.max(1, questions.length)) * 100))
+  );
+  const categoryName = session.quiz?.category || 'Grammar';
 
   return (
-    <div className="relative min-h-[90vh] bg-gradient-to-br from-[#040c1e] via-[#081b3d] to-[#040f28] text-white rounded-[32px] p-6 sm:p-8 lg:p-10 shadow-2xl overflow-hidden border border-sky-500/25 flex flex-col justify-between select-none">
-      
-      {/* Background Decorative Energy Ribbons & Watermark Glow */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl" />
-        <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 1000 600" preserveAspectRatio="none">
-          <path d="M0,300 C300,150 700,450 1000,300" stroke="#38bdf8" strokeWidth="2" fill="none" />
-          <path d="M0,350 C350,200 650,500 1000,350" stroke="#818cf8" strokeWidth="1.5" fill="none" />
-        </svg>
-      </div>
-
+    <div className="relative bg-white text-[#10245A] rounded-[28px] p-4 sm:p-6 lg:p-8 shadow-[0_20px_50px_rgba(8,124,245,0.08)] border border-[#DCEBFA] flex flex-col justify-between space-y-5 select-none">
       {/* ========================================================================= */}
-      {/* TOP HEADER                                                                */}
+      {/* 1. TOP HEADER                                                             */}
       {/* ========================================================================= */}
-      <div className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-        
-        {/* Left: EdTechra Biz Logo + Live Quiz Indicator */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center p-2 shadow-lg shadow-blue-500/30 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6 text-white" stroke="currentColor" strokeWidth="2.2">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M6 12v5c3 3 9 3 12 0v-5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div className="text-left hidden sm:block">
-              <div className="text-sm font-black tracking-tight text-white flex items-center gap-1">
-                <span>EdTechra</span>
-                <span className="text-sky-400 font-extrabold">Biz</span>
-              </div>
-              <div className="text-[10px] font-semibold text-slate-400 tracking-wider">
-                Learn • Assess • Grow
-              </div>
-            </div>
-          </div>
-
-          <div className="h-7 w-[1px] bg-white/20 hidden md:block" />
-
-          {/* Live Quiz Pill */}
-          <div className="space-y-0.5 text-left">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E6F1FC]">
+        {/* Left: Official EdTechra Logo + Brand + PIN */}
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="/logo.png"
+            alt="EdTechra"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain shadow-xs shrink-0"
+          />
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-              <span className="text-sm font-black text-white tracking-wide">Live Quiz</span>
+              <span className="text-base sm:text-lg font-extrabold text-[#10245A] tracking-tight">
+                EDTECHRA
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#EAF7FF] border border-[#BCE3FF] text-[#087CF5] text-[10px] font-extrabold uppercase tracking-wider">
+                Host View • PIN {session.pin}
+              </span>
             </div>
-            <div className="text-[11px] text-slate-300 font-medium line-clamp-1 max-w-[200px] sm:max-w-xs">
-              {session.classroom?.title || 'Class 10'} — {session.quiz?.title || 'General Knowledge'}
+            <div className="text-xs text-[#64748B] font-semibold truncate">
+              {session.classroom?.title || 'Classroom'} — {session.quiz?.title || 'Live Quiz'}
             </div>
           </div>
         </div>
 
-        {/* Right: Student Presence Count, Sound, Menu, End Quiz */}
-        <div className="flex items-center gap-3">
-          
+        {/* Right: Active Students Pill, Sound Toggle, Menu, End Quiz */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
           {/* Active Students Pill */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/70 border border-blue-500/30 text-xs font-bold text-sky-200 shadow-inner">
-            <Users className="w-3.5 h-3.5 text-sky-400" />
-            <span>{activePlayers} Students</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Live</span>
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 sm:py-2 rounded-full bg-[#EAF7FF] border border-[#BCE3FF] text-xs font-extrabold text-[#10245A]">
+            <Users className="w-3.5 h-3.5 text-[#087CF5]" />
+            <span>{activePlayers} Players</span>
+            <span className="w-2 h-2 rounded-full bg-[#18B981] animate-pulse" />
           </div>
 
-          {/* Background Music Mute / Unmute Toggle */}
+          {/* Sound Button */}
           <button
             type="button"
             onClick={toggleMusic}
-            className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-slate-200 transition-colors cursor-pointer"
-            title={isMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+              isMusicMuted
+                ? 'bg-[#FFF1F5] text-[#F43F7A] hover:bg-[#FFE4EC]'
+                : 'bg-[#DDF0FF] text-[#087CF5] hover:bg-[#CBE7FF]'
+            }`}
+            title={isMusicMuted ? 'Unmute Audio' : 'Mute Audio'}
           >
-            {isMusicMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-sky-300" />}
+            {isMusicMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
 
           {/* Host Dropdown Menu */}
@@ -526,15 +511,15 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
                 quizAudioService.playClick();
                 setHostMenuOpen(!hostMenuOpen);
               }}
-              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-slate-200 transition-colors cursor-pointer"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#EEF5FC] hover:bg-[#E1EEF9] text-[#10245A] flex items-center justify-center transition-colors cursor-pointer"
               title="Host Controls"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
 
             {hostMenuOpen && (
-              <div className="absolute right-0 mt-2 w-52 bg-[#091733] border border-blue-500/30 text-white rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <div className="px-3 py-1.5 text-[10px] font-black uppercase text-sky-300/80 tracking-wider border-b border-white/10">
+              <div className="absolute right-0 mt-2 w-52 bg-white border border-[#DCEBFA] text-[#10245A] rounded-2xl shadow-[0_12px_32px_rgba(16,36,90,0.12)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1.5 text-[10px] font-black uppercase text-[#087CF5] tracking-wider border-b border-[#E6F1FC]">
                   Host Controls
                 </div>
                 <button
@@ -543,9 +528,13 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
                     handleTogglePause();
                     setHostMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-white/10 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-[#F5FBFF] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
+                  {isPaused ? (
+                    <Play className="w-3.5 h-3.5 text-[#18B981]" />
+                  ) : (
+                    <Pause className="w-3.5 h-3.5 text-[#F7B928]" />
+                  )}
                   <span>{isPaused ? 'Resume Timer' : 'Pause Timer'}</span>
                 </button>
                 <button
@@ -555,9 +544,9 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
                     setHostMenuOpen(false);
                     triggerAutomaticRevealAndAdvance();
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-white/10 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-[#F5FBFF] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
+                  <BarChart2 className="w-3.5 h-3.5 text-[#087CF5]" />
                   <span>Reveal Now</span>
                 </button>
                 <button
@@ -567,16 +556,16 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
                     setHostMenuOpen(false);
                     handleFinishQuiz();
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/20 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-xs font-bold text-[#F43F7A] hover:bg-[#FFF1F5] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <StopCircle className="w-3.5 h-3.5 text-rose-400" />
+                  <StopCircle className="w-3.5 h-3.5 text-[#F43F7A]" />
                   <span>End Quiz Early</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* End Quiz Button (Pill red button with rounded square stop icon) */}
+          {/* End Quiz Pill Button */}
           <button
             type="button"
             onClick={() => {
@@ -584,315 +573,242 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
               handleFinishQuiz();
             }}
             disabled={isFinishing}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-full text-xs font-black shadow-lg shadow-rose-600/30 active:scale-95 transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#F43F7A] to-[#E11D62] hover:brightness-105 text-white rounded-full text-xs font-extrabold shadow-[0_6px_16px_rgba(244,63,122,0.28)] active:scale-95 transition-all cursor-pointer shrink-0"
           >
-            <div className="w-3.5 h-3.5 rounded-[4px] border-2 border-white flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-white rounded-[2px]" />
-            </div>
+            <StopCircle className="w-3.5 h-3.5" />
             <span>End Quiz</span>
           </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* QUESTION PROGRESS TRACK & CIRCULAR COUNTDOWN TIMER                        */}
+      {/* 2. PROGRESS BAR & META ROW                                                */}
       {/* ========================================================================= */}
-      <div className="relative z-10 flex items-center justify-between gap-4 py-3 sm:py-4">
-        
-        {/* Left: QUESTION X OF Y Pill */}
-        <div className="px-5 py-2 rounded-full bg-[#0d224d]/80 border border-blue-500/40 text-blue-200 text-xs font-black uppercase tracking-wider shadow-md shrink-0">
-          QUESTION {currentQIndex + 1} OF {questions.length}
+      <div className="space-y-2.5">
+        <div className="w-full h-2.5 bg-[#E6F0FA] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-[#087CF5] to-[#08AEEF] rounded-full transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
 
-        {/* Center: Glowing Track Dots */}
-        <div className="flex-1 max-w-xl mx-auto flex items-center justify-center gap-2 sm:gap-3 px-2">
-          {questions.map((_, idx) => {
-            const isCompleted = idx < currentQIndex;
-            const isCurrent = idx === currentQIndex;
+        <div className="flex items-center justify-between gap-3 text-xs sm:text-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-[#10245A]">
+              Question {currentQIndex + 1} of {questions.length}
+            </span>
+            <span className="text-[#7BA7D7]">•</span>
+            <span className="font-bold text-[#087CF5]">{categoryName}</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="px-2.5 py-1 rounded-lg bg-[#E5F2FF] text-[#10245A] font-extrabold text-xs">
+              10 pts
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 font-extrabold text-sm tabular-nums ${
+                timeLeft <= 5 ? 'text-[#F43F7A] animate-pulse' : 'text-[#087CF5]'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>{timeLeft}s</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. QUESTION CARD & 4 ANSWER OPTIONS                                       */}
+      {/* ========================================================================= */}
+      <div className="bg-[#F8FCFF] rounded-[24px] p-5 sm:p-7 border border-[#DCEBFA] space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-xl sm:text-3xl font-extrabold text-[#10245A] tracking-tight leading-snug max-w-3xl mx-auto">
+            {activeQuestion.question}
+          </h1>
+
+          {phase === 'reveal' && activeQuestion.explanation && (
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-xs font-bold">
+              <Lightbulb className="w-3.5 h-3.5 text-[#18B981] shrink-0" />
+              <span>{activeQuestion.explanation}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 4 Answer Cards (2x2 Grid on Desktop, Stack on Mobile) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 max-w-4xl mx-auto w-full">
+          {(activeQuestion?.options || []).map((optionText, idx) => {
+            const style = OPTION_STYLES[idx] || OPTION_STYLES[0];
+            const isCorrect = idx === activeQuestion.correctIndex;
+            const isRevealed = phase === 'reveal';
+            const voteCount = answerDistribution[idx] || 0;
+            const votePercent =
+              answeredCount > 0 ? Math.round((voteCount / answeredCount) * 100) : 0;
+
             return (
-              <div key={idx} className="flex items-center flex-1 last:flex-none">
-                <div
-                  className={`w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full transition-all duration-300 shrink-0 ${
-                    isCompleted
-                      ? 'bg-purple-500 shadow-[0_0_8px_#a855f7]'
-                      : isCurrent
-                      ? 'bg-purple-400 ring-4 ring-purple-500/40 shadow-[0_0_12px_#c084fc] scale-125'
-                      : 'border-2 border-sky-400/30 bg-sky-950/40'
-                  }`}
-                />
-                {idx < questions.length - 1 && (
+              <div
+                key={idx}
+                className={`relative flex items-center justify-between p-4 sm:p-5 rounded-[20px] border transition-all duration-300 overflow-hidden ${
+                  isRevealed && isCorrect
+                    ? 'bg-[#ECFDF5] border-2 border-[#18B981] text-[#065F46] shadow-[0_8px_24px_rgba(24,185,129,0.16)] scale-[1.01]'
+                    : isRevealed && !isCorrect
+                    ? 'bg-white/70 border-[#E2EDF8] text-[#64748B] opacity-70'
+                    : 'bg-white border-[#E2EDF8] text-[#10245A] shadow-[0_4px_12px_rgba(16,36,90,0.03)]'
+                }`}
+              >
+                {/* Vote distribution fill bar on reveal */}
+                {isRevealed && (
                   <div
-                    className={`h-[2px] flex-1 mx-1 rounded-full transition-all duration-300 ${
-                      idx < currentQIndex ? 'bg-gradient-to-r from-purple-500 to-indigo-500' : 'bg-white/10'
-                    }`}
+                    className={`absolute inset-y-0 left-0 ${
+                      isCorrect ? 'bg-[#18B981]/15' : style.barFill
+                    } transition-all duration-700 pointer-events-none`}
+                    style={{ width: `${votePercent}%` }}
                   />
                 )}
+
+                {/* Left: Letter Badge + Option Text */}
+                <div className="flex items-center gap-3.5 relative z-10 flex-1 min-w-0 pr-3">
+                  <div
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full ${style.badgeBg} ${style.badgeText} flex items-center justify-center font-extrabold text-base sm:text-lg shrink-0`}
+                  >
+                    {style.label}
+                  </div>
+                  <span className="text-base sm:text-lg font-bold text-[#10245A] leading-snug break-words">
+                    {optionText}
+                  </span>
+                </div>
+
+                {/* Right: Vote Count / Correct Check */}
+                <div className="relative z-10 shrink-0 flex items-center gap-2">
+                  {isRevealed ? (
+                    <div className="flex items-center gap-2 animate-in fade-in">
+                      <span className="text-xs font-extrabold bg-[#EAF7FF] border border-[#BCE3FF] text-[#087CF5] px-2.5 py-1 rounded-lg">
+                        {voteCount} ({votePercent}%)
+                      </span>
+                      {isCorrect && (
+                        <CheckCircle2 className="w-6 h-6 text-[#18B981] shrink-0" />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="w-7 h-7 rounded-full border-2 border-[#CBD8E8] flex items-center justify-center text-[#94A3B8]">
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-
-        {/* Right: Authoritative Circular Countdown Timer Ring */}
-        <div className="relative w-16 h-16 sm:w-18 sm:h-18 flex items-center justify-center shrink-0">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
-            <defs>
-              <linearGradient id="timerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#38bdf8" />
-                <stop offset="100%" stopColor="#818cf8" />
-              </linearGradient>
-            </defs>
-            <circle
-              cx="32"
-              cy="32"
-              r={timerRadius}
-              stroke="rgba(255, 255, 255, 0.1)"
-              strokeWidth="4"
-              fill="transparent"
-            />
-            <circle
-              cx="32"
-              cy="32"
-              r={timerRadius}
-              stroke="url(#timerGrad)"
-              strokeWidth="4.5"
-              strokeDasharray={timerCircumference}
-              strokeDashoffset={timerOffset}
-              strokeLinecap="round"
-              fill="transparent"
-              className="transition-all duration-500"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-base sm:text-lg font-black font-mono tracking-tight ${
-              timeLeft <= 5 ? 'text-rose-400 animate-pulse' : 'text-white'
-            }`}>
-              {timeLeft}s
-            </span>
-          </div>
-        </div>
-
       </div>
 
       {/* ========================================================================= */}
-      {/* CENTER QUESTION PROMPT & MOTIVATIONAL WATERMARKS                           */}
+      {/* 4. BOTTOM CONTROL BAR                                                     */}
       {/* ========================================================================= */}
-      <div className="relative z-10 flex items-center justify-between gap-6 my-auto py-2 sm:py-4">
-        
-        {/* Ambient Motivational Watermark — Left */}
-        <div className="hidden lg:block w-28 text-[10px] font-black tracking-widest text-sky-400/25 uppercase text-left leading-loose select-none">
-          EXPLORE<br />
-          LEARN<br />
-          ACHIEVE<br />
-          TOGETHER
-          <div className="w-8 h-0.5 bg-sky-400/30 mt-2 rounded-full" />
-        </div>
-
-        {/* Center: Question Prompt + Helper Pill */}
-        <div className="flex-1 max-w-4xl mx-auto text-center space-y-4">
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-snug drop-shadow-md">
-            {activeQuestion.question}
-          </h1>
-
-          {/* Helper Pill */}
-          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#0a1b3d]/90 border border-purple-500/30 text-purple-200 text-xs sm:text-sm font-bold shadow-lg">
-            <Lightbulb className="w-4 h-4 text-purple-400 shrink-0" />
-            <span>
-              {phase === 'reveal'
-                ? activeQuestion.explanation || 'Question complete — auto advancing to next question!'
-                : 'Think carefully and choose the best answer.'}
-            </span>
-          </div>
-        </div>
-
-        {/* Ambient Motivational Watermark — Right */}
-        <div className="hidden lg:block w-28 text-[11px] font-medium italic text-sky-400/25 text-right leading-relaxed select-none">
-          Knowledge<br />
-          today<br />
-          brighter<br />
-          tomorrow
-          <div className="w-8 h-0.5 bg-sky-400/30 mt-2 ml-auto rounded-full" />
-        </div>
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 4 ANSWER CARDS (2x2 GRID)                                                 */}
-      {/* ========================================================================= */}
-      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 max-w-5xl mx-auto w-full my-3 sm:my-4">
-        {(activeQuestion?.options || []).map((optionText, idx) => {
-          const style = OPTION_STYLES[idx] || OPTION_STYLES[0];
-          const isCorrect = idx === activeQuestion.correctIndex;
-          const isRevealed = phase === 'reveal';
-          const voteCount = answerDistribution[idx] || 0;
-          const votePercent = answeredCount > 0 ? Math.round((voteCount / answeredCount) * 100) : 0;
-
-          return (
-            <div
-              key={idx}
-              className={`relative flex items-center justify-between p-5 sm:p-6 rounded-[24px] border-2 transition-all duration-300 overflow-hidden bg-gradient-to-r ${style.gradient} ${style.border} ${style.shadow} ${
-                isRevealed && isCorrect
-                  ? 'ring-4 ring-emerald-400 scale-[1.02] shadow-[0_0_35px_rgba(52,211,153,0.5)] brightness-110'
-                  : isRevealed && !isCorrect
-                  ? 'opacity-40 grayscale-[20%]'
-                  : 'hover:brightness-105'
-              }`}
-            >
-              {/* Glossy top sheen highlight */}
-              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none rounded-t-[22px]" />
-
-              {/* Vote bar background on reveal */}
-              {isRevealed && (
-                <div
-                  className="absolute inset-0 bg-white/20 transition-all duration-700 pointer-events-none"
-                  style={{ width: `${votePercent}%` }}
-                />
-              )}
-
-              {/* Left: Circular Letter Badge + Option Text */}
-              <div className="flex items-center gap-4 relative z-10 flex-1 min-w-0 pr-3">
-                <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white ${style.badgeText} flex items-center justify-center font-black text-xl sm:text-2xl shadow-md shrink-0`}>
-                  {style.label}
-                </div>
-                <span className="text-lg sm:text-xl font-bold text-white tracking-wide truncate">
-                  {optionText}
-                </span>
-              </div>
-
-              {/* Right Action / Reveal Stats */}
-              <div className="relative z-10 shrink-0 flex items-center gap-2">
-                {isRevealed ? (
-                  <div className="flex items-center gap-2 animate-in fade-in">
-                    <span className="text-xs font-black bg-white/30 text-white px-3 py-1 rounded-xl shadow-inner">
-                      {voteCount} votes ({votePercent}%)
-                    </span>
-                    {isCorrect && (
-                      <CheckCircle2 className="w-6 h-6 text-emerald-300 drop-shadow-md shrink-0" />
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white/90">
-                    <ChevronRight className="w-5 h-5" />
-                  </div>
-                )}
-              </div>
-
+      <div className="bg-[#F5FBFF] rounded-[22px] border border-[#DCEBFA] p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+        {/* Left: Answered Progress Tracker */}
+        <div className="flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-white border border-[#E2EEF9] text-xs font-bold text-[#10245A]">
+          <BarChart2 className="w-4 h-4 text-[#087CF5] shrink-0" />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="font-extrabold text-[#10245A]">
+                {answeredCount} / {activePlayers} Answered
+              </span>
+              <span className="text-[#087CF5] font-mono font-black">{answeredPercentage}%</span>
             </div>
-          );
-        })}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* BOTTOM FLOATING CONTROL BAR                                               */}
-      {/* ========================================================================= */}
-      <div className="relative z-10 bg-[#071533]/90 backdrop-blur-md rounded-[24px] border border-blue-500/30 p-3 sm:p-4 shadow-2xl flex flex-wrap items-center justify-between gap-3 mt-4">
-        
-        {/* Left: Live Student Counter */}
-        <div className="flex items-center gap-3 px-3 py-1.5 rounded-2xl bg-white/5 border border-white/10">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-sky-400 flex items-center justify-center">
-            <Users className="w-4 h-4" />
-          </div>
-          <div className="text-left">
-            <div className="text-sm font-black text-white">{activePlayers}</div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Live in Class</div>
+            <div className="w-24 sm:w-32 h-1.5 rounded-full bg-[#E6F0FA] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#087CF5] to-[#08AEEF] rounded-full transition-all duration-500"
+                style={{ width: `${answeredPercentage}%` }}
+              />
+            </div>
           </div>
         </div>
 
         {/* Center Controls: Previous, Pause, Next Question */}
-        <div className="flex items-center gap-2 sm:gap-3 mx-auto">
-          {/* Previous Question */}
+        <div className="flex items-center gap-2 sm:gap-2.5 mx-auto">
           <button
             type="button"
             onClick={handleManualPrevious}
             disabled={currentQIndex === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-black border border-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white hover:bg-[#EAF7FF] text-[#10245A] text-xs font-extrabold border border-[#CDE4FA] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Previous</span>
           </button>
 
-          {/* Pause / Resume Timer */}
           <button
             type="button"
             onClick={handleTogglePause}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-black border border-white/15 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white hover:bg-[#EAF7FF] text-[#10245A] text-xs font-extrabold border border-[#CDE4FA] transition-all cursor-pointer"
           >
-            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-400" />}
+            {isPaused ? (
+              <Play className="w-3.5 h-3.5 text-[#18B981]" />
+            ) : (
+              <Pause className="w-3.5 h-3.5 text-[#F7B928]" />
+            )}
             <span>{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
 
-          {/* Primary Action: Next Question -> */}
           <button
             type="button"
             onClick={handleManualNext}
-            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-2xl text-xs sm:text-sm font-black shadow-[0_0_25px_rgba(99,102,241,0.5)] active:scale-95 transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#087CF5] via-[#0895F3] to-[#08AEEF] hover:brightness-105 text-white rounded-full text-xs sm:text-sm font-extrabold shadow-[0_8px_20px_rgba(8,124,245,0.28)] active:scale-95 transition-all cursor-pointer"
           >
-            <span>{currentQIndex === questions.length - 1 && phase === 'reveal' ? 'Show Podium 🏆' : 'Next Question'}</span>
+            <span>
+              {currentQIndex === questions.length - 1 && phase === 'reveal'
+                ? 'Show Podium 🏆'
+                : 'Next Question'}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Right Section: Answered Progress Tracker & Quick Tips */}
-        <div className="flex items-center gap-3">
-          
-          {/* Submissions Progress Widget */}
-          <div className="flex items-center gap-3 px-3.5 py-1.5 rounded-2xl bg-white/5 border border-white/10 text-xs font-bold text-slate-300">
-            <BarChart2 className="w-4 h-4 text-sky-400 shrink-0" />
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="font-extrabold text-white">{answeredCount} / {activePlayers} answered</span>
-                <span className="text-sky-300 font-mono font-black">{answeredPercentage}%</span>
-              </div>
-              <div className="w-24 sm:w-32 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500"
-                  style={{ width: `${answeredPercentage}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Tips Toggle */}
-          <button
-            type="button"
-            onClick={() => {
-              quizAudioService.playClick();
-              setQuickTipsOpen(!quickTipsOpen);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 text-xs font-black transition-colors cursor-pointer"
-          >
-            <Lightbulb className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Quick Tips</span>
-            {quickTipsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          </button>
-
-        </div>
-
+        {/* Right: Quick Tips Toggle */}
+        <button
+          type="button"
+          onClick={() => {
+            quizAudioService.playClick();
+            setQuickTipsOpen(!quickTipsOpen);
+          }}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white hover:bg-[#EAF7FF] border border-[#CDE4FA] text-[#087CF5] text-xs font-extrabold transition-colors cursor-pointer"
+        >
+          <Lightbulb className="w-3.5 h-3.5 text-[#F7B928]" />
+          <span className="hidden md:inline">Quick Tips</span>
+          {quickTipsOpen ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronUp className="w-3.5 h-3.5" />
+          )}
+        </button>
       </div>
 
       {/* Quick Tips Expandable Drawer */}
       {quickTipsOpen && (
-        <div className="relative z-20 mt-3 p-4 bg-[#0a183d] rounded-2xl border border-amber-400/40 text-left text-xs text-amber-100 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-black text-amber-300 flex items-center gap-1.5">
+        <div className="p-4 bg-[#F5FBFF] rounded-2xl border border-[#BCE3FF] text-left text-xs text-[#10245A] space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between">
+            <div className="font-extrabold text-[#087CF5] flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" />
               <span>Host Tips & Auto-Advance Guide</span>
             </div>
             <button
               type="button"
               onClick={() => setQuickTipsOpen(false)}
-              className="text-slate-400 hover:text-white text-xs font-bold"
+              className="text-[#64748B] hover:text-[#10245A] text-xs font-bold cursor-pointer"
             >
               Close
             </button>
           </div>
-          <ul className="space-y-1.5 text-slate-300 font-medium">
-            <li>• <strong>Auto-Advance:</strong> The quiz automatically advances 3.5 seconds after all active students submit or when the timer hits zero.</li>
-            <li>• <strong>Manual Override:</strong> Click <em>Next Question</em> anytime to reveal immediately or skip the countdown.</li>
-            <li>• <strong>Classroom Direct Join:</strong> Students enrolled in your class join directly from the class stream without typing the PIN.</li>
+          <ul className="space-y-1 text-[#4A608A] font-medium">
+            <li>
+              • <strong className="text-[#10245A]">Auto-Advance:</strong> Advances 3.5 seconds
+              after all active students submit or when the timer reaches zero.
+            </li>
+            <li>
+              • <strong className="text-[#10245A]">Manual Override:</strong> Click{' '}
+              <em>Next Question</em> anytime to reveal immediately or skip the countdown.
+            </li>
           </ul>
         </div>
       )}
-
     </div>
   );
 };

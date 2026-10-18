@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Zap, ArrowRight, AlertCircle } from 'lucide-react';
+import { ArrowRight, AlertCircle } from 'lucide-react';
 import { liveQuizService } from '@/services/liveQuizService';
 import { useAuth } from '@/context/AuthContext';
 
@@ -84,25 +84,31 @@ export const LiveQuizJoinPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl border border-slate-100 space-y-6 text-center animate-in zoom-in-95 duration-200">
-        
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-purple-500/25">
-          <Zap className="w-8 h-8 fill-current" />
+    <div className="min-h-[100dvh] w-full bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex items-center justify-center px-4 py-12">
+      <div className="max-w-md w-full bg-white rounded-[28px] p-7 sm:p-8 shadow-[0_20px_50px_rgba(8,124,245,0.08)] border border-[#DCEBFA] space-y-6 text-center animate-in zoom-in-95 duration-200">
+        <div className="flex flex-col items-center gap-2">
+          <img
+            src="/logo.png"
+            alt="EdTechra"
+            className="w-14 h-14 rounded-2xl object-contain shadow-sm"
+          />
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#087CF5]">
+            EDTECHRA LIVE QUIZ
+          </span>
         </div>
 
         <div className="space-y-1">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-extrabold text-[#10245A] tracking-tight">
             Join Live Quiz
           </h1>
-          <p className="text-xs text-slate-500 font-semibold">
-            Enter the 6-digit PIN displayed on your teacher's screen
+          <p className="text-xs sm:text-sm text-[#64748B] font-semibold">
+            Enter the 6-digit PIN displayed on your teacher&apos;s screen
           </p>
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2 text-left animate-in fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="p-3.5 rounded-2xl bg-[#FFF1F5] border border-[#FECDD3] text-[#9F1239] text-xs font-bold flex items-center gap-2 text-left animate-in fade-in">
+            <AlertCircle className="w-4 h-4 text-[#F43F7A] shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -116,33 +122,32 @@ export const LiveQuizJoinPage: React.FC = () => {
               value={inputPin}
               onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
               placeholder="e.g. 849201"
-              className="w-full text-center tracking-[0.3em] font-mono font-black text-3xl py-3.5 px-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-purple-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-purple-600/10 text-slate-900 placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-sans placeholder:text-lg"
+              className="w-full text-center tracking-[0.3em] font-mono font-black text-3xl py-3.5 px-4 bg-[#F5FBFF] border-2 border-[#DCEBFA] rounded-2xl focus:border-[#087CF5] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#087CF5]/15 text-[#10245A] placeholder:text-[#94A3B8] placeholder:tracking-normal placeholder:font-sans placeholder:text-lg"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading || inputPin.length < 6}
-            className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl font-extrabold text-sm shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="w-full py-4 bg-gradient-to-r from-[#087CF5] via-[#0895F3] to-[#08AEEF] hover:brightness-105 text-white rounded-full font-extrabold text-sm sm:text-base shadow-[0_10px_25px_rgba(8,124,245,0.3)] flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <span>{loading ? 'Entering Game...' : 'Join Game'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
-        <div className="pt-2 border-t border-slate-100 space-y-2">
-          <p className="text-[11px] text-slate-400 font-medium">
-            Enrolled in a class? You don't need a PIN — join directly from your classroom workspace.
+        <div className="pt-2 border-t border-[#E6F1FC] space-y-2">
+          <p className="text-[11px] text-[#64748B] font-medium">
+            Enrolled in a class? You don&apos;t need a PIN — join directly from your classroom workspace.
           </p>
           <button
             type="button"
             onClick={() => navigate('/classes')}
-            className="text-xs font-black text-[#026fc3] hover:underline"
+            className="text-xs font-extrabold text-[#087CF5] hover:underline cursor-pointer"
           >
             Go to My Classrooms →
           </button>
         </div>
-
       </div>
     </div>
   );

@@ -111,7 +111,7 @@ export const AppLayout: React.FC = () => {
   const initials = (displayName || 'U').slice(0, 2).toUpperCase();
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#060c1d]' : isLiveQuizRoute ? 'bg-[#060c1d] text-white' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-[#026fc3] selection:text-white ${isPresentationViewer ? 'h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950' : isHomePage ? 'h-[100dvh] overflow-hidden bg-[#020813]' : isLiveQuizLobby ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isLiveQuizRoute ? 'min-h-[100dvh] bg-[#F5FBFF] text-[#10245A]' : isClassesPage ? 'bg-[#f9f7f1] text-slate-900' : 'bg-[#fbfbf7] text-slate-900'}`}>
       
       {/* ========================================================================= */}
       {/* FLOATING NAVIGATION HEADER                                                */}
@@ -672,7 +672,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main Page Body */}
-      <main className={`flex-1 w-full relative ${isHomePage || isLiveQuizLobby || isPresentationViewer ? 'h-full overflow-hidden flex flex-col' : ''}`}>
+      <main className={`flex-1 w-full relative ${isHomePage || isPresentationViewer ? 'h-full overflow-hidden flex flex-col' : ''}`}>
         <Outlet />
       </main>
 

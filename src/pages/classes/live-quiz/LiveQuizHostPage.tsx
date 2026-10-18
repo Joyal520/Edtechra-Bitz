@@ -65,30 +65,34 @@ export const LiveQuizHostPage: React.FC = () => {
 
   if (loading || !session) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center space-y-3">
-        <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-black text-slate-500">Loading game host session...</p>
+      <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center px-4 py-16 text-center space-y-3">
+        <div className="w-10 h-10 border-4 border-[#087CF5] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs sm:text-sm font-extrabold text-[#10245A]">
+          Loading game host session...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-3 sm:py-6 w-full min-h-[100dvh]">
-      {isFinished ? (
-        <LiveQuizPodium
-          results={finalResults}
-          classroomId={classroomId || session.classroom_id}
-          sessionId={session.id}
-          session={session}
-          quiz={session.quiz}
-          onExit={() => navigate(`/classes/${classroomId || session.classroom_id}`)}
-        />
-      ) : (
-        <LiveQuizTeacherHost
-          session={session}
-          onFinish={handleFinish}
-        />
-      )}
+    <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center px-3 sm:px-4 py-4 sm:py-6">
+      <div className="w-full max-w-5xl mx-auto">
+        {isFinished ? (
+          <LiveQuizPodium
+            results={finalResults}
+            classroomId={classroomId || session.classroom_id}
+            sessionId={session.id}
+            session={session}
+            quiz={session.quiz}
+            onExit={() => navigate(`/classes/${classroomId || session.classroom_id}`)}
+          />
+        ) : (
+          <LiveQuizTeacherHost
+            session={session}
+            onFinish={handleFinish}
+          />
+        )}
+      </div>
     </div>
   );
 };

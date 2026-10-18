@@ -50,7 +50,9 @@ export const LiveQuizPlayPage: React.FC = () => {
           return;
         }
         const scheduledTimeStr = s.scheduled_start_at || s.started_at;
-        const isScheduledTimeReached = Boolean(scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now());
+        const isScheduledTimeReached = Boolean(
+          scheduledTimeStr && new Date(scheduledTimeStr).getTime() <= Date.now()
+        );
 
         // If scheduled start time is reached, authoritatively treat as in_progress and reconcile
         if ((s.status === 'scheduled' || s.status === 'lobby') && isScheduledTimeReached) {
@@ -60,13 +62,17 @@ export const LiveQuizPlayPage: React.FC = () => {
             s.question_start_ms = initialSession?.question_start_ms || Date.now();
           }
           if (!s.question_duration_sec) {
-            s.question_duration_sec = initialSession?.question_duration_sec || s.quiz?.questions?.[0]?.durationSec || 20;
+            s.question_duration_sec =
+              initialSession?.question_duration_sec || s.quiz?.questions?.[0]?.durationSec || 20;
           }
           if ((initialSession as any)?.questionEndsAtMs) {
             (s as any).questionEndsAtMs = (initialSession as any).questionEndsAtMs;
           }
           liveQuizService.reconcileScheduledSession(s.id, s.classroom_id).catch(() => {});
-        } else if (initialSession?.status === 'in_progress' && (s.status === 'scheduled' || s.status === 'lobby')) {
+        } else if (
+          initialSession?.status === 'in_progress' &&
+          (s.status === 'scheduled' || s.status === 'lobby')
+        ) {
           // Never downgrade an active session back to lobby
           s.status = 'in_progress';
           if (!s.question_start_ms && initialSession.question_start_ms) {
@@ -101,37 +107,41 @@ export const LiveQuizPlayPage: React.FC = () => {
     }
   };
 
-  const handleQuizFinished = useCallback(async (results: any) => {
-    let finalData: LiveQuizResult[] = Array.isArray(results) && results.length > 0 ? results : [];
+  const handleQuizFinished = useCallback(
+    async (results: any) => {
+      let finalData: LiveQuizResult[] =
+        Array.isArray(results) && results.length > 0 ? results : [];
 
-    if (finalData.length === 0 && sessionId) {
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          const { data } = await liveQuizService.getResults(sessionId);
-          if (data && data.length > 0) {
-            finalData = data;
-            break;
-          }
-        } catch {}
-        await new Promise((r) => setTimeout(r, 400));
+      if (finalData.length === 0 && sessionId) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            const { data } = await liveQuizService.getResults(sessionId);
+            if (data && data.length > 0) {
+              finalData = data;
+              break;
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
-    }
 
-    setFinalResults(finalData);
-    setIsFinished(true);
-  }, [sessionId]);
+      setFinalResults(finalData);
+      setIsFinished(true);
+    },
+    [sessionId]
+  );
 
   if (loading || !session) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center space-y-3">
-        <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-black text-slate-500">Connecting to game...</p>
+      <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center px-4 py-16 text-center space-y-3">
+        <div className="w-10 h-10 border-4 border-[#087CF5] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs sm:text-sm font-extrabold text-[#10245A]">Connecting to game...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-2 sm:px-4 py-3 sm:py-6 w-full min-h-[100dvh]">
+    <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center px-3 sm:px-4 py-4 sm:py-6">
       {isFinished ? (
         <LiveQuizPodium
           results={finalResults}

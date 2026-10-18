@@ -75,23 +75,27 @@ export const LiveQuizLobbyPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-[100dvh] max-h-[100dvh] bg-[#060c1d] flex flex-col items-center justify-center text-center p-4 space-y-3">
-        <div className="w-10 h-10 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-black text-slate-400">Entering live game lobby...</p>
+      <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center text-center p-4 space-y-3">
+        <div className="w-10 h-10 border-4 border-[#087CF5] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs sm:text-sm font-extrabold text-[#10245A]">
+          Entering live game lobby...
+        </p>
       </div>
     );
   }
 
   if (error || !session) {
     return (
-      <div className="w-full h-[100dvh] max-h-[100dvh] bg-[#060c1d] flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full p-6 bg-[#0c1a38] border border-white/10 rounded-3xl space-y-3 text-center">
-          <h2 className="text-sm font-black text-rose-400">Lobby Unavailable</h2>
-          <p className="text-xs text-slate-300 font-medium">{error || 'This live quiz session is no longer active.'}</p>
+      <div className="w-full min-h-[100dvh] bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF] flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full p-6 bg-white border border-[#DCEBFA] rounded-[28px] shadow-[0_20px_50px_rgba(8,124,245,0.08)] space-y-3 text-center">
+          <h2 className="text-base font-extrabold text-[#F43F7A]">Lobby Unavailable</h2>
+          <p className="text-xs sm:text-sm text-[#4A608A] font-medium">
+            {error || 'This live quiz session is no longer active.'}
+          </p>
           <button
             type="button"
             onClick={() => navigate(classroomId ? `/classes/${classroomId}` : '/classes')}
-            className="mt-3 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+            className="mt-3 px-6 py-3 bg-gradient-to-r from-[#087CF5] to-[#08AEEF] text-white rounded-full text-xs sm:text-sm font-extrabold shadow-[0_8px_20px_rgba(8,124,245,0.28)] active:scale-95 transition-all cursor-pointer"
           >
             Back to Classes
           </button>
@@ -103,7 +107,7 @@ export const LiveQuizLobbyPage: React.FC = () => {
   const isHostTeacher = isTeacher || session.teacher_id === user?.id;
 
   return (
-    <div className="w-full min-h-[100dvh] overflow-y-auto flex flex-col justify-center items-center p-0 sm:p-4 md:p-6 bg-[#060c1d]">
+    <div className="w-full min-h-[100dvh] overflow-y-auto flex flex-col justify-center items-center px-3 sm:px-4 py-4 sm:py-6 bg-gradient-to-br from-[#EAF7FF] via-[#F5FBFF] to-[#E6F4FF]">
       <LiveQuizLobby
         session={session}
         isTeacher={isHostTeacher}
