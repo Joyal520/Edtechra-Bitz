@@ -397,12 +397,13 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     };
   }, [session.id, user?.id, currentQIdx]);
 
-  // ---- realtime: ONE channel, ONE listener; any change triggers an authoritative refetch ----
+  // ---- realtime: ONE channel; postgres_changes (primary) + broadcast (fast-lane) ----
   useEffect(() => {
     const channel = liveQuizService.createRealtimeChannel(session.pin);
     if (!channel) return;
 
     channel
+      // Primary: DB change events (authoritative — triggers full state refetch)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'live_quiz_sessions', filter: `id=eq.${session.id}` },
@@ -410,6 +411,22 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
           syncWithDatabase();
         }
       )
+      // Fast-lane: host broadcasts question_started immediately after advancing
+      .on('broadcast', { event: 'question_started' }, () => {
+        syncWithDatabase();
+      })
+      // Fast-lane: host broadcasts question_reveal during answer reveal phase
+      .on('broadcast', { event: 'question_reveal' }, () => {
+        syncWithDatabase();
+      })
+      // Fast-lane: host broadcasts quiz_finished when quiz ends
+      .on('broadcast', { event: 'quiz_finished' }, () => {
+        syncWithDatabase();
+      })
+      // Fast-lane: host broadcasts quiz_cancelled when quiz is cancelled
+      .on('broadcast', { event: 'quiz_cancelled' }, () => {
+        handleFinished();
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           syncWithDatabase();
@@ -419,7 +436,7 @@ const LiveQuizStudentPlayInner: React.FC<LiveQuizStudentPlayProps> = ({
     return () => {
       liveQuizService.removeRealtimeChannel(channel);
     };
-  }, [session.pin, session.id, syncWithDatabase]);
+  }, [session.pin, session.id, syncWithDatabase, handleFinished]);
 
   // ---- safety refetch (also the presence heartbeat): visibility, focus, 5s ----
   useEffect(() => {

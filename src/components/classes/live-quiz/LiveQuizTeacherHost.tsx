@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { LiveQuizSession, LiveQuizQuestion } from '@/types/liveQuiz';
 import { liveQuizService } from '@/services/liveQuizService';
+import { supabase } from '@/lib/supabase';
 import { quizAudioService } from '@/services/quizAudioService';
 
 interface LiveQuizTeacherHostProps {
@@ -347,15 +348,47 @@ export const LiveQuizTeacherHost: React.FC<LiveQuizTeacherHostProps> = ({
   };
 
   // Helper to actually advance question index or finish quiz via CAS RPC
+  // CRITICAL: Never fall back to local-only setCurrentQIndex — the DB must be updated
+  // so that student clients receive the postgres_changes event.
   const proceedToNextQuestionOrFinish = async () => {
     if (currentQIndex < questions.length - 1) {
-      const res = await liveQuizService.advanceQuestion(session.id, currentQIndex);
+      let res = await liveQuizService.advanceQuestion(session.id, currentQIndex);
+
+      // If the RPC rejected (e.g. stale race), retry once after a short delay
+      if (!res.advanced && !res.finished) {
+        console.warn('[TeacherHost] advanceQuestion rejected, retrying once...', res.reason);
+        await new Promise((r) => setTimeout(r, 500));
+        res = await liveQuizService.advanceQuestion(session.id, currentQIndex);
+      }
+
       if (res.finished) {
         handleFinishQuiz();
-      } else if (typeof res.next_question_index === 'number') {
+      } else if (res.advanced && typeof res.next_question_index === 'number') {
         setCurrentQIndex(res.next_question_index);
-      } else {
+      } else if (res.advanced) {
         setCurrentQIndex((prev) => prev + 1);
+      } else {
+        // RPC still failed after retry — force a direct DB update as last resort
+        // to ensure students get the postgres_changes event
+        console.warn('[TeacherHost] advanceQuestion failed after retry, forcing direct DB update');
+        const nextIdx = currentQIndex + 1;
+        try {
+          if (supabase) {
+            await supabase
+              .from('live_quiz_sessions')
+              .update({
+                current_question_index: nextIdx,
+                question_start_ms: Date.now(),
+                status: 'in_progress',
+                correct_answer_index: null,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+          }
+        } catch (dbErr) {
+          console.error('[TeacherHost] Direct DB fallback also failed:', dbErr);
+        }
+        setCurrentQIndex(nextIdx);
       }
     } else {
       handleFinishQuiz();
