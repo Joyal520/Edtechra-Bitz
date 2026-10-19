@@ -343,7 +343,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const isAllAnswered = validQuestions.length > 0 && answeredTotal >= validQuestions.length;
 
   return (
-    <div className="w-full max-w-[760px] mx-auto space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border overflow-x-hidden">
+    <div className="w-full max-w-[760px] mx-auto space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border min-w-0">
       
       {/* ===================================================================== */}
       {/* 1. LESSON CONTENT STREAM                                              */}
@@ -655,15 +655,25 @@ export const CourseContentRenderer: React.FC<Props> = ({
               );
             }
 
+            // Student view: never render the private transcript unless the teacher
+            // opted in. Also suppress "notes" text that is just a pasted transcript copy.
+            const normCmp = (s: string) =>
+              String(s || '').toLowerCase().replace(/[#*_>`~\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+            const nTr = normCmp(vidTranscript);
+            const nBody = normCmp(bodyText);
+            const bodyDuplicatesTranscript =
+              nTr.length >= 30 && nBody.length >= 30 && (nBody === nTr || nTr.includes(nBody) || nBody.includes(nTr));
+            const studentBodyText = !showTranscriptToStudents && bodyDuplicatesTranscript ? '' : bodyText;
+
             return (
-              <figure key={block.id || idx} className="w-full my-4 sm:my-6 space-y-2.5">
+              <figure key={block.id || idx} className="w-full my-3 sm:my-6 space-y-2 sm:space-y-3">
                 {vidTitle && (
-                  <h3 className="text-base sm:text-lg font-black text-theme-primary reader-h2">
+                  <h3 className="text-base sm:text-lg font-black text-theme-primary reader-h2 leading-snug">
                     {vidTitle}
                   </h3>
                 )}
                 {embedUrl && (
-                  <div className="video-container shadow-md rounded-2xl overflow-hidden aspect-video w-full -mx-2 sm:mx-0">
+                  <div className="video-container course-video-bleed sm:shadow-md">
                     <iframe
                       src={embedUrl}
                       title={vidTitle}
@@ -672,13 +682,13 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     />
                   </div>
                 )}
-                {bodyText && <FormattedLessonText text={bodyText} textScale={textScale} />}
+                {studentBodyText && <FormattedLessonText text={studentBodyText} textScale={textScale} />}
                 {showTranscriptToStudents && vidTranscript && (
-                  <details className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-theme-secondary mt-2">
-                    <summary className="font-bold text-theme-primary cursor-pointer select-none">
+                  <details className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs mt-2 text-[#172033]">
+                    <summary className="font-bold text-[#172033] cursor-pointer select-none">
                       View Video Transcript
                     </summary>
-                    <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap opacity-90 font-mono">
+                    <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#334155] font-mono">
                       {vidTranscript}
                     </p>
                   </details>
@@ -1059,10 +1069,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
       {/* 2. PRACTICE QUESTIONS STREAM                                          */}
       {/* ===================================================================== */}
       {(validQuestions.length > 0 || isEditMode) && (
-        <section className="w-full pt-6 sm:pt-8 border-t border-[var(--theme-border-subtle)] space-y-5 sm:space-y-6">
+        <section className="w-full pt-5 sm:pt-8 border-t border-[var(--theme-border-subtle)] space-y-4 sm:space-y-6">
           
-          {/* Practice Header: Mode Switch Aware */}
-          <div className="surface-card rounded-2xl p-3.5 sm:p-4.5 space-y-2.5 border border-[var(--theme-border-subtle)] shadow-xs">
+          {/* Practice Header: Mode Switch Aware (panel only in edit mode; light row for students) */}
+          <div className={isEditMode
+            ? 'surface-card rounded-2xl p-3.5 sm:p-4.5 space-y-2.5 border border-[var(--theme-border-subtle)] shadow-xs'
+            : 'space-y-2'}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[10px] sm:text-[11px] font-black uppercase tracking-wider reader-badge">

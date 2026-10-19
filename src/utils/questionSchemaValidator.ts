@@ -292,10 +292,11 @@ const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
     type: 'short_answer',
     questions: [
       {
-        question: 'What lesson did the story teach?',
-        correct_answer: 'Courage to try and reach for the sky',
-        acceptable_answers: ['courage', 'trying', 'believing in yourself'],
-        explanation: 'The story emphasizes believing in your potential.',
+        question: 'Complete the sentence with the missing word from the lesson:\n\nThe young bird gathered ________ to fly across the high valley.',
+        correct_answer: 'courage',
+        expected_answer: 'courage',
+        acceptable_answers: ['courage', 'bravery'],
+        explanation: 'The missing word is "courage".',
         difficulty: 'medium',
         points: 10
       }
@@ -1419,16 +1420,27 @@ export function generateTranscriptGrounded10Questions(
 
   // ---------------------------------------------------------------------------
   // 7-9: 3 SHORT ANSWER QUESTIONS (10 marks each = 30 marks)
+  // Controlled 1-word fill-in-the-blank from the lesson transcript
   // ---------------------------------------------------------------------------
   for (let i = 0; i < 3; i++) {
     const sourceSentence = getSentence(i + 6);
     const keywords = extractKeywords(sourceSentence);
-    const keyTopic = keywords.slice(0, 2).join(' ') || lessonTitle;
+    const candidateWords = keywords.filter(w => w.length >= 4 && !/^\d+$/.test(w));
+    const rawTargetWord = candidateWords[0] || (sourceSentence.split(/\s+/).find(w => w.length >= 4) || 'lesson');
+    const cleanTargetWord = rawTargetWord.replace(/[^a-zA-Z0-9]/g, '').trim();
+
+    // Create sentence with blank
+    const blankRegex = new RegExp(`\\b${cleanTargetWord}\\b`, 'i');
+    const sentenceWithBlank = blankRegex.test(sourceSentence)
+      ? sourceSentence.replace(blankRegex, '________')
+      : `Complete the sentence with the missing word: "${sourceSentence.slice(0, 80)} ________"`;
+
     const acceptable = Array.from(
       new Set([
-        sourceSentence,
-        keywords.slice(0, 4).join(' '),
-        ...keywords.slice(0, 3)
+        cleanTargetWord,
+        cleanTargetWord.toLowerCase(),
+        cleanTargetWord.toUpperCase(),
+        cleanTargetWord.charAt(0).toUpperCase() + cleanTargetWord.slice(1).toLowerCase()
       ].filter(Boolean))
     );
 
@@ -1436,26 +1448,20 @@ export function generateTranscriptGrounded10Questions(
       id: `q_${now}_${orderIndex}`,
       episode_id: episodeId,
       course_id: courseId,
-      question_text: i === 0
-        ? `Based on the video transcript, explain the main point discussed about "${keyTopic}".`
-        : i === 1
-        ? `In your own words, summarize what the lesson states regarding "${keyTopic}".`
-        : `According to the speaker in the video, what is important to understand about "${keyTopic}"?`,
+      question_text: `Fill in the missing word from the video lesson:\n\n${sentenceWithBlank}`,
       question_type: 'short_answer',
       options: acceptable,
-      correct_answer: sourceSentence,
-      expected_answer: sourceSentence,
+      correct_answer: cleanTargetWord,
+      expected_answer: cleanTargetWord,
       acceptable_answers: acceptable,
-      explanation: `Full marks (10/10) for explaining the key idea from the transcript: "${sourceSentence}". Key terms to include: ${keywords.slice(0, 5).join(', ')}.`,
-      skill: 'Short Answer Comprehension',
-      concept: keyTopic,
+      explanation: `The missing word is "${cleanTargetWord}". Full sentence from transcript: "${sourceSentence}".`,
+      skill: 'Vocabulary Recall',
+      concept: cleanTargetWord,
       difficulty: 'medium',
       points: 10,
       order_index: orderIndex++,
       evaluation: {
-        method: 'ai_semantic',
-        ai_evaluated: true,
-        criteria: ['comprehension', 'accuracy', 'key_details'],
+        method: 'deterministic',
         maxScore: 10
       }
     });

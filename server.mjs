@@ -5302,10 +5302,46 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       `)
       .eq('course_id', courseId);
 
+    // Teachers (owner/admin) receive full authoring data. Students only receive
+    // what they need: private video transcripts are stripped unless the teacher
+    // explicitly enabled "Show transcript to students".
+    const isCourseOwnerOrAdmin =
+      course.teacher_id === authData.user.id ||
+      authData.profile?.role === 'admin' ||
+      authData.user.email === 'roshanjoyal520@gmail.com';
+
+    const normalizeForCompare = (s) => String(s || '')
+      .toLowerCase()
+      .replace(/[#*_>`~\-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const sanitizeBlockForStudent = (b) => {
+      if (isCourseOwnerOrAdmin || !b || typeof b.content !== 'object' || b.content === null) return b;
+      const c = { ...b.content };
+      const showTranscript = Boolean(c.show_transcript || c.video?.show_transcript);
+      if (!showTranscript) {
+        const transcript = c.transcript || c.video?.transcript || '';
+        // If the video "notes" text is just a pasted copy of the transcript, hide it too.
+        const nt = normalizeForCompare(transcript);
+        const nb = normalizeForCompare(c.text || c.markdown || '');
+        if (nt.length >= 30 && nb.length >= 30 && (nb === nt || nt.includes(nb) || nb.includes(nt))) {
+          delete c.text;
+          delete c.markdown;
+        }
+        delete c.transcript;
+        if (c.video && typeof c.video === 'object') {
+          const { transcript: _omit, ...videoRest } = c.video;
+          c.video = videoRest;
+        }
+      }
+      return { ...b, content: c };
+    };
+
     const blocksByEpisode = new Map();
     (blocks || []).forEach(b => {
       if (!blocksByEpisode.has(b.episode_id)) blocksByEpisode.set(b.episode_id, []);
-      blocksByEpisode.get(b.episode_id).push(b);
+      blocksByEpisode.get(b.episode_id).push(sanitizeBlockForStudent(b));
     });
 
     const questionsByEpisode = new Map();

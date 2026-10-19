@@ -489,7 +489,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
       <main
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="flex-1 w-full overflow-y-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 scroll-smooth box-border"
+        className="course-reader-scroll flex-1 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 py-6 sm:py-10 scroll-smooth box-border [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]"
       >
         {viewMode === 'roadmap' ? (
           <CourseRoadmap
@@ -503,7 +503,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
             activeLessonId={selectedEpisode.id}
           />
         ) : (
-          <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border overflow-x-hidden">
+          <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border min-w-0">
             
             {/* EDITORIAL LESSON HEADER */}
             <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">

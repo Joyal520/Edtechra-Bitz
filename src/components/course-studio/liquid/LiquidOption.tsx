@@ -25,23 +25,21 @@ export const LiquidOption: React.FC<LiquidOptionProps> = ({
   className = ''
 }) => {
   let stateClass = '';
-  let badgeStyle = 'liquid-option-badge';
+  let badgeStyle = 'liquid-option-badge self-start mt-0.5';
 
   if (isAnswered) {
     if (isSelected) {
       stateClass = isCorrect ? 'is-correct' : 'is-incorrect';
-      badgeStyle = isCorrect
-        ? 'w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center font-black shrink-0'
-        : 'w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center font-black shrink-0';
+      badgeStyle = 'w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center font-black shrink-0 self-start mt-0.5';
     } else if (!isCorrect && isCorrectOption) {
       stateClass = 'border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100 font-bold';
-      badgeStyle = 'w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black shrink-0';
+      badgeStyle = 'w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black shrink-0 self-start mt-0.5';
     } else {
-      stateClass = 'opacity-40 bg-slate-50 text-slate-400 cursor-not-allowed';
+      stateClass = 'opacity-40 bg-slate-50 dark:bg-slate-900/40 text-slate-400 cursor-not-allowed';
     }
   } else if (isSelected) {
     stateClass = 'is-selected';
-    badgeStyle = 'w-8 h-8 rounded-xl bg-[#026fc3] text-white flex items-center justify-center font-black shrink-0 shadow-xs';
+    badgeStyle = 'w-8 h-8 rounded-xl bg-[#026fc3] text-white flex items-center justify-center font-black shrink-0 shadow-xs self-start mt-0.5';
   }
 
   return (

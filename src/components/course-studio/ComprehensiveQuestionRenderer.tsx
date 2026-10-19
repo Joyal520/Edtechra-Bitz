@@ -292,77 +292,30 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   };
 
   // --------------------------------------------------------------------------
-  // 2B. SHORT ANSWER EVALUATOR SUBMISSION (0 TO 10 MARKS)
   // --------------------------------------------------------------------------
-  const handleEvaluateShortAnswer = async () => {
-    const trimmed = shortAnswerInput.trim();
-    if (!trimmed || isAnswered || isEvaluatingAi) return;
+  // 2B. SHORT ANSWER: DETERMINISTIC ONE-WORD EVALUATOR (0 OR 10 MARKS, NO AI)
+  // --------------------------------------------------------------------------
+  const handleEvaluateShortAnswer = () => {
+    const rawInput = shortAnswerInput.trim();
+    if (!rawInput || isAnswered) return;
 
-    setIsEvaluatingAi(true);
+    // Reject multi-word submissions
+    const words = rawInput.split(/\s+/).filter(Boolean);
+    if (words.length > 1) {
+      setAiError('Please enter exactly ONE word.');
+      return;
+    }
     setAiError(null);
 
-    const maxScore = question.points || 10;
-    const expectedAns = String(
-      question.expected_answer ||
-      question.correct_answer ||
-      (typeof question.options === 'object' && !Array.isArray(question.options) && (question.options as any)?.expected_answer) ||
-      ''
-    ).trim();
-
-    const acceptableAnswers: string[] = Array.isArray(question.acceptable_answers) && question.acceptable_answers.length > 0
-      ? question.acceptable_answers
-      : Array.isArray(question.options)
-      ? question.options.map((o: any) => typeof o === 'string' ? o : String(o?.text || '')).filter(Boolean)
-      : (expectedAns ? [expectedAns] : []);
-
-    try {
-      const evaluation = await courseStudioService.evaluateQuestionAnswer({
-        question_text: question.question_text,
-        student_answer: trimmed,
-        expected_answer: expectedAns,
-        acceptable_answers: acceptableAnswers,
-        evaluation_criteria: question.evaluation_criteria || question.evaluation?.criteria || ['comprehension', 'accuracy', 'key_details'],
-        passage: passageText || question.explanation || '',
-        max_score: maxScore
-      });
-
-      const finalScore = typeof evaluation.score === 'number'
-        ? Math.max(0, Math.min(maxScore, Math.round(evaluation.score)))
-        : (evaluation.correct ? maxScore : 0);
-      const isPass = evaluation.correct || finalScore >= Math.ceil(maxScore * 0.6);
-
-      if (isPass) {
-        courseAudio.playCorrectSound();
-        triggerConfettiBurst(null);
-      } else {
-        courseAudio.playIncorrectSound();
-      }
-
-      const res: StudentQuestionResponse = {
-        questionId: qId,
-        answer: trimmed,
-        status: isPass ? 'correct' : 'incorrect',
-        score: finalScore,
-        maxScore,
-        feedback: evaluation.feedback || (isPass ? (question.explanation || 'Great short answer!') : `Expected answer: "${expectedAns}". ${question.explanation || ''}`),
-        languageFeedback: evaluation.languageFeedback || null,
-        evaluatedAt: new Date().toISOString()
-      };
-
-      onAnswerSubmit(res);
-    } catch (err: any) {
-      // Fallback to local semantic/keyword grading
-      const fallbackResult = evaluateQuestionAnswer(question, trimmed);
-      commitAnswer(
-        trimmed,
-        fallbackResult.isCorrect,
-        fallbackResult.feedback || (fallbackResult.isCorrect ? (question.explanation || 'Correct!') : `Expected key idea: "${expectedAns}". ${question.explanation || ''}`),
-        fallbackResult.isCorrect ? 1 : 0,
-        fallbackResult.languageFeedback
-      );
-    } finally {
-      setIsEvaluatingAi(false);
-    }
+    // Score deterministically using questionGrading engine (no AI API call)
+    const evalResult = evaluateQuestionAnswer(question, rawInput);
+    commitAnswer(
+      rawInput,
+      evalResult.isCorrect,
+      evalResult.feedback,
+      evalResult.isCorrect ? 1 : 0,
+      null
+    );
   };
 
   // --------------------------------------------------------------------------
@@ -436,7 +389,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   return (
     <div
       id={`question-${qId}`}
-      className={`w-full rounded-2xl sm:rounded-3xl p-5 sm:p-7 surface-card space-y-4 transition-all border border-[var(--theme-border-primary)] shadow-xs ${
+      className={`w-full ${
+        mode === 'edit'
+          ? 'rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[var(--theme-border-primary)] shadow-xs'
+          : 'rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-[var(--theme-border-subtle)] shadow-2xs'
+      } surface-card space-y-3.5 sm:space-y-4 transition-all ${
         isAnswered
           ? isCorrect
             ? 'ring-1 ring-emerald-500/40 bg-emerald-50/10'
@@ -826,21 +783,34 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            {(qType === 'true_false' ? ['True', 'False'] : ['Yes', 'No']).map(val => {
-              const isSelected = response?.answer === val;
+          <div className="flex items-center justify-center gap-4 sm:gap-6 pt-2 pb-1">
+            {/* TRUE BUTTON (Green / Teal checkmark icon button) */}
+            {(() => {
+              const val = qType === 'true_false' ? 'True' : 'Yes';
+              const isSelected = String(response?.answer || '').toLowerCase() === val.toLowerCase();
               const isCorrectOption = val.toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
 
+              let buttonStyle = 'bg-white hover:bg-emerald-50 text-emerald-600 border-2 border-emerald-300 hover:border-emerald-500 shadow-xs';
+              if (isAnswered) {
+                if (isSelected) {
+                  buttonStyle = isCorrect
+                    ? 'bg-emerald-600 text-white border-2 border-emerald-600 shadow-md ring-4 ring-emerald-500/20'
+                    : 'bg-emerald-600 text-white border-2 border-emerald-600';
+                } else if (!isCorrect && isCorrectOption) {
+                  buttonStyle = 'bg-emerald-50 text-emerald-700 border-2 border-dashed border-emerald-500';
+                } else {
+                  buttonStyle = 'opacity-35 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed';
+                }
+              } else if (isSelected) {
+                buttonStyle = 'bg-emerald-600 text-white border-2 border-emerald-600 shadow-md ring-4 ring-emerald-500/20';
+              }
+
               return (
-                <LiquidOption
-                  key={val}
-                  badge={val === 'True' || val === 'Yes' ? '✓' : '✕'}
-                  text={val}
-                  isSelected={isSelected}
-                  isAnswered={isAnswered}
-                  isCorrect={isCorrect}
-                  isCorrectOption={isCorrectOption}
+                <button
+                  type="button"
                   disabled={isAnswered}
+                  aria-label={`Select ${val}`}
+                  title={val}
                   onClick={() =>
                     commitAnswer(
                       val,
@@ -850,9 +820,57 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                         : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
                     )
                   }
-                />
+                  className={`w-24 sm:w-28 h-16 sm:h-18 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer select-none active:scale-95 focus:outline-none focus:ring-4 focus:ring-emerald-500/30 ${buttonStyle}`}
+                >
+                  <Check className="w-8 h-8 stroke-[3.2]" />
+                  <span className="sr-only">{val}</span>
+                </button>
               );
-            })}
+            })()}
+
+            {/* FALSE BUTTON (Coral / Red cross icon button) */}
+            {(() => {
+              const val = qType === 'true_false' ? 'False' : 'No';
+              const isSelected = String(response?.answer || '').toLowerCase() === val.toLowerCase();
+              const isCorrectOption = val.toLowerCase() === (question.correct_answer || '').trim().toLowerCase();
+
+              let buttonStyle = 'bg-white hover:bg-rose-50 text-rose-600 border-2 border-rose-300 hover:border-rose-500 shadow-xs';
+              if (isAnswered) {
+                if (isSelected) {
+                  buttonStyle = isCorrect
+                    ? 'bg-rose-600 text-white border-2 border-rose-600 shadow-md ring-4 ring-rose-500/20'
+                    : 'bg-rose-600 text-white border-2 border-rose-600';
+                } else if (!isCorrect && isCorrectOption) {
+                  buttonStyle = 'bg-rose-50 text-rose-700 border-2 border-dashed border-rose-500';
+                } else {
+                  buttonStyle = 'opacity-35 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed';
+                }
+              } else if (isSelected) {
+                buttonStyle = 'bg-rose-600 text-white border-2 border-rose-600 shadow-md ring-4 ring-rose-500/20';
+              }
+
+              return (
+                <button
+                  type="button"
+                  disabled={isAnswered}
+                  aria-label={`Select ${val}`}
+                  title={val}
+                  onClick={() =>
+                    commitAnswer(
+                      val,
+                      isCorrectOption,
+                      isCorrectOption
+                        ? question.explanation || 'Correct!'
+                        : `Incorrect. The correct answer is: ${question.correct_answer}. ${question.explanation || ''}`
+                    )
+                  }
+                  className={`w-24 sm:w-28 h-16 sm:h-18 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer select-none active:scale-95 focus:outline-none focus:ring-4 focus:ring-rose-500/30 ${buttonStyle}`}
+                >
+                  <XCircle className="w-8 h-8 stroke-[2.8]" />
+                  <span className="sr-only">{val}</span>
+                </button>
+              );
+            })()}
           </div>
         )
       )}
@@ -953,13 +971,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         ) : (
           <div className="space-y-4 pt-1">
             <p className="text-xs sm:text-sm text-theme-secondary font-medium">
-              Click the word chips below to assemble the sentence in the correct order:
+              Assemble the sentence in the correct order:
             </p>
 
-            {/* Constructed Sentence Box (Answer Area - Liquid Glass Workspace) */}
-            <div className="space-y-2">
+            {/* AREA 1: Ordered Sentence */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black text-sky-800 dark:text-sky-300 uppercase tracking-wider block">
+                <span className="text-[11px] font-black text-[#026fc3] uppercase tracking-wider block">
                   Your Ordered Sentence:
                 </span>
                 {selectedTokens.length > 0 && !isAnswered && (
@@ -968,10 +986,10 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   </span>
                 )}
               </div>
-              <div className="liquid-answer-workspace word-bank">
+              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-sky-50/70 border-2 border-dashed border-sky-300 flex flex-wrap items-center gap-2 transition-all">
                 {selectedTokens.length === 0 ? (
-                  <span className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium italic select-none py-1 px-1">
-                    Click the chips below in order to assemble the sentence...
+                  <span className="text-xs sm:text-sm text-slate-400 font-medium italic select-none">
+                    Tap the words below in order to assemble the sentence...
                   </span>
                 ) : (
                   selectedTokens.map((token) => (
@@ -992,15 +1010,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               </div>
             </div>
 
-            {/* Available Word Chips Area (Liquid Tray) */}
-            <div className="space-y-2 pt-1">
-              <span className="text-[11px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                Available Words & Phrases:
+            {/* AREA 2: Available Word Bank */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                Available Words:
               </span>
-              <div className="liquid-tray-workspace word-bank">
+              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-slate-50/80 border border-slate-200 flex flex-wrap items-center gap-2 transition-all">
                 {sentenceTokens.length === 0 ? (
-                  <div className="text-xs sm:text-sm text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 py-1 px-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <div className="text-xs sm:text-sm text-emerald-700 font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>All words placed! Click "Submit Sentence" below.</span>
                   </div>
                 ) : (
@@ -1199,70 +1217,106 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 9A: SHORT ANSWER (CONCISE LESSON ANSWER WITH MARKS & RUBRIC)   */}
+      {/* TYPE 9A: SHORT ANSWER (CONTROLLED ONE-WORD FILL-IN-THE-BLANK TASK) */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'short_answer' && (
         mode === 'edit' ? (
-          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-[#172033]">
             <div>
               <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
-                Expected Answer (Answer Key):
+                Expected Word (One word answer key):
               </span>
               <input
                 type="text"
                 value={question.expected_answer || question.correct_answer || ''}
-                onChange={e => onUpdateQuestion?.({
-                  ...question,
-                  correct_answer: e.target.value,
-                  expected_answer: e.target.value,
-                  acceptable_answers: question.acceptable_answers || [e.target.value]
-                })}
-                placeholder="e.g. The police were called."
-                className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+                onChange={e => {
+                  const val = e.target.value;
+                  onUpdateQuestion?.({
+                    ...question,
+                    correct_answer: val,
+                    expected_answer: val,
+                    acceptable_answers: question.acceptable_answers || [val]
+                  });
+                }}
+                placeholder="e.g. tunnel"
+                className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
+              />
+              <span className="text-[10px] text-slate-400 font-medium block mt-1">
+                Tip: Enter the exact missing word. Question text should contain an underscore blank (e.g. "The train entered a long ________.")
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+                Alternative Accepted Answers (comma-separated, optional):
+              </span>
+              <input
+                type="text"
+                value={Array.isArray(question.acceptable_answers) ? question.acceptable_answers.join(', ') : ''}
+                onChange={e => {
+                  const list = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                  onUpdateQuestion?.({
+                    ...question,
+                    acceptable_answers: list
+                  });
+                }}
+                placeholder="e.g. color, colour"
+                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
               />
             </div>
             <div>
               <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
-                Marking Guidance / Teacher Rubric:
+                Review Explanation (shown after submission):
               </span>
               <textarea
                 rows={2}
                 value={question.explanation || ''}
                 onChange={e => onUpdateQuestion?.({ ...question, explanation: e.target.value })}
-                placeholder="e.g. Award 10 marks if student mentions police were notified."
-                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+                placeholder="e.g. The transcript confirms the train entered the tunnel."
+                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
               />
             </div>
           </div>
         ) : (
           <div className="space-y-3 pt-1">
-            <textarea
-              rows={3}
-              disabled={isAnswered || isEvaluatingAi}
-              value={shortAnswerInput}
-              onChange={e => setShortAnswerInput(e.target.value)}
-              placeholder="Write your short answer here (1-2 sentences)..."
-              className="w-full p-3.5 liquid-textarea text-base font-sans leading-relaxed placeholder:text-slate-400"
-            />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  type="text"
+                  disabled={isAnswered}
+                  value={shortAnswerInput}
+                  onChange={e => {
+                    setShortAnswerInput(e.target.value);
+                    if (aiError) setAiError(null);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !isAnswered && shortAnswerInput.trim()) {
+                      e.preventDefault();
+                      handleEvaluateShortAnswer();
+                    }
+                  }}
+                  placeholder="Type missing word (one word only)..."
+                  aria-label="One word answer"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 focus:border-[#026fc3] focus:ring-2 focus:ring-[#026fc3]/20 bg-white text-[#172033] text-base font-semibold placeholder:text-slate-400 placeholder:font-normal outline-none transition-all"
+                />
+              </div>
+
+              {!isAnswered && (
+                <button
+                  type="button"
+                  disabled={!shortAnswerInput.trim()}
+                  onClick={handleEvaluateShortAnswer}
+                  className="px-5 py-3 rounded-xl bg-[#026fc3] hover:bg-[#025aa0] active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-black transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1.5"
+                >
+                  <span>Check Word</span>
+                </button>
+              )}
+            </div>
 
             {aiError && (
               <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                <span>{aiError}</span>
+                <span className="font-semibold">{aiError}</span>
               </div>
-            )}
-
-            {!isAnswered && (
-              <LiquidButton
-                variant="primary"
-                size="md"
-                disabled={!shortAnswerInput.trim() || isEvaluatingAi}
-                loading={isEvaluatingAi}
-                onClick={handleEvaluateShortAnswer}
-                icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
-              >
-                {isEvaluatingAi ? 'Evaluating Answer...' : 'Submit Short Answer'}
-              </LiquidButton>
             )}
           </div>
         )

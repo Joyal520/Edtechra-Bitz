@@ -656,8 +656,58 @@ export function evaluateQuestionAnswer(
     };
   }
 
+  // 6B. SHORT ANSWER: CONTROLLED ONE-WORD FILL-IN-THE-BLANK TASK (PART 4 REQUIREMENT)
+  if (qType === 'short_answer') {
+    const rawStudentStr = String(studentAnswer || '').trim();
+    // Validate: student must provide exactly one word. Multiple words or empty string are invalid.
+    const words = rawStudentStr ? rawStudentStr.split(/\s+/).filter(Boolean) : [];
+    const isSingleWord = words.length === 1;
+
+    const expectedAns = String(
+      rawCorrect ||
+      (question as any).expected_answer ||
+      (question as any).expectedAnswer ||
+      (typeof question.options === 'object' && (question.options as any)?.expected_answer) ||
+      ''
+    ).trim();
+
+    const acceptableAnswers: string[] = [
+      expectedAns,
+      ...(Array.isArray((question as any).acceptable_answers) ? (question as any).acceptable_answers : []),
+      ...(Array.isArray((question as any).acceptableAnswers) ? (question as any).acceptableAnswers : []),
+      ...(Array.isArray(question.options) ? question.options.map(o => typeof o === 'string' ? o : o?.text || '') : [])
+    ].map(s => String(s || '').trim()).filter(Boolean);
+
+    // Normalize one-word answer: clean surrounding punctuation, trim, lowercase
+    const cleanStudent = cleanTextForComparison(rawStudentStr);
+    const acceptableCleaned = acceptableAnswers.map(cleanTextForComparison).filter(Boolean);
+
+    const isMatch = isSingleWord && cleanStudent.length > 0 && acceptableCleaned.includes(cleanStudent);
+
+    let feedback = '';
+    if (!rawStudentStr) {
+      feedback = 'Please provide an answer.';
+    } else if (!isSingleWord) {
+      feedback = 'Please enter exactly one word.';
+    } else if (isMatch) {
+      feedback = explanation ? `Correct! +${maxScore} marks. ${explanation}` : `Correct! +${maxScore} marks.`;
+    } else {
+      feedback = expectedAns
+        ? `Not quite. Expected: "${expectedAns}". ${explanation || ''}`.trim()
+        : `Not quite. ${explanation || ''}`.trim();
+    }
+
+    return {
+      isCorrect: isMatch,
+      score: isMatch ? maxScore : 0,
+      maxScore,
+      feedback,
+      languageFeedback: null
+    };
+  }
+
   // 7. WH QUESTION & READING COMPREHENSION (SEMANTIC EVALUATOR)
-  if (qType === 'wh_question' || qType === 'comprehension' || qType === 'short_answer') {
+  if (qType === 'wh_question' || qType === 'comprehension') {
     const studentStr = String(studentAnswer || '').trim();
     const expectedAns =
       rawCorrect ||
