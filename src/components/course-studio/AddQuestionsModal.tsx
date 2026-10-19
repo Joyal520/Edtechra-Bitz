@@ -44,6 +44,8 @@ interface Props {
   episodeId: string;
   courseId: string;
   lessonText: string;
+  videoTranscript?: string;
+  hasVideo?: boolean;
   onImportQuestions: (questions: CourseQuestion[]) => void;
 }
 
@@ -65,6 +67,15 @@ interface QuestionCategoryDef {
   items: QuestionTypeDefinition[];
 }
 
+// Default selected IDs for the standard 10-question / 100-mark assessment:
+// 3 Multiple Choice (30) + 3 True/False (30) + 3 Fill in the Blank / Short Answer (30) + 1 Sentence Builder (10)
+const DEFAULT_SELECTED_IDS: Record<string, number> = {
+  mcq_single: 3,
+  tf_standard: 3,
+  short_ans: 3,
+  sent_builder: 1
+};
+
 // Full Category Workspace Definitions matching Section 5 (A through I)
 const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
   {
@@ -72,7 +83,7 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
     title: 'MULTIPLE CHOICE & SELECTION',
     description: 'Single and multiple selection objective items with distractors',
     items: [
-      { id: 'mcq_single', label: 'Multiple Choice', type: 'multiple_choice', defaultCount: 5, points: 10 },
+      { id: 'mcq_single', label: 'Multiple Choice', type: 'multiple_choice', defaultCount: 3, points: 10 },
       { id: 'mcq_multi', label: 'Multiple Select', type: 'multiple_select', defaultCount: 3, points: 10 }
     ]
   },
@@ -88,9 +99,10 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
   {
     code: 'C',
     title: 'FILL IN THE BLANK & CLOZE',
-    description: 'Single blank, multi-blank, and embedded cloze reading passages',
+    description: 'One-word fill-in-the-blank, multi-blank, and embedded cloze passages',
     items: [
-      { id: 'fill_single', label: 'Fill in the Blank', type: 'fill_blank', defaultCount: 5, points: 10 },
+      { id: 'short_ans', label: 'Fill in the Blank (One-Word Short Answer)', type: 'short_answer', defaultCount: 3, points: 10 },
+      { id: 'fill_single', label: 'Fill in the Blank (Sentence)', type: 'fill_blank', defaultCount: 3, points: 10 },
       { id: 'fill_multi', label: 'Multiple Fill in the Blanks', type: 'multiple_fill_blanks', defaultCount: 3, points: 10 },
       { id: 'cloze_passage', label: 'Cloze Passage', type: 'cloze_passage', defaultCount: 1, points: 20 }
     ]
@@ -98,10 +110,9 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
   {
     code: 'D',
     title: 'READING COMPREHENSION',
-    description: 'Text-anchored WH comprehension, short answers, and passage inference',
+    description: 'Text-anchored WH comprehension and passage inference',
     items: [
       { id: 'wh_general', label: 'WH Questions', type: 'wh_question', defaultCount: 5, wh_type: 'mixed_wh', points: 10 },
-      { id: 'short_ans', label: 'Short Answer', type: 'short_answer', defaultCount: 3, points: 10 },
       { id: 'comp_main_idea', label: 'Main Idea', type: 'comprehension', defaultCount: 2, points: 10 },
       { id: 'comp_detail', label: 'Detail Questions', type: 'comprehension', defaultCount: 3, points: 10 },
       { id: 'comp_vocab', label: 'Vocabulary in Context', type: 'comprehension', defaultCount: 3, points: 10 }
@@ -112,9 +123,9 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
     title: 'ORDERING & SEQUENCING',
     description: 'Chronological timeline, sentence reconstruction, and sequence events',
     items: [
-      { id: 'ord_seq', label: 'Ordering Sequence', type: 'ordering', defaultCount: 2, maxCount: 10, points: 10 },
-      { id: 'sent_builder', label: 'Sentence Builder', type: 'sentence_builder', defaultCount: 3, maxCount: 10, points: 10 },
-      { id: 'sent_reorder', label: 'Sentence Reordering', type: 'sentence_reordering', defaultCount: 3, maxCount: 10, points: 10 }
+      { id: 'sent_builder', label: 'Sentence Builder', type: 'sentence_builder', defaultCount: 1, maxCount: 10, points: 10 },
+      { id: 'sent_reorder', label: 'Sentence Reordering', type: 'sentence_reordering', defaultCount: 1, maxCount: 10, points: 10 },
+      { id: 'ord_seq', label: 'Ordering Sequence', type: 'ordering', defaultCount: 2, maxCount: 10, points: 10 }
     ]
   },
   {
@@ -133,7 +144,7 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
     description: 'Grammar choice, sentence completion, and error detection',
     items: [
       { id: 'gram_choice', label: 'Grammar Choice', type: 'word_choice', defaultCount: 5, points: 10 },
-      { id: 'gram_completion', label: 'Sentence Completion', type: 'fill_blank', defaultCount: 5, points: 10 },
+      { id: 'gram_completion', label: 'Sentence Completion', type: 'fill_blank', defaultCount: 3, points: 10 },
       { id: 'gram_error', label: 'Error Correction', type: 'grammar_correction', defaultCount: 3, points: 10 }
     ]
   },
@@ -142,7 +153,7 @@ const WORKSPACE_CATEGORIES: QuestionCategoryDef[] = [
     title: 'WRITING & SPEAKING',
     description: 'Descriptive paragraphs, speaking responses, and guided role-plays',
     items: [
-      { id: 'write_short', label: 'Short Writing', type: 'short_answer', defaultCount: 2, points: 10 },
+      { id: 'write_short', label: 'Short Writing (1-Word Blank)', type: 'short_answer', defaultCount: 2, points: 10 },
       { id: 'write_paragraph', label: 'Paragraph Writing', type: 'essay', defaultCount: 1, maxCount: 5, points: 20 },
       { id: 'speak_prompt', label: 'Speaking Prompt', type: 'speaking', defaultCount: 2, maxCount: 5, points: 15 },
       { id: 'speak_roleplay', label: 'Role Play', type: 'speaking', defaultCount: 1, maxCount: 5, points: 15 }
@@ -166,6 +177,22 @@ interface SelectedItemState {
   blankCount?: number;
 }
 
+const buildDefaultItemSelections = (): Record<string, SelectedItemState> => {
+  const initial: Record<string, SelectedItemState> = {};
+  WORKSPACE_CATEGORIES.forEach(cat => {
+    cat.items.forEach(item => {
+      const defaultCountForId = DEFAULT_SELECTED_IDS[item.id];
+      initial[item.id] = {
+        selected: defaultCountForId !== undefined,
+        count: defaultCountForId !== undefined ? defaultCountForId : item.defaultCount,
+        wh_type: item.wh_type || 'mixed_wh',
+        blankCount: item.type === 'cloze_passage' ? 10 : undefined
+      };
+    });
+  });
+  return initial;
+};
+
 export const AddQuestionsModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -175,30 +202,20 @@ export const AddQuestionsModal: React.FC<Props> = ({
   episodeId,
   courseId,
   lessonText,
+  videoTranscript = '',
+  hasVideo = false,
   onImportQuestions
 }) => {
   const [step, setStep] = useState<'select' | 'prompt' | 'import'>('select');
 
-  // Selection states keyed by item ID
-  const [itemSelections, setItemSelections] = useState<Record<string, SelectedItemState>>(() => {
-    const initial: Record<string, SelectedItemState> = {};
-    WORKSPACE_CATEGORIES.forEach(cat => {
-      cat.items.forEach(item => {
-        // Default: Multiple Choice in Category A selected by default
-        initial[item.id] = {
-          selected: item.id === 'mcq_single',
-          count: item.defaultCount,
-          wh_type: item.wh_type || 'mixed_wh',
-          blankCount: item.type === 'cloze_passage' ? 10 : undefined
-        };
-      });
-    });
-    return initial;
-  });
+  // Selection states keyed by item ID (defaults to 3 MCQ, 3 T/F, 3 Short Answer/Fill Blank, 1 Sentence Builder = 10 Qs, 100 Marks)
+  const [itemSelections, setItemSelections] = useState<Record<string, SelectedItemState>>(buildDefaultItemSelections);
 
   // Global assessment settings
   const [cefrLevel, setCefrLevel] = useState<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'>('A1');
   const [teacherInstructions, setTeacherInstructions] = useState('');
+  const [localTranscript, setLocalTranscript] = useState(videoTranscript || '');
+  const [promptValidationError, setPromptValidationError] = useState<string | null>(null);
 
   // Step 2: Prompt state
   const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -208,12 +225,21 @@ export const AddQuestionsModal: React.FC<Props> = ({
   const [jsonInput, setJsonInput] = useState('');
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
-  // Reset or initialize on open
+  // Synchronize transcript with canonical videoTranscript prop whenever modal opens or prop updates
+  useEffect(() => {
+    setLocalTranscript(videoTranscript || '');
+    if ((videoTranscript || '').trim().length > 0) {
+      setPromptValidationError(null);
+    }
+  }, [videoTranscript, isOpen]);
+
+  // Reset step on open
   useEffect(() => {
     if (isOpen) {
       setStep('select');
       setValidationResult(null);
       setCopied(false);
+      setPromptValidationError(null);
     }
   }, [isOpen]);
 
@@ -229,12 +255,18 @@ export const AddQuestionsModal: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const effectiveTranscript = (localTranscript || videoTranscript || '').trim();
+  const cleanLessonText = (lessonText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const isMissingRequiredTranscript =
+    (hasVideo && effectiveTranscript.length === 0) ||
+    (!hasVideo && effectiveTranscript.length === 0 && cleanLessonText.length === 0);
+
   // Selection Metrics Summary
   const { totalSelectedQuestions, totalSelectedTypes, totalSelectedPoints, selectedItemsSummary } = useMemo(() => {
     let qCount = 0;
     let tCount = 0;
     let pCount = 0;
-    const summaryList: { id: string; label: string; count: number; points: number }[] = [];
+    const summaryList: { id: string; label: string; type: QuestionType; count: number; points: number }[] = [];
 
     WORKSPACE_CATEGORIES.forEach(cat => {
       cat.items.forEach(item => {
@@ -248,6 +280,7 @@ export const AddQuestionsModal: React.FC<Props> = ({
           summaryList.push({
             id: item.id,
             label: item.label,
+            type: item.type,
             count: c,
             points: pts
           });
@@ -264,6 +297,10 @@ export const AddQuestionsModal: React.FC<Props> = ({
   }, [itemSelections]);
 
   if (!isOpen) return null;
+
+  const handleRestoreDefaults = () => {
+    setItemSelections(buildDefaultItemSelections());
+  };
 
   // Toggle item selection
   const toggleItem = (itemId: string, isComingSoon?: boolean) => {
@@ -338,7 +375,14 @@ export const AddQuestionsModal: React.FC<Props> = ({
             count: state.count,
             difficulty: 'medium',
             points: item.points || (item.type === 'essay' || item.type === 'cloze_passage' ? 20 : 10),
-            instructions: item.label !== QUESTION_TYPE_LABELS[item.type] ? `Focus: ${item.label}` : undefined
+            instructions:
+              item.type === 'short_answer' || item.type === 'fill_blank'
+                ? 'One-word fill-in-the-blank question based directly on the video transcript. Expected answer MUST be ONE WORD ONLY.'
+                : item.type === 'sentence_builder' || item.type === 'sentence_reordering'
+                ? 'Sentence builder question (6–12 words) using a meaningful sentence directly from the video transcript.'
+                : item.label !== QUESTION_TYPE_LABELS[item.type]
+                ? `Focus: ${item.label}`
+                : undefined
           };
 
           if (item.type === 'cloze_passage') {
@@ -358,6 +402,7 @@ export const AddQuestionsModal: React.FC<Props> = ({
     return {
       items,
       cefr_level: cefrLevel,
+      video_transcript: effectiveTranscript || undefined,
       teacher_instructions: teacherInstructions
     };
   };
@@ -366,12 +411,21 @@ export const AddQuestionsModal: React.FC<Props> = ({
   const handleProceedToPrompt = () => {
     if (totalSelectedQuestions === 0) return;
 
+    if (isMissingRequiredTranscript) {
+      setPromptValidationError(
+        'Please enter or restore the video transcript before generating practice questions. EdTechra requires the transcript to create questions based on this lesson.'
+      );
+      return;
+    }
+
+    setPromptValidationError(null);
     const plan = constructPlan();
     const promptText = buildAiQuestionPrompt({
       courseTitle,
       unitTitle,
       episodeTitle,
       lessonText,
+      videoTranscript: effectiveTranscript,
       plan,
       cefrLevel
     });
@@ -585,17 +639,65 @@ export const AddQuestionsModal: React.FC<Props> = ({
               {/* LEFT / MAIN WORKSPACE AREA: CATEGORIES A THROUGH I */}
               <div className="w-full lg:flex-1 space-y-6">
                 
+                {/* Missing Transcript Validation Banner (Part 4 requirement) */}
+                {(isMissingRequiredTranscript || promptValidationError) && (
+                  <div className="p-4 rounded-2xl bg-rose-950/60 border-2 border-rose-500/60 flex items-start gap-3 shadow-lg">
+                    <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-2 flex-1">
+                      <p className="text-xs sm:text-sm font-black text-rose-200 leading-relaxed">
+                        {promptValidationError ||
+                          'Please enter or restore the video transcript before generating practice questions. EdTechra requires the transcript to create questions based on this lesson.'}
+                      </p>
+                      <div className="space-y-1 pt-1">
+                        <label className="text-[11px] font-bold text-rose-200 uppercase tracking-wider block">
+                          Paste or Restore Video Transcript Here ({localTranscript.length} characters):
+                        </label>
+                        <textarea
+                          rows={4}
+                          data-color-scheme="light"
+                          value={localTranscript}
+                          onChange={e => {
+                            setLocalTranscript(e.target.value);
+                            if (e.target.value.trim().length > 0) {
+                              setPromptValidationError(null);
+                            }
+                          }}
+                          placeholder="Paste the video transcript here. EdTechra will use the transcript to create practice questions based on the actual lesson content."
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            color: '#172033',
+                            WebkitTextFillColor: '#172033',
+                            caretColor: '#172033',
+                            borderColor: '#CBD5E1',
+                            opacity: 1
+                          }}
+                          className="edtechra-video-transcript-textarea w-full p-3 text-xs font-mono leading-relaxed rounded-xl border border-[#CBD5E1] bg-white text-[#172033] focus:outline-none focus:border-[#026fc3] placeholder:text-[#64748B]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Visual Authoring Instruction Banner */}
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-[#0d2849] to-[#0a1e38] border border-[#193e6a] flex items-start gap-3 shadow-md">
-                  <div className="w-8 h-8 rounded-xl bg-[#026fc3]/25 text-sky-300 flex items-center justify-center shrink-0 border border-sky-400/30">
-                    <Sparkles className="w-4 h-4 text-amber-300" />
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-[#0d2849] to-[#0a1e38] border border-[#193e6a] flex items-start justify-between gap-3 shadow-md flex-wrap">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#026fc3]/25 text-sky-300 flex items-center justify-center shrink-0 border border-sky-400/30">
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                    </div>
+                    <div className="text-xs text-slate-200 leading-relaxed space-y-1">
+                      <p className="font-bold text-white text-sm">Design Your Lesson Assessment</p>
+                      <p className="text-slate-300">
+                        Default configuration: <span className="font-bold text-white">3 Multiple Choice</span>, <span className="font-bold text-white">3 True/False</span>, <span className="font-bold text-white">3 Fill in the Blank (One-Word)</span>, and <span className="font-bold text-white">1 Sentence Builder</span> (<span className="font-bold text-emerald-300">10 Questions • 100 Marks</span>).
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-200 leading-relaxed space-y-1">
-                    <p className="font-bold text-white text-sm">Design Your Lesson Assessment</p>
-                    <p className="text-slate-300">
-                      Click any question type row to select it. Use <span className="font-bold text-white">[-]</span> and <span className="font-bold text-white">[+]</span> to adjust quantities. The AI Question Builder will construct a targeted prompt referencing your actual lesson text.
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaults}
+                    className="px-3 py-1.5 rounded-xl bg-[#0b2341] hover:bg-[#11325b] text-sky-300 text-xs font-bold border border-sky-500/30 cursor-pointer transition-colors shrink-0"
+                  >
+                    Restore Default (10 Qs • 100 Marks)
+                  </button>
                 </div>
 
                 {/* CATEGORIES GRID (A through I) */}
@@ -810,6 +912,25 @@ export const AddQuestionsModal: React.FC<Props> = ({
                     </div>
                   </div>
 
+                  {/* Source-Material Indicator (Part 4 requirement) */}
+                  <div className="p-3 rounded-xl bg-[#07182c] border border-[#16355b] space-y-1.5 text-xs">
+                    <span className="text-[10px] font-black text-sky-300 uppercase tracking-wider block">
+                      Source Material Status
+                    </span>
+                    <div className="flex items-center justify-between text-slate-200">
+                      <span>Transcript included:</span>
+                      <span className={`font-black ${effectiveTranscript ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {effectiveTranscript ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-200">
+                      <span>Transcript length:</span>
+                      <span className="font-mono font-bold text-sky-300">
+                        {effectiveTranscript.length.toLocaleString()} characters
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Selected Breakdown List */}
                   <div className="space-y-2 pt-1">
                     <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
@@ -861,7 +982,7 @@ export const AddQuestionsModal: React.FC<Props> = ({
           )}
 
           {/* --------------------------------------------------------------- */}
-          {/* STEP 2: GENERATED AI PROMPT WORKSPACE                           */}
+          {/* STEP 2: GENERATED AI PROMPT WORKSPACE (PART 4 PREVIEW)          */}
           {/* --------------------------------------------------------------- */}
           {step === 'prompt' && (
             <div className="space-y-5 max-w-4xl mx-auto">
@@ -870,9 +991,9 @@ export const AddQuestionsModal: React.FC<Props> = ({
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
-                    <h2 className="text-base font-black text-white">AI PROMPT READY</h2>
+                    <h2 className="text-base font-black text-white">AI PROMPT PREVIEW & COPY</h2>
                     <p className="text-xs text-slate-300">
-                      Copy this prompt and paste it into ChatGPT, Claude, Gemini, or DeepSeek. Then copy the AI's JSON output and click Next.
+                      Review the complete prompt and embedded video transcript below. Click <span className="font-bold text-white">Copy Complete Prompt</span> and paste it into ChatGPT, Claude, Gemini, or DeepSeek.
                     </p>
                   </div>
                 </div>
@@ -887,18 +1008,53 @@ export const AddQuestionsModal: React.FC<Props> = ({
                   }`}
                 >
                   {copied ? <Check className="w-4 h-4 stroke-[3]" /> : <Copy className="w-4 h-4" />}
-                  <span>{copied ? 'Copied to Clipboard!' : 'COPY PROMPT'}</span>
+                  <span>{copied ? 'Copied to Clipboard!' : 'Copy Complete Prompt'}</span>
                 </button>
               </div>
 
-              {/* Large Dark Code / Text Container */}
+              {/* Prompt Preview Metadata Summary Card (Part 4 requirement) */}
+              <div className="rounded-2xl border border-[#193d68] bg-[#091b32] p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs shadow-lg">
+                <div className="p-3 rounded-xl bg-[#061325] border border-[#153256]">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Assessment Title</span>
+                  <span className="text-sm font-black text-white truncate block mt-0.5">{episodeTitle || courseTitle}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#061325] border border-[#153256]">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Target CEFR Level</span>
+                  <span className="text-sm font-black text-sky-300 block mt-0.5">{cefrLevel}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#061325] border border-[#153256]">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Questions & Marks</span>
+                  <span className="text-sm font-black text-emerald-400 block mt-0.5">
+                    {totalSelectedQuestions} Questions • {totalSelectedPoints} Total Marks
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#061325] border border-[#153256] sm:col-span-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Selected Question Types</span>
+                  <span className="text-xs font-bold text-slate-200 block mt-0.5">
+                    {selectedItemsSummary.map(s => `${s.label}: ${s.count} (${s.points} marks)`).join(' • ')}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#061325] border border-[#153256]">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Source-Material Indicator</span>
+                  <div className="mt-0.5 space-y-0.5">
+                    <span className="text-xs font-bold text-emerald-400 block">
+                      Transcript included: {effectiveTranscript ? 'Yes' : 'No'}
+                    </span>
+                    <span className="text-[11px] font-mono text-sky-300 block">
+                      Transcript length: {effectiveTranscript.length.toLocaleString()} characters
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Large Dark Code / Text Container (Complete AI Instructions + Complete Source Transcript) */}
               <div className="rounded-2xl border border-[#193d68] bg-[#050e1a] overflow-hidden shadow-2xl">
                 <div className="flex items-center justify-between px-4 py-2.5 bg-[#091b32] border-b border-[#142d4d] text-xs font-mono text-slate-300">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                    <span className="font-bold">EdTechra Assessment Prompt v1.0</span>
+                    <span className="font-bold">Complete AI Instructions & Source Video Transcript</span>
                   </div>
-                  <span>{generatedPrompt.length} characters</span>
+                  <span>{generatedPrompt.length.toLocaleString()} characters</span>
                 </div>
                 <pre className="p-5 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto max-h-[520px] overflow-y-auto whitespace-pre-wrap">
                   {generatedPrompt}
@@ -1023,7 +1179,7 @@ export const AddQuestionsModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleProceedToPrompt}
-              disabled={totalSelectedQuestions === 0}
+              disabled={totalSelectedQuestions === 0 || isMissingRequiredTranscript}
               className="px-6 py-2.5 rounded-xl bg-[#026fc3] hover:bg-[#025da4] disabled:opacity-40 text-white text-xs font-black shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed ring-1 ring-sky-400/40"
             >
               <span>Next: Generate AI Prompt ({totalSelectedQuestions})</span>

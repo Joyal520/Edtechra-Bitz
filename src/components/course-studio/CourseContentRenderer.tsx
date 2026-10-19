@@ -37,6 +37,10 @@ import { courseAudio } from '@/utils/courseAudio';
 import { ComprehensiveQuestionRenderer } from '@/components/course-studio/ComprehensiveQuestionRenderer';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
 import { getThemePreset } from '@/utils/courseThemes';
+import {
+  getCanonicalBlockTranscript,
+  setCanonicalBlockTranscript
+} from '@/utils/questionSchemaValidator';
 
 interface Props {
   blocks: CourseBlock[];
@@ -91,6 +95,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const [studentResponses, setStudentResponses] = useState<Record<string, StudentQuestionResponse>>({});
   const [soundEnabled, setSoundEnabled] = useState<boolean>(courseAudio.isSoundEnabled());
   const [showAddSectionMenu, setShowAddSectionMenu] = useState<boolean>(false);
+  const [transcriptValidationBlockIdx, setTranscriptValidationBlockIdx] = useState<number | null>(null);
 
   // Sync external answers if component updates
   useEffect(() => {
@@ -528,37 +533,47 @@ export const CourseContentRenderer: React.FC<Props> = ({
             const item = content as any;
             const vidUrl = item.video?.url || item.url || item.video_id || '';
             const vidTitle = item.title || 'Video Lesson';
-            const vidTranscript = item.transcript || item.video?.transcript || '';
+            const vidTranscript = getCanonicalBlockTranscript(item);
             const showTranscriptToStudents = Boolean(item.show_transcript || item.video?.show_transcript);
             const bodyText = item.text || item.markdown || '';
             const embedUrl = getYouTubeEmbedUrl(vidUrl);
 
             if (isEditMode) {
               return renderBlockWrapper(
-                <div className="space-y-3.5 p-3.5 rounded-2xl bg-white/70 dark:bg-stone-900/70 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                <div className="space-y-3.5 p-3.5 rounded-2xl bg-white/95 dark:bg-stone-900/90 border border-slate-200 dark:border-slate-800 shadow-2xs">
                   {/* Video Title */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
                       Video Lesson Title:
                     </label>
                     <input
                       type="text"
+                      data-color-scheme="light"
                       value={item.title || ''}
                       onChange={e => updateBlockContent(idx, { ...item, title: e.target.value })}
                       placeholder="e.g. Understanding the Present Perfect Tense"
-                      className="w-full p-2.5 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        color: '#172033',
+                        WebkitTextFillColor: '#172033',
+                        caretColor: '#172033',
+                        borderColor: '#CBD5E1',
+                        opacity: 1
+                      }}
+                      className="edtechra-light-input w-full p-2.5 text-xs font-bold rounded-xl border border-[#CBD5E1] bg-white text-[#172033] focus:outline-none focus:border-[#026fc3] placeholder:text-[#64748B]"
                     />
                   </div>
 
                   {/* Video URL */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
                       Video URL:
                     </label>
                     <div className="flex items-center gap-2">
                       <Video className="w-4 h-4 text-sky-500 shrink-0" />
                       <input
                         type="text"
+                        data-color-scheme="light"
                         value={vidUrl}
                         onChange={e => {
                           const nextUrl = e.target.value;
@@ -569,7 +584,15 @@ export const CourseContentRenderer: React.FC<Props> = ({
                           }
                         }}
                         placeholder="Paste YouTube Video URL (e.g. https://www.youtube.com/watch?v=...)"
-                        className="flex-1 p-2 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          color: '#172033',
+                          WebkitTextFillColor: '#172033',
+                          caretColor: '#172033',
+                          borderColor: '#CBD5E1',
+                          opacity: 1
+                        }}
+                        className="edtechra-light-input flex-1 p-2 text-xs font-medium rounded-lg border border-[#CBD5E1] bg-white text-[#172033] focus:outline-none focus:border-[#026fc3] placeholder:text-[#64748B]"
                       />
                     </div>
                   </div>
@@ -585,36 +608,60 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       />
                     </div>
                   ) : (
-                    <div className="w-full aspect-video rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-400 font-medium">
+                    <div className="w-full aspect-video rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400 font-medium">
                       Enter a valid YouTube URL to preview 16:9 video
                     </div>
                   )}
 
-                  {/* Video Transcript (Part 4 requirement) */}
+                  {/* Video Transcript (Canonical Single Source of Truth) */}
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-black uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5" />
                         <span>Video Transcript (Used to generate practice questions):</span>
                       </label>
-                      <span className="text-[10px] font-semibold text-slate-400">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                         {vidTranscript.length} characters
                       </span>
                     </div>
                     <textarea
-                      rows={5}
+                      rows={6}
+                      data-color-scheme="light"
                       value={vidTranscript}
                       onChange={e => {
                         const newTr = e.target.value;
-                        updateBlockContent(idx, {
-                          ...item,
-                          transcript: newTr,
-                          video: item.video ? { ...item.video, transcript: newTr } : { url: vidUrl, transcript: newTr }
-                        });
+                        if (transcriptValidationBlockIdx === idx && newTr.trim().length > 0) {
+                          setTranscriptValidationBlockIdx(null);
+                        }
+                        updateBlockContent(
+                          idx,
+                          setCanonicalBlockTranscript(
+                            {
+                              ...item,
+                              video: item.video ? { ...item.video } : (vidUrl ? { url: vidUrl } : undefined)
+                            },
+                            newTr
+                          )
+                        );
                       }}
                       placeholder="Paste the video transcript here. EdTechra will use the transcript to create practice questions based on the actual lesson content."
-                      className="w-full p-3 text-xs font-mono leading-relaxed rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3] placeholder:text-slate-400"
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        color: '#172033',
+                        WebkitTextFillColor: '#172033',
+                        caretColor: '#172033',
+                        borderColor: '#CBD5E1',
+                        opacity: 1
+                      }}
+                      className="edtechra-video-transcript-textarea w-full p-3 text-xs sm:text-sm font-mono leading-relaxed rounded-xl border border-[#CBD5E1] bg-white text-[#172033] focus:outline-none focus:border-[#026fc3] placeholder:text-[#64748B]"
                     />
+
+                    {(transcriptValidationBlockIdx === idx && !vidTranscript.trim()) && (
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold leading-relaxed">
+                        Please enter or restore the video transcript before generating practice questions. EdTechra requires the transcript to create questions based on this lesson.
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                       <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600 dark:text-slate-400">
                         <input
@@ -629,13 +676,19 @@ export const CourseContentRenderer: React.FC<Props> = ({
                       {onOpenAddQuestions && (
                         <button
                           type="button"
-                          onClick={onOpenAddQuestions}
-                          disabled={!vidTranscript.trim() || vidTranscript.trim().length < 30}
+                          onClick={() => {
+                            if (!vidTranscript.trim()) {
+                              setTranscriptValidationBlockIdx(idx);
+                            } else {
+                              setTranscriptValidationBlockIdx(null);
+                            }
+                            onOpenAddQuestions();
+                          }}
                           title={!vidTranscript.trim() ? 'Paste video transcript first' : 'Generate questions from transcript'}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                          <span>Generate Practice Questions (10 Qs • 100 Marks)</span>
+                          <span>Generate Practice Questions</span>
                         </button>
                       )}
                     </div>

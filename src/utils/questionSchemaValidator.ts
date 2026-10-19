@@ -389,6 +389,65 @@ const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
 };
 
 /**
+ * Canonical helper to read the transcript from any block content object.
+ * Guarantees a single source of truth whether stored at content.transcript or content.video.transcript.
+ */
+export function getCanonicalBlockTranscript(content: any): string {
+  if (!content || typeof content !== 'object') return '';
+  if (typeof content.transcript === 'string' && content.transcript.length > 0) {
+    return content.transcript;
+  }
+  if (content.video && typeof content.video === 'object' && typeof content.video.transcript === 'string') {
+    return content.video.transcript;
+  }
+  return typeof content.transcript === 'string' ? content.transcript : '';
+}
+
+/**
+ * Canonical helper to write the transcript into a block content object.
+ * Synchronizes both content.transcript and content.video.transcript (if content.video exists).
+ */
+export function setCanonicalBlockTranscript(content: any, nextTranscript: string): any {
+  const safeContent = content && typeof content === 'object' ? { ...content } : {};
+  const normalized = typeof nextTranscript === 'string' ? nextTranscript : String(nextTranscript ?? '');
+  safeContent.transcript = normalized;
+  if (safeContent.video && typeof safeContent.video === 'object') {
+    safeContent.video = {
+      ...safeContent.video,
+      transcript: normalized
+    };
+  }
+  return safeContent;
+}
+
+/**
+ * Canonical helper to extract the combined video transcript across all lesson blocks.
+ */
+export function extractCanonicalLessonTranscript(blocks: any[]): string {
+  if (!Array.isArray(blocks) || blocks.length === 0) return '';
+  const parts: string[] = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue;
+    const t = getCanonicalBlockTranscript(block.content).trim();
+    if (t) {
+      parts.push(t);
+    }
+  }
+  return parts.join('\n\n');
+}
+
+/**
+ * Canonical helper to extract non-transcript lesson reading text across lesson blocks.
+ */
+export function extractCanonicalLessonText(blocks: any[]): string {
+  if (!Array.isArray(blocks) || blocks.length === 0) return '';
+  return blocks
+    .map((b: any) => (typeof b?.content?.text === 'string' ? b.content.text.trim() : ''))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/**
  * Builds the EdTechra AI Question Prompt (v1.0) for external AI tools (ChatGPT, Claude, Gemini).
  */
 export function buildAiQuestionPrompt(params: {
@@ -413,38 +472,70 @@ export function buildAiQuestionPrompt(params: {
   } = params;
 
   const targetCefr = directCefr || plan.cefr_level || 'A1';
+  const resolvedTranscript = (videoTranscript ?? plan.video_transcript ?? '').trim();
   // Strip HTML tags so the external AI gets pure, clean text without markdown or HTML corruption
   const cleanLessonText = (lessonText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
+  const totalQuestionsCount = plan.items.reduce((acc, item) => acc + getPlanItemActivityCount(item), 0);
+  const totalMarksCount = plan.items.reduce((acc, item) => acc + getPlanItemTotalMarks(item), 0);
+
   let prompt = `You are an educational assessment generator for EdTechra Course Studio.\n`;
   prompt += `Target CEFR Level: ${targetCefr}. Align question complexity, grammar structures, and vocabulary strictly to ${targetCefr} language learners.\n`;
-  prompt += `Create high-quality practice questions based ONLY on the source material provided below.\n`;
-  prompt += `Do not introduce external facts or unsupported assumptions.\n\n`;
+  prompt += `Task: Create ${totalQuestionsCount} practice question${totalQuestionsCount === 1 ? '' : 's'} (${totalMarksCount} total marks) based ONLY on the source material provided below.\n`;
+  prompt += `Do not introduce external facts, outside world knowledge, or unsupported assumptions.\n\n`;
 
-  prompt += `============================================================\n`;
+  prompt += `==================================================\n`;
   prompt += `COURSE METADATA\n`;
-  prompt += `============================================================\n`;
+  prompt += `==================================================\n`;
   prompt += `Course: ${courseTitle}\n`;
   prompt += `Unit: ${unitTitle}\n`;
   prompt += `Lesson: ${episodeTitle}\n`;
-  prompt += `Target CEFR Level: ${targetCefr}\n\n`;
+  prompt += `Target CEFR Level: ${targetCefr}\n`;
+  prompt += `Total Questions: ${totalQuestionsCount}\n`;
+  prompt += `Total Marks: ${totalMarksCount}\n\n`;
 
-  prompt += `============================================================\n`;
-  prompt += `SOURCE MATERIAL\n`;
-  prompt += `============================================================\n`;
-  prompt += `LESSON TEXT:\n"""\n${cleanLessonText || '(No lesson text provided)'}\n"""\n\n`;
+  prompt += `==================================================\n`;
+  prompt += `STRICT SOURCE MATERIAL RESTRICTIONS\n`;
+  prompt += `==================================================\n`;
+  prompt += `- Use ONLY facts, events, vocabulary, and ideas explicitly present in the provided source transcript/material.\n`;
+  prompt += `- Do NOT invent new story details, characters, places, numbers, or explanations.\n`;
+  prompt += `- Do NOT use external world knowledge.\n`;
+  prompt += `- Every question, option, answer, and explanation must be directly supported by the transcript.\n\n`;
 
-  if (videoTranscript && videoTranscript.trim()) {
-    prompt += `VIDEO TRANSCRIPT:\n"""\n${videoTranscript.trim()}\n"""\n\n`;
+  if (resolvedTranscript) {
+    prompt += `==================================================\n`;
+    prompt += `SOURCE VIDEO TRANSCRIPT\n`;
+    prompt += `==================================================\n\n`;
+    prompt += `Use ONLY the following video transcript to create all questions.\n`;
+    prompt += `Every question, option, answer, and explanation must come directly\n`;
+    prompt += `from this transcript. Do not use outside knowledge or invent details.\n\n`;
+    prompt += `<BEGIN_SOURCE_TRANSCRIPT>\n\n`;
+    prompt += `${resolvedTranscript}\n\n`;
+    prompt += `<END_SOURCE_TRANSCRIPT>\n\n`;
+    prompt += `==================================================\n`;
+    prompt += `END SOURCE MATERIAL\n`;
+    prompt += `==================================================\n\n`;
+  }
+
+  if (cleanLessonText && cleanLessonText !== resolvedTranscript) {
+    prompt += `==================================================\n`;
+    prompt += `ADDITIONAL LESSON TEXT\n`;
+    prompt += `==================================================\n`;
+    prompt += `"""\n${cleanLessonText}\n"""\n\n`;
+  } else if (!resolvedTranscript) {
+    prompt += `==================================================\n`;
+    prompt += `SOURCE MATERIAL\n`;
+    prompt += `==================================================\n`;
+    prompt += `LESSON TEXT:\n"""\n${cleanLessonText || '(No lesson text provided)'}\n"""\n\n`;
   }
 
   if (imageDescription && imageDescription.trim()) {
     prompt += `IMAGE DESCRIPTION:\n"""\n${imageDescription.trim()}\n"""\n\n`;
   }
 
-  prompt += `============================================================\n`;
-  prompt += `REQUIRED QUESTION SETS (GENERATE EXACTLY THESE):\n`;
-  prompt += `============================================================\n`;
+  prompt += `==================================================\n`;
+  prompt += `REQUIRED QUESTION SETS (GENERATE EXACTLY THESE)\n`;
+  prompt += `==================================================\n`;
 
   plan.items.forEach((item, index) => {
     const label = QUESTION_TYPE_LABELS[item.type] || item.type;
@@ -453,23 +544,29 @@ export function buildAiQuestionPrompt(params: {
     if (item.type === 'ordering') {
       const actCount = item.activityCount || 1;
       const sentCount = item.itemsPerActivity || item.count || 5;
-      prompt += `${index + 1}. Ordering — Create exactly ${actCount} Ordering activit${actCount > 1 ? 'ies' : 'y'}, each containing exactly ${sentCount} sentence blocks. Points: ${points} per activity — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. Ordering (ordering) — Create exactly ${actCount} Ordering activit${actCount > 1 ? 'ies' : 'y'}, each containing exactly ${sentCount} sentence blocks. Points: ${points} per activity — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'cloze_passage') {
       const blankCount = item.blankCount || item.count || 10;
-      prompt += `${index + 1}. Cloze Passage — Create exactly ONE Cloze Passage question containing exactly ${blankCount} blanks. Each blank must have exactly four answer options with one correct answer. Points: ${points} (for the entire passage activity) — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. Cloze Passage (cloze_passage) — Create exactly ONE Cloze Passage question containing exactly ${blankCount} blanks. Each blank must have exactly four answer options with one correct answer. Points: ${points} (for the entire passage activity) — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'essay') {
       const count = item.count || 1;
-      prompt += `${index + 1}. Essay / Descriptive Response — ${count} question${count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words, Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. Essay / Descriptive Response (essay) — ${count} question${count > 1 ? 's' : ''} (Expected words: ${item.min_words || 80}–${item.max_words || 100} words, Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'wh_question') {
       const count = item.count || 1;
       const whType = item.wh_type || 'mixed_wh';
       const whDesc = whType === 'mixed_wh'
         ? 'balanced variety of WH questions (Who, What, Where, When, Why, How)'
         : `${whType.toUpperCase()} questions`;
-      prompt += `${index + 1}. WH Comprehension — Create ${count} ${whDesc} strictly anchored to the reading passage. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers" (array of 5–8 alternate valid phrasings and common synonyms), "passage" (exact excerpt), and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. WH Comprehension (wh_question) — Create ${count} ${whDesc} strictly anchored to the source text. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers", "passage", and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
+    } else if (item.type === 'short_answer' || item.type === 'fill_blank') {
+      const count = item.count || 1;
+      prompt += `${index + 1}. One-Word Fill in the Blank (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}. IMPORTANT: Each question MUST be a sentence from the transcript with ONE missing word ("________"), and the expected answer MUST be ONE SINGLE WORD from the transcript.`;
+    } else if (item.type === 'sentence_builder' || item.type === 'sentence_reordering' || item.type === 'word_ordering') {
+      const count = item.count || 1;
+      prompt += `${index + 1}. Sentence Builder (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}. Use a meaningful sentence (6–12 words) directly from the transcript.`;
     } else {
       const count = item.count || 1;
-      prompt += `${index + 1}. ${label} — ${count} question${count > 1 ? 's' : ''} (Points: ${points} per question) — Difficulty: ${item.difficulty.toUpperCase()}`;
+      prompt += `${index + 1}. ${label} (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}`;
     }
     if (item.instructions?.trim()) {
       prompt += ` (Instructions: ${item.instructions.trim()})`;
@@ -481,19 +578,16 @@ export function buildAiQuestionPrompt(params: {
     prompt += `\nTEACHER INSTRUCTIONS:\n${plan.teacher_instructions.trim()}\n`;
   }
 
-  prompt += `\n============================================================\n`;
-  prompt += `OUTPUT FORMAT INSTRUCTIONS\n`;
-  prompt += `============================================================\n`;
-  prompt += `1. Generate ONLY the requested question types listed above. Do NOT include unused question types or empty question sets.\n`;
-  prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0.\n`;
-  prompt += `3. Do not include markdown code block backticks if possible, or wrap inside standard \`\`\`json block.\n`;
-  prompt += `4. For Multiple Choice: Balance the position of the correct answer evenly across options A, B, C, and D. Do NOT always place the correct answer as option A or the first choice.\n`;
-  prompt += `5. For Ordering: Generate the exact number of activities requested, with each activity containing the exact requested number of sentence blocks in the "items" array.\n`;
-  prompt += `6. For Cloze Passage: Generate EXACTLY ONE question containing a complete passage and a "blanks" array with the EXACT requested number of blanks. Every blank MUST have an "id", "answer", and exactly 4 "options" (1 correct, 3 plausible distractors).\n`;
-  prompt += `7. For Essay / Descriptive Response: Include "question", optional "image_url", "answer_length" (min_words, max_words), and "evaluation_criteria".\n`;
-  prompt += `8. For WH Comprehension: Include "question", "wh_type", "expected_answer", "acceptable_answers" (5–8 natural variations and synonyms), "passage" (exact quote from text), and "explanation".\n`;
-  prompt += `9. Include "points" for every question matching the teacher's selected marks.\n`;
-  prompt += `10. Provide a clear educational explanation for every question.\n\n`;
+  prompt += `\n==================================================\n`;
+  prompt += `QUESTION TYPE & OUTPUT FORMAT INSTRUCTIONS\n`;
+  prompt += `==================================================\n`;
+  prompt += `1. Generate ONLY the requested question types and exact question counts listed above. Do NOT include unused question types or empty question sets.\n`;
+  prompt += `2. Return ONLY valid JSON adhering strictly to EdTechra Question JSON Schema v1.0. Do not include commentary outside the JSON.\n`;
+  prompt += `3. For Multiple Choice ("multiple_choice"): Provide 4 clear options in "options", 1 exact matching "correct_answer", and balance the position of the correct answer across options A, B, C, and D.\n`;
+  prompt += `4. For True/False ("true_false"): Provide a factual "statement" directly verifiable from the transcript, "correct_answer" (true or false), and balance True and False answers.\n`;
+  prompt += `5. For One-Word Fill in the Blank ("short_answer" / "fill_blank"): Each question must be a single sentence or short prompt with ONE blank ("________") based directly on the transcript. "correct_answer" and "expected_answer" MUST be ONE WORD ONLY (no phrases or multi-word answers). Include "acceptable_answers" as an array of valid single-word variants.\n`;
+  prompt += `6. For Sentence Builder ("sentence_builder" / "sentence_reordering"): Select a meaningful 6–12 word sentence directly from the transcript. Provide "words" (array of individual words) and "correct_sentence" (the complete sentence).\n`;
+  prompt += `7. Include "points" for every question matching the requested marks per question, and a transcript-grounded "explanation" for every question.\n\n`;
 
   // Dynamically build example schema with ONLY the selected question types
   const exampleQuestionSets = plan.items.map(item => {
@@ -603,8 +697,25 @@ export function buildAiQuestionPrompt(params: {
       };
     }
 
+    if (item.type === 'sentence_reordering' || item.type === 'sentence_builder' || item.type === 'word_ordering') {
+      return {
+        type: item.type,
+        questions: [
+          {
+            question: 'Arrange the words in the correct order to form a sentence from the video transcript.',
+            words: ['The', 'young', 'bird', 'flew', 'across', 'the', 'valley'],
+            correct_sentence: 'The young bird flew across the valley',
+            explanation: 'This sentence appears directly in the video transcript.',
+            difficulty: item.difficulty || 'medium',
+            points: points
+          }
+        ]
+      };
+    }
+
     const template = TYPE_EXAMPLE_TEMPLATES[item.type] || TYPE_EXAMPLE_TEMPLATES.multiple_choice;
     const cloned = JSON.parse(JSON.stringify(template));
+    cloned.type = item.type;
     if (cloned.questions?.[0]) {
       cloned.questions[0].points = points;
       cloned.questions[0].difficulty = item.difficulty || 'medium';
@@ -658,7 +769,6 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
   try {
     parsed = JSON.parse(cleanString);
   } catch (err: any) {
-    // Extract line and column numbers from error message or character position
     let lineInfo = '';
     const posMatch = err.message.match(/position (\d+)/i);
     if (posMatch) {
@@ -721,7 +831,6 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
     };
   }
 
-  // Schema version check (soft warning if missing)
   if (!parsed.schema_version) {
     warnings.push('Missing "schema_version" (recommended: "1.0").');
   }
@@ -768,7 +877,8 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
   const planTypes = (plan?.items || []).map(item => item.type);
   const seenTypes = new Set<string>();
-  const sentenceOrderingAliases = new Set(['sentence_reordering', 'sentence_builder', 'word_ordering']);
+  const sentenceOrderingAliases = new Set<QuestionType>(['sentence_reordering', 'sentence_builder', 'word_ordering']);
+  const oneWordBlankAliases = new Set<QuestionType>(['short_answer', 'fill_blank']);
 
   parsed.question_sets.forEach((qSet: any, setIdx: number) => {
     if (!qSet.type || !validTypes.includes(qSet.type)) {
@@ -778,11 +888,19 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
 
     let typeKey = qSet.type as QuestionType;
     // Normalize sentence ordering aliases to match plan if needed
-    if (sentenceOrderingAliases.has(typeKey) && planTypes.length > 0) {
+    if (sentenceOrderingAliases.has(typeKey) && planTypes.length > 0 && !planTypes.includes(typeKey)) {
       const matchingPlanOrdering = planTypes.find(pt => sentenceOrderingAliases.has(pt));
       if (matchingPlanOrdering) {
         typeKey = matchingPlanOrdering;
         qSet.type = matchingPlanOrdering;
+      }
+    }
+    // Normalize one-word fill-in-the-blank / short_answer aliases to match plan if needed
+    if (oneWordBlankAliases.has(typeKey) && planTypes.length > 0 && !planTypes.includes(typeKey)) {
+      const matchingPlanBlank = planTypes.find(pt => oneWordBlankAliases.has(pt));
+      if (matchingPlanBlank) {
+        typeKey = matchingPlanBlank;
+        qSet.type = matchingPlanBlank;
       }
     }
 
@@ -837,8 +955,8 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
           errors.push(`${qNum}: Missing "question" text.`);
         }
-        if (!Array.isArray(q.options) || q.options.length < 2) {
-          errors.push(`${qNum}: Multiple choice requires at least 2 options in "options".`);
+        if (!Array.isArray(q.options) || q.options.length < 4) {
+          errors.push(`${qNum}: Multiple choice requires 4 options in "options" (found ${Array.isArray(q.options) ? q.options.length : 0}).`);
         }
         if (q.correct_answer === undefined || q.correct_answer === null || String(q.correct_answer).trim() === '') {
           errors.push(`${qNum}: Missing "correct_answer".`);
@@ -850,14 +968,30 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
         }
         if (q.correct_answer === undefined || q.correct_answer === null) {
           errors.push(`${qNum}: Missing "correct_answer" (must be true or false).`);
+        } else {
+          const norm = String(q.correct_answer).trim().toLowerCase();
+          if (typeKey === 'true_false' && norm !== 'true' && norm !== 'false') {
+            errors.push(`${qNum}: Invalid "correct_answer" "${q.correct_answer}" (must be true or false).`);
+          }
         }
-      } else if (typeKey === 'fill_blank') {
+      } else if (typeKey === 'fill_blank' || typeKey === 'short_answer') {
         const text = q.sentence || q.question;
         if (!text || typeof text !== 'string' || !text.trim()) {
-          errors.push(`${qNum}: Missing "sentence" or "question" text.`);
+          errors.push(`${qNum}: Missing "question" or "sentence" text.`);
         }
-        if (!q.correct_answer || String(q.correct_answer).trim() === '') {
-          errors.push(`${qNum}: Missing "correct_answer" for blank.`);
+        const rawAns = String(q.correct_answer || q.expected_answer || (Array.isArray(q.acceptable_answers) ? q.acceptable_answers[0] : '') || '').trim();
+        if (!rawAns) {
+          errors.push(`${qNum}: Missing "correct_answer" or "expected_answer".`);
+        } else {
+          // Enforce controlled one-word fill-in-the-blank answer
+          const cleanWord = rawAns.replace(/^[.,!?;:"'()[\]{}]+|[.,!?;:"'()[\]{}]+$/g, '').trim();
+          const wordTokens = cleanWord.split(/\s+/).filter(Boolean);
+          if (wordTokens.length > 1) {
+            errors.push(`${qNum}: Expected a ONE-WORD answer for Fill in the Blank / Short Answer, but received "${rawAns}" (${wordTokens.length} words).`);
+          } else {
+            q.correct_answer = cleanWord;
+            q.expected_answer = cleanWord;
+          }
         }
       } else if (typeKey === 'matching') {
         if (!q.question) q.question = 'Match the items';
@@ -876,14 +1010,11 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
           }
         }
         if (!Array.isArray(itemsCandidate) || itemsCandidate.length < 2) {
-          errors.push(`${qNum}: Requires "items", "words", or "correct_order" array with at least 2 words/phrases.`);
+          errors.push(`${qNum}: Requires "words", "items", or "correct_order" array with at least 2 words/phrases.`);
         }
-      } else if (typeKey === 'short_answer') {
-        if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
-          errors.push(`${qNum}: Missing "question" text.`);
-        }
-        if (!q.correct_answer && !q.expected_answer && (!Array.isArray(q.acceptable_answers) || q.acceptable_answers.length === 0)) {
-          errors.push(`${qNum}: Missing "correct_answer" or "acceptable_answers".`);
+        if (typeKey !== 'ordering' && !q.correct_sentence && !q.correct_answer && Array.isArray(itemsCandidate) && itemsCandidate.length >= 2) {
+          q.correct_sentence = itemsCandidate.join(' ');
+          q.correct_answer = q.correct_sentence;
         }
       } else if (typeKey === 'wh_question' || typeKey === 'comprehension') {
         if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
@@ -936,7 +1067,8 @@ export function validateAiQuestionJson(jsonString: string, plan?: QuestionPlan):
       const label = QUESTION_TYPE_LABELS[planItem.type] || planItem.type;
       const qSet = parsed.question_sets.find((s: any) =>
         s.type === planItem.type ||
-        (sentenceOrderingAliases.has(planItem.type) && sentenceOrderingAliases.has(s.type))
+        (sentenceOrderingAliases.has(planItem.type) && sentenceOrderingAliases.has(s.type)) ||
+        (oneWordBlankAliases.has(planItem.type) && oneWordBlankAliases.has(s.type))
       );
 
       if (!qSet || !Array.isArray(qSet.questions) || qSet.questions.length === 0) {
@@ -1020,6 +1152,7 @@ export function convertValidatedJsonToCourseQuestions(
       let minWords: number | undefined = undefined;
       let maxWords: number | undefined = undefined;
       let criteriaList: string[] | undefined = undefined;
+      let canonicalCorrectOrder: string[] | undefined = undefined;
       const points = typeof q.points === 'number' ? q.points : (qType === 'essay' || qType === 'cloze_passage' ? 20 : 10);
 
       if (qType === 'multiple_choice') {
@@ -1110,29 +1243,14 @@ export function convertValidatedJsonToCourseQuestions(
           }
         });
         return;
-      } else if (qType === 'fill_blank') {
-        optionsList = [];
-      } else if (qType === 'matching') {
-        if (Array.isArray(q.pairs)) {
-          optionsList = q.pairs.map((p: any) => `${p.left || ''} -> ${p.right || ''}`);
-        }
-      } else if (qType === 'ordering' || qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'word_ordering') {
-        const rawItems = q.items || q.options || q.words || q.correct_order || [];
-        optionsList = Array.isArray(rawItems)
-          ? rawItems.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
-          : [];
-        const rawCorrect = q.correct_order || q.correctOrder || q.items || [];
-        const correctList = Array.isArray(rawCorrect)
-          ? rawCorrect.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
-          : [];
-        correctAnswerStr = String(q.correct_answer || q.correct_sentence || correctList.join(' ') || (optionsList.length > 0 ? optionsList.join(' ') : '')).trim();
-        if (optionsList.length === 0 && correctAnswerStr) {
-          optionsList = correctAnswerStr.split(/\s+/).filter(Boolean);
-        }
-      } else if (qType === 'short_answer') {
-        expectedAnswerStr = String(q.expected_answer || q.correct_answer || q.answer || '').trim();
+      } else if (qType === 'fill_blank' || qType === 'short_answer') {
+        const rawExpected = String(q.expected_answer || q.correct_answer || q.answer || '').trim();
+        const cleanWord = rawExpected.replace(/^[.,!?;:"'()[\]{}]+|[.,!?;:"'()[\]{}]+$/g, '').trim();
+        expectedAnswerStr = cleanWord || rawExpected;
         const rawAcceptable: string[] = Array.isArray(q.acceptable_answers)
-          ? q.acceptable_answers.map((a: any) => String(a).trim()).filter(Boolean)
+          ? q.acceptable_answers
+              .map((a: any) => String(a).replace(/^[.,!?;:"'()[\]{}]+|[.,!?;:"'()[\]{}]+$/g, '').trim())
+              .filter(Boolean)
           : (expectedAnswerStr ? [expectedAnswerStr] : []);
         if (expectedAnswerStr && !rawAcceptable.includes(expectedAnswerStr)) {
           acceptableAnswersList = [expectedAnswerStr, ...rawAcceptable];
@@ -1140,7 +1258,39 @@ export function convertValidatedJsonToCourseQuestions(
           acceptableAnswersList = rawAcceptable;
         }
         correctAnswerStr = expectedAnswerStr || (acceptableAnswersList && acceptableAnswersList[0]) || '';
-        optionsList = acceptableAnswersList || [];
+        optionsList = qType === 'fill_blank' ? [] : (acceptableAnswersList || []);
+      } else if (qType === 'matching') {
+        if (Array.isArray(q.pairs)) {
+          optionsList = q.pairs.map((p: any) => `${p.left || ''} -> ${p.right || ''}`);
+        }
+      } else if (qType === 'ordering' || qType === 'sentence_reordering' || qType === 'sentence_builder' || qType === 'word_ordering') {
+        const rawItems = q.items || q.options || q.words || q.correct_order || [];
+        const extractedTokens = Array.isArray(rawItems)
+          ? rawItems.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
+          : [];
+        const rawCorrect = q.correct_order || q.correctOrder || [];
+        const explicitCorrectTokens = Array.isArray(rawCorrect)
+          ? rawCorrect.map((item: any) => typeof item === 'string' ? item : item?.text || item?.label || String(item || '')).filter(Boolean)
+          : [];
+        correctAnswerStr = String(
+          q.correct_sentence ||
+          q.correct_answer ||
+          explicitCorrectTokens.join(' ') ||
+          (extractedTokens.length > 0 ? extractedTokens.join(' ') : '')
+        ).trim();
+
+        const targetTokens = explicitCorrectTokens.length > 0
+          ? explicitCorrectTokens
+          : (correctAnswerStr ? correctAnswerStr.split(/\s+/).filter(Boolean) : extractedTokens);
+
+        canonicalCorrectOrder = targetTokens;
+        if (qType === 'ordering') {
+          optionsList = extractedTokens.length > 0 ? extractedTokens : targetTokens;
+        } else {
+          // Ensure word bank tokens are shuffled for Sentence Builder / Sentence Ordering
+          const baseWords = extractedTokens.length > 0 ? extractedTokens : targetTokens;
+          optionsList = shuffleWordsGuaranteed(baseWords);
+        }
       } else if (qType === 'cloze_passage') {
         passageText = q.passage || '';
         blanksList = Array.isArray(q.blanks) ? q.blanks : [];
@@ -1176,9 +1326,9 @@ export function convertValidatedJsonToCourseQuestions(
         expected_answer: expectedAnswerStr,
         acceptable_answers: acceptableAnswersList,
         items: optionsList,
-        correct_order: (Array.isArray(q.correct_order) ? q.correct_order : Array.isArray(q.correctOrder) ? q.correctOrder : optionsList),
+        correct_order: canonicalCorrectOrder || (Array.isArray(q.correct_order) ? q.correct_order : Array.isArray(q.correctOrder) ? q.correctOrder : optionsList),
         explanation: q.explanation || q.marking_guidance || q.rubric || '',
-        skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : 'Comprehension'),
+        skill: q.skill || (qType === 'essay' ? 'Descriptive Writing' : qType === 'cloze_passage' ? 'Context Clues' : qType === 'short_answer' || qType === 'fill_blank' ? 'Vocabulary Recall' : 'Comprehension'),
         concept: q.concept || 'General',
         difficulty: (q.difficulty as DifficultyLevel) || 'medium',
         points: points,
@@ -1189,10 +1339,8 @@ export function convertValidatedJsonToCourseQuestions(
         min_words: minWords,
         max_words: maxWords,
         evaluation_criteria: criteriaList,
-        evaluation: qType === 'short_answer' ? {
-          method: 'ai_semantic',
-          ai_evaluated: true,
-          criteria: ['comprehension', 'accuracy', 'key_details'],
+        evaluation: (qType === 'short_answer' || qType === 'fill_blank') ? {
+          method: 'deterministic',
           maxScore: points
         } : undefined
       });
@@ -1206,8 +1354,8 @@ export function convertValidatedJsonToCourseQuestions(
  * Default 10-Question Video Assessment Plan (100 Total Marks):
  * - 3 Multiple Choice (10 marks each = 30 marks)
  * - 3 True or False (10 marks each = 30 marks)
- * - 3 Short Answer (10 marks each = 30 marks)
- * - 1 Sentence Ordering (10 marks each = 10 marks)
+ * - 3 Fill in the Blank / Short Answer (10 marks each = 30 marks, ONE-WORD answer)
+ * - 1 Sentence Builder (10 marks each = 10 marks)
  */
 export function createDefaultVideoAssessmentPlanItems(): QuestionPlanItem[] {
   const ts = Date.now();
@@ -1218,7 +1366,7 @@ export function createDefaultVideoAssessmentPlanItems(): QuestionPlanItem[] {
       count: 3,
       points: 10,
       difficulty: 'medium',
-      instructions: 'Create 3 multiple-choice questions testing key concepts, definitions, and factual details from the video transcript.'
+      instructions: 'Create 3 multiple-choice questions testing key concepts, events, and factual details directly from the video transcript.'
     },
     {
       id: `plan_tf_${ts}_2`,
@@ -1234,16 +1382,16 @@ export function createDefaultVideoAssessmentPlanItems(): QuestionPlanItem[] {
       count: 3,
       points: 10,
       difficulty: 'medium',
-      ai_evaluated: true,
-      instructions: 'Create 3 short-answer comprehension questions with clear expected answers, acceptable alternatives, and marking guidance.'
+      ai_evaluated: false,
+      instructions: 'Create 3 one-word fill-in-the-blank questions based directly on the video transcript. Each question must have ONE blank ("________") and a ONE-WORD expected answer.'
     },
     {
-      id: `plan_so_${ts}_4`,
-      type: 'sentence_reordering',
+      id: `plan_sb_${ts}_4`,
+      type: 'sentence_builder',
       count: 1,
       points: 10,
       difficulty: 'medium',
-      instructions: 'Create 1 sentence-ordering question using an important sentence from the video transcript.'
+      instructions: 'Create 1 sentence-builder question (6–12 words) using a meaningful sentence directly from the video transcript.'
     }
   ];
 }

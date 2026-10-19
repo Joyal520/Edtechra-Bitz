@@ -47,6 +47,10 @@ import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
+import {
+  extractCanonicalLessonTranscript,
+  extractCanonicalLessonText
+} from '@/utils/questionSchemaValidator';
 
 export const CoursePreviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -86,6 +90,33 @@ export const CoursePreviewPage: React.FC = () => {
   const [currentQuestions, setCurrentQuestions] = useState<CourseQuestion[]>([]);
   const [currentEpisodeTitle, setCurrentEpisodeTitle] = useState('');
   const [currentEpisodeMins, setCurrentEpisodeMins] = useState(15);
+
+  // Authoritative refs to prevent stale-closure overwrites during autosave or question import
+  const latestBlocksRef = useRef<CourseBlock[]>([]);
+  const latestQuestionsRef = useRef<CourseQuestion[]>([]);
+  const latestTitleRef = useRef<string>('');
+  const latestMinsRef = useRef<number>(15);
+  const latestEpisodeRef = useRef<CourseEpisode | null>(null);
+
+  // Canonical transcript and lesson text derived from currentBlocks
+  const canonicalVideoTranscript = useMemo(
+    () => extractCanonicalLessonTranscript(currentBlocks),
+    [currentBlocks]
+  );
+  const canonicalLessonText = useMemo(
+    () => extractCanonicalLessonText(currentBlocks),
+    [currentBlocks]
+  );
+  const lessonHasVideo = useMemo(
+    () =>
+      currentBlocks.some(
+        (b: any) =>
+          ['video', 'youtube_video', 'text_video'].includes(b.block_type) ||
+          Boolean((b?.content as any)?.video?.url) ||
+          Boolean(extractCanonicalLessonTranscript([b]))
+      ),
+    [currentBlocks]
+  );
 
   // Inline Editing for Course Title & Unit Titles
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
@@ -178,10 +209,45 @@ export const CoursePreviewPage: React.FC = () => {
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (selectedEpisode) {
-      setCurrentBlocks(selectedEpisode.blocks || []);
-      setCurrentQuestions(selectedEpisode.questions || []);
-      setCurrentEpisodeTitle(selectedEpisode.title || '');
-      setCurrentEpisodeMins(selectedEpisode.estimated_minutes || 15);
+      // If switching from another episode with a pending autosave, flush it first
+      if (
+        autosaveTimerRef.current &&
+        latestEpisodeRef.current &&
+        latestEpisodeRef.current.id !== selectedEpisode.id &&
+        course
+      ) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+        const prevEp = latestEpisodeRef.current;
+        const prevBlocks = latestBlocksRef.current;
+        const prevQuestions = latestQuestionsRef.current;
+        const prevTitle = latestTitleRef.current;
+        const prevMins = latestMinsRef.current;
+        Promise.all([
+          courseStudioService.saveEpisodeBlocks(course.id, prevEp.id, prevBlocks),
+          courseStudioService.saveEpisodeQuestions(course.id, prevEp.id, prevQuestions),
+          courseStudioService.updateEpisode(course.id, prevEp.id, {
+            title: prevTitle,
+            estimated_minutes: prevMins
+          })
+        ]).catch(err => console.error('[Course Studio] Flush save on episode switch failed:', err));
+      }
+
+      const initBlocks = selectedEpisode.blocks || [];
+      const initQuestions = selectedEpisode.questions || [];
+      const initTitle = selectedEpisode.title || '';
+      const initMins = selectedEpisode.estimated_minutes || 15;
+
+      latestEpisodeRef.current = selectedEpisode;
+      latestBlocksRef.current = initBlocks;
+      latestQuestionsRef.current = initQuestions;
+      latestTitleRef.current = initTitle;
+      latestMinsRef.current = initMins;
+
+      setCurrentBlocks(initBlocks);
+      setCurrentQuestions(initQuestions);
+      setCurrentEpisodeTitle(initTitle);
+      setCurrentEpisodeMins(initMins);
       setSavingStatus('saved');
     }
   }, [selectedEpisode?.id]);
@@ -206,11 +272,22 @@ export const CoursePreviewPage: React.FC = () => {
     nextMins: number
   ) => {
     if (!course || !selectedEpisode) return;
+    latestBlocksRef.current = nextBlocks;
+    latestQuestionsRef.current = nextQuestions;
+    latestTitleRef.current = nextTitle;
+    latestMinsRef.current = nextMins;
+
     setSavingStatus('unsaved');
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
 
     autosaveTimerRef.current = setTimeout(async () => {
-      await executeSave(nextBlocks, nextQuestions, nextTitle, nextMins);
+      autosaveTimerRef.current = null;
+      await executeSave(
+        latestBlocksRef.current,
+        latestQuestionsRef.current,
+        latestTitleRef.current,
+        latestMinsRef.current
+      );
     }, 800);
   };
 
@@ -222,26 +299,33 @@ export const CoursePreviewPage: React.FC = () => {
     isManual = false
   ) => {
     if (!course || !selectedEpisode) return;
+    const targetEpisodeId = selectedEpisode.id;
     setSavingStatus('saving');
     try {
       await Promise.all([
-        courseStudioService.saveEpisodeBlocks(course.id, selectedEpisode.id, nextBlocks),
-        courseStudioService.saveEpisodeQuestions(course.id, selectedEpisode.id, nextQuestions),
-        courseStudioService.updateEpisode(course.id, selectedEpisode.id, {
+        courseStudioService.saveEpisodeBlocks(course.id, targetEpisodeId, nextBlocks),
+        courseStudioService.saveEpisodeQuestions(course.id, targetEpisodeId, nextQuestions),
+        courseStudioService.updateEpisode(course.id, targetEpisodeId, {
           title: nextTitle,
           estimated_minutes: nextMins
         })
       ]);
 
-      // In-place state synchronization across local unit tree
+      // Use the latest live state if additional edits happened while network request was in flight
+      const liveBlocks = latestEpisodeRef.current?.id === targetEpisodeId ? latestBlocksRef.current : nextBlocks;
+      const liveQuestions = latestEpisodeRef.current?.id === targetEpisodeId ? latestQuestionsRef.current : nextQuestions;
+      const liveTitle = latestEpisodeRef.current?.id === targetEpisodeId ? latestTitleRef.current : nextTitle;
+      const liveMins = latestEpisodeRef.current?.id === targetEpisodeId ? latestMinsRef.current : nextMins;
+
       const updatedEpisode: CourseEpisode = {
         ...selectedEpisode,
-        title: nextTitle,
-        estimated_minutes: nextMins,
-        blocks: nextBlocks,
-        questions: nextQuestions
+        title: liveTitle,
+        estimated_minutes: liveMins,
+        blocks: liveBlocks,
+        questions: liveQuestions
       };
 
+      latestEpisodeRef.current = updatedEpisode;
       setSelectedEpisode(updatedEpisode);
 
       // Keep course units up to date with updated episode
@@ -268,29 +352,42 @@ export const CoursePreviewPage: React.FC = () => {
   };
 
   const handleManualSave = () => {
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    executeSave(currentBlocks, currentQuestions, currentEpisodeTitle, currentEpisodeMins, true);
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    executeSave(
+      latestBlocksRef.current,
+      latestQuestionsRef.current,
+      latestTitleRef.current,
+      latestMinsRef.current,
+      true
+    );
   };
 
   // In-Place Episode Content Handlers
   const handleBlocksChange = (newBlocks: CourseBlock[]) => {
+    latestBlocksRef.current = newBlocks;
     setCurrentBlocks(newBlocks);
-    triggerAutosave(newBlocks, currentQuestions, currentEpisodeTitle, currentEpisodeMins);
+    triggerAutosave(newBlocks, latestQuestionsRef.current, latestTitleRef.current, latestMinsRef.current);
   };
 
   const handleQuestionsChange = (newQuestions: CourseQuestion[]) => {
+    latestQuestionsRef.current = newQuestions;
     setCurrentQuestions(newQuestions);
-    triggerAutosave(currentBlocks, newQuestions, currentEpisodeTitle, currentEpisodeMins);
+    triggerAutosave(latestBlocksRef.current, newQuestions, latestTitleRef.current, latestMinsRef.current);
   };
 
   const handleUpdateEpisodeTitle = (newTitle: string) => {
+    latestTitleRef.current = newTitle;
     setCurrentEpisodeTitle(newTitle);
-    triggerAutosave(currentBlocks, currentQuestions, newTitle, currentEpisodeMins);
+    triggerAutosave(latestBlocksRef.current, latestQuestionsRef.current, newTitle, latestMinsRef.current);
   };
 
   const handleUpdateEpisodeMins = (newMins: number) => {
+    latestMinsRef.current = newMins;
     setCurrentEpisodeMins(newMins);
-    triggerAutosave(currentBlocks, currentQuestions, currentEpisodeTitle, newMins);
+    triggerAutosave(latestBlocksRef.current, latestQuestionsRef.current, latestTitleRef.current, newMins);
   };
 
   // --------------------------------------------------------------------------
@@ -1315,7 +1412,7 @@ export const CoursePreviewPage: React.FC = () => {
         courseTitle={course.title}
         unitTitle={currentInfo?.unitTitle || 'Unit 1'}
         lessonTitle={currentEpisodeTitle}
-        currentLessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
+        currentLessonText={[canonicalLessonText, canonicalVideoTranscript].filter(Boolean).join('\n\n')}
         onApplyBlocks={handleBlocksChange}
         onApplyQuestions={handleQuestionsChange}
       />
@@ -1330,15 +1427,12 @@ export const CoursePreviewPage: React.FC = () => {
           episodeTitle={currentEpisodeTitle || selectedEpisode.title || 'Lesson'}
           episodeId={selectedEpisode.id}
           courseId={course.id}
-          lessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
-          hasVideo={currentBlocks.some((b: any) => ['video', 'youtube_video', 'text_video'].includes(b.block_type))}
+          lessonText={canonicalLessonText}
+          hasVideo={lessonHasVideo}
           hasImage={currentBlocks.some((b: any) => ['image', 'text_image'].includes(b.block_type))}
-          initialVideoTranscript={(() => {
-            const vb = currentBlocks.find((b: any) => ['video', 'youtube_video', 'text_video'].includes(b.block_type));
-            return (vb?.content as any)?.transcript || (vb?.content as any)?.video?.transcript || '';
-          })()}
+          initialVideoTranscript={canonicalVideoTranscript}
           onImportQuestions={imported => {
-            const next = [...currentQuestions, ...imported];
+            const next = [...latestQuestionsRef.current, ...imported];
             handleQuestionsChange(next);
             setQuestionPlanModalOpen(false);
           }}
@@ -1355,9 +1449,11 @@ export const CoursePreviewPage: React.FC = () => {
           episodeTitle={currentEpisodeTitle || selectedEpisode.title || 'Lesson'}
           episodeId={selectedEpisode.id}
           courseId={course.id}
-          lessonText={currentBlocks.map((b: any) => b.content?.text || '').join('\n\n')}
+          lessonText={canonicalLessonText}
+          videoTranscript={canonicalVideoTranscript}
+          hasVideo={lessonHasVideo}
           onImportQuestions={imported => {
-            const next = [...currentQuestions, ...imported];
+            const next = [...latestQuestionsRef.current, ...imported];
             handleQuestionsChange(next);
           }}
         />

@@ -1011,7 +1011,7 @@
 .bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black) input:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 .bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black) textarea:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 .bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black) select:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
-input.bg-white:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
+input.bg-white:not([type="checkbox"]):not([type="radio"]),
 input.bg-slate-50:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 input.bg-slate-100:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 input.bg-slate-200:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
@@ -1019,7 +1019,7 @@ input.bg-gray-50:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-
 input.bg-gray-100:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 input.bg-zinc-50:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 input.bg-neutral-50:not([type="checkbox"]):not([type="radio"]):not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
-textarea.bg-white:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
+textarea.bg-white,
 textarea.bg-slate-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 textarea.bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 textarea.bg-slate-200:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
@@ -1027,7 +1027,7 @@ textarea.bg-gray-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\
 textarea.bg-gray-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 textarea.bg-zinc-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 textarea.bg-neutral-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
-select.bg-white:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
+select.bg-white,
 select.bg-slate-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 select.bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
 select.bg-gray-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900):not(.dark\:bg-slate-800):not(.dark\:bg-black),
@@ -1040,8 +1040,32 @@ textarea.input-theme-light,
 select.input-theme-light {
   color: #172033 !important;
   -webkit-text-fill-color: #172033 !important;
-  caret-color: #026fc3 !important;
+  caret-color: #172033 !important;
   color-scheme: light !important;
+  opacity: 1 !important;
+}
+
+/* Explicit Video Transcript & Light Course Studio Inputs */
+textarea.edtechra-video-transcript-textarea,
+.edtechra-video-transcript-textarea,
+input.edtechra-light-input,
+textarea.edtechra-light-input {
+  background-color: #FFFFFF !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  caret-color: #172033 !important;
+  border-color: #CBD5E1 !important;
+  opacity: 1 !important;
+  color-scheme: light !important;
+}
+
+textarea.edtechra-video-transcript-textarea::placeholder,
+.edtechra-video-transcript-textarea::placeholder,
+input.edtechra-light-input::placeholder,
+textarea.edtechra-light-input::placeholder {
+  color: #64748B !important;
+  -webkit-text-fill-color: #64748B !important;
+  opacity: 1 !important;
 }
 
 /* Ensure native select <option> items are always readable across browsers */
@@ -1072,7 +1096,7 @@ select option {
 .bg-slate-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800) textarea:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800)::placeholder,
 .bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800) input:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800)::placeholder,
 .bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800) textarea:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800)::placeholder,
-input.bg-white:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
+input.bg-white::placeholder,
 input.bg-slate-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 input.bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 input.bg-slate-200:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
@@ -1080,7 +1104,7 @@ input.bg-gray-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg
 input.bg-gray-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 input.bg-zinc-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 input.bg-neutral-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
-textarea.bg-white:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
+textarea.bg-white::placeholder,
 textarea.bg-slate-50:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 textarea.bg-slate-100:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,
 textarea.bg-slate-200:not(.dark\:bg-stone-900):not(.dark\:bg-stone-800):not(.dark\:bg-slate-900)::placeholder,

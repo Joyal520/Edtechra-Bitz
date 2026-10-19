@@ -59,7 +59,7 @@ export const DEFAULT_10_QUESTION_VIDEO_PLAN: QuestionPlanItem[] = [
     count: 3,
     difficulty: 'medium',
     points: 10,
-    instructions: 'Test factual understanding of key concepts taught in the video.'
+    instructions: 'Test factual understanding of key concepts, events, and details directly from the video transcript.'
   },
   {
     id: 'plan_tf_3',
@@ -67,7 +67,7 @@ export const DEFAULT_10_QUESTION_VIDEO_PLAN: QuestionPlanItem[] = [
     count: 3,
     difficulty: 'medium',
     points: 10,
-    instructions: 'Test comprehension of statements made in the video.'
+    instructions: 'Verify factual statements directly from the video transcript.'
   },
   {
     id: 'plan_sa_3',
@@ -75,7 +75,7 @@ export const DEFAULT_10_QUESTION_VIDEO_PLAN: QuestionPlanItem[] = [
     count: 3,
     difficulty: 'medium',
     points: 10,
-    instructions: 'Direct questions requiring 1-2 sentence answers based on the video transcript with expected answer key.'
+    instructions: 'One-word fill-in-the-blank questions based directly on the video transcript. Each question must have ONE blank ("________") and a ONE-WORD expected answer.'
   },
   {
     id: 'plan_so_1',
@@ -83,7 +83,7 @@ export const DEFAULT_10_QUESTION_VIDEO_PLAN: QuestionPlanItem[] = [
     count: 1,
     difficulty: 'medium',
     points: 10,
-    instructions: 'Reconstruct a memorable key sentence from the transcript using shuffled word tokens.'
+    instructions: 'Reconstruct a meaningful sentence (6–12 words) directly from the video transcript using shuffled word tokens.'
   }
 ];
 
@@ -103,23 +103,13 @@ export const QuestionPlanModal: React.FC<Props> = ({
 }) => {
   const [tab, setTab] = useState<'plan' | 'prompt' | 'import'>('plan');
   
-  // Question Plan state
-  const [planItems, setPlanItems] = useState<QuestionPlanItem[]>(() => 
-    hasVideo ? DEFAULT_10_QUESTION_VIDEO_PLAN : [
-      {
-        id: '1',
-        type: 'multiple_choice',
-        count: 5,
-        difficulty: 'medium',
-        points: 10,
-        instructions: ''
-      }
-    ]
-  );
+  // Question Plan state (defaults to 10 Questions / 100 Marks: 3 MCQ, 3 T/F, 3 Short Answer/Fill Blank, 1 Sentence Builder)
+  const [planItems, setPlanItems] = useState<QuestionPlanItem[]>(() => DEFAULT_10_QUESTION_VIDEO_PLAN);
   const [videoTranscript, setVideoTranscript] = useState(initialVideoTranscript || '');
   const [imageDescription, setImageDescription] = useState('');
   const [teacherInstructions, setTeacherInstructions] = useState('');
   const [cefrLevel, setCefrLevel] = useState<'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'>('A1');
+  const [promptValidationError, setPromptValidationError] = useState<string | null>(null);
 
   // Prompt state
   const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -129,25 +119,34 @@ export const QuestionPlanModal: React.FC<Props> = ({
   const [jsonInput, setJsonInput] = useState('');
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
+  // Keep videoTranscript synchronized with canonical lesson transcript
+  useEffect(() => {
+    setVideoTranscript(initialVideoTranscript || '');
+    if ((initialVideoTranscript || '').trim().length > 0) {
+      setPromptValidationError(null);
+    }
+  }, [initialVideoTranscript, isOpen]);
+
   // Reset or initialize on open
   useEffect(() => {
     if (isOpen) {
       setTab('plan');
       setValidationResult(null);
       setCopied(false);
-      if (initialVideoTranscript && !videoTranscript) {
-        setVideoTranscript(initialVideoTranscript);
-      }
-      if (hasVideo && planItems.length === 1 && planItems[0].type === 'multiple_choice' && planItems[0].count === 5) {
-        setPlanItems(DEFAULT_10_QUESTION_VIDEO_PLAN);
-      }
+      setPromptValidationError(null);
     }
-  }, [isOpen, initialVideoTranscript, hasVideo]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const effectiveTranscript = (videoTranscript || initialVideoTranscript || '').trim();
+  const cleanLessonText = (lessonText || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const isMissingRequiredTranscript =
+    (hasVideo && effectiveTranscript.length === 0) ||
+    (!hasVideo && effectiveTranscript.length === 0 && cleanLessonText.length === 0);
+
   // Calculate lesson text word count & total interactive activities & marks
-  const wordCount = lessonText.trim() ? lessonText.trim().split(/\s+/).length : 0;
+  const wordCount = cleanLessonText ? cleanLessonText.split(/\s+/).length : 0;
   const totalPlanActivities = planItems.reduce((sum, item) => sum + getPlanItemActivityCount(item), 0);
   const totalPlanMarks = planItems.reduce((sum, item) => sum + getPlanItemTotalMarks(item), 0);
 
@@ -174,10 +173,19 @@ export const QuestionPlanModal: React.FC<Props> = ({
   };
 
   const handleGeneratePrompt = () => {
+    if (isMissingRequiredTranscript) {
+      setPromptValidationError(
+        'Please enter or restore the video transcript before generating practice questions. EdTechra requires the transcript to create questions based on this lesson.'
+      );
+      setTab('plan');
+      return;
+    }
+
+    setPromptValidationError(null);
     const plan: QuestionPlan = {
       items: planItems,
       cefr_level: cefrLevel,
-      video_transcript: videoTranscript,
+      video_transcript: effectiveTranscript,
       image_description: imageDescription,
       teacher_instructions: teacherInstructions
     };
@@ -187,7 +195,7 @@ export const QuestionPlanModal: React.FC<Props> = ({
       unitTitle,
       episodeTitle,
       lessonText,
-      videoTranscript,
+      videoTranscript: effectiveTranscript,
       imageDescription,
       plan,
       cefrLevel
@@ -358,12 +366,12 @@ export const QuestionPlanModal: React.FC<Props> = ({
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Lesson text: {wordCount} words detected</span>
                   </div>
-                  {hasVideo && (
-                    <div className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Video present in lesson</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className={`w-4 h-4 ${effectiveTranscript ? 'text-emerald-600' : 'text-amber-500'}`} />
+                    <span>
+                      Transcript included: {effectiveTranscript ? 'Yes' : 'No'} ({effectiveTranscript.length.toLocaleString()} characters)
+                    </span>
+                  </div>
                   {hasImage && (
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -373,42 +381,76 @@ export const QuestionPlanModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Optional Transcripts / Descriptions */}
-              {(hasVideo || hasImage) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {hasVideo && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Video className="w-3.5 h-3.5 text-rose-500" />
-                        <span>Video Transcript (Optional)</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={videoTranscript}
-                        onChange={e => setVideoTranscript(e.target.value)}
-                        placeholder="Paste video dialogue or key spoken points here..."
-                        className="w-full p-3 rounded-xl border border-stone-200 text-xs font-mono focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                      />
-                    </div>
-                  )}
-
-                  {hasImage && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Image Description (Optional)</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={imageDescription}
-                        onChange={e => setImageDescription(e.target.value)}
-                        placeholder="e.g. A young eagle standing among chickens on a farm..."
-                        className="w-full p-3 rounded-xl border border-stone-200 text-xs font-mono focus:ring-2 focus:ring-[#026fc3] focus:outline-none"
-                      />
-                    </div>
-                  )}
+              {(isMissingRequiredTranscript || promptValidationError) && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>
+                    {promptValidationError ||
+                      'Please enter or restore the video transcript before generating practice questions. EdTechra requires the transcript to create questions based on this lesson.'}
+                  </span>
                 </div>
               )}
+
+              {/* Video Transcript & Image Descriptions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={`space-y-1.5 ${hasImage ? '' : 'sm:col-span-2'}`}>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Video className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Video Transcript (Source Material)</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      {videoTranscript.length.toLocaleString()} characters
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    data-color-scheme="light"
+                    value={videoTranscript}
+                    onChange={e => {
+                      setVideoTranscript(e.target.value);
+                      if (e.target.value.trim().length > 0) {
+                        setPromptValidationError(null);
+                      }
+                    }}
+                    placeholder="Paste the video transcript here. EdTechra will use the transcript to create practice questions based on the actual lesson content."
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      color: '#172033',
+                      WebkitTextFillColor: '#172033',
+                      caretColor: '#172033',
+                      borderColor: '#CBD5E1',
+                      opacity: 1
+                    }}
+                    className="edtechra-video-transcript-textarea w-full p-3 rounded-xl border border-[#CBD5E1] bg-white text-[#172033] text-xs font-mono focus:ring-2 focus:ring-[#026fc3] focus:outline-none placeholder:text-[#64748B]"
+                  />
+                </div>
+
+                {hasImage && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Image Description (Optional)</span>
+                    </label>
+                    <textarea
+                      rows={4}
+                      data-color-scheme="light"
+                      value={imageDescription}
+                      onChange={e => setImageDescription(e.target.value)}
+                      placeholder="e.g. A young eagle standing among chickens on a farm..."
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        color: '#172033',
+                        WebkitTextFillColor: '#172033',
+                        caretColor: '#172033',
+                        borderColor: '#CBD5E1',
+                        opacity: 1
+                      }}
+                      className="edtechra-light-input w-full p-3 rounded-xl border border-[#CBD5E1] bg-white text-[#172033] text-xs font-mono focus:ring-2 focus:ring-[#026fc3] focus:outline-none placeholder:text-[#64748B]"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* Question Sets List */}
               <div className="space-y-3">
@@ -797,12 +839,48 @@ export const QuestionPlanModal: React.FC<Props> = ({
               <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>AI Prompt Ready!</span>
+                  <span>Prompt Preview Ready!</span>
                 </p>
                 <p>
-                  Copy the prompt below and paste it into ChatGPT (GPT-4o), Claude 3.5 Sonnet, or Google Gemini.
-                  Then paste the returned JSON into Tab 3 to validate and import into your course.
+                  Verify the prompt details and included video transcript below, then copy the complete prompt into ChatGPT, Claude, or Gemini and paste the returned JSON into Tab 3.
                 </p>
+              </div>
+
+              {/* Prompt Preview Metadata Summary */}
+              <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-[#CBD5E1] grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#64748B]">Assessment Title</span>
+                  <span className="text-xs font-bold text-[#172033] truncate block">{episodeTitle || courseTitle || 'Practice Questions'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#64748B]">Target CEFR Level</span>
+                  <span className="text-xs font-bold text-[#172033]">{cefrLevel}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#64748B]">Questions & Marks</span>
+                  <span className="text-xs font-bold text-[#026fc3]">{totalPlanActivities} Questions • {totalPlanMarks} Marks</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-[#64748B]">Source Material</span>
+                  <span className={`text-xs font-bold ${effectiveTranscript.length > 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    Transcript included: {effectiveTranscript.length > 0 ? 'Yes' : 'No'} ({effectiveTranscript.length.toLocaleString()} chars)
+                  </span>
+                </div>
+                <div className="col-span-2 sm:col-span-4 pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#64748B] mr-1">Selected Question Types:</span>
+                  {planItems.map((item) => {
+                    const typeLabel = QUESTION_TYPE_LABELS[item.type] || item.type;
+                    const ptsEach = item.points ?? 10;
+                    return (
+                      <span
+                        key={item.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-[#CBD5E1] text-[11px] font-bold text-[#172033]"
+                      >
+                        {typeLabel}: {item.count} ({item.count * ptsEach} pts)
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="relative">
@@ -824,12 +902,12 @@ export const QuestionPlanModal: React.FC<Props> = ({
                   {copied ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>Copied to Clipboard!</span>
+                      <span>Copied Complete Prompt!</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      <span>Copy Full Prompt</span>
+                      <span>Copy Complete Prompt</span>
                     </>
                   )}
                 </button>
@@ -842,6 +920,15 @@ export const QuestionPlanModal: React.FC<Props> = ({
                   className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
                 >
                   ← Edit Question Plan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyPrompt}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copied ? 'Copied!' : 'Copy Complete Prompt'}</span>
                 </button>
 
                 <button
