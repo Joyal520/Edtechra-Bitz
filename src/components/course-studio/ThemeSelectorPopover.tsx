@@ -53,26 +53,38 @@ export const ThemeSelectorPopover: React.FC<Props> = ({ activeThemeId, onSelectT
 
       {/* Popover Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-[320px] sm:w-[360px] p-4 rounded-2xl surface-elevated text-theme-primary shadow-2xl border border-[var(--theme-border-primary)] z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--theme-border-subtle)] mb-3">
+        <div
+          role="dialog"
+          aria-label="Reading Appearance Themes"
+          className="absolute right-0 top-full mt-2 w-[320px] sm:w-[360px] p-4 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            backgroundColor: '#0B2340',
+            borderColor: '#315579',
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+          }}
+        >
+          <div className="flex items-center justify-between pb-3 mb-3" style={{ borderBottom: '1px solid #315579' }}>
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-theme-primary">
+              <h4 className="text-xs font-black uppercase tracking-wider text-white">
                 Reading Appearance
               </h4>
-              <p className="text-[11px] text-theme-muted font-medium">
+              <p className="text-[11px] font-medium text-[#DCE8F5]">
                 Select a subtle light gradient or midnight mode
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-current/10 text-theme-muted hover:text-theme-primary cursor-pointer"
+              className="p-1 rounded-lg text-[#DCE8F5] hover:text-white hover:bg-[#174A75] transition-colors cursor-pointer"
+              title="Close Appearance Menu"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* 10 Gradient Presets Grid */}
+          {/* Theme Presets Grid */}
           <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto pr-1">
             {THEME_PRESETS.map((preset) => {
               const isSelected = preset.id === activeThemeId;
@@ -85,30 +97,47 @@ export const ThemeSelectorPopover: React.FC<Props> = ({ activeThemeId, onSelectT
                     onSelectTheme(preset.id);
                     setIsOpen(false);
                   }}
-                  className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectTheme(preset.id);
+                      setIsOpen(false);
+                    } else if (e.key === 'Escape') {
+                      setIsOpen(false);
+                    }
+                  }}
+                  className={`p-2 rounded-xl text-left transition-all cursor-pointer flex flex-col gap-1.5 focus:outline-none ${
                     isSelected
-                      ? 'border-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)]/20 bg-[var(--theme-accent-soft)] shadow-xs'
-                      : 'border-[var(--theme-border-subtle)] hover:border-[var(--theme-border-primary)] hover:bg-current/5'
+                      ? 'shadow-md'
+                      : 'hover:bg-[#174A75]'
                   }`}
+                  style={{
+                    backgroundColor: isSelected ? '#174A75' : '#0d2745',
+                    border: isSelected ? '2px solid #38BDF8' : '1px solid #315579',
+                    boxShadow: isSelected ? '0 0 12px rgba(56, 189, 248, 0.25)' : 'none'
+                  }}
                 >
                   {/* Swatch Preview Box */}
                   <div
-                    className="w-full h-10 rounded-lg border border-black/10 shadow-2xs relative flex items-center justify-end p-1.5"
+                    className="w-full h-10 rounded-lg border border-white/20 shadow-2xs relative flex items-center justify-end p-1.5"
                     style={{ background: preset.previewCss }}
                   >
                     {isSelected && (
-                      <span className="w-4 h-4 rounded-full bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] flex items-center justify-center shadow-xs">
-                        <Check className="w-2.5 h-2.5" />
+                      <span className="w-5 h-5 rounded-full bg-[#38BDF8] text-[#0B2340] flex items-center justify-center shadow-xs font-bold">
+                        <Check className="w-3 h-3 stroke-[3]" />
                       </span>
                     )}
                   </div>
 
                   {/* Preset Name & Tone */}
                   <div>
-                    <div className="text-xs font-bold text-theme-primary truncate">
-                      {preset.name}
+                    <div className="text-xs font-bold text-white truncate flex items-center justify-between">
+                      <span>{preset.name}</span>
+                      {isSelected && (
+                        <span className="text-[10px] text-[#38BDF8] font-black uppercase">Active</span>
+                      )}
                     </div>
-                    <div className="text-[10px] text-theme-muted font-medium truncate">
+                    <div className="text-[10px] font-medium text-[#DCE8F5] truncate">
                       {preset.description}
                     </div>
                   </div>

@@ -879,108 +879,129 @@ export const DirectLessonEditor: React.FC<DirectLessonEditorProps> = ({
           </button>
 
           {showAddSectionMenu && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 bg-[var(--theme-surface-card)] text-theme-primary rounded-2xl shadow-2xl border border-[var(--theme-border-primary)] p-2 z-30 animate-in fade-in zoom-in-95 duration-150">
-              <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-theme-muted">
-                Typography & Content
-              </div>
-              <div className="grid grid-cols-2 gap-1 pb-2 border-b border-[var(--theme-border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('heading')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Heading className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Heading</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('text')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Rich Text</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('quote')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Quote className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Quote</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('callout')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Callout Box</span>
-                </button>
-              </div>
+            <>
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setShowAddSectionMenu(false)}
+              />
+              <div
+                role="menu"
+                aria-label="Add Content Section Menu"
+                className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 max-w-[92vw] rounded-2xl shadow-2xl p-2.5 z-30 animate-in fade-in zoom-in-95 duration-150"
+                style={{
+                  backgroundColor: '#0B2340',
+                  borderColor: '#315579',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+                }}
+              >
+                <div className="px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#38BDF8]">
+                  Typography & Content
+                </div>
+                <div className="grid grid-cols-2 gap-1 pb-2 border-b border-[#315579]">
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('heading')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Heading className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Heading</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('text')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Rich Text</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('quote')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Quote className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Quote</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('callout')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Callout Box</span>
+                  </button>
+                </div>
 
-              <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-theme-muted">
-                Media & Visuals
-              </div>
-              <div className="grid grid-cols-2 gap-1 pb-2 border-b border-[var(--theme-border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('text_image')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Text + Image</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('image')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ImageIcon className="w-3.5 h-3.5 text-stone-400" />
-                  <span>Image Only</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('text_video')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Video className="w-3.5 h-3.5 text-rose-500" />
-                  <span>Video</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('audio')}
-                  className="px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Volume2 className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Audio Narration</span>
-                </button>
-              </div>
+                <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-[#38BDF8]">
+                  Media & Visuals
+                </div>
+                <div className="grid grid-cols-2 gap-1 pb-2 border-b border-[#315579]">
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('text_image')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Text + Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('image')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Image Only</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('text_video')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Video className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Video (16:9)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('audio')}
+                    className="px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Audio Narration</span>
+                  </button>
+                </div>
 
-              <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-theme-muted">
-                Divider & AI
+                <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-[#38BDF8]">
+                  Divider & AI
+                </div>
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('divider')}
+                    className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#174A75] active:bg-[#1769AA] text-left text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Minus className="w-3.5 h-3.5 text-slate-300" />
+                    <span>Decorative Divider</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSectionMenu(false);
+                      onOpenAiAssistant();
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer border border-[#38BDF8]/40 hover:border-[#38BDF8] shadow-xs"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(23, 74, 117, 0.8) 0%, rgba(23, 105, 170, 0.5) 100%)',
+                      color: '#38BDF8'
+                    }}
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                    <span className="font-black">✨ Generate Section with AI</span>
+                  </button>
+                </div>
               </div>
-              <div className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('divider')}
-                  className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[var(--theme-surface-interactive-hover)] text-left text-xs font-bold text-theme-primary flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Minus className="w-3.5 h-3.5 text-theme-muted" />
-                  <span>Decorative Divider</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddSectionMenu(false);
-                    onOpenAiAssistant();
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 text-left text-xs font-bold text-theme-accent flex items-center gap-2 cursor-pointer border border-sky-400/30"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>✨ Generate Section with AI</span>
-                </button>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </div>

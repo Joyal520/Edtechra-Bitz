@@ -257,28 +257,28 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
                 <button
                   type="button"
                   onClick={() => handleApplyHeading('h2')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-black hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-black text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Heading 1
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyHeading('h3')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-bold hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Heading 2
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyHeading('h4')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Heading 3
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyHeading('p')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-normal hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-normal text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Paragraph
                 </button>
@@ -310,21 +310,21 @@ export const CanvaInlineTextEditor: React.FC<CanvaInlineTextEditorProps> = ({
                 <button
                   type="button"
                   onClick={() => handleApplyFont('sans-serif')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-sans hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-sans text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Modern Sans
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyFont('Georgia, serif')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-serif hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-serif text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Classic Serif
                 </button>
                 <button
                   type="button"
                   onClick={() => handleApplyFont('monospace')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs font-mono hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg"
+                  className="w-full text-left px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                 >
                   Code Mono
                 </button>

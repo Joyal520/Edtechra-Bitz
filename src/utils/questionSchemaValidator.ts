@@ -292,7 +292,7 @@ const TYPE_EXAMPLE_TEMPLATES: Partial<Record<QuestionType, any>> = {
     type: 'short_answer',
     questions: [
       {
-        question: 'Complete the sentence with the missing word from the lesson:\n\nThe young bird gathered ________ to fly across the high valley.',
+        question: 'The young bird gathered ________ to fly across the high valley.',
         correct_answer: 'courage',
         expected_answer: 'courage',
         acceptable_answers: ['courage', 'bravery'],
@@ -560,7 +560,7 @@ export function buildAiQuestionPrompt(params: {
       prompt += `${index + 1}. WH Comprehension (wh_question) — Create ${count} ${whDesc} strictly anchored to the source text. Each question MUST provide "question", "wh_type", "expected_answer", "acceptable_answers", "passage", and "explanation". Points: ${points} per question — Difficulty: ${item.difficulty.toUpperCase()}`;
     } else if (item.type === 'short_answer' || item.type === 'fill_blank') {
       const count = item.count || 1;
-      prompt += `${index + 1}. One-Word Fill in the Blank (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}. IMPORTANT: Each question MUST be a sentence from the transcript with ONE missing word ("________"), and the expected answer MUST be ONE SINGLE WORD from the transcript.`;
+      prompt += `${index + 1}. One-Word Fill in the Blank (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}. IMPORTANT: Each question MUST be a sentence from the transcript with ONE missing word ("________"), and the expected answer MUST be ONE SINGLE WORD from the transcript. Do NOT include generic prefixes such as "Complete the sentence with the missing word:". The "question" field must contain ONLY the specific sentence with the blank.`;
     } else if (item.type === 'sentence_builder' || item.type === 'sentence_reordering' || item.type === 'word_ordering') {
       const count = item.count || 1;
       prompt += `${index + 1}. Sentence Builder (${item.type}) — ${count} question${count > 1 ? 's' : ''} (${points} marks each = ${count * points} marks) — Difficulty: ${item.difficulty.toUpperCase()}. Use a meaningful sentence (6–12 words) directly from the transcript.`;
@@ -1581,7 +1581,7 @@ export function generateTranscriptGrounded10Questions(
     const blankRegex = new RegExp(`\\b${cleanTargetWord}\\b`, 'i');
     const sentenceWithBlank = blankRegex.test(sourceSentence)
       ? sourceSentence.replace(blankRegex, '________')
-      : `Complete the sentence with the missing word: "${sourceSentence.slice(0, 80)} ________"`;
+      : `${sourceSentence.slice(0, 80)} ________`;
 
     const acceptable = Array.from(
       new Set([
@@ -1596,7 +1596,7 @@ export function generateTranscriptGrounded10Questions(
       id: `q_${now}_${orderIndex}`,
       episode_id: episodeId,
       course_id: courseId,
-      question_text: `Fill in the missing word from the video lesson:\n\n${sentenceWithBlank}`,
+      question_text: sentenceWithBlank,
       question_type: 'short_answer',
       options: acceptable,
       correct_answer: cleanTargetWord,

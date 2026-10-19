@@ -1117,77 +1117,150 @@ export const CourseContentRenderer: React.FC<Props> = ({
             </button>
 
             {showAddSectionMenu && (
-              <div className="absolute top-16 z-30 w-72 bg-white dark:bg-stone-900 rounded-2xl p-2 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('heading')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setShowAddSectionMenu(false)}
+                />
+                <div
+                  role="menu"
+                  aria-label="Add Content Section Menu"
+                  className="absolute top-16 z-30 w-80 max-w-[92vw] p-2.5 rounded-2xl shadow-2xl border space-y-1 animate-in fade-in zoom-in-95 duration-150"
+                  style={{
+                    backgroundColor: '#0B2340',
+                    borderColor: '#315579',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+                  }}
                 >
-                  <Heading className="w-4 h-4 text-sky-500" />
-                  <span>Heading Title</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('text')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <FileText className="w-4 h-4 text-emerald-500" />
-                  <span>Paragraph Text</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('video')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <Video className="w-4 h-4 text-rose-500" />
-                  <span>Video Lesson (16:9)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('image')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <ImageIcon className="w-4 h-4 text-purple-500" />
-                  <span>Visual Image</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('callout')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>Callout / Tip Box</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('quote')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <Quote className="w-4 h-4 text-indigo-500" />
-                  <span>Inspirational Quote</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSection('divider')}
-                  className="w-full p-2 rounded-xl text-left text-xs font-bold hover:bg-slate-100 dark:hover:bg-stone-800 flex items-center gap-2 cursor-pointer"
-                >
-                  <Minus className="w-4 h-4 text-slate-400" />
-                  <span>Decorative Divider</span>
-                </button>
-                {onOpenAiAssistant && (
+                  <div className="px-3 py-1.5 border-b border-[#315579] mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#38BDF8]">
+                      Add Content Section
+                    </span>
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowAddSectionMenu(false);
-                      onOpenAiAssistant();
-                    }}
-                    className="w-full p-2 rounded-xl text-left text-xs font-black bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-[#026fc3] hover:from-sky-500/30 flex items-center gap-2 cursor-pointer border border-sky-400/30"
+                    onClick={() => handleAddSection('heading')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-                    <span>✨ Generate Section with AI</span>
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+                      <Heading className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Heading Title</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Major chapter or section break</div>
+                    </div>
                   </button>
-                )}
-              </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('text')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Paragraph Text</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Rich editorial text block</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('video')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                      <Video className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Video Lesson (16:9)</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">YouTube or direct video player</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('image')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Visual Image</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Standalone image with caption</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('callout')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Callout / Tip Box</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Highlighted key takeaways & tips</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('quote')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                      <Quote className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Inspirational Quote</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Featured quotation with author</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('divider')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] active:bg-[#1769AA] flex items-center gap-2.5 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-[#38BDF8]"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-slate-500/20 text-slate-300 flex items-center justify-center shrink-0">
+                      <Minus className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Decorative Divider</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Subtle visual break between topics</div>
+                    </div>
+                  </button>
+
+                  {onOpenAiAssistant && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddSectionMenu(false);
+                        onOpenAiAssistant();
+                      }}
+                      className="w-full p-2.5 rounded-xl text-left flex items-center gap-2.5 cursor-pointer transition-all border border-[#38BDF8]/40 hover:border-[#38BDF8] mt-1 shadow-xs"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(23, 74, 117, 0.8) 0%, rgba(23, 105, 170, 0.5) 100%)'
+                      }}
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center shrink-0">
+                        <Sparkles className="w-4 h-4 animate-pulse" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-[#38BDF8] leading-tight">✨ Generate Section with AI</div>
+                        <div className="text-[10px] text-[#DCE8F5] leading-tight">Draft an entire section automatically</div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1249,29 +1322,44 @@ export const CourseContentRenderer: React.FC<Props> = ({
           </div>
 
           {/* Interactive Question Cards Stream */}
-          <div className="w-full space-y-5 sm:space-y-6">
-            {(isEditMode ? questions : validQuestions).map((q, qIndex) => {
+          <div className="w-full space-y-4 sm:space-y-5">
+            {(isEditMode ? questions : validQuestions).map((q, qIndex, arr) => {
               const effectiveQId = q.id || `q_${qIndex}`;
               const qWithId = { ...q, id: effectiveQId };
               const qResponse = studentResponses[effectiveQId];
 
+              const isFirstShortAnswer =
+                q.question_type === 'short_answer' &&
+                (qIndex === 0 || arr[qIndex - 1]?.question_type !== 'short_answer');
+
               return (
-                <ComprehensiveQuestionRenderer
-                  key={effectiveQId}
-                  question={qWithId}
-                  index={qIndex}
-                  response={qResponse}
-                  onAnswerSubmit={(res) => handleStudentResponse(res, qWithId)}
-                  isStudentView={!isEditMode}
-                  mode={mode}
-                  onUpdateQuestion={updated => handleUpdateQuestion(qIndex, updated)}
-                  onDeleteQuestion={() => handleDeleteQuestion(qIndex)}
-                  onDuplicateQuestion={() => handleDuplicateQuestion(qIndex)}
-                  onMoveQuestionUp={() => handleMoveQuestion(qIndex, 'up')}
-                  onMoveQuestionDown={() => handleMoveQuestion(qIndex, 'down')}
-                  canMoveUp={qIndex > 0}
-                  canMoveDown={qIndex < questions.length - 1}
-                />
+                <React.Fragment key={effectiveQId}>
+                  {isFirstShortAnswer && (
+                    <div className="pt-2 pb-1 text-left border-t border-[var(--theme-border-subtle)]/70 mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-4 rounded-full bg-[#026fc3]" />
+                        <h4 className="text-xs sm:text-sm font-bold text-theme-primary">
+                          Complete each sentence with one missing word.
+                        </h4>
+                      </div>
+                    </div>
+                  )}
+                  <ComprehensiveQuestionRenderer
+                    question={qWithId}
+                    index={qIndex}
+                    response={qResponse}
+                    onAnswerSubmit={(res) => handleStudentResponse(res, qWithId)}
+                    isStudentView={!isEditMode}
+                    mode={mode}
+                    onUpdateQuestion={updated => handleUpdateQuestion(qIndex, updated)}
+                    onDeleteQuestion={() => handleDeleteQuestion(qIndex)}
+                    onDuplicateQuestion={() => handleDuplicateQuestion(qIndex)}
+                    onMoveQuestionUp={() => handleMoveQuestion(qIndex, 'up')}
+                    onMoveQuestionDown={() => handleMoveQuestion(qIndex, 'down')}
+                    canMoveUp={qIndex > 0}
+                    canMoveDown={qIndex < questions.length - 1}
+                  />
+                </React.Fragment>
               );
             })}
           </div>

@@ -89,6 +89,16 @@ function extractSentenceCorrectOrder(q: any): string[] {
   return [];
 }
 
+export function cleanShortAnswerPrompt(text: string): string {
+  if (!text) return '';
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^(?:Complete the sentence with (?:the|one) missing word(?: from the (?:video )?lesson)?:?\s*)+/i, '');
+  cleaned = cleaned.replace(/^(?:Fill in the (?:missing word|blank)(?: from the (?:video )?lesson)?:?\s*)+/i, '');
+  cleaned = cleaned.replace(/^(?:Complete the sentence:?\s*)+/i, '');
+  cleaned = cleaned.replace(/^(?:Fill in the blank:?\s*)+/i, '');
+  return cleaned.trim();
+}
+
 interface ComprehensiveQuestionRendererProps {
   question: CourseQuestion;
   index: number;
@@ -152,6 +162,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const [openEndedText, setOpenEndedText] = useState<string>('');
   const [isEvaluatingAi, setIsEvaluatingAi] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [isInputActive, setIsInputActive] = useState<boolean>(false);
+  const shortAnswerInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Initialize Sentence Reordering tokens from question items / options / correct_order
   useEffect(() => {
@@ -296,8 +308,12 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   // 2B. SHORT ANSWER: DETERMINISTIC ONE-WORD EVALUATOR (0 OR 10 MARKS, NO AI)
   // --------------------------------------------------------------------------
   const handleEvaluateShortAnswer = () => {
+    if (isAnswered) return;
     const rawInput = shortAnswerInput.trim();
-    if (!rawInput || isAnswered) return;
+    if (!rawInput) {
+      setAiError('Please enter a word.');
+      return;
+    }
 
     // Reject multi-word submissions
     const words = rawInput.split(/\s+/).filter(Boolean);
@@ -386,14 +402,103 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     }
   };
 
+  const renderInlineShortAnswerSentence = () => {
+    const rawText = cleanShortAnswerPrompt(question.question_text);
+    const blankRegex = /(?:\[\s*_{2,}\s*\]|\[\s*blank\s*\]|_{2,})/i;
+    let parts: string[];
+    if (blankRegex.test(rawText)) {
+      parts = rawText.split(blankRegex);
+    } else {
+      parts = [rawText, ''];
+    }
+
+    const beforeText = parts[0] || '';
+    const afterText = parts.slice(1).join(' ') || '';
+
+    return (
+      <div className="text-base sm:text-lg font-medium text-theme-primary leading-relaxed reader-question">
+        <span>{beforeText}</span>
+        {isAnswered ? (
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-0.5 mx-1.5 my-0.5 rounded-lg font-bold text-sm sm:text-base border transition-all ${
+              isCorrect
+                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-400'
+                : 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-rose-400'
+            }`}
+          >
+            <span>{String(response?.answer || '')}</span>
+            {isCorrect ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 inline shrink-0" />
+            ) : (
+              <XCircle className="w-4 h-4 text-rose-600 inline shrink-0" />
+            )}
+          </span>
+        ) : isInputActive ? (
+          <span className="inline-flex items-center gap-1.5 mx-1.5 my-0.5 align-middle">
+            <input
+              ref={shortAnswerInputRef}
+              type="text"
+              autoFocus
+              value={shortAnswerInput}
+              onChange={e => {
+                setShortAnswerInput(e.target.value);
+                if (aiError) setAiError(null);
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleEvaluateShortAnswer();
+                } else if (e.key === 'Escape' && !shortAnswerInput) {
+                  setIsInputActive(false);
+                }
+              }}
+              placeholder="one word"
+              className="w-28 sm:w-36 px-2.5 py-1 text-sm sm:text-base font-bold text-[#172033] dark:text-white bg-white dark:bg-slate-900 border-2 border-[#026fc3] rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-[#38BDF8]"
+            />
+            <button
+              type="button"
+              disabled={!shortAnswerInput.trim()}
+              onClick={handleEvaluateShortAnswer}
+              className="px-2.5 py-1 bg-[#026fc3] hover:bg-[#025aa0] disabled:opacity-40 text-white rounded-lg text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+            >
+              Submit
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setIsInputActive(true);
+              setTimeout(() => shortAnswerInputRef.current?.focus(), 50);
+            }}
+            className="inline-flex items-center justify-center px-3 py-0.5 mx-1.5 my-0.5 rounded-lg border-2 border-dashed border-[#026fc3] bg-sky-50 dark:bg-sky-950/40 text-[#026fc3] dark:text-sky-300 font-bold text-sm hover:bg-sky-100 dark:hover:bg-sky-900/60 cursor-pointer transition-all active:scale-95"
+            title="Tap to type missing word"
+          >
+            [ &nbsp;______&nbsp; ]
+          </button>
+        )}
+        <span>{afterText}</span>
+
+        {aiError && (
+          <div className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-in fade-in">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{aiError}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div
       id={`question-${qId}`}
       className={`w-full ${
         mode === 'edit'
           ? 'rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[var(--theme-border-primary)] shadow-xs'
-          : 'rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-[var(--theme-border-subtle)] shadow-2xs'
-      } surface-card space-y-3.5 sm:space-y-4 transition-all ${
+          : qType === 'short_answer'
+          ? 'rounded-xl p-3 sm:p-4 border border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 space-y-2'
+          : 'rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-[var(--theme-border-subtle)] shadow-2xs space-y-3.5 sm:space-y-4'
+      } surface-card transition-all ${
         isAnswered
           ? isCorrect
             ? 'ring-1 ring-emerald-500/40 bg-emerald-50/10'
@@ -560,6 +665,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           rows={2}
           className="w-full text-base sm:text-lg font-bold leading-snug p-2.5 rounded-xl border border-dashed border-[#026fc3]/50 focus:border-[#026fc3] focus:outline-none bg-white dark:bg-slate-900/90 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] resize-y"
         />
+      ) : qType === 'short_answer' ? (
+        renderInlineShortAnswerSentence()
       ) : (
         <h4 className="text-base sm:text-lg font-bold text-theme-primary leading-snug text-left reader-question">
           {question.question_text}
@@ -1276,50 +1383,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               />
             </div>
           </div>
-        ) : (
-          <div className="space-y-3 pt-1">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              <div className="relative flex-1 min-w-0">
-                <input
-                  type="text"
-                  disabled={isAnswered}
-                  value={shortAnswerInput}
-                  onChange={e => {
-                    setShortAnswerInput(e.target.value);
-                    if (aiError) setAiError(null);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !isAnswered && shortAnswerInput.trim()) {
-                      e.preventDefault();
-                      handleEvaluateShortAnswer();
-                    }
-                  }}
-                  placeholder="Type missing word (one word only)..."
-                  aria-label="One word answer"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-300 focus:border-[#026fc3] focus:ring-2 focus:ring-[#026fc3]/20 bg-white text-[#172033] text-base font-semibold placeholder:text-slate-400 placeholder:font-normal outline-none transition-all"
-                />
-              </div>
-
-              {!isAnswered && (
-                <button
-                  type="button"
-                  disabled={!shortAnswerInput.trim()}
-                  onClick={handleEvaluateShortAnswer}
-                  className="px-5 py-3 rounded-xl bg-[#026fc3] hover:bg-[#025aa0] active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-black transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1.5"
-                >
-                  <span>Check Word</span>
-                </button>
-              )}
-            </div>
-
-            {aiError && (
-              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                <span className="font-semibold">{aiError}</span>
-              </div>
-            )}
-          </div>
-        )
+        ) : null
       )}
 
       {/* ------------------------------------------------------------------- */}
@@ -1410,7 +1474,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           <div className="flex items-center justify-between font-black">
             <span className="flex items-center gap-1.5">
               {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
-              <span>{isCorrect ? 'Correct!' : (qType === 'essay' || qType === 'short_answer' ? 'Needs Review' : 'Incorrect')}</span>
+              <span>{isCorrect ? 'Correct!' : (qType === 'essay' ? 'Needs Review' : 'Incorrect')}</span>
             </span>
             <span className="font-mono">
               Score: {response?.score} / {response?.maxScore} pts

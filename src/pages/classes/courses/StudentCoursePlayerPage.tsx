@@ -410,7 +410,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
             icon={<Menu className="w-3.5 h-3.5" />}
             title="Table of Contents"
           >
-            <span className="hidden md:inline">Contents</span>
+            <span className="inline font-bold">Contents</span>
           </LiquidButton>
         </div>
 
