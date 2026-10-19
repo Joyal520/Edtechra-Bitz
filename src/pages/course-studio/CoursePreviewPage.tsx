@@ -1317,6 +1317,7 @@ export const CoursePreviewPage: React.FC = () => {
 
               {/* UNIFIED CONTENT ENGINE (ONE ENGINE FOR BOTH EDIT & STUDENT MODES) */}
               <CourseContentRenderer
+                key={selectedEpisode.id}
                 blocks={currentBlocks}
                 questions={currentQuestions}
                 mode={isEditMode ? 'edit' : 'student'}
@@ -1432,8 +1433,9 @@ export const CoursePreviewPage: React.FC = () => {
           hasImage={currentBlocks.some((b: any) => ['image', 'text_image'].includes(b.block_type))}
           initialVideoTranscript={canonicalVideoTranscript}
           onImportQuestions={imported => {
-            const next = [...latestQuestionsRef.current, ...imported];
-            handleQuestionsChange(next);
+            // Replace the active assessment cleanly with the imported questions
+            // (prevents accumulating duplicates and invalid 170/100 scoring)
+            handleQuestionsChange(imported);
             setQuestionPlanModalOpen(false);
           }}
         />
@@ -1453,8 +1455,9 @@ export const CoursePreviewPage: React.FC = () => {
           videoTranscript={canonicalVideoTranscript}
           hasVideo={lessonHasVideo}
           onImportQuestions={imported => {
-            const next = [...latestQuestionsRef.current, ...imported];
-            handleQuestionsChange(next);
+            // Replace active questions with imported generated assessment
+            handleQuestionsChange(imported);
+            setAddQuestionsModalOpen(false);
           }}
         />
       )}

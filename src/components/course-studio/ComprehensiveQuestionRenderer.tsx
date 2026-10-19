@@ -443,18 +443,18 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   points: question.points || 10
                 });
               }}
-              className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-white text-[#172033] border border-[#CBD5E1] focus:outline-none focus:border-[#026fc3] cursor-pointer w-fit shadow-2xs"
+              className="text-[11px] font-black uppercase px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] border border-[#CBD5E1] dark:border-slate-700 focus:outline-none focus:border-[#026fc3] cursor-pointer w-fit shadow-2xs"
             >
-              <option value="multiple_choice" className="bg-white text-[#172033]">Multiple Choice</option>
-              <option value="true_false" className="bg-white text-[#172033]">True / False</option>
-              <option value="short_answer" className="bg-white text-[#172033]">Short Answer</option>
-              <option value="sentence_reordering" className="bg-white text-[#172033]">Sentence Ordering</option>
-              <option value="fill_blank" className="bg-white text-[#172033]">Fill in Blank</option>
-              <option value="wh_question" className="bg-white text-[#172033]">WH Question</option>
-              <option value="multiple_select" className="bg-white text-[#172033]">Multiple Select</option>
-              <option value="ordering" className="bg-white text-[#172033]">Story / Step Ordering</option>
-              <option value="cloze_passage" className="bg-white text-[#172033]">Cloze Passage</option>
-              <option value="essay" className="bg-white text-[#172033]">Essay / Open Ended</option>
+              <option value="multiple_choice" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Multiple Choice</option>
+              <option value="true_false" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">True / False</option>
+              <option value="short_answer" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Short Answer</option>
+              <option value="sentence_reordering" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Sentence Ordering</option>
+              <option value="fill_blank" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Fill in Blank</option>
+              <option value="wh_question" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">WH Question</option>
+              <option value="multiple_select" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Multiple Select</option>
+              <option value="ordering" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Story / Step Ordering</option>
+              <option value="cloze_passage" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Cloze Passage</option>
+              <option value="essay" className="bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC]">Essay / Open Ended</option>
             </select>
           ) : (
             <span className="question-type text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-[var(--theme-surface-subtle)] text-theme-secondary border border-[var(--theme-border-subtle)] w-fit">
@@ -558,7 +558,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           onChange={e => onUpdateQuestion?.({ ...question, question_text: e.target.value })}
           placeholder="Enter question prompt..."
           rows={2}
-          className="w-full text-base sm:text-lg font-bold text-theme-primary leading-snug p-2.5 rounded-xl border border-dashed border-[#026fc3]/50 focus:border-[#026fc3] focus:outline-none bg-white/50 dark:bg-black/30 resize-y"
+          className="w-full text-base sm:text-lg font-bold leading-snug p-2.5 rounded-xl border border-dashed border-[#026fc3]/50 focus:border-[#026fc3] focus:outline-none bg-white dark:bg-slate-900/90 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] resize-y"
         />
       ) : (
         <h4 className="text-base sm:text-lg font-bold text-theme-primary leading-snug text-left reader-question">
@@ -584,7 +584,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                     title="Click to set as correct answer"
                     onClick={() => onUpdateQuestion?.({ ...question, correct_answer: opt.id })}
                     className={`liquid-option-badge cursor-pointer transition-colors ${
-                      isThisCorrect ? 'bg-emerald-500 text-white border-emerald-600' : 'hover:bg-sky-100 text-slate-700'
+                      isThisCorrect ? 'bg-emerald-500 text-white border-emerald-600' : 'hover:bg-sky-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
                     }`}
                   >
                     {isThisCorrect ? '✓' : opt.id}
@@ -600,7 +600,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                         onUpdateQuestion?.({ ...question, options: nextOptions.map(o => o.text) });
                       }}
                       placeholder={`Option ${opt.id}`}
-                      className="w-full text-sm font-bold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-[#026fc3] focus:outline-none py-1"
+                      className="w-full text-sm font-bold bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-[#026fc3] focus:outline-none py-1 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                     />
                     {normalizedOptions.length > 2 && (
                       <button
@@ -640,15 +640,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Add Answer</span>
               </button>
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                 <span>Correct Answer:</span>
                 <select
                   value={question.correct_answer || 'A'}
                   onChange={e => onUpdateQuestion?.({ ...question, correct_answer: e.target.value })}
-                  className="px-2 py-1 rounded-lg border border-slate-300 bg-white dark:bg-stone-800 text-xs font-black text-emerald-600 focus:outline-none cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-black text-emerald-600 dark:text-emerald-400 focus:outline-none cursor-pointer"
                 >
                   {normalizedOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>
+                    <option key={opt.id} value={opt.id} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
                       {opt.id} ({opt.text.substring(0, 16)}...)
                     </option>
                   ))}
@@ -881,13 +881,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {qType === 'fill_blank' && (
         mode === 'edit' ? (
           <div className="space-y-1.5 pt-1">
-            <span className="text-[11px] font-black uppercase text-slate-500 block">Expected Correct Answer:</span>
+            <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 block">Expected Correct Answer:</span>
             <input
               type="text"
               value={question.correct_answer || ''}
               onChange={e => onUpdateQuestion?.({ ...question, correct_answer: e.target.value })}
               placeholder="e.g. digestive"
-              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-stone-900 focus:outline-none focus:border-[#026fc3]"
+              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] focus:outline-none focus:border-[#026fc3]"
             />
           </div>
         ) : (
@@ -931,8 +931,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* ------------------------------------------------------------------- */}
       {(qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') && (
         mode === 'edit' ? (
-          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] font-black uppercase text-slate-500 block">
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 block">
               Full Target Sentence (in correct sequence):
             </span>
             <input
@@ -948,9 +948,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 });
               }}
               placeholder="e.g. Sarah likes tea every day"
-              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-black text-slate-900 dark:text-white focus:outline-none focus:border-[#026fc3]"
+              className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] focus:outline-none focus:border-[#026fc3]"
             />
-            <span className="text-[11px] text-slate-400 font-medium block">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold block">
               Word chips available to student:
             </span>
             <div className="word-bank">
@@ -1221,9 +1221,9 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* ------------------------------------------------------------------- */}
       {qType === 'short_answer' && (
         mode === 'edit' ? (
-          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-[#172033]">
+          <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[#172033] dark:text-[#F8FAFC]">
             <div>
-              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+              <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 block mb-1">
                 Expected Word (One word answer key):
               </span>
               <input
@@ -1239,14 +1239,14 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   });
                 }}
                 placeholder="e.g. tunnel"
-                className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
+                className="w-full p-2.5 text-sm font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] focus:outline-none focus:border-[#026fc3]"
               />
-              <span className="text-[10px] text-slate-400 font-medium block mt-1">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mt-1">
                 Tip: Enter the exact missing word. Question text should contain an underscore blank (e.g. "The train entered a long ________.")
               </span>
             </div>
             <div>
-              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+              <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 block mb-1">
                 Alternative Accepted Answers (comma-separated, optional):
               </span>
               <input
@@ -1260,11 +1260,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   });
                 }}
                 placeholder="e.g. color, colour"
-                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
+                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] focus:outline-none focus:border-[#026fc3]"
               />
             </div>
             <div>
-              <span className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+              <span className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-300 block mb-1">
                 Review Explanation (shown after submission):
               </span>
               <textarea
@@ -1272,7 +1272,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 value={question.explanation || ''}
                 onChange={e => onUpdateQuestion?.({ ...question, explanation: e.target.value })}
                 placeholder="e.g. The transcript confirms the train entered the tunnel."
-                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 bg-white text-[#172033] focus:outline-none focus:border-[#026fc3]"
+                className="w-full p-2.5 text-xs font-medium rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-[#172033] dark:text-[#F8FAFC] placeholder:text-[#64748B] dark:placeholder:text-[#94A3B8] focus:outline-none focus:border-[#026fc3]"
               />
             </div>
           </div>
@@ -1449,7 +1449,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       {/* EDIT MODE: EXPLANATION / FEEDBACK INPUT */}
       {mode === 'edit' && (
         <div className="pt-2 border-t border-[var(--theme-border-subtle)] space-y-1">
-          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+          <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
             Explanation / Feedback for Students (shown after answering):
           </label>
           <input
@@ -1457,7 +1457,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             value={question.explanation || ''}
             onChange={e => onUpdateQuestion?.({ ...question, explanation: e.target.value })}
             placeholder="e.g. Water is essential because it aids digestion and transports nutrients..."
-            className="w-full text-xs font-medium text-slate-700 dark:text-slate-300 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-[#026fc3] focus:outline-none py-1"
+            className="w-full text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-[#026fc3] focus:outline-none py-1"
           />
         </div>
       )}

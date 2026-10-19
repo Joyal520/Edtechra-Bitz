@@ -976,13 +976,10 @@
 [data-theme-mode="light"],
 [data-course-theme="light"],
 .edtechra-light-surface,
-[data-light-surface="true"],
-.liquid-option {
+[data-light-surface="true"] {
   color-scheme: light !important;
 }
 
-.liquid-option input:not([type="checkbox"]):not([type="radio"]),
-.liquid-option textarea,
 .light input:not([type="checkbox"]):not([type="radio"]),
 .light textarea,
 .light select,
@@ -1950,6 +1947,45 @@ textarea.classroom-announcement-textarea::selection,
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.22);
   color: #f8fafc;
+}
+
+/* Edit Mode Input & Caret Styling inside Liquid Option */
+[data-theme-mode="dark"] .liquid-option input,
+.dark .liquid-option input,
+[data-theme="ocean-blue"] .liquid-option input,
+[data-theme="midnight-navy"] .liquid-option input,
+[data-theme="night-dark"] .liquid-option input,
+[data-theme="aurora-blue"] .liquid-option input {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #38bdf8 !important;
+}
+
+[data-theme-mode="dark"] .liquid-option input::placeholder,
+.dark .liquid-option input::placeholder,
+[data-theme="ocean-blue"] .liquid-option input::placeholder,
+[data-theme="midnight-navy"] .liquid-option input::placeholder,
+[data-theme="night-dark"] .liquid-option input::placeholder,
+[data-theme="aurora-blue"] .liquid-option input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+[data-theme-mode="light"] .liquid-option input,
+.light .liquid-option input,
+[data-course-theme="light"] .liquid-option input,
+[data-theme="cream-sepia"] .liquid-option input {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  caret-color: #026fc3 !important;
+}
+
+[data-theme-mode="light"] .liquid-option input::placeholder,
+.light .liquid-option input::placeholder,
+[data-course-theme="light"] .liquid-option input::placeholder,
+[data-theme="cream-sepia"] .liquid-option input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
 }
 
 /* 7. Liquid Option Letter Badge */

@@ -56,7 +56,6 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const [completedEpisodeIds, setCompletedEpisodeIds] = useState<Set<string>>(new Set());
   const [completingEpisode, setCompletingEpisode] = useState(false);
-  const [userScore, setUserScore] = useState(0);
 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [feedbackState, setFeedbackState] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
@@ -215,6 +214,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
     currentActiveEpisodeId: selectedEpisode?.id || null
   }) : null;
 
+  const [questionScores, setQuestionScores] = useState<Record<string, number>>({});
+  const currentScore = Object.values(questionScores).reduce((sum, pts) => sum + pts, 0);
+
   const handleQuestionAnswer = async (
     questionId: string,
     answer: string,
@@ -224,9 +226,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
   ) => {
     if (!courseId || !classroomId || !selectedEpisode) return;
 
-    if (isCorrect) {
-      setUserScore(s => s + pointsAwarded);
-    }
+    setQuestionScores(prev => ({
+      ...prev,
+      [questionId]: isCorrect ? pointsAwarded : 0
+    }));
 
     try {
       await courseStudioService.recordQuestionAttempt({
@@ -252,12 +255,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
     const epId = selectedEpisode.id;
     setCompletingEpisode(true);
 
+    const calculatedScore = Object.values(questionScores).reduce((sum, pts) => sum + pts, 0);
+
     try {
       const res = await courseStudioService.recordStudentProgress({
         course_id: courseId,
         classroom_id: classroomId,
         episode_id: epId,
-        score: userScore,
+        score: calculatedScore,
         max_score: 100,
         time_spent_seconds: (selectedEpisode.estimated_minutes || 15) * 60
       });
@@ -423,7 +428,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
           {/* XP Pill */}
           <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[11px] font-bold border border-amber-400/30">
             <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-            <span>{userScore} XP</span>
+            <span>{currentScore} XP</span>
           </div>
 
           {/* Reading / Roadmap Progress Badge */}
@@ -536,6 +541,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
             {/* SHARED EDITORIAL CONTENT RENDERER */}
             <CourseContentRenderer
+              key={selectedEpisode.id}
               blocks={selectedEpisode.blocks || []}
               questions={selectedEpisode.questions || []}
               isStudentView={true}

@@ -85,34 +85,86 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
 
-  // Filter out any invalid / dummy placeholder questions from rendering
-  const validQuestions = questions.filter(
-    q => q && q.question_text && q.question_text.trim() && q.question_text !== 'New practice question' && q.question_text !== 'Statement based on the lesson'
-  );
+  // Unique canonical questions strictly belonging to this lesson instance
+  const validQuestions = React.useMemo(() => {
+    const seen = new Set<string>();
+    const result: CourseQuestion[] = [];
+    (questions || []).forEach((q, idx) => {
+      if (!q || !q.question_text || !q.question_text.trim()) return;
+      if (q.question_text === 'New practice question' || q.question_text === 'Statement based on the lesson') return;
+      const effectiveId = q.id || `q_pos_${idx}`;
+      if (!seen.has(effectiveId)) {
+        seen.add(effectiveId);
+        result.push({ ...q, id: effectiveId, points: q.points || 10 });
+      }
+    });
+    return result;
+  }, [questions]);
 
-  const [localAnswers, setLocalAnswers] = useState<Record<string, string>>(userAnswers);
-  const [localFeedback, setLocalFeedback] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>(feedbackState);
+  const validQuestionIdSet = React.useMemo(() => new Set(validQuestions.map(q => q.id)), [validQuestions]);
+
+  const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
+  const [localFeedback, setLocalFeedback] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
   const [studentResponses, setStudentResponses] = useState<Record<string, StudentQuestionResponse>>({});
   const [soundEnabled, setSoundEnabled] = useState<boolean>(courseAudio.isSoundEnabled());
   const [showAddSectionMenu, setShowAddSectionMenu] = useState<boolean>(false);
   const [transcriptValidationBlockIdx, setTranscriptValidationBlockIdx] = useState<number | null>(null);
 
-  // Sync external answers if component updates
+  // Sync external answers if component updates, filtering strictly to valid questions
   useEffect(() => {
-    if (Object.keys(userAnswers).length > 0) {
-      setLocalAnswers(prev => ({ ...prev, ...userAnswers }));
+    if (userAnswers && Object.keys(userAnswers).length > 0) {
+      setLocalAnswers(prev => {
+        const next = { ...prev };
+        Object.entries(userAnswers).forEach(([k, v]) => {
+          if (validQuestionIdSet.has(k)) next[k] = v;
+        });
+        return next;
+      });
     }
-  }, [userAnswers]);
+  }, [userAnswers, validQuestionIdSet]);
 
   useEffect(() => {
-    if (Object.keys(feedbackState).length > 0) {
-      setLocalFeedback(prev => ({ ...prev, ...feedbackState }));
+    if (feedbackState && Object.keys(feedbackState).length > 0) {
+      setLocalFeedback(prev => {
+        const next = { ...prev };
+        Object.entries(feedbackState).forEach(([k, v]) => {
+          if (validQuestionIdSet.has(k)) next[k] = v;
+        });
+        return next;
+      });
     }
-  }, [feedbackState]);
+  }, [feedbackState, validQuestionIdSet]);
+
+  // Prune any stale responses when validQuestions changes
+  useEffect(() => {
+    setLocalAnswers(prev => {
+      const filtered: Record<string, string> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        if (validQuestionIdSet.has(k)) filtered[k] = v;
+      });
+      return filtered;
+    });
+
+    setLocalFeedback(prev => {
+      const filtered: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        if (validQuestionIdSet.has(k)) filtered[k] = v;
+      });
+      return filtered;
+    });
+
+    setStudentResponses(prev => {
+      const filtered: Record<string, StudentQuestionResponse> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        if (validQuestionIdSet.has(k)) filtered[k] = v;
+      });
+      return filtered;
+    });
+  }, [validQuestionIdSet]);
 
   // Seed studentResponses from userAnswers/feedbackState if present
   useEffect(() => {
-    if (Object.keys(userAnswers).length > 0 || Object.keys(feedbackState).length > 0) {
+    if (Object.keys(userAnswers || {}).length > 0 || Object.keys(feedbackState || {}).length > 0) {
       setStudentResponses(prev => {
         const next = { ...prev };
         validQuestions.forEach(q => {
@@ -330,22 +382,45 @@ export const CourseContentRenderer: React.FC<Props> = ({
     onChangeQuestions([...questions, newQ]);
   };
 
-  // Progress metrics
-  const answeredTotal = Math.max(
-    Object.keys(localAnswers).length,
-    Object.keys(localFeedback).length,
-    Object.keys(studentResponses).length
-  );
-  const correctTotal = Object.values(studentResponses).filter(r => r.status === 'correct').length ||
-    Object.values(localFeedback).filter(f => f.isCorrect).length;
-  const incorrectTotal = Math.max(0, answeredTotal - correctTotal);
+  // Progress metrics computed STRICTLY against unique active questions in this lesson
+  const totalQuestions = validQuestions.length;
   const totalPointsPossible = validQuestions.reduce((sum, q) => sum + (q.points || 10), 0);
-  const earnedPoints = Object.values(studentResponses).reduce((sum, r) => sum + (r.score || 0), 0) ||
+
+  const answeredTotal = validQuestions.filter(q => {
+    const resp = studentResponses[q.id];
+    const ans = localAnswers[q.id];
+    const fb = localFeedback[q.id];
+    return (resp && resp.status !== 'unanswered') || Boolean(ans) || Boolean(fb);
+  }).length;
+
+  const correctTotal = validQuestions.filter(q => {
+    const resp = studentResponses[q.id];
+    if (resp && resp.status === 'correct') return true;
+    return Boolean(localFeedback[q.id]?.isCorrect);
+  }).length;
+
+  const incorrectTotal = validQuestions.filter(q => {
+    const resp = studentResponses[q.id];
+    if (resp && resp.status === 'incorrect') return true;
+    const fb = localFeedback[q.id];
+    if (fb && !fb.isCorrect) return true;
+    const ans = localAnswers[q.id];
+    return Boolean(ans && fb && !fb.isCorrect);
+  }).length;
+
+  const earnedPoints = Math.min(
+    totalPointsPossible,
     validQuestions.reduce((sum, q) => {
+      const resp = studentResponses[q.id];
+      if (resp && typeof resp.score === 'number') {
+        return sum + Math.max(0, resp.score);
+      }
       const fb = localFeedback[q.id];
       return sum + (fb?.isCorrect ? (q.points || 10) : 0);
-    }, 0);
-  const isAllAnswered = validQuestions.length > 0 && answeredTotal >= validQuestions.length;
+    }, 0)
+  );
+
+  const isAllAnswered = totalQuestions > 0 && answeredTotal >= totalQuestions;
 
   return (
     <div className="w-full max-w-[760px] mx-auto space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border min-w-0">
