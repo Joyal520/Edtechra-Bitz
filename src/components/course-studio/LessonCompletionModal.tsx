@@ -22,6 +22,7 @@ interface Props {
   lessonTitle: string;
   lessonPosition?: number;
   pointsEarned?: number;
+  totalLeaderboardPoints?: number;
   progressPercent?: number;
   completedLessonsCount?: number;
   totalLessonsCount?: number;
@@ -49,6 +50,7 @@ export const LessonCompletionModal: React.FC<Props> = ({
   lessonTitle,
   lessonPosition = 1,
   pointsEarned = 10,
+  totalLeaderboardPoints,
   progressPercent = 0,
   completedLessonsCount = 1,
   totalLessonsCount = 1,
@@ -127,7 +129,12 @@ export const LessonCompletionModal: React.FC<Props> = ({
           {pointsEarned > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-black border border-amber-200 dark:border-amber-800 reader-badge">
               <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>+{pointsEarned} POINTS</span>
+              <span>
+                +{pointsEarned} POINTS
+                {typeof totalLeaderboardPoints === 'number' && totalLeaderboardPoints > 0
+                  ? ` • ${totalLeaderboardPoints.toLocaleString()} TOTAL PTS`
+                  : ''}
+              </span>
             </div>
           )}
 

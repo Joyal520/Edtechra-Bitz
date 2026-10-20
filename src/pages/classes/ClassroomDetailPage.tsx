@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Settings,
-  CalendarDays,
   GraduationCap,
   Trophy,
   Flame,
@@ -577,6 +576,30 @@ export const ClassroomDetailPage: React.FC = () => {
               event: '*',
               schema: 'public',
               table: 'classroom_exam_results'
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'classroom_points',
+              filter: `classroom_id=eq.${id}`
+            },
+            () => {
+              if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'course_episode_progress',
+              filter: `classroom_id=eq.${id}`
             },
             () => {
               if (isMounted) loadAllClassroomData(true);
@@ -1705,27 +1728,18 @@ export const ClassroomDetailPage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="pt-4 relative z-10 space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAiReportInitialTab('planner');
-                      setAiReportModalOpen(true);
-                    }}
-                    className="btn-liquid-primary w-full py-3 px-5 text-xs sm:text-sm font-black shadow-lg hover:shadow-xl active:scale-95 transition-all text-center flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <CalendarDays className="w-4 h-4" />
-                    <span>AI Teaching Planner</span>
-                  </button>
+                <div className="pt-4 relative z-10">
                   <button
                     type="button"
                     onClick={() => {
                       setAiReportInitialTab('intelligence');
                       setAiReportModalOpen(true);
                     }}
-                    className="btn-liquid-secondary w-full py-2.5 px-5 text-xs font-black shadow-md hover:shadow-lg active:scale-95 transition-all text-center cursor-pointer"
+                    className="btn-liquid-intelligence w-full py-3.5 px-6 rounded-full font-black text-white text-xs sm:text-sm tracking-wide shadow-xl flex items-center justify-center gap-2.5 transition-all cursor-pointer group hover:shadow-2xl"
                   >
-                    Open Teaching Intelligence
+                    <Sparkles className="w-4 h-4 text-cyan-300 group-hover:rotate-12 transition-transform" />
+                    <span>OPEN TEACHING INTELLIGENCE</span>
+                    <ArrowRight className="w-4 h-4 text-cyan-200 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
 
@@ -2382,6 +2396,7 @@ export const ClassroomDetailPage: React.FC = () => {
         <AITeachingIntelligenceModal
           isOpen={aiReportModalOpen}
           classroom={classroom}
+          courses={classroomCourses}
           initialTab={aiReportInitialTab}
           onClose={() => setAiReportModalOpen(false)}
         />

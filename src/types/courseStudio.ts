@@ -500,6 +500,17 @@ export interface ClassroomCoursePerformance {
   completion_rate_percent: number;
 }
 
+export interface LessonPerformanceItem {
+  episode_id: string;
+  title: string;
+  unit_title: string;
+  total_attempts: number;
+  correct_attempts: number;
+  accuracy_percentage: number;
+  has_attempts: boolean;
+  status: MasteryStatus;
+}
+
 export interface StudentCoursePerformance {
   student_id: string;
   student_name: string;
@@ -510,6 +521,8 @@ export interface StudentCoursePerformance {
   progress_percent: number;
   mastery_percent: number;
   accuracy_percent: number;
+  completed_episodes_count?: number;
+  total_episodes_count?: number;
   status: MasteryStatus;
   last_active_at: string;
   weak_concepts: string[];
@@ -530,6 +543,9 @@ export interface CourseAnalyticsSummary {
   classroom_performance: ClassroomCoursePerformance[];
   student_performance: StudentCoursePerformance[];
   concept_mastery: ConceptMasteryItem[];
+  lesson_performance?: LessonPerformanceItem[];
+  most_difficult_lessons?: LessonPerformanceItem[];
+  strongest_lessons?: LessonPerformanceItem[];
   ai_insights: {
     summary: string;
     class_strengths: string[];

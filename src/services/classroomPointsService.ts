@@ -126,9 +126,7 @@ class ClassroomPointsService {
         return true;
       });
 
-      if (studentList.length === 0) return [];
-
-      // 3. Aggregate points
+      // 3. Aggregate points by authenticated student_id
       const { data: pointsData } = await supabase
         .from('classroom_points')
         .select('student_id, points')
@@ -136,10 +134,37 @@ class ClassroomPointsService {
 
       const pointsMap: Record<string, number> = {};
       (pointsData || []).forEach((p: any) => {
+        if (!p?.student_id) return;
         pointsMap[p.student_id] = (pointsMap[p.student_id] || 0) + Number(p.points || 0);
       });
 
-      // 3. Count completed assignments
+      // Ensure any student who earned points in this classroom (e.g. via Course Studio) is included
+      const existingMemberIds = new Set(studentList.map((m: any) => m.profile_id));
+      const missingStudentIds = Object.keys(pointsMap).filter(
+        sid => !existingMemberIds.has(sid) && sid !== ownerId
+      );
+
+      if (missingStudentIds.length > 0) {
+        const { data: extraProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, avatar_url, role')
+          .in('id', missingStudentIds);
+
+        (extraProfiles || []).forEach((prof: any) => {
+          if (prof.role === 'teacher' || prof.role === 'admin') return;
+          if (prof.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com') return;
+          studentList.push({
+            profile_id: prof.id,
+            display_name: prof.full_name || null,
+            role: 'student',
+            profile: prof
+          });
+        });
+      }
+
+      if (studentList.length === 0) return [];
+
+      // 4. Count completed assignments
       const { data: submissionsData } = await supabase
         .from('assignment_submissions')
         .select('student_id')
@@ -151,11 +176,17 @@ class ClassroomPointsService {
         subCountMap[s.student_id] = (subCountMap[s.student_id] || 0) + 1;
       });
 
-      // 4. Build leaderboard and sort by points descending
+      // 5. Build leaderboard and sort by points descending (keyed strictly by permanent student_id)
       const entries: ClassroomLeaderboardEntry[] = studentList.map((m: any) => {
         const studentId = m.profile_id;
         const profile = m.profile;
-        const name = m.display_name || profile?.full_name || profile?.email?.split('@')[0] || 'Student';
+        const cleanProfileName = profile?.full_name && !profile.full_name.includes('@')
+          ? profile.full_name.trim()
+          : '';
+        const cleanMemberName = m.display_name && !m.display_name.includes('@')
+          ? m.display_name.trim()
+          : '';
+        const name = cleanProfileName || cleanMemberName || profile?.full_name?.trim() || m.display_name?.trim() || profile?.email?.split('@')[0] || 'Student';
         return {
           student_id: studentId,
           name,

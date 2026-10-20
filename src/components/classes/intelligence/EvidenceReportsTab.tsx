@@ -12,6 +12,7 @@ import {
   Eye
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
+import { CourseAnalyticsSummary } from '@/types/courseStudio';
 import { TeachingIntelligenceData, ClassroomMetricsSummary } from '@/services/teachingIntelligenceService';
 import { EvidenceDetailModal, EvidenceDetailItem } from './EvidenceDetailModal';
 
@@ -25,6 +26,7 @@ interface Student {
 interface EvidenceReportsTabProps {
   intelligence?: TeachingIntelligenceData | null;
   metrics?: ClassroomMetricsSummary | null;
+  courseAnalytics?: CourseAnalyticsSummary | null;
   classroomId?: string;
   students?: Student[];
   initialFilter?: {

@@ -95,7 +95,9 @@ import {
   generateCoursePlanWithAI,
   generateStructuredLessonWithAI,
   compileCrossClassroomAnalytics,
-  calculateConceptMastery
+  calculateConceptMastery,
+  completeCourseLessonAndAwardPoints,
+  backfillMissingCourseLessonPoints
 } from './server/courseStudioService.mjs';
 import {
   generateExam,
@@ -6716,13 +6718,24 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .eq('status', 'completed');
 
       completedEpisodeIds = (progressRows || []).map(r => r.episode_id);
+      if (completedEpisodeIds.length > 0) {
+        await backfillMissingCourseLessonPoints(serverSupabase, classroom_id).catch(() => {});
+      }
     }
+
+    const { data: studentPointsRows } = await serverSupabase
+      .from('classroom_points')
+      .select('points')
+      .eq('classroom_id', classroom_id)
+      .eq('student_id', student_id);
+    const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
 
     res.json({
       success: true,
       enrollment: enrollment || null,
       completedEpisodeIds,
-      progress_percent: enrollment?.progress_percent || 0
+      progress_percent: enrollment?.progress_percent || 0,
+      total_classroom_points: totalClassroomPoints
     });
   } catch (err) {
     console.error('Error in GET student progress:', err);
@@ -6730,118 +6743,34 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
   }
 });
 
-// 22. POST /api/course-studio/student/progress - Update episode progress and calculate course progress
+// 22. POST /api/course-studio/student/progress - Update episode progress, award lesson points, and calculate course progress
 app.post('/api/course-studio/student/progress', async (req, res) => {
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
-    const { course_id, classroom_id, episode_id, score = 0, max_score = 0, time_spent_seconds = 0 } = req.body;
+    const { course_id, classroom_id, episode_id, score = 0, max_score = 100, time_spent_seconds = 0 } = req.body;
     const student_id = authData.user.id;
 
-    const { data: enrollment } = await serverSupabase
-      .from('course_enrollments')
-      .select('*')
-      .eq('course_id', course_id)
-      .eq('classroom_id', classroom_id)
-      .eq('student_id', student_id)
-      .maybeSingle();
-
-    if (!enrollment) {
-      const { data: assignment } = await serverSupabase
-        .from('course_classroom_assignments')
-        .select('id')
-        .eq('course_id', course_id)
-        .eq('classroom_id', classroom_id)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (!assignment) {
-        return res.status(404).json({ success: false, error: 'Course is not actively assigned to this classroom.' });
-      }
-
-      const { data: allEpisodes } = await serverSupabase
-        .from('course_episodes')
-        .select('id')
-        .eq('course_id', course_id);
-
-      const { data: created } = await serverSupabase
-        .from('course_enrollments')
-        .upsert({
-          course_id,
-          classroom_id,
-          classroom_assignment_id: assignment.id,
-          student_id,
-          status: 'in_progress',
-          total_episodes_count: (allEpisodes || []).length
-        }, { onConflict: 'classroom_assignment_id,student_id' })
-        .select()
-        .single();
-
-      enrollment = created;
+    if (!course_id || !classroom_id || !episode_id) {
+      return res.status(400).json({ success: false, error: 'course_id, classroom_id, and episode_id are required.' });
     }
 
-    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment could not be established.' });
-
-    const percentage = max_score > 0 ? Number(((score / max_score) * 100).toFixed(1)) : 100;
-
-    await serverSupabase
-      .from('course_episode_progress')
-      .upsert(
-        {
-          enrollment_id: enrollment.id,
-          student_id,
-          course_id,
-          classroom_id,
-          episode_id,
-          status: 'completed',
-          score,
-          max_score,
-          percentage,
-          time_spent_seconds,
-          completed_at: new Date().toISOString()
-        },
-        { onConflict: 'enrollment_id,episode_id' }
-      );
-
-    const { data: completedEps } = await serverSupabase
-      .from('course_episode_progress')
-      .select('id')
-      .eq('enrollment_id', enrollment.id)
-      .eq('status', 'completed');
-
-    const completedCount = (completedEps || []).length;
-    const totalCount = Math.max(1, enrollment.total_episodes_count || 1);
-    const progressPercent = Math.min(100, Number(((completedCount / totalCount) * 100).toFixed(1)));
-    const status = progressPercent >= 100 ? 'completed' : 'in_progress';
-
-    const { data: updatedEnrollment } = await serverSupabase
-      .from('course_enrollments')
-      .update({
-        progress_percent: progressPercent,
-        completed_episodes_count: completedCount,
-        status,
-        current_episode_id: episode_id,
-        completed_at: progressPercent >= 100 ? new Date().toISOString() : null,
-        last_activity_at: new Date().toISOString()
-      })
-      .eq('id', enrollment.id)
-      .select()
-      .single();
-
-    await serverSupabase.from('course_learning_events').insert({
+    const result = await completeCourseLessonAndAwardPoints(serverSupabase, {
       student_id,
       course_id,
       classroom_id,
       episode_id,
-      event_type: 'episode_completed',
-      metadata: { score, max_score, percentage, progress_percent: progressPercent }
+      score,
+      max_score,
+      time_spent_seconds
     });
 
-    res.json({ success: true, enrollment: updatedEnrollment });
+    res.json(result);
   } catch (err) {
     console.error('Error in student progress:', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to update progress.' });
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({ success: false, error: err.message || 'Failed to update progress.' });
   }
 });
 
@@ -6866,7 +6795,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     const student_id = authData.user.id;
 
-    const { data: enrollment } = await serverSupabase
+    let { data: enrollment } = await serverSupabase
       .from('course_enrollments')
       .select('id')
       .eq('course_id', course_id)

@@ -1685,6 +1685,89 @@ textarea.classroom-announcement-textarea::selection,
   filter: grayscale(0.25);
 }
 
+/* Premium AI Teaching Intelligence Liquid Animated Button */
+@keyframes liquidIntelligenceShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.btn-liquid-intelligence {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  font-weight: 900;
+  color: #ffffff;
+  background: linear-gradient(135deg, #026fc3 0%, #4f46e5 32%, #06b6d4 68%, #7c3aed 100%);
+  background-size: 250% 250%;
+  animation: liquidIntelligenceShift 7s ease-in-out infinite;
+  border-radius: 9999px;
+  box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.65), 0 6px 20px rgba(79, 70, 229, 0.35), 0 0 15px rgba(6, 182, 212, 0.25);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.4);
+  border-left: 1px solid rgba(6, 182, 212, 0.3);
+  border-right: 1px solid rgba(6, 182, 212, 0.3);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-liquid-intelligence::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  transform: skewX(-20deg);
+  pointer-events: none;
+  animation: liquidSheen 5s ease-in-out infinite;
+}
+
+@keyframes liquidSheen {
+  0%, 65% {
+    left: -100%;
+  }
+  85%, 100% {
+    left: 200%;
+  }
+}
+
+.btn-liquid-intelligence:hover:not(:disabled) {
+  transform: translateY(-1.5px) scale(1.02);
+  box-shadow: inset 0 1.5px 2px rgba(255, 255, 255, 0.8), 0 10px 28px rgba(79, 70, 229, 0.45), 0 0 24px rgba(6, 182, 212, 0.4);
+}
+
+.btn-liquid-intelligence:active:not(:disabled) {
+  transform: scale(0.98);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 3px 10px rgba(79, 70, 229, 0.3);
+}
+
+.btn-liquid-intelligence:disabled {
+  opacity: 0.45;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-liquid-intelligence,
+  .btn-liquid-intelligence::after {
+    animation: none !important;
+  }
+}
+
 .btn-liquid-secondary {
   display: inline-flex;
   align-items: center;

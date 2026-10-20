@@ -18,12 +18,14 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
+import { CourseAnalyticsSummary } from '@/types/courseStudio';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
 
 interface InsightTabProps {
   classroom?: Classroom;
   data?: TeachingIntelligenceResponse | null;
+  courseAnalytics?: CourseAnalyticsSummary | null;
   intelligence?: any;
   metrics?: any;
   classroomId?: string;
@@ -40,6 +42,7 @@ interface InsightTabProps {
 export const InsightTab: React.FC<InsightTabProps> = ({
   classroom,
   data,
+  courseAnalytics: courseAnalyticsProp,
   intelligence: _intelligence,
   metrics,
   classroomId: _classroomId,
@@ -62,6 +65,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   };
 
   const resolvedMetrics = metrics || data?.metrics || {};
+  const activeCourseAnalytics: CourseAnalyticsSummary | null = courseAnalyticsProp || resolvedMetrics.course_analytics || null;
 
   const classSummary = resolvedMetrics.class_summary || {};
   const classHealth = resolvedMetrics.class_health || {};
@@ -102,14 +106,14 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     };
   }, [resolvedMetrics.evidenceSummaryCounts, resolvedMetrics.evidence_summary_counts, recentEvidence]);
 
-  // Section 1: Class Performance — Max 10 clean canonical concept bars (No raw JSON, no duplicates)
+  // Section 1: Class & Course Performance — Max 10 clean canonical concept bars (No raw JSON, no duplicates)
   const sortedTopics = useMemo(() => {
     const rawTopics = (resolvedMetrics.topics && resolvedMetrics.topics.length > 0)
       ? resolvedMetrics.topics
       : topicPerformance;
 
     const seenNames = new Set<string>();
-    const cleaned = [];
+    const cleaned: Array<{ displayName: string; topic: string; score: number }> = [];
 
     for (const t of rawTopics) {
       const name = t.displayName || t.topic || '';
@@ -129,9 +133,96 @@ export const InsightTab: React.FC<InsightTabProps> = ({
       });
     }
 
+    // Merge course concept mastery if available
+    if (activeCourseAnalytics?.concept_mastery) {
+      for (const cm of activeCourseAnalytics.concept_mastery) {
+        const name = cm.concept || '';
+        if (!name || name.length < 3 || seenNames.has(name.toLowerCase())) continue;
+        if (/^(?:general|other|course question)$/i.test(name.trim())) continue;
+        const score = Math.round(cm.accuracy_percentage || 0);
+        seenNames.add(name.toLowerCase());
+        cleaned.push({
+          displayName: name,
+          topic: name,
+          score
+        });
+      }
+    }
+
     // Sort by lowest score first, maximum 10 bars
     return cleaned.sort((a, b) => a.score - b.score).slice(0, 10);
-  }, [resolvedMetrics.topics, topicPerformance]);
+  }, [resolvedMetrics.topics, topicPerformance, activeCourseAnalytics]);
+
+  // Course-Level Analysis Summary (Scoped to this classroom if matched, or course-wide)
+  const courseSummary = useMemo(() => {
+    if (!activeCourseAnalytics) return null;
+    const { overview, classroom_performance, student_performance, concept_mastery, most_difficult_lessons, strongest_lessons, ai_insights, course } = activeCourseAnalytics;
+
+    const classPerf = classroom?.id
+      ? classroom_performance.find(c => c.classroom_id === classroom.id)
+      : null;
+
+    const classStudents = classroom?.id
+      ? student_performance.filter(s => s.classroom_id === classroom.id)
+      : student_performance;
+    const effectiveStudents = classStudents.length > 0 ? classStudents : student_performance;
+
+    const enrolledCount = classPerf ? classPerf.enrolled_students : (overview.total_enrolled_students || totalStudents);
+    const avgProgress = classPerf ? Math.round(classPerf.average_progress_percent) : Math.round(overview.average_progress_percent || 0);
+    const completionRatePct = classPerf ? Math.round(classPerf.completion_rate_percent) : Math.round(overview.overall_completion_rate || 0);
+    const avgAssessmentScore = classPerf
+      ? Math.round(classPerf.average_accuracy_percent || classPerf.average_mastery_percent || 0)
+      : Math.round(overview.average_accuracy_percent || overview.average_mastery_percent || 0);
+
+    const onTrackCount = effectiveStudents.filter(s => s.status === 'strong' || s.status === 'good' || s.progress_percent >= 65).length;
+    const fallingBehindCount = effectiveStudents.filter(s => s.progress_percent < 40 && s.status !== 'strong').length;
+    const needingSupportCount = effectiveStudents.filter(s => s.status === 'needs_support' || s.status === 'at_risk').length;
+
+    const difficultLessons = (most_difficult_lessons && most_difficult_lessons.length > 0)
+      ? most_difficult_lessons
+      : concept_mastery.filter(c => c.accuracy_percentage < 65).slice(0, 3).map(c => ({
+          episode_id: c.concept,
+          title: c.concept,
+          unit_title: c.skill || 'Concept',
+          accuracy_percentage: Math.round(c.accuracy_percentage),
+          total_attempts: c.total_attempts,
+          correct_attempts: c.correct_attempts,
+          has_attempts: true,
+          status: c.status
+        }));
+
+    const topStrongLessons = (strongest_lessons && strongest_lessons.length > 0)
+      ? strongest_lessons
+      : concept_mastery.filter(c => c.accuracy_percentage >= 70).slice(0, 3).map(c => ({
+          episode_id: c.concept,
+          title: c.concept,
+          unit_title: c.skill || 'Concept',
+          accuracy_percentage: Math.round(c.accuracy_percentage),
+          total_attempts: c.total_attempts,
+          correct_attempts: c.correct_attempts,
+          has_attempts: true,
+          status: c.status
+        }));
+
+    const commonGaps = concept_mastery
+      .filter(c => c.status === 'needs_support' || c.status === 'at_risk' || c.accuracy_percentage < 65)
+      .slice(0, 4);
+
+    return {
+      course,
+      enrolledCount,
+      avgProgress,
+      completionRatePct,
+      avgAssessmentScore,
+      onTrackCount,
+      fallingBehindCount,
+      needingSupportCount,
+      difficultLessons,
+      topStrongLessons,
+      commonGaps,
+      aiInsights: ai_insights
+    };
+  }, [activeCourseAnalytics, classroom?.id, totalStudents]);
 
   // Section 2: DIAGNOSIS ENGINE — Maximum 5 clean, evidence-backed diagnostic cards
   const diagnosesList = useMemo(() => {
@@ -395,13 +486,179 @@ export const InsightTab: React.FC<InsightTabProps> = ({
         </div>
       </section>
 
+      {/* 1B. COURSE-LEVEL ANALYSIS ("What is happening in my course?") */}
+      {courseSummary && (
+        <>
+          <hr className="border-[#C9E5E2]" />
+          <section className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[#087477]" />
+                  <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
+                    Course Analysis • {courseSummary.course?.title || 'Assigned Course'}
+                  </h2>
+                </div>
+                <p className="text-xs text-[#36565A] mt-0.5">
+                  Real-time curriculum progress, lesson performance, and student pacing across your assigned course.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleNavigation('students')}
+                className="px-3.5 py-1.5 rounded-xl bg-[#087477]/10 hover:bg-[#087477]/20 text-[#087477] text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto"
+              >
+                <span>View Student Course Progress</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* 4 Course Telemetry Stat Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs">
+                <span className="text-[11px] font-bold text-[#36565A] uppercase tracking-wider">Enrolled Students</span>
+                <p className="text-2xl font-black text-[#173B3F] mt-1">{courseSummary.enrolledCount}</p>
+                <span className="text-[11px] text-[#36565A] font-medium">Active in course</span>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs">
+                <span className="text-[11px] font-bold text-[#36565A] uppercase tracking-wider">Average Course Progress</span>
+                <p className="text-2xl font-black text-[#173B3F] mt-1">{courseSummary.avgProgress}%</p>
+                <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
+                  <div className="bg-[#087477] h-full rounded-full transition-all" style={{ width: `${courseSummary.avgProgress}%` }} />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs">
+                <span className="text-[11px] font-bold text-[#36565A] uppercase tracking-wider">Course Completion Rate</span>
+                <p className="text-2xl font-black text-[#173B3F] mt-1">{courseSummary.completionRatePct}%</p>
+                <span className="text-[11px] text-[#36565A] font-medium">Finished all lessons</span>
+              </div>
+
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs">
+                <span className="text-[11px] font-bold text-[#36565A] uppercase tracking-wider">Avg Assessment Score</span>
+                <p className="text-2xl font-black text-[#173B3F] mt-1">{courseSummary.avgAssessmentScore}%</p>
+                <span className="text-[11px] text-[#36565A] font-medium">Lesson quizzes & checks</span>
+              </div>
+            </div>
+
+            {/* Pacing Status Pills */}
+            <div className="bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3 flex items-center justify-between flex-wrap gap-2.5 text-xs">
+              <span className="font-bold text-[#173B3F]">Learner Pacing Breakdown:</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">
+                  Students On Track: <strong>{courseSummary.onTrackCount}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-bold">
+                  Falling Behind: <strong>{courseSummary.fallingBehindCount}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 font-bold">
+                  Needing Support: <strong>{courseSummary.needingSupportCount}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Most Difficult Lessons, Strongest Lessons, Common Learning Gaps */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {/* Most Difficult Lessons */}
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-rose-700">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Most Difficult Lessons</span>
+                </div>
+                {courseSummary.difficultLessons.length === 0 ? (
+                  <p className="text-xs text-[#36565A]">No high-difficulty lesson bottlenecks detected yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {courseSummary.difficultLessons.map((l, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-rose-50/60 border border-rose-100 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#173B3F] truncate">{l.title}</p>
+                          <p className="text-[10px] text-[#36565A] truncate">{l.unit_title}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[11px] shrink-0">
+                          {l.accuracy_percentage}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Strongest Lessons */}
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-700">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Strongest Lessons</span>
+                </div>
+                {courseSummary.topStrongLessons.length === 0 ? (
+                  <p className="text-xs text-[#36565A]">Complete more lesson checks to identify top strengths.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {courseSummary.topStrongLessons.map((l, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#173B3F] truncate">{l.title}</p>
+                          <p className="text-[10px] text-[#36565A] truncate">{l.unit_title}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] shrink-0">
+                          {l.accuracy_percentage}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Common Learning Gaps */}
+              <div className="bg-white rounded-xl border border-[#C9E5E2] p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-700">
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Common Learning Gaps</span>
+                </div>
+                {courseSummary.commonGaps.length === 0 ? (
+                  <p className="text-xs text-[#36565A]">No widespread concept gaps detected across the course.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {courseSummary.commonGaps.map((g, idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-100 flex items-center justify-between gap-2 text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#173B3F] truncate">{g.concept}</p>
+                          <p className="text-[10px] text-[#36565A]">{g.correct_attempts}/{g.total_attempts} correct</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black text-[11px] shrink-0">
+                          {Math.round(g.accuracy_percentage)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
       <hr className="border-[#C9E5E2]" />
 
-      {/* 2. CLASS PERFORMANCE (MAX 10 CLEAN CANONICAL BARS AGAINST 70% TARGET) */}
+      {/* 2. COURSE PERFORMANCE (MAX 10 CLEAN CANONICAL BARS AGAINST 70% TARGET) */}
       <section>
-        <div className="mb-3.5">
-          <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Class Performance</h2>
-          <p className="text-xs text-[#36565A] mt-0.5">Assessed concept accuracy against the 70% curriculum mastery benchmark.</p>
+        <div className="mb-3.5 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">Course & Concept Performance</h2>
+            <p className="text-xs text-[#36565A] mt-0.5">Assessed concept and lesson accuracy against the 70% curriculum mastery benchmark.</p>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+              <span className="w-2 h-2 rounded-full bg-[#14b8a6]" /> Strong (70%+)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+              <span className="w-2 h-2 rounded-full bg-[#f59e0b]" /> Developing (50–69%)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200">
+              <span className="w-2 h-2 rounded-full bg-[#ef4444]" /> Needs Support (&lt;50%)
+            </span>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border border-[#C9E5E2] p-4.5 shadow-2xs">
@@ -418,20 +675,34 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                 70% Target
               </div>
               
-              {sortedTopics.map((t, i) => (
-                <div key={i} className="relative z-10">
-                  <div className="flex justify-between text-xs font-bold text-[#173B3F] mb-1">
-                    <span className="truncate pr-2">{t.displayName}</span>
-                    <span className="shrink-0 font-mono font-black" style={{ color: getBarColor(t.score) }}>{t.score}%</span>
+              {sortedTopics.map((t, i) => {
+                const statusLabel = t.score >= 70 ? 'Strong' : t.score >= 50 ? 'Developing' : 'Needs Support';
+                const statusBadgeClass = t.score >= 70
+                  ? 'bg-teal-50 text-teal-800 border-teal-200'
+                  : t.score >= 50
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-rose-50 text-rose-800 border-rose-200';
+
+                return (
+                  <div key={i} className="relative z-10">
+                    <div className="flex justify-between items-center text-xs font-bold text-[#173B3F] mb-1 gap-2">
+                      <span className="truncate pr-2">{t.displayName}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${statusBadgeClass}`}>
+                          {statusLabel}
+                        </span>
+                        <span className="font-mono font-black" style={{ color: getBarColor(t.score) }}>{t.score}%</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, Math.max(0, t.score))}%`, backgroundColor: getBarColor(t.score) }} 
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="h-full rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.min(100, Math.max(0, t.score))}%`, backgroundColor: getBarColor(t.score) }} 
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

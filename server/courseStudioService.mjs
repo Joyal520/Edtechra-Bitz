@@ -726,7 +726,38 @@ export async function compileCrossClassroomAnalytics(arg1, arg2) {
       .select('*')
       .eq('course_id', courseId);
     attemptList = attempts || [];
+
+    // 4b. Fetch Course Units & Episodes for Lesson-Level Telemetry
+    try {
+      const { data: unitsData } = await serverSupabase
+        .from('course_units')
+        .select('id, title, order_index, course_episodes(id, title, order_index)')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true });
+      if (unitsData) {
+        course.units = unitsData;
+      }
+    } catch {
+      // Optional enrichment
+    }
   }
+
+  // Extract ordered list of episodes/lessons if available
+  const allCourseLessons = [];
+  const rawUnits = course.units || course.course_units || [];
+  rawUnits.forEach((u, uIdx) => {
+    const eps = u.episodes || u.course_episodes || [];
+    eps.forEach((ep, eIdx) => {
+      allCourseLessons.push({
+        episode_id: ep.id,
+        title: ep.title || `Lesson ${eIdx + 1}`,
+        unit_id: u.id,
+        unit_title: u.title || `Unit ${uIdx + 1}`,
+        order_index: ep.order_index ?? eIdx
+      });
+    });
+  });
+  const totalCourseLessons = allCourseLessons.length;
 
   const assignedClassroomsCount = assignmentList.length;
   const totalEnrolled = enrollmentList.length;
@@ -800,6 +831,11 @@ export async function compileCrossClassroomAnalytics(arg1, arg2) {
     else if (mastery >= 50) status = 'needs_support';
     else status = 'at_risk';
 
+    const totalEpisodes = Number(e.total_episodes_count || totalCourseLessons || 0);
+    const completedEpisodes = e.completed_episodes_count != null
+      ? Number(e.completed_episodes_count)
+      : (totalEpisodes > 0 ? Math.round((Number(e.progress_percent || 0) / 100) * totalEpisodes) : 0);
+
     return {
       student_id: e.student_id,
       student_name: student.full_name || 'Student',
@@ -810,12 +846,64 @@ export async function compileCrossClassroomAnalytics(arg1, arg2) {
       progress_percent: Number(e.progress_percent || 0),
       mastery_percent: Number(e.mastery_percent || 0),
       accuracy_percent: Number(e.accuracy_percent || 0),
+      completed_episodes_count: completedEpisodes,
+      total_episodes_count: totalEpisodes,
       status,
       last_active_at: e.last_activity_at,
       weak_concepts: weakConcepts,
       strong_concepts: strongConcepts
     };
   });
+
+  // 6b. Lesson-Level Performance Telemetry
+  const lessonMap = new Map();
+  allCourseLessons.forEach(l => {
+    lessonMap.set(l.episode_id, {
+      episode_id: l.episode_id,
+      title: l.title,
+      unit_title: l.unit_title,
+      total_attempts: 0,
+      correct_attempts: 0
+    });
+  });
+
+  attemptList.forEach(a => {
+    const epId = a.episode_id;
+    if (!epId) return;
+    if (!lessonMap.has(epId)) {
+      lessonMap.set(epId, {
+        episode_id: epId,
+        title: a.concept || 'Course Lesson',
+        unit_title: a.skill || 'Unit',
+        total_attempts: 0,
+        correct_attempts: 0
+      });
+    }
+    const rec = lessonMap.get(epId);
+    rec.total_attempts += 1;
+    if (a.is_correct) rec.correct_attempts += 1;
+  });
+
+  const lessonPerformance = Array.from(lessonMap.values()).map(l => {
+    const acc = l.total_attempts > 0 ? Math.round((l.correct_attempts / l.total_attempts) * 100) : null;
+    let status = 'good';
+    if (acc !== null) {
+      if (acc >= 80) status = 'strong';
+      else if (acc >= 65) status = 'good';
+      else if (acc >= 50) status = 'needs_support';
+      else status = 'at_risk';
+    }
+    return {
+      ...l,
+      accuracy_percentage: acc ?? 0,
+      has_attempts: l.total_attempts > 0,
+      status
+    };
+  });
+
+  const attemptedLessons = lessonPerformance.filter(l => l.has_attempts);
+  const mostDifficultLessons = [...attemptedLessons].sort((a, b) => a.accuracy_percentage - b.accuracy_percentage).slice(0, 3);
+  const strongestLessons = [...attemptedLessons].filter(l => l.accuracy_percentage >= 70).sort((a, b) => b.accuracy_percentage - a.accuracy_percentage).slice(0, 3);
 
   // 7. Overall Summary Metrics
   const activeStudentsCount = enrollmentList.filter(e => Number(e.progress_percent) > 0).length;
@@ -866,6 +954,9 @@ export async function compileCrossClassroomAnalytics(arg1, arg2) {
     classroom_performance: classroomPerformance,
     student_performance: studentPerformance,
     concept_mastery: conceptMastery,
+    lesson_performance: lessonPerformance,
+    most_difficult_lessons: mostDifficultLessons,
+    strongest_lessons: strongestLessons,
     ai_insights: {
       summary: insightSummary,
       class_strengths: classStrengths.length > 0 ? classStrengths : ['Foundational concepts show steady progression'],
@@ -1098,3 +1189,445 @@ function buildLocalRuleBasedStructuredLesson(lessonTitle, unitTitle, targetLevel
     ]
   };
 }
+
+// ----------------------------------------------------------------------------
+// 6. AUTHORITATIVE LESSON COMPLETION & LEADERBOARD REWARD ENGINE
+// ----------------------------------------------------------------------------
+
+const DEFAULT_LESSON_REWARD_POINTS = 10;
+const lessonRewardMutexMap = new Map();
+
+/**
+ * Generates a deterministic, canonical unique reward key for a student's lesson completion.
+ */
+export function buildLessonRewardKey({ user_id, course_id, unit_id, lesson_id }) {
+  return `lesson_completion:${String(user_id).trim()}:${String(course_id).trim()}:${String(unit_id || 'unit').trim()}:${String(lesson_id).trim()}`;
+}
+
+/**
+ * Serializes concurrent execution per lock key to eliminate race conditions.
+ */
+async function withLessonRewardLock(lockKey, taskFn) {
+  const previousPromise = lessonRewardMutexMap.get(lockKey) || Promise.resolve();
+  let releaseLock;
+  const currentLockPromise = new Promise(resolve => {
+    releaseLock = resolve;
+  });
+  const chainedPromise = previousPromise.then(() => currentLockPromise);
+  lessonRewardMutexMap.set(lockKey, chainedPromise);
+
+  try {
+    await previousPromise;
+    return await taskFn();
+  } finally {
+    releaseLock();
+    if (lessonRewardMutexMap.get(lockKey) === chainedPromise) {
+      lessonRewardMutexMap.delete(lockKey);
+    }
+  }
+}
+
+/**
+ * Authoritatively marks a Course Studio lesson as completed, prevents duplicate rewards,
+ * records the reward transaction, and atomically updates the student's classroom leaderboard points.
+ */
+export async function completeCourseLessonAndAwardPoints(supabaseClient, {
+  student_id,
+  course_id,
+  classroom_id,
+  episode_id,
+  score = 0,
+  max_score = 100,
+  time_spent_seconds = 0,
+  lesson_points = DEFAULT_LESSON_REWARD_POINTS
+}) {
+  if (!supabaseClient) {
+    throw new Error('Database client is required.');
+  }
+  if (!student_id || !course_id || !classroom_id || !episode_id) {
+    throw new Error('student_id, course_id, classroom_id, and episode_id are required.');
+  }
+
+  const cleanStudentId = String(student_id).trim();
+  const cleanCourseId = String(course_id).trim();
+  const cleanClassroomId = String(classroom_id).trim();
+  const cleanEpisodeId = String(episode_id).trim();
+  const rewardPointsToGrant = Math.max(1, Math.round(Number(lesson_points) || DEFAULT_LESSON_REWARD_POINTS));
+
+  const lockKey = `${cleanStudentId}:${cleanCourseId}:${cleanEpisodeId}`;
+
+  return withLessonRewardLock(lockKey, async () => {
+    const nowIso = new Date().toISOString();
+
+    // 1. Fetch episode metadata (unit_id, title) & classroom teacher_id
+    const [{ data: episodeRow }, { data: classroomRow }, { data: studentProfile }] = await Promise.all([
+      supabaseClient
+        .from('course_episodes')
+        .select('id, title, unit_id, course_id, position, order_index')
+        .eq('id', cleanEpisodeId)
+        .maybeSingle(),
+      supabaseClient
+        .from('classrooms')
+        .select('id, teacher_id')
+        .eq('id', cleanClassroomId)
+        .maybeSingle(),
+      supabaseClient
+        .from('profiles')
+        .select('id, full_name, role')
+        .eq('id', cleanStudentId)
+        .maybeSingle()
+    ]);
+
+    const unitId = episodeRow?.unit_id || 'default_unit';
+    const episodeTitle = episodeRow?.title || 'Course Lesson';
+    const uniqueRewardKey = buildLessonRewardKey({
+      user_id: cleanStudentId,
+      course_id: cleanCourseId,
+      unit_id: unitId,
+      lesson_id: cleanEpisodeId
+    });
+
+    // 2. Resolve or create student enrollment
+    let { data: enrollment } = await supabaseClient
+      .from('course_enrollments')
+      .select('*')
+      .eq('course_id', cleanCourseId)
+      .eq('classroom_id', cleanClassroomId)
+      .eq('student_id', cleanStudentId)
+      .maybeSingle();
+
+    if (!enrollment) {
+      const { data: assignment } = await supabaseClient
+        .from('course_classroom_assignments')
+        .select('id')
+        .eq('course_id', cleanCourseId)
+        .eq('classroom_id', cleanClassroomId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (!assignment) {
+        const notAssignedErr = new Error('Course is not actively assigned to this classroom.');
+        notAssignedErr.statusCode = 404;
+        throw notAssignedErr;
+      }
+
+      const { data: allEpisodes } = await supabaseClient
+        .from('course_episodes')
+        .select('id')
+        .eq('course_id', cleanCourseId);
+
+      const { data: created } = await supabaseClient
+        .from('course_enrollments')
+        .upsert({
+          course_id: cleanCourseId,
+          classroom_id: cleanClassroomId,
+          classroom_assignment_id: assignment.id,
+          student_id: cleanStudentId,
+          status: 'in_progress',
+          total_episodes_count: (allEpisodes || []).length
+        }, { onConflict: 'classroom_assignment_id,student_id' })
+        .select()
+        .single();
+
+      enrollment = created;
+    }
+
+    if (!enrollment) {
+      const enrollErr = new Error('Enrollment could not be established.');
+      enrollErr.statusCode = 404;
+      throw enrollErr;
+    }
+
+    // Ensure student is registered in classroom_members so they appear on the leaderboard
+    const isClassroomOwner = classroomRow?.teacher_id && classroomRow.teacher_id === cleanStudentId;
+    const isTeacherOrAdmin = isClassroomOwner || studentProfile?.role === 'teacher' || studentProfile?.role === 'admin';
+    if (!isTeacherOrAdmin) {
+      try {
+        await supabaseClient
+          .from('classroom_members')
+          .upsert({
+            classroom_id: cleanClassroomId,
+            profile_id: cleanStudentId,
+            role: 'student',
+            status: 'active'
+          }, { onConflict: 'classroom_id,profile_id' });
+      } catch (_memberErr) {
+        // Non-critical if membership already exists
+      }
+    }
+
+    // 3. Check whether this lesson was already completed or its reward was already granted
+    const [
+      { data: existingProgress },
+      { data: existingPointRows },
+      { data: existingRewardEvents },
+      { data: currentPointsRows }
+    ] = await Promise.all([
+      supabaseClient
+        .from('course_episode_progress')
+        .select('id, status, completed_at')
+        .eq('enrollment_id', enrollment.id)
+        .eq('episode_id', cleanEpisodeId)
+        .maybeSingle(),
+      supabaseClient
+        .from('classroom_points')
+        .select('id, points, created_at')
+        .eq('classroom_id', cleanClassroomId)
+        .eq('student_id', cleanStudentId)
+        .eq('source_type', 'activity')
+        .eq('source_id', cleanEpisodeId)
+        .order('created_at', { ascending: true }),
+      supabaseClient
+        .from('course_learning_events')
+        .select('id, metadata, created_at')
+        .eq('student_id', cleanStudentId)
+        .eq('course_id', cleanCourseId)
+        .eq('episode_id', cleanEpisodeId)
+        .eq('event_type', 'lesson_completion_reward')
+        .limit(1),
+      supabaseClient
+        .from('classroom_points')
+        .select('points')
+        .eq('classroom_id', cleanClassroomId)
+        .eq('student_id', cleanStudentId)
+    ]);
+
+    const previousPoints = (currentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
+    const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
+    const hasExistingRewardEvent = Array.isArray(existingRewardEvents) && existingRewardEvents.length > 0;
+    const alreadyAwarded = hasExistingPointRow || hasExistingRewardEvent;
+
+    // 4. Mark lesson as completed in course_episode_progress
+    const numScore = Number(score) || 0;
+    const numMaxScore = Number(max_score) || 100;
+    const percentage = numMaxScore > 0 ? Number(((numScore / numMaxScore) * 100).toFixed(1)) : 100;
+
+    await supabaseClient
+      .from('course_episode_progress')
+      .upsert(
+        {
+          enrollment_id: enrollment.id,
+          student_id: cleanStudentId,
+          course_id: cleanCourseId,
+          classroom_id: cleanClassroomId,
+          episode_id: cleanEpisodeId,
+          status: 'completed',
+          score: numScore,
+          max_score: numMaxScore,
+          percentage,
+          time_spent_seconds: Number(time_spent_seconds) || 0,
+          completed_at: existingProgress?.completed_at || nowIso
+        },
+        { onConflict: 'enrollment_id,episode_id' }
+      );
+
+    // 5. Recalculate course enrollment progress
+    const { data: completedEps } = await supabaseClient
+      .from('course_episode_progress')
+      .select('id')
+      .eq('enrollment_id', enrollment.id)
+      .eq('status', 'completed');
+
+    const completedCount = (completedEps || []).length;
+    const totalCount = Math.max(1, enrollment.total_episodes_count || 1);
+    const progressPercent = Math.min(100, Number(((completedCount / totalCount) * 100).toFixed(1)));
+    const enrollmentStatus = progressPercent >= 100 ? 'completed' : 'in_progress';
+
+    const { data: updatedEnrollment } = await supabaseClient
+      .from('course_enrollments')
+      .update({
+        progress_percent: progressPercent,
+        completed_episodes_count: completedCount,
+        status: enrollmentStatus,
+        current_episode_id: cleanEpisodeId,
+        completed_at: progressPercent >= 100 ? (enrollment.completed_at || nowIso) : null,
+        last_activity_at: nowIso
+      })
+      .eq('id', enrollment.id)
+      .select()
+      .single();
+
+    // 6. Award points and record reward transaction ONLY if not already granted
+    let pointsAwarded = 0;
+    let rewardTransaction = null;
+
+    if (!alreadyAwarded && !isClassroomOwner) {
+      const { data: insertedPoint, error: ptErr } = await supabaseClient
+        .from('classroom_points')
+        .insert({
+          classroom_id: cleanClassroomId,
+          student_id: cleanStudentId,
+          points: rewardPointsToGrant,
+          reason: `Completed Lesson: ${episodeTitle}`,
+          source_type: 'activity',
+          source_id: cleanEpisodeId,
+          awarded_by: cleanStudentId
+        })
+        .select()
+        .single();
+
+      if (ptErr) {
+        // If a database unique constraint caught a concurrent insert, treat as already awarded
+        console.warn('[CourseStudioPoints] Insert notice:', ptErr.message);
+      }
+
+      // Post-insert deduplication guard: ensure strictly 1 point record exists for (classroom_id, student_id, activity, episode_id)
+      const { data: verifyRows } = await supabaseClient
+        .from('classroom_points')
+        .select('id, points, created_at')
+        .eq('classroom_id', cleanClassroomId)
+        .eq('student_id', cleanStudentId)
+        .eq('source_type', 'activity')
+        .eq('source_id', cleanEpisodeId)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
+
+      if (Array.isArray(verifyRows) && verifyRows.length > 1) {
+        const duplicateIds = verifyRows.slice(1).map(r => r.id);
+        await supabaseClient
+          .from('classroom_points')
+          .delete()
+          .in('id', duplicateIds);
+      }
+
+      const primaryPointRow = (verifyRows && verifyRows[0]) || insertedPoint;
+      if (primaryPointRow && (!insertedPoint || primaryPointRow.id === insertedPoint.id)) {
+        pointsAwarded = rewardPointsToGrant;
+      }
+
+      rewardTransaction = {
+        user_id: cleanStudentId,
+        course_id: cleanCourseId,
+        unit_id: unitId,
+        lesson_id: cleanEpisodeId,
+        points: rewardPointsToGrant,
+        reward_type: 'lesson_completion',
+        reward_key: uniqueRewardKey,
+        created_at: nowIso
+      };
+
+      // Record authoritative reward transaction event
+      await supabaseClient.from('course_learning_events').insert({
+        student_id: cleanStudentId,
+        course_id: cleanCourseId,
+        classroom_id: cleanClassroomId,
+        episode_id: cleanEpisodeId,
+        event_type: 'lesson_completion_reward',
+        metadata: {
+          ...rewardTransaction,
+          score: numScore,
+          max_score: numMaxScore,
+          percentage,
+          progress_percent: progressPercent
+        }
+      });
+
+      // Record standard episode_completed telemetry event once
+      await supabaseClient.from('course_learning_events').insert({
+        student_id: cleanStudentId,
+        course_id: cleanCourseId,
+        classroom_id: cleanClassroomId,
+        episode_id: cleanEpisodeId,
+        event_type: 'episode_completed',
+        metadata: {
+          score: numScore,
+          max_score: numMaxScore,
+          percentage,
+          progress_percent: progressPercent,
+          points_awarded: pointsAwarded,
+          reward_key: uniqueRewardKey
+        }
+      });
+
+      // Invalidate Teaching Intelligence cache so new evidence & points are reflected
+      try {
+        await supabaseClient
+          .from('ai_classroom_insights')
+          .delete()
+          .eq('classroom_id', cleanClassroomId);
+      } catch (_tiErr) {
+        // Non-critical
+      }
+    } else if (hasExistingRewardEvent && existingRewardEvents[0]?.metadata) {
+      rewardTransaction = existingRewardEvents[0].metadata;
+    } else if (hasExistingPointRow) {
+      rewardTransaction = {
+        user_id: cleanStudentId,
+        course_id: cleanCourseId,
+        unit_id: unitId,
+        lesson_id: cleanEpisodeId,
+        points: existingPointRows[0].points || rewardPointsToGrant,
+        reward_type: 'lesson_completion',
+        reward_key: uniqueRewardKey,
+        created_at: existingPointRows[0].created_at || nowIso
+      };
+    }
+
+    // 7. Query authoritative updated leaderboard total for this student in this classroom
+    const { data: updatedPointsRows } = await supabaseClient
+      .from('classroom_points')
+      .select('points')
+      .eq('classroom_id', cleanClassroomId)
+      .eq('student_id', cleanStudentId);
+
+    const totalClassroomPoints = (updatedPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
+
+    return {
+      success: true,
+      enrollment: updatedEnrollment,
+      points_awarded: pointsAwarded,
+      lesson_reward_points: rewardPointsToGrant,
+      already_awarded: alreadyAwarded,
+      previous_points: previousPoints,
+      total_classroom_points: totalClassroomPoints,
+      reward_key: uniqueRewardKey,
+      reward_transaction: rewardTransaction
+    };
+  });
+}
+
+/**
+ * Backfills missing lesson completion rewards for any student lessons that were marked
+ * 'completed' before the leaderboard reward integration was active. Idempotent and safe.
+ */
+export async function backfillMissingCourseLessonPoints(supabaseClient, classroomId = null) {
+  if (!supabaseClient) return { backfilledCount: 0 };
+
+  let query = supabaseClient
+    .from('course_episode_progress')
+    .select('enrollment_id, student_id, course_id, classroom_id, episode_id, score, max_score, time_spent_seconds, completed_at')
+    .eq('status', 'completed');
+
+  if (classroomId) {
+    query = query.eq('classroom_id', classroomId);
+  }
+
+  const { data: completedRows, error } = await query;
+  if (error || !Array.isArray(completedRows) || completedRows.length === 0) {
+    return { backfilledCount: 0 };
+  }
+
+  let backfilledCount = 0;
+  for (const row of completedRows) {
+    if (!row.student_id || !row.course_id || !row.classroom_id || !row.episode_id) continue;
+    try {
+      const res = await completeCourseLessonAndAwardPoints(supabaseClient, {
+        student_id: row.student_id,
+        course_id: row.course_id,
+        classroom_id: row.classroom_id,
+        episode_id: row.episode_id,
+        score: row.score || 0,
+        max_score: row.max_score || 100,
+        time_spent_seconds: row.time_spent_seconds || 0
+      });
+      if (res && !res.already_awarded && res.points_awarded > 0) {
+        backfilledCount++;
+      }
+    } catch (_err) {
+      // Continue safely
+    }
+  }
+
+  return { backfilledCount };
+}
+

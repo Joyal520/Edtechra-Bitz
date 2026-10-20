@@ -17,6 +17,7 @@ import {
   buildPublicUrl
 } from './r2Service.mjs';
 import { computeClassroomAnalytics } from './classroomAnalyticsService.mjs';
+import { compileCrossClassroomAnalytics } from './courseStudioService.mjs';
 import { aiRouter } from './ai/aiRouter.mjs';
 import { AI_TASK_TYPES } from './ai/taskTypes.mjs';
 
@@ -278,6 +279,23 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
 
     const writingIntelligence = await computeWritingChallengeInsights(serverSupabase, classroomId);
 
+    // Optional: Fetch assigned courses and compile course analytics for this classroom
+    let courseAnalytics = null;
+    try {
+      const { data: assignedCourses } = await serverSupabase
+        .from('course_classroom_assignments')
+        .select('course_id, status')
+        .eq('classroom_id', classroomId)
+        .eq('status', 'active');
+
+      if (assignedCourses && assignedCourses.length > 0) {
+        const primaryCourseId = assignedCourses[0].course_id;
+        courseAnalytics = await compileCrossClassroomAnalytics(serverSupabase, primaryCourseId);
+      }
+    } catch {
+      // Optional course analytics enrichment
+    }
+
     return {
       classroom: {
         id: analytics.classroom.id,
@@ -285,6 +303,7 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
         subject: analytics.classroom.subject,
         grade: analytics.classroom.grade
       },
+      course_analytics: courseAnalytics,
       class_summary: {
         total_students: totalStudents,
         active_students: activeStudents,

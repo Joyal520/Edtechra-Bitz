@@ -67,10 +67,12 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [lastCompletedTitle, setLastCompletedTitle] = useState('');
   const [lastCompletedPos, setLastCompletedPos] = useState(1);
   const [lastCompletedPoints, setLastCompletedPoints] = useState(10);
+  const [totalClassroomPoints, setTotalClassroomPoints] = useState<number | undefined>(undefined);
   const [celebratedIds, setCelebratedIds] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const mainScrollRef = useRef<HTMLElement>(null);
+  const completingEpisodeRef = useRef(false);
 
   const handleProgressChange = React.useCallback((answered: number, total: number) => {
     setQuestionProgress({ answered, total });
@@ -127,11 +129,19 @@ export const StudentCoursePlayerPage: React.FC = () => {
       if (supabase) {
         const { data: userData } = await supabase.auth.getUser();
         if (userData?.user) {
-          const profileName = (userData.user.user_metadata as any)?.full_name
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+
+          const dbProfileName = profileRow?.full_name && !profileRow.full_name.includes('@')
+            ? profileRow.full_name.trim()
+            : '';
+          const metaName = (userData.user.user_metadata as any)?.full_name
             || (userData.user.user_metadata as any)?.name
-            || userData.user.email?.split('@')[0]
             || '';
-          setStudentName(profileName);
+          setStudentName(dbProfileName || metaName);
         }
       }
 
@@ -141,7 +151,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
         courseStudioService.getStudentProgress(cId, clId).catch(() => ({
           enrollment: null,
           completedEpisodeIds: [],
-          progress_percent: 0
+          progress_percent: 0,
+          total_classroom_points: undefined
         }))
       ]);
 
@@ -150,6 +161,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
       // Restore persistent completed episode states from database
       const completedSet = new Set(progressData.completedEpisodeIds || []);
       setCompletedEpisodeIds(completedSet);
+      setCelebratedIds(new Set(completedSet));
+      if (typeof (progressData as any).total_classroom_points === 'number') {
+        setTotalClassroomPoints((progressData as any).total_classroom_points);
+      }
 
       if (progressData.enrollment) {
         setEnrollment(progressData.enrollment as CourseEnrollment);
@@ -285,6 +300,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const handleCompleteEpisode = async () => {
     if (!courseId || !classroomId || !selectedEpisode) return;
+    if (completingEpisodeRef.current || completingEpisode) return;
 
     // Strict business rule: do NOT allow lesson completion until ALL required questions are answered
     if (totalRequiredQuestions > 0 && answeredQuestionsCount < totalRequiredQuestions) {
@@ -292,6 +308,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
 
     const epId = selectedEpisode.id;
+    completingEpisodeRef.current = true;
     setCompletingEpisode(true);
 
     const calculatedScore = Object.values(questionScores).reduce((sum, pts) => sum + pts, 0);
@@ -310,26 +327,32 @@ export const StudentCoursePlayerPage: React.FC = () => {
         setEnrollment(res.enrollment);
       }
 
+      if (typeof res?.total_classroom_points === 'number') {
+        setTotalClassroomPoints(res.total_classroom_points);
+      }
+
       setCompletedEpisodeIds(prev => new Set([...prev, epId]));
 
-      // Only trigger celebration modal ONCE per lesson completion
-      if (!celebratedIds.has(epId)) {
-        const pointsForLesson = (selectedEpisode.questions || []).reduce((sum, q) => {
-          const fb = feedbackState[q.id];
-          return sum + (fb?.isCorrect ? (q.points || 10) : 0);
-        }, 0) || 10;
+      const alreadyAwarded = Boolean(res?.already_awarded);
+      const awardedByBackend = typeof res?.points_awarded === 'number'
+        ? res.points_awarded
+        : (alreadyAwarded ? 0 : 10);
+
+      // Only trigger celebration modal ONCE when backend confirms new lesson completion & reward
+      if (!alreadyAwarded && !celebratedIds.has(epId)) {
         setCelebratedIds(prev => new Set([...prev, epId]));
         setLastCompletedTitle(selectedEpisode.title);
         setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
-        setLastCompletedPoints(pointsForLesson);
+        setLastCompletedPoints(awardedByBackend);
         setCelebrationOpen(true);
       } else {
-        // Already celebrated, proceed directly
+        setCelebratedIds(prev => new Set([...prev, epId]));
         handleAfterCelebrationContinue();
       }
     } catch (err) {
       console.error('Failed to mark lesson complete:', err);
     } finally {
+      completingEpisodeRef.current = false;
       setCompletingEpisode(false);
     }
   };
@@ -824,6 +847,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         lessonTitle={lastCompletedTitle}
         lessonPosition={lastCompletedPos}
         pointsEarned={lastCompletedPoints}
+        totalLeaderboardPoints={totalClassroomPoints}
         progressPercent={roadmapData?.progressPercent || 0}
         completedLessonsCount={roadmapData?.completedLessons || 1}
         totalLessonsCount={roadmapData?.totalLessons || 1}

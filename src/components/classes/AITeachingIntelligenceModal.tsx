@@ -7,9 +7,12 @@ import {
   CalendarDays,
   FileText,
   MessageSquare,
-  AlertCircle
+  AlertCircle,
+  BookOpen
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
+import { CourseClassroomAssignment, CourseAnalyticsSummary } from '@/types/courseStudio';
+import { courseStudioService } from '@/services/courseStudioService';
 import {
   teachingIntelligenceService,
   TeachingIntelligenceResponse
@@ -44,6 +47,8 @@ export type ModalTab =
 interface AITeachingIntelligenceModalProps {
   isOpen: boolean;
   classroom: Classroom | null;
+  courses?: CourseClassroomAssignment[];
+  initialCourseId?: string;
   onClose: () => void;
   initialTab?: ModalTab;
 }
@@ -51,6 +56,8 @@ interface AITeachingIntelligenceModalProps {
 export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalProps> = ({
   isOpen,
   classroom,
+  courses: coursesProp,
+  initialCourseId,
   onClose,
   initialTab
 }) => {
@@ -68,6 +75,9 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     mapInitialTab(initialTab)
   );
   const [data, setData] = useState<TeachingIntelligenceResponse | null>(null);
+  const [assignedCourses, setAssignedCourses] = useState<CourseClassroomAssignment[]>(coursesProp || []);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || '');
+  const [courseAnalytics, setCourseAnalytics] = useState<CourseAnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -97,10 +107,49 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   }, [isOpen, initialTab]);
 
   useEffect(() => {
+    if (coursesProp && coursesProp.length > 0) {
+      setAssignedCourses(coursesProp);
+      if (!selectedCourseId) {
+        setSelectedCourseId(initialCourseId || coursesProp[0].course_id);
+      }
+    }
+  }, [coursesProp, initialCourseId]);
+
+  useEffect(() => {
     if (isOpen && classroom?.id) {
       loadIntelligence();
+      loadAssignedCoursesAndAnalytics();
     }
   }, [isOpen, classroom?.id]);
+
+  useEffect(() => {
+    if (isOpen && selectedCourseId) {
+      courseStudioService.getCourseAnalytics(selectedCourseId)
+        .then(res => setCourseAnalytics(res))
+        .catch(err => console.warn('[TeachingIntelligenceModal] course analytics error:', err));
+    }
+  }, [isOpen, selectedCourseId]);
+
+  const loadAssignedCoursesAndAnalytics = async () => {
+    if (!classroom?.id) return;
+    try {
+      let currentCourses = coursesProp && coursesProp.length > 0 ? coursesProp : [];
+      if (currentCourses.length === 0) {
+        currentCourses = await courseStudioService.getClassroomCourses(classroom.id).catch(() => []);
+        setAssignedCourses(currentCourses);
+      }
+      if (currentCourses.length > 0) {
+        const targetId = initialCourseId || selectedCourseId || currentCourses[0].course_id;
+        setSelectedCourseId(targetId);
+        const analyticsRes = await courseStudioService.getCourseAnalytics(targetId).catch(() => null);
+        if (analyticsRes) {
+          setCourseAnalytics(analyticsRes);
+        }
+      }
+    } catch (err) {
+      console.warn('[TeachingIntelligenceModal] failed to load assigned courses:', err);
+    }
+  };
 
   const sanitizeErrorMessage = (msg: any, fallback: string): string => {
     if (!msg || typeof msg !== 'string') return fallback;
@@ -122,6 +171,9 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     try {
       const res = await teachingIntelligenceService.getTeachingIntelligence(classroom.id);
       setData(res);
+      if ((res.metrics as any)?.course_analytics && !courseAnalytics) {
+        setCourseAnalytics((res.metrics as any).course_analytics);
+      }
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] load error:', err);
       setErrorMsg(sanitizeErrorMessage(err.message, 'Failed to load teaching intelligence.'));
@@ -137,6 +189,12 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     try {
       const res = await teachingIntelligenceService.refreshTeachingIntelligence(classroom.id);
       setData(res);
+      if (selectedCourseId) {
+        const freshCourseAnalytics = await courseStudioService.getCourseAnalytics(selectedCourseId).catch(() => null);
+        if (freshCourseAnalytics) setCourseAnalytics(freshCourseAnalytics);
+      } else if ((res.metrics as any)?.course_analytics) {
+        setCourseAnalytics((res.metrics as any).course_analytics);
+      }
     } catch (err: any) {
       console.error('[TeachingIntelligenceModal] refresh error:', err);
       setErrorMsg(sanitizeErrorMessage(err.message, 'Failed to re-run AI intelligence analysis.'));
@@ -150,6 +208,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     setIsChatOpen(true);
   };
 
+  const resolvedCourseAnalytics = courseAnalytics || ((data?.metrics as any)?.course_analytics as CourseAnalyticsSummary) || null;
+
   if (!isOpen || !classroom) return null;
 
   return (
@@ -157,23 +217,44 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
       <div className="w-full h-full flex flex-col overflow-hidden">
         
         {/* TOP HEADER BAR (Sticky, always visible) */}
-        <header className="px-6 sm:px-8 py-3.5 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] flex items-center justify-center shadow-lg shadow-[#159A9C]/25 text-white">
+        <header className="px-4 sm:px-8 py-3.5 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#159A9C] to-[#087477] flex items-center justify-center shadow-lg shadow-[#159A9C]/25 text-white shrink-0">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-black tracking-tight text-white">
                   Teaching Intelligence
                 </h2>
-                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wide bg-[#159A9C]/30 text-teal-200 border border-[#159A9C]/40">
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wide bg-[#159A9C]/30 text-teal-200 border border-[#159A9C]/40 truncate max-w-[200px]">
                   {classroom.title}
                 </span>
+                {assignedCourses.length > 1 ? (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/25 border border-indigo-400/35 text-[11px] font-bold text-indigo-200">
+                    <BookOpen className="w-3 h-3 text-indigo-300 shrink-0" />
+                    <select
+                      value={selectedCourseId}
+                      onChange={e => setSelectedCourseId(e.target.value)}
+                      className="bg-transparent text-indigo-100 font-black outline-none cursor-pointer max-w-[180px] sm:max-w-[240px] truncate"
+                    >
+                      {assignedCourses.map(ac => (
+                        <option key={ac.course_id} value={ac.course_id} className="bg-[#071a1c] text-white">
+                          {ac.course?.title || 'Assigned Course'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : resolvedCourseAnalytics?.course ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wide bg-indigo-500/25 text-indigo-200 border border-indigo-400/35 max-w-[220px] sm:max-w-[280px] truncate">
+                    <BookOpen className="w-3 h-3 text-indigo-300 shrink-0" />
+                    <span className="truncate">{resolvedCourseAnalytics.course.title}</span>
+                  </span>
+                ) : null}
                 <AIDebugBadge onClick={() => setShowAIUsageModal(true)} />
               </div>
-              <p className="text-xs text-teal-100/75 font-medium">
-                {classroom.subject || 'All Subjects'} • Evidence-driven diagnostic intelligence
+              <p className="text-xs text-teal-100/75 font-medium truncate">
+                {classroom.subject || 'All Subjects'} • {resolvedCourseAnalytics?.course ? `Course & Classroom Diagnostic Intelligence` : 'Evidence-driven diagnostic intelligence'}
               </p>
             </div>
           </div>
@@ -307,6 +388,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   <InsightTab
                     classroom={classroom}
                     data={data}
+                    courseAnalytics={resolvedCourseAnalytics}
                     onNavigateToTab={handleNavigateToTab}
                     onNavigateToTeaching={() => setActiveTab('teaching')}
                     onNavigateToStudents={() => setActiveTab('students')}
@@ -317,6 +399,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 {activeTab === 'students' && (
                   <StudentsTab
                     classroom={classroom}
+                    courseAnalytics={resolvedCourseAnalytics}
                     selectedStudentId={tabContext.studentId || undefined}
                   />
                 )}
@@ -325,6 +408,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   <TeachingTab
                     classroom={classroom}
                     data={data}
+                    courseAnalytics={resolvedCourseAnalytics}
                     targetTopic={tabContext.topic}
                     onOpenChatWithPrompt={handleOpenChatWithPrompt}
                   />
@@ -334,6 +418,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                   <EvidenceReportsTab
                     classroom={classroom}
                     data={data}
+                    courseAnalytics={resolvedCourseAnalytics}
                     initialFilter={tabContext.topic ? { topic: tabContext.topic } : tabContext.studentId ? { studentId: tabContext.studentId } : undefined}
                   />
                 )}

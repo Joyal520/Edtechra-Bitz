@@ -7,13 +7,16 @@
 // 4. Multi-Day Lesson Planner (Powered by Teaching Planner)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   CheckCircle2,
   Calendar,
-  Zap
+  Zap,
+  BookOpen,
+  AlertCircle
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
+import { CourseAnalyticsSummary } from '@/types/courseStudio';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
 import { AIActionsDashboard } from '../actions/AIActionsDashboard';
 import { AITeachingPlannerTab } from '../planner/AITeachingPlannerTab';
@@ -22,6 +25,7 @@ import { actionExecutionService, ActionType } from '@/services/actionExecutionSe
 interface TeachingTabProps {
   classroom: Classroom;
   data: TeachingIntelligenceResponse | null;
+  courseAnalytics?: CourseAnalyticsSummary | null;
   targetTopic?: string;
   onActionTriggered?: (actionLabel: string) => void;
   onOpenChatWithPrompt?: (prompt: string) => void;
@@ -32,6 +36,7 @@ type TeachingSubView = 'actions' | 'planner';
 export const TeachingTab: React.FC<TeachingTabProps> = ({
   classroom,
   data,
+  courseAnalytics: courseAnalyticsProp,
   targetTopic,
   onActionTriggered,
   onOpenChatWithPrompt
@@ -40,17 +45,71 @@ export const TeachingTab: React.FC<TeachingTabProps> = ({
   const [creatingQuickAction, setCreatingQuickAction] = useState<string | null>(null);
   const [actionSuccessNotice, setActionSuccessNotice] = useState<string | null>(null);
 
+  const activeCourseAnalytics: CourseAnalyticsSummary | null = courseAnalyticsProp || (data?.metrics as any)?.course_analytics || null;
   const metrics = data?.metrics?.class_summary;
   const classHealth = data?.metrics?.class_health;
   const intel = data?.intelligence;
   const topicPerf = data?.metrics?.topic_performance || [];
 
-  const totalStudents = metrics?.total_students || classroom.student_count || 0;
+  const totalStudents = metrics?.total_students || activeCourseAnalytics?.overview?.total_enrolled_students || classroom.student_count || 0;
   const strugglingCount = classHealth?.strugglingCount ?? (data?.metrics?.students_needing_attention?.length || 0);
 
-  // Derive target topic
-  const learningGapTopic = targetTopic || intel?.teach_next?.[0]?.topic || data?.metrics?.top_weaknesses?.[0]?.topic || topicPerf.find(t => t.score < 65)?.topic || 'Foundational Concepts';
+  // Derive target topic from classroom & course evidence
+  const courseWeakConcept = activeCourseAnalytics?.concept_mastery?.find(c => c.status === 'needs_support' || c.status === 'at_risk')?.concept;
+  const learningGapTopic = targetTopic || intel?.teach_next?.[0]?.topic || data?.metrics?.top_weaknesses?.[0]?.topic || topicPerf.find(t => t.score < 65)?.topic || courseWeakConcept || 'Foundational Concepts';
   const strugglingStudentCount = Math.min(strugglingCount > 0 ? strugglingCount : 1, totalStudents > 0 ? totalStudents : 1);
+
+  // Build evidence-backed "What Should I Teach Next?" observations
+  const teachingObservations = useMemo(() => {
+    const bullets: Array<{ text: string; type: 'gap' | 'course' | 'strength' }> = [];
+
+    if (totalStudents > 0 && learningGapTopic) {
+      bullets.push({
+        text: `${strugglingStudentCount} of ${totalStudents} students need additional practice with ${learningGapTopic}.`,
+        type: 'gap'
+      });
+    }
+
+    if (activeCourseAnalytics) {
+      const difficultLesson = activeCourseAnalytics.most_difficult_lessons?.[0];
+      if (difficultLesson) {
+        bullets.push({
+          text: `${difficultLesson.title} has the lowest average performance (${Math.round(difficultLesson.accuracy_percentage)}%).`,
+          type: 'course'
+        });
+      }
+
+      const classStudents = classroom?.id
+        ? activeCourseAnalytics.student_performance.filter(s => s.classroom_id === classroom.id)
+        : activeCourseAnalytics.student_performance;
+      const effectiveStudents = classStudents.length > 0 ? classStudents : activeCourseAnalytics.student_performance;
+      const behindCount = effectiveStudents.filter(s => s.progress_percent < 40 && s.status !== 'strong').length;
+      if (behindCount > 0) {
+        bullets.push({
+          text: `${behindCount} ${behindCount === 1 ? 'student has' : 'students have'} fallen behind the course schedule in "${activeCourseAnalytics.course?.title || 'Assigned Course'}".`,
+          type: 'course'
+        });
+      }
+
+      const topStrong = activeCourseAnalytics.concept_mastery?.find(c => c.status === 'strong');
+      if (topStrong) {
+        bullets.push({
+          text: `${topStrong.concept} performance is strong (${Math.round(topStrong.accuracy_percentage)}% accuracy).`,
+          type: 'strength'
+        });
+      }
+    }
+
+    if (data?.metrics?.top_strengths?.[0]) {
+      const st = data.metrics.top_strengths[0];
+      bullets.push({
+        text: `${st.topic} performance is steady at ${Math.round(st.averageScore)}%.`,
+        type: 'strength'
+      });
+    }
+
+    return bullets;
+  }, [totalStudents, strugglingStudentCount, learningGapTopic, activeCourseAnalytics, classroom?.id, data?.metrics?.top_strengths]);
 
   // Quick Action Creator
   const handleCreateQuickAction = async (actionType: ActionType, label: string) => {
@@ -157,11 +216,11 @@ export const TeachingTab: React.FC<TeachingTabProps> = ({
                   <span>Immediate Classroom Action</span>
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-[#173B3F]">
-                  What Should I Do Next?
+                  What Should I Teach Next?
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-[#36565A] bg-[#E8F7F5] px-3 py-1.5 rounded-xl border border-[#C9E5E2]">
                   Target: {learningGapTopic}
                 </span>
@@ -177,17 +236,34 @@ export const TeachingTab: React.FC<TeachingTabProps> = ({
               </div>
             </div>
 
-            {/* Context & Reason */}
-            <div className="p-4 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] space-y-1 text-xs">
+            {/* Context & Reason + Evidence-Backed Observations */}
+            <div className="p-4 bg-[#E8F7F5]/50 rounded-2xl border border-[#C9E5E2] space-y-2.5 text-xs">
               <span className="text-[10px] font-black uppercase tracking-wider text-[#087477] block">
-                Pedagogical Priority Reason
+                Pedagogical Priority & Classroom Signals
               </span>
               <p className="text-sm font-bold text-[#173B3F] leading-snug">
                 {strugglingStudentCount} of {totalStudents} students are struggling with {learningGapTopic}.
               </p>
-              <p className="text-[#36565A] font-medium leading-relaxed mt-1">
-                {intel?.teach_next?.[0]?.why || 'Recent assessments show consistent confusion in foundational rules and error patterns.'}
+              <p className="text-[#36565A] font-medium leading-relaxed">
+                {intel?.teach_next?.[0]?.why || activeCourseAnalytics?.ai_insights?.recommended_action || 'Recent assessments show consistent confusion in foundational rules and error patterns.'}
               </p>
+
+              {teachingObservations.length > 0 && (
+                <div className="pt-2 border-t border-[#C9E5E2]/70 space-y-1.5">
+                  {teachingObservations.map((obs, idx) => (
+                    <div key={idx} className="flex items-start gap-2 font-semibold text-[#173B3F]">
+                      {obs.type === 'gap' ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                      ) : obs.type === 'course' ? (
+                        <BookOpen className="w-3.5 h-3.5 text-[#087477] shrink-0 mt-0.5" />
+                      ) : (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      )}
+                      <span>{obs.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 4-Step Action Sequence (Learn, Practise, Check, Reassess) */}
