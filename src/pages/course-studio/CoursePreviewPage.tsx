@@ -31,7 +31,8 @@ import {
   ChevronRight,
   Layers,
   HelpCircle,
-  AlertCircle
+  AlertCircle,
+  Camera
 } from 'lucide-react';
 import { Course, CourseUnit, CourseEpisode, RoadmapLessonItem, CourseBlock, CourseQuestion } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
@@ -39,6 +40,7 @@ import { CourseContentRenderer } from '@/components/course-studio/CourseContentR
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
+import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 import { AILessonAssistantModal } from '@/components/course-studio/AILessonAssistantModal';
 import { AddQuestionsModal } from '@/components/course-studio/AddQuestionsModal';
 import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
@@ -77,6 +79,7 @@ export const CoursePreviewPage: React.FC = () => {
 
   // Modals
   const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [coverModalOpen, setCoverModalOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [addQuestionsModalOpen, setAddQuestionsModalOpen] = useState(false);
   const [questionPlanModalOpen, setQuestionPlanModalOpen] = useState(false);
@@ -1135,16 +1138,29 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Right: Publish (in Edit Mode), Reading %, Font Size, Theme Popover */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {isEditMode && (
-            <LiquidButton
-              variant="emerald"
-              size="sm"
-              onClick={() => setPublishModalOpen(true)}
-              icon={<Send className="w-3.5 h-3.5" />}
-              title="Publish course & assign to classrooms"
-              className="!px-3 !py-1 !text-xs font-bold shrink-0"
-            >
-              <span>Publish</span>
-            </LiquidButton>
+            <>
+              <LiquidButton
+                variant="secondary"
+                size="sm"
+                onClick={() => setCoverModalOpen(true)}
+                icon={<Camera className="w-3.5 h-3.5 text-[#026fc3]" />}
+                title="Manage course cover artwork"
+                className="!px-3 !py-1 !text-xs font-bold shrink-0"
+              >
+                <span>Cover</span>
+              </LiquidButton>
+
+              <LiquidButton
+                variant="emerald"
+                size="sm"
+                onClick={() => setPublishModalOpen(true)}
+                icon={<Send className="w-3.5 h-3.5" />}
+                title="Publish course & assign to classrooms"
+                className="!px-3 !py-1 !text-xs font-bold shrink-0"
+              >
+                <span>Publish</span>
+              </LiquidButton>
+            </>
           )}
 
           {/* Reading % Badge */}
@@ -1473,6 +1489,19 @@ export const CoursePreviewPage: React.FC = () => {
           showToast('Course published and assigned!');
         }}
       />
+
+      {/* 10. COURSE COVER MANAGEMENT MODAL */}
+      {course && (
+        <CourseCoverModal
+          isOpen={coverModalOpen}
+          course={course}
+          onClose={() => setCoverModalOpen(false)}
+          onSuccess={(updated) => {
+            setCourse(prev => (prev ? { ...prev, ...updated } : prev));
+            showToast('Course cover artwork updated!');
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -307,6 +307,32 @@ export const courseStudioService = {
     return json;
   },
 
+  async unpublishCourse(courseId: string): Promise<Course> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/unpublish`, {
+      method: 'POST',
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to unpublish course.');
+    return json.course;
+  },
+
+  async getStudentProgress(courseId: string, classroomId: string): Promise<{
+    enrollment: any;
+    completedEpisodeIds: string[];
+    progress_percent: number;
+  }> {
+    const headers = await getAuthHeader();
+    const params = new URLSearchParams({ course_id: courseId, classroom_id: classroomId });
+    const res = await fetch(`${API_BASE}/student/progress?${params.toString()}`, { headers });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      return { enrollment: null, completedEpisodeIds: [], progress_percent: 0 };
+    }
+    return json;
+  },
+
   async getCourseAnalytics(courseId: string): Promise<CourseAnalyticsSummary> {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/courses/${courseId}/analytics`, { headers });

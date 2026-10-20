@@ -5128,7 +5128,7 @@ app.get('/api/course-studio/courses', async (req, res) => {
       .select(`
         *,
         course_units(id, course_episodes(id)),
-        course_classroom_assignments(id, classroom_id)
+        course_classroom_assignments(id, classroom_id, status)
       `);
 
     const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
@@ -5143,7 +5143,7 @@ app.get('/api/course-studio/courses', async (req, res) => {
     const enriched = (courses || []).map(c => {
       const units = c.course_units || [];
       const episodesCount = units.reduce((sum, u) => sum + (u.course_episodes?.length || 0), 0);
-      const assignments = c.course_classroom_assignments || [];
+      const activeAssignments = (c.course_classroom_assignments || []).filter(a => a.status === 'active');
       return {
         id: c.id,
         teacher_id: c.teacher_id,
@@ -5152,11 +5152,13 @@ app.get('/api/course-studio/courses', async (req, res) => {
         subject: c.subject,
         grade_level: c.grade_level,
         cover_image_url: c.cover_image_url,
+        cover_image_key: c.cover_image_key,
+        cover_aspect_ratio: c.cover_aspect_ratio || '16:9',
         course_type: c.course_type,
         status: c.status,
         units_count: units.length,
         episodes_count: episodesCount,
-        assigned_classrooms_count: assignments.length,
+        assigned_classrooms_count: activeAssignments.length,
         created_at: c.created_at,
         updated_at: c.updated_at
       };
@@ -5309,6 +5311,32 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       course.teacher_id === authData.user.id ||
       authData.profile?.role === 'admin' ||
       authData.user.email === 'roshanjoyal520@gmail.com';
+
+    // Strict access control: students can only access published courses assigned to their active classrooms
+    if (!isCourseOwnerOrAdmin) {
+      if (course.status !== 'published') {
+        return res.status(403).json({ success: false, error: 'This course is in draft mode and not available to students.' });
+      }
+
+      const activeAssignments = (assignments || []).filter(a => a.status === 'active');
+      const assignedClassroomIds = activeAssignments.map(a => a.classroom_id);
+
+      if (assignedClassroomIds.length === 0) {
+        return res.status(403).json({ success: false, error: 'This course is not assigned to any classroom.' });
+      }
+
+      const { data: memberRecord } = await serverSupabase
+        .from('classroom_members')
+        .select('id')
+        .in('classroom_id', assignedClassroomIds)
+        .eq('profile_id', authData.user.id)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (!memberRecord || memberRecord.length === 0) {
+        return res.status(403).json({ success: false, error: 'You are not enrolled in any class assigned to this course.' });
+      }
+    }
 
     const normalizeForCompare = (s) => String(s || '')
       .toLowerCase()
@@ -6156,8 +6184,34 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
       .eq('course_id', courseId);
     const totalEpisodesCount = (allEpisodes || []).length;
 
+    // Fetch all classrooms managed by this teacher (or all if admin) to safely determine active vs removed assignments
+    let teacherClassroomsQuery = serverSupabase
+      .from('classrooms')
+      .select('id');
+    if (!isAdmin) {
+      teacherClassroomsQuery = teacherClassroomsQuery.eq('teacher_id', authData.user.id);
+    }
+    const { data: teacherClassrooms } = await teacherClassroomsQuery;
+    const manageableClassroomIds = new Set((teacherClassrooms || []).map(c => c.id));
+
+    // For any classroom this teacher manages that is NOT in classroom_ids, set existing assignment status to 'archived'
+    // This removes student access without deleting historical progress or enrollments (avoids cascade deletion).
+    const unselectedClassIds = [...manageableClassroomIds].filter(cid => !classroom_ids.includes(cid));
+    if (unselectedClassIds.length > 0) {
+      await serverSupabase
+        .from('course_classroom_assignments')
+        .update({ status: 'archived', updated_at: new Date().toISOString() })
+        .eq('course_id', courseId)
+        .in('classroom_id', unselectedClassIds);
+    }
+
     const assignmentResults = [];
     for (const classId of classroom_ids) {
+      // Security check: teacher can only assign classrooms they are authorized to manage
+      if (!isAdmin && !manageableClassroomIds.has(classId)) {
+        continue;
+      }
+
       const { data: assignment, error: aErr } = await serverSupabase
         .from('course_classroom_assignments')
         .upsert(
@@ -6211,6 +6265,37 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
   } catch (err) {
     console.error('Error in publish-and-assign:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to publish and assign course.' });
+  }
+});
+
+// 15B. POST /api/course-studio/courses/:id/unpublish - Revert published course to draft
+app.post('/api/course-studio/courses/:id/unpublish', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    let courseQuery = serverSupabase
+      .from('courses')
+      .update({ status: 'draft', updated_at: new Date().toISOString() })
+      .eq('id', courseId);
+    if (!isAdmin) {
+      courseQuery = courseQuery.eq('teacher_id', authData.user.id);
+    }
+    const { data: updatedCourse, error: cErr } = await courseQuery
+      .select()
+      .single();
+
+    if (cErr) throw cErr;
+
+    res.json({
+      success: true,
+      course: updatedCourse
+    });
+  } catch (err) {
+    console.error('Error in unpublish course:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to unpublish course.' });
   }
 });
 
@@ -6468,15 +6553,24 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
           subject,
           grade_level,
           cover_image_url,
+          cover_image_key,
+          cover_aspect_ratio,
           course_type,
           status,
-          updated_at
+          updated_at,
+          course_units(id, course_episodes(id))
         )
       `)
       .eq('classroom_id', classroomId)
       .eq('status', 'active');
 
     if (error) throw error;
+
+    // Strict publication filter: students must NEVER see draft or unassigned courses
+    let eligibleAssignments = assignments || [];
+    if (!isTeacherOrAdmin) {
+      eligibleAssignments = eligibleAssignments.filter(a => a.course && a.course.status === 'published');
+    }
 
     const studentId = authData.user.id;
     const { data: enrollments } = await serverSupabase
@@ -6488,15 +6582,152 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
     const enrollmentMap = new Map();
     (enrollments || []).forEach(e => enrollmentMap.set(e.course_id, e));
 
-    const enriched = (assignments || []).map(a => ({
-      ...a,
-      enrollment: enrollmentMap.get(a.course_id) || null
+    const enriched = await Promise.all(eligibleAssignments.map(async (a) => {
+      const units = a.course?.course_units || [];
+      const episodesCount = units.reduce((sum, u) => sum + (u.course_episodes?.length || 0), 0);
+      const cleanCourse = {
+        ...a.course,
+        units_count: units.length,
+        episodes_count: episodesCount
+      };
+      delete cleanCourse.course_units;
+
+      let enrollment = enrollmentMap.get(a.course_id) || null;
+
+      // Auto-enroll student if enrolled in this classroom but record does not exist yet
+      if (!enrollment && !isTeacherOrAdmin) {
+        try {
+          const { data: newEnrollment } = await serverSupabase
+            .from('course_enrollments')
+            .upsert({
+              course_id: a.course_id,
+              classroom_id: classroomId,
+              classroom_assignment_id: a.id,
+              student_id: studentId,
+              status: 'enrolled',
+              progress_percent: 0,
+              completed_episodes_count: 0,
+              total_episodes_count: episodesCount
+            }, { onConflict: 'classroom_assignment_id,student_id' })
+            .select()
+            .single();
+
+          if (newEnrollment) enrollment = newEnrollment;
+        } catch (enrollErr) {
+          console.warn('Auto-enroll error:', enrollErr.message);
+        }
+      }
+
+      // Compute student actual completed progress from persistent progress table
+      if (enrollment && !isTeacherOrAdmin) {
+        const { data: completedRows } = await serverSupabase
+          .from('course_episode_progress')
+          .select('episode_id')
+          .eq('enrollment_id', enrollment.id)
+          .eq('status', 'completed');
+
+        const completedCount = (completedRows || []).length;
+        const totalCount = Math.max(1, episodesCount || enrollment.total_episodes_count || 1);
+        const progressPct = Math.min(100, Number(((completedCount / totalCount) * 100).toFixed(1)));
+
+        enrollment = {
+          ...enrollment,
+          completed_episodes_count: completedCount,
+          total_episodes_count: totalCount,
+          progress_percent: progressPct,
+          status: progressPct >= 100 ? 'completed' : progressPct > 0 ? 'in_progress' : 'enrolled'
+        };
+      }
+
+      return {
+        ...a,
+        course: cleanCourse,
+        enrollment
+      };
     }));
 
     res.json({ success: true, courses: enriched });
   } catch (err) {
     console.error('Error in classroom courses:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to load classroom courses.' });
+  }
+});
+
+// 21B. GET /api/course-studio/student/progress - Get student progress and completed episode IDs
+app.get('/api/course-studio/student/progress', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { course_id, classroom_id } = req.query;
+    if (!course_id || !classroom_id) {
+      return res.status(400).json({ success: false, error: 'course_id and classroom_id are required.' });
+    }
+
+    const student_id = authData.user.id;
+
+    // Retrieve or auto-create enrollment
+    let { data: enrollment } = await serverSupabase
+      .from('course_enrollments')
+      .select('*')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .eq('student_id', student_id)
+      .maybeSingle();
+
+    if (!enrollment) {
+      const { data: assignment } = await serverSupabase
+        .from('course_classroom_assignments')
+        .select('id')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (assignment) {
+        const { data: allEpisodes } = await serverSupabase
+          .from('course_episodes')
+          .select('id')
+          .eq('course_id', course_id);
+        const totalEpisodesCount = (allEpisodes || []).length;
+
+        const { data: created } = await serverSupabase
+          .from('course_enrollments')
+          .upsert({
+            course_id,
+            classroom_id,
+            classroom_assignment_id: assignment.id,
+            student_id,
+            status: 'enrolled',
+            total_episodes_count: totalEpisodesCount
+          }, { onConflict: 'classroom_assignment_id,student_id' })
+          .select()
+          .single();
+
+        enrollment = created;
+      }
+    }
+
+    let completedEpisodeIds = [];
+    if (enrollment) {
+      const { data: progressRows } = await serverSupabase
+        .from('course_episode_progress')
+        .select('episode_id')
+        .eq('enrollment_id', enrollment.id)
+        .eq('status', 'completed');
+
+      completedEpisodeIds = (progressRows || []).map(r => r.episode_id);
+    }
+
+    res.json({
+      success: true,
+      enrollment: enrollment || null,
+      completedEpisodeIds,
+      progress_percent: enrollment?.progress_percent || 0
+    });
+  } catch (err) {
+    console.error('Error in GET student progress:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load student progress.' });
   }
 });
 
@@ -6517,7 +6748,41 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
       .eq('student_id', student_id)
       .maybeSingle();
 
-    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment not found.' });
+    if (!enrollment) {
+      const { data: assignment } = await serverSupabase
+        .from('course_classroom_assignments')
+        .select('id')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (!assignment) {
+        return res.status(404).json({ success: false, error: 'Course is not actively assigned to this classroom.' });
+      }
+
+      const { data: allEpisodes } = await serverSupabase
+        .from('course_episodes')
+        .select('id')
+        .eq('course_id', course_id);
+
+      const { data: created } = await serverSupabase
+        .from('course_enrollments')
+        .upsert({
+          course_id,
+          classroom_id,
+          classroom_assignment_id: assignment.id,
+          student_id,
+          status: 'in_progress',
+          total_episodes_count: (allEpisodes || []).length
+        }, { onConflict: 'classroom_assignment_id,student_id' })
+        .select()
+        .single();
+
+      enrollment = created;
+    }
+
+    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment could not be established.' });
 
     const percentage = max_score > 0 ? Number(((score / max_score) * 100).toFixed(1)) : 100;
 
@@ -6610,7 +6875,41 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       .eq('student_id', student_id)
       .maybeSingle();
 
-    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment not found.' });
+    if (!enrollment) {
+      const { data: assignment } = await serverSupabase
+        .from('course_classroom_assignments')
+        .select('id')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (!assignment) {
+        return res.status(404).json({ success: false, error: 'Course is not actively assigned to this classroom.' });
+      }
+
+      const { data: allEpisodes } = await serverSupabase
+        .from('course_episodes')
+        .select('id')
+        .eq('course_id', course_id);
+
+      const { data: created } = await serverSupabase
+        .from('course_enrollments')
+        .upsert({
+          course_id,
+          classroom_id,
+          classroom_assignment_id: assignment.id,
+          student_id,
+          status: 'in_progress',
+          total_episodes_count: (allEpisodes || []).length
+        }, { onConflict: 'classroom_assignment_id,student_id' })
+        .select()
+        .single();
+
+      enrollment = created;
+    }
+
+    if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment could not be established.' });
 
     // Anti-Retry Protection: Reject duplicate submissions for the same question
     const { data: existingAttempt } = await serverSupabase

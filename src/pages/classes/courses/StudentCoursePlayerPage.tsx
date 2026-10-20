@@ -42,6 +42,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
   const [studentName, setStudentName] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
   const [showDrawer, setShowDrawer] = useState(false);
@@ -106,6 +107,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const loadCourseAndProgress = async (cId: string, clId: string) => {
     setLoading(true);
+    setLoadError(null);
     try {
       if (supabase) {
         const { data: userData } = await supabase.auth.getUser();
@@ -118,21 +120,31 @@ export const StudentCoursePlayerPage: React.FC = () => {
         }
       }
 
-      const courseData = await courseStudioService.getCourse(cId);
+      // Fetch course and actual student progress concurrently
+      const [courseData, progressData] = await Promise.all([
+        courseStudioService.getCourse(cId),
+        courseStudioService.getStudentProgress(cId, clId).catch(() => ({
+          enrollment: null,
+          completedEpisodeIds: [],
+          progress_percent: 0
+        }))
+      ]);
+
       setCourse(courseData);
 
-      // Load classroom assignments to find enrollment
-      const assignments = await courseStudioService.getClassroomCourses(clId);
-      const matched = assignments.find(a => a.course_id === cId);
-      if (matched?.enrollment) {
-        setEnrollment(matched.enrollment as CourseEnrollment);
+      // Restore persistent completed episode states from database
+      const completedSet = new Set(progressData.completedEpisodeIds || []);
+      setCompletedEpisodeIds(completedSet);
+
+      if (progressData.enrollment) {
+        setEnrollment(progressData.enrollment as CourseEnrollment);
       }
 
-      // Compute initial roadmap to find current active lesson
+      // Compute initial roadmap with actual completed lessons
       const roadmap = computeCourseRoadmap({
         course: courseData,
-        completedEpisodeIds: new Set(),
-        studentStartDate: matched?.enrollment?.created_at || null
+        completedEpisodeIds: completedSet,
+        studentStartDate: progressData.enrollment?.created_at || null
       });
 
       if (roadmap.currentAvailableEpisode) {
@@ -142,8 +154,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
         const firstUnit = courseData.units?.[0];
         if (firstUnit?.episodes?.[0]) setSelectedEpisode(firstUnit.episodes[0]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load course player:', err);
+      setLoadError(err.message || 'Access restricted. You do not have permission to access this course.');
     } finally {
       setLoading(false);
     }
@@ -344,16 +357,30 @@ export const StudentCoursePlayerPage: React.FC = () => {
     );
   }
 
-  if (!course || !selectedEpisode) {
+  if (loadError || !course || !selectedEpisode) {
     return (
-      <div className="min-h-screen bg-[#fcfaf6] flex items-center justify-center p-6 text-center space-y-4">
-        <h2 className="text-xl font-serif text-stone-800">Course Not Available</h2>
-        <button
-          onClick={() => navigate(`/classes/${classroomId}`)}
-          className="px-6 py-2.5 bg-[#026fc3] text-white text-xs font-bold rounded-xl"
-        >
-          Return to Classroom
-        </button>
+      <div className="min-h-screen bg-[#fcfaf6] flex flex-col items-center justify-center p-6 text-center space-y-4 font-sans">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shadow-xs">
+          <Lock className="w-8 h-8" />
+        </div>
+        <div className="space-y-1.5 max-w-md">
+          <h2 className="text-xl font-black text-slate-900">
+            {loadError ? 'Access Restricted' : 'Course Not Available'}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+            {loadError || 'This course is currently unavailable or has not been assigned to your classroom.'}
+          </p>
+        </div>
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => navigate(`/classes/${classroomId}`)}
+            className="px-6 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black rounded-xl shadow-md cursor-pointer transition-all inline-flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Return to Classroom</span>
+          </button>
+        </div>
       </div>
     );
   }

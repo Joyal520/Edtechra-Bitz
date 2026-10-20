@@ -87,6 +87,8 @@ import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 import { StudentReportModal } from '@/components/classes/student/StudentReportModal';
 import { EditClassroomModal } from '@/components/classes/EditClassroomModal';
 import { getClassroomTheme } from '@/utils/classroomThemes';
+import { ClassroomCoursesSection } from '@/components/classes/ClassroomCoursesSection';
+import { AssignCourseToClassModal } from '@/components/classes/AssignCourseToClassModal';
 
 type TabType = 'overview' | 'assignments' | 'roster' | 'stream' | 'resources' | 'leaderboard' | 'exams' | 'courses';
 
@@ -143,6 +145,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [studentReportModalOpen, setStudentReportModalOpen] = useState(false);
   const [studentReportInitialTab, setStudentReportInitialTab] = useState<'results' | 'corrected' | 'progress' | 'achievements'>('results');
   const [editClassroomModalOpen, setEditClassroomModalOpen] = useState(false);
+  const [assignCourseModalOpen, setAssignCourseModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Live Quiz State
@@ -1342,6 +1345,26 @@ export const ClassroomDetailPage: React.FC = () => {
         })()}
 
         {/* ========================================================================= */}
+        {/* SECTION 2B — COURSES FOR THIS CLASS                                       */}
+        {/* ========================================================================= */}
+        <ClassroomCoursesSection
+          classroomId={id!}
+          classroom={classroom}
+          courses={classroomCourses}
+          loading={loading}
+          isTeacher={isTeacher}
+          onRefresh={async () => {
+            if (id) {
+              const freshCourses = await courseStudioService.getClassroomCourses(id).catch(() => []);
+              setClassroomCourses(freshCourses || []);
+            }
+          }}
+          onOpenAssignModal={() => {
+            setAssignCourseModalOpen(true);
+          }}
+        />
+
+        {/* ========================================================================= */}
         {/* SECTION 3 — CLASS STREAM (Announcements, Posts & Updates)                  */}
         {/* ========================================================================= */}
         <section className="space-y-3.5">
@@ -2484,6 +2507,24 @@ export const ClassroomDetailPage: React.FC = () => {
             setToastMessage('Classroom updated');
             setTimeout(() => setToastMessage(null), 3500);
             loadAllClassroomData(true);
+          }}
+        />
+      )}
+
+      {/* Assign Course to Classroom Modal (Teacher only) */}
+      {isTeacher && classroom && (
+        <AssignCourseToClassModal
+          isOpen={assignCourseModalOpen}
+          classroom={classroom}
+          onClose={() => setAssignCourseModalOpen(false)}
+          onAssigned={() => {
+            if (id) {
+              courseStudioService.getClassroomCourses(id).then(data => {
+                setClassroomCourses(data || []);
+              });
+            }
+            setToastMessage('Course assignments updated');
+            setTimeout(() => setToastMessage(null), 3500);
           }}
         />
       )}
