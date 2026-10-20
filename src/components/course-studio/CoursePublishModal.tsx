@@ -76,12 +76,13 @@ export const CoursePublishModal: React.FC<Props> = ({
       let currentAssigned: string[] = [];
       try {
         const fullCourse = await courseStudioService.getCourse(course.id);
-        const activeAssigned = ((fullCourse as any)?.course_classroom_assignments || [])
+        const activeAssigned = ((fullCourse as any)?.assignments || (fullCourse as any)?.course_classroom_assignments || [])
           .filter((a: any) => a.status === 'active')
           .map((a: any) => a.classroom_id);
         currentAssigned = activeAssigned;
       } catch (_e) {
-        currentAssigned = [];
+        // Do NOT assume zero assignments: saving with an empty list would archive every existing class assignment.
+        throw new Error('Could not load the current class assignments for this course. Please try again.');
       }
 
       setAlreadyAssignedIds(currentAssigned);

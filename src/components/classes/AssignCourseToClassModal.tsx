@@ -69,7 +69,7 @@ export const AssignCourseToClassModal: React.FC<Props> = ({
     try {
       // 1. Fetch full course details to get current assigned classrooms
       const full = await courseStudioService.getCourse(course.id);
-      const activeClassroomIds: string[] = ((full as any)?.course_classroom_assignments || [])
+      const activeClassroomIds: string[] = ((full as any)?.assignments || (full as any)?.course_classroom_assignments || [])
         .filter((a: any) => a.status === 'active')
         .map((a: any) => a.classroom_id);
 

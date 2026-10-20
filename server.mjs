@@ -5418,7 +5418,9 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
         ...course,
         units: enrichedUnits,
         assignments: assignments || [],
-        assigned_classrooms_count: assignments?.length || 0
+        // Alias kept for frontend components that read this key
+        course_classroom_assignments: assignments || [],
+        assigned_classrooms_count: (assignments || []).filter(a => a.status === 'active').length
       }
     });
   } catch (err) {
@@ -6503,43 +6505,40 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
       return res.json({ success: true, courses: [] });
     }
 
-    if (serverSupabase) {
-      const { data: classroom, error: classErr } = await serverSupabase
-        .from('classrooms')
-        .select('id, teacher_id')
-        .eq('id', classroomId)
-        .maybeSingle();
+    if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database uninitialized' });
 
-      if (classErr) throw classErr;
-      if (!classroom) {
-        return res.status(404).json({ success: false, error: 'Classroom not found.' });
-      }
+    const { data: classroom, error: classErr } = await serverSupabase
+      .from('classrooms')
+      .select('id, teacher_id')
+      .eq('id', classroomId)
+      .maybeSingle();
 
-      const userId = authData.user.id;
-      const isTeacherOrAdmin = (
-        classroom.teacher_id === userId ||
-        authData.profile?.role === 'admin' ||
-        authData.profile?.role === 'teacher'
-      );
+    if (classErr) throw classErr;
+    if (!classroom) {
+      return res.status(404).json({ success: false, error: 'Classroom not found.' });
+    }
 
-      let isAuthorized = isTeacherOrAdmin;
+    const userId = authData.user.id;
+    const isAdminUser = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
 
-      if (!isAuthorized) {
-        const { data: membership } = await serverSupabase
-          .from('classroom_members')
-          .select('role, status')
-          .eq('classroom_id', classroomId)
-          .eq('profile_id', userId)
-          .maybeSingle();
+    const { data: membership } = await serverSupabase
+      .from('classroom_members')
+      .select('role, status')
+      .eq('classroom_id', classroomId)
+      .eq('profile_id', userId)
+      .maybeSingle();
 
-        if (membership && (membership.status === 'active' || !membership.status)) {
-          isAuthorized = true;
-        }
-      }
+    // Teacher view (sees drafts/all active assignments) only for this classroom's teacher(s) or admins.
+    // NOTE: declared at function scope — it is used below when filtering and enriching assignments.
+    const isTeacherOrAdmin = (
+      classroom.teacher_id === userId ||
+      isAdminUser ||
+      (membership?.role === 'teacher' && membership?.status !== 'removed')
+    );
 
-      if (!isAuthorized) {
-        return res.status(403).json({ success: false, error: 'You are not enrolled in this classroom.' });
-      }
+    const isActiveMember = !!membership && (membership.status === 'active' || !membership.status);
+    if (!isTeacherOrAdmin && !isActiveMember) {
+      return res.status(403).json({ success: false, error: 'You are not enrolled in this classroom.' });
     }
 
     const { data: assignments, error } = await serverSupabase
