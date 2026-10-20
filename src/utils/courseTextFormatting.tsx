@@ -135,10 +135,43 @@ function domNodeToReact(node: Node, key: string, textScale: TextScale): React.Re
     if (renderedChild !== null) childNodes.push(renderedChild);
   });
 
+  // Helper: ignore hardcoded neutral white/black text colors so reading themes (Morning Mist, Cloud Light, Midnight Navy) always remain readable
+  const isNeutralThemeBreakingColor = (rawColor: string): boolean => {
+    const c = rawColor.trim().toLowerCase().replace(/\s+/g, '');
+    return (
+      c === '#fff' ||
+      c === '#ffffff' ||
+      c === 'white' ||
+      c === '#f8fafc' ||
+      c === '#f1f5f9' ||
+      c === '#f0f9ff' ||
+      c === '#e2e8f0' ||
+      c === '#cbd5e1' ||
+      c === '#000' ||
+      c === '#000000' ||
+      c === 'black' ||
+      c === '#0f172a' ||
+      c === '#172033' ||
+      c === '#1e293b' ||
+      c === 'rgb(255,255,255)' ||
+      c === 'rgb(248,250,252)' ||
+      c === 'rgb(241,245,249)' ||
+      c === 'rgb(240,249,255)' ||
+      c === 'rgb(226,232,240)' ||
+      c === 'rgb(203,213,225)' ||
+      c === 'rgb(0,0,0)' ||
+      c === 'rgb(15,23,42)' ||
+      c === 'rgb(23,32,51)' ||
+      c === 'rgb(30,41,59)'
+    );
+  };
+
   // Extract safe inline styles
   const styleObj: React.CSSProperties = {};
   if (element.style) {
-    if (element.style.color) styleObj.color = element.style.color;
+    if (element.style.color && !isNeutralThemeBreakingColor(element.style.color)) {
+      styleObj.color = element.style.color;
+    }
     if (element.style.backgroundColor) styleObj.backgroundColor = element.style.backgroundColor;
     if (element.style.textAlign) styleObj.textAlign = element.style.textAlign as any;
     if (element.style.fontFamily) styleObj.fontFamily = element.style.fontFamily;
@@ -157,7 +190,7 @@ function domNodeToReact(node: Node, key: string, textScale: TextScale): React.Re
     if (sizeAttr && FONT_SIZE_MAP[sizeAttr]) {
       styleObj.fontSize = FONT_SIZE_MAP[sizeAttr];
     }
-    if (colorAttr) styleObj.color = colorAttr;
+    if (colorAttr && !isNeutralThemeBreakingColor(colorAttr)) styleObj.color = colorAttr;
     if (faceAttr) styleObj.fontFamily = faceAttr;
 
     return (

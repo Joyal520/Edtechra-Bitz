@@ -25,7 +25,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { Course, CourseEpisode, CourseEnrollment, RoadmapLessonItem } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
-import { CourseContentRenderer } from '@/components/course-studio/CourseContentRenderer';
+import { CourseContentRenderer, getValidLessonQuestions } from '@/components/course-studio/CourseContentRenderer';
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
 import { TextScale } from '@/utils/courseTextFormatting';
@@ -60,6 +60,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [feedbackState, setFeedbackState] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
+  const [questionProgress, setQuestionProgress] = useState<{ answered: number; total: number }>({ answered: 0, total: 0 });
 
   // Celebration Modal State
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -71,6 +72,10 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const mainScrollRef = useRef<HTMLElement>(null);
 
+  const handleProgressChange = React.useCallback((answered: number, total: number) => {
+    setQuestionProgress({ answered, total });
+  }, []);
+
   useEffect(() => {
     if (courseId && classroomId) {
       loadCourseAndProgress(courseId, classroomId);
@@ -79,6 +84,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   useEffect(() => {
     if (courseId && classroomId && selectedEpisode) {
+      const initialTotal = getValidLessonQuestions(selectedEpisode.questions).length;
+      setUserAnswers({});
+      setFeedbackState({});
+      setQuestionScores({});
+      setQuestionProgress({ answered: 0, total: initialTotal });
       loadEpisodeAttempts(courseId, classroomId, selectedEpisode.id);
     }
   }, [courseId, classroomId, selectedEpisode?.id]);
@@ -88,18 +98,23 @@ export const StudentCoursePlayerPage: React.FC = () => {
       const attempts = await courseStudioService.getStudentQuestionAttempts(cId, clId, epId);
       const answersMap: Record<string, string> = {};
       const feedbackMap: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }> = {};
+      const scoresMap: Record<string, number> = {};
 
       attempts.forEach((att: any) => {
-        answersMap[att.question_id] = att.student_answer;
-        feedbackMap[att.question_id] = {
-          isCorrect: att.is_correct,
-          showExplanation: true,
-          selected: att.student_answer
-        };
+        if (att.student_answer !== undefined && att.student_answer !== null && String(att.student_answer).trim() !== '') {
+          answersMap[att.question_id] = att.student_answer;
+          feedbackMap[att.question_id] = {
+            isCorrect: att.is_correct,
+            showExplanation: true,
+            selected: att.student_answer
+          };
+          scoresMap[att.question_id] = att.is_correct ? (att.points_awarded || 10) : 0;
+        }
       });
 
       setUserAnswers(answersMap);
       setFeedbackState(feedbackMap);
+      setQuestionScores(scoresMap);
     } catch (err) {
       console.error('Failed to load past attempts:', err);
     }
@@ -262,8 +277,19 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
   };
 
+  const totalRequiredQuestions = selectedEpisode
+    ? getValidLessonQuestions(selectedEpisode.questions).length
+    : questionProgress.total;
+  const answeredQuestionsCount = Math.min(questionProgress.answered, totalRequiredQuestions);
+  const canCompleteLesson = totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions;
+
   const handleCompleteEpisode = async () => {
     if (!courseId || !classroomId || !selectedEpisode) return;
+
+    // Strict business rule: do NOT allow lesson completion until ALL required questions are answered
+    if (totalRequiredQuestions > 0 && answeredQuestionsCount < totalRequiredQuestions) {
+      return;
+    }
 
     const epId = selectedEpisode.id;
     setCompletingEpisode(true);
@@ -393,7 +419,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
       data-scale={textScale}
       data-theme={themeId}
       data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
-      className={`reader-scale-container ${activeTheme.isDark ? 'dark' : ''} w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
+      className={`reader-scale-container course-reader-shell ${activeTheme.isDark ? 'dark' : ''} w-full flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
       
       {/* 1. TOP READING PROGRESS LINE */}
@@ -405,16 +431,17 @@ export const StudentCoursePlayerPage: React.FC = () => {
       </div>
 
       {/* 2. COMPACT EDITORIAL TOP BAR */}
-      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 border-b border-[var(--theme-border-subtle)] text-theme-primary transition-colors`}>
+      <header className={`h-12 sm:h-14 ${activeTheme.headerBg} px-2.5 sm:px-6 flex items-center justify-between gap-1.5 shrink-0 z-20 border-b border-[var(--theme-border-subtle)] text-theme-primary transition-colors`}>
         
-        {/* Left: ← Class & Roadmap Toggle */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Left: ← Class, Roadmap Toggle, Contents */}
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0 shrink-0">
           <LiquidButton
             variant="tertiary"
             size="sm"
             onClick={() => navigate(`/classes/${classroomId}`)}
             icon={<ArrowLeft className="w-3.5 h-3.5 text-[#026fc3]" />}
             title="Back to Class"
+            className="!px-2 sm:!px-2.5 !py-1"
           >
             <span className="hidden sm:inline">Class</span>
           </LiquidButton>
@@ -426,8 +453,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
             onClick={() => setViewMode(viewMode === 'lesson' ? 'roadmap' : 'lesson')}
             icon={<Map className="w-3.5 h-3.5" />}
             title="Toggle Course Roadmap"
+            className="!px-2 sm:!px-2.5 !py-1"
           >
-            <span>{viewMode === 'roadmap' ? 'Read Lesson' : 'Roadmap'}</span>
+            <span>{viewMode === 'roadmap' ? 'Lesson' : 'Roadmap'}</span>
           </LiquidButton>
 
           <LiquidButton
@@ -436,13 +464,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
             onClick={() => setShowDrawer(true)}
             icon={<Menu className="w-3.5 h-3.5" />}
             title="Table of Contents"
+            className="!px-2 sm:!px-2.5 !py-1"
           >
             <span className="inline font-bold">Contents</span>
           </LiquidButton>
         </div>
 
-        {/* Center: Chapter Info */}
-        <div className="text-center truncate px-2 max-w-[140px] sm:max-w-xs hidden xs:block">
+        {/* Center: Chapter Info (Desktop / Tablet) */}
+        <div className="text-center truncate px-2 max-w-[160px] md:max-w-xs hidden md:block">
           <p className="text-xs font-serif italic text-current/80 truncate">
             {viewMode === 'roadmap'
               ? `${course.title} • Roadmap`
@@ -450,22 +479,26 @@ export const StudentCoursePlayerPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Right: XP, Progress %, Font Controls, Theme Popover, Bookmark */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Right: XP, Progress %, Font Controls (Desktop), Theme Popover, Bookmark */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* XP Pill */}
-          <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[11px] font-bold border border-amber-400/30">
-            <Award className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          <div
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full bg-amber-500/15 ${
+              activeTheme.isDark ? 'text-amber-300' : 'text-amber-900'
+            } text-[10px] sm:text-[11px] font-bold border border-amber-400/30 whitespace-nowrap`}
+          >
+            <Award className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${activeTheme.isDark ? 'text-amber-400' : 'text-amber-600'} shrink-0`} />
             <span>{currentScore} XP</span>
           </div>
 
           {/* Reading / Roadmap Progress Badge */}
-          <span className="text-[11px] font-mono font-bold opacity-75 px-1 py-0.5">
+          <span className="hidden min-[380px]:inline text-[11px] font-mono font-bold opacity-80 px-1 py-0.5 whitespace-nowrap">
             {viewMode === 'roadmap' ? `${roadmapData?.progressPercent || 0}%` : `${scrollProgress}%`}
           </span>
 
-          {/* Font Size A- / A+ */}
+          {/* Font Size A- / A+ (Desktop header; on mobile available inside Reading Appearance sheet) */}
           {viewMode === 'lesson' && (
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               <LiquidButton
                 variant="tertiary"
                 size="sm"
@@ -487,10 +520,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
             </div>
           )}
 
-          {/* Theme Presets Popover */}
+          {/* Theme Presets Popover (Desktop Popover + Mobile Bottom Sheet) */}
           <ThemeSelectorPopover
             activeThemeId={themeId}
             onSelectTheme={handleThemeChange}
+            textScale={textScale}
+            onScaleDown={handleScaleDown}
+            onScaleUp={handleScaleUp}
+            showFontControls={viewMode === 'lesson'}
           />
 
           {/* Bookmark Toggle */}
@@ -499,6 +536,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
             size="sm"
             onClick={() => setIsBookmarked(!isBookmarked)}
             title="Bookmark this page"
+            className="!px-2 !py-1"
             icon={<Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current text-[#026fc3]' : ''}`} />}
           />
         </div>
@@ -506,7 +544,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
       {/* Non-blocking Toast Message */}
       {toastMessage && (
-        <div className="bg-amber-500 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-md z-30 animate-in fade-in duration-150 reader-meta">
+        <div className="bg-amber-500 text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-md z-30 animate-in fade-in duration-150 reader-meta shrink-0">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4" />
             <span>{toastMessage}</span>
@@ -521,7 +559,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
       <main
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="course-reader-scroll flex-1 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 py-6 sm:py-10 scroll-smooth box-border [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]"
+        className="course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 scroll-smooth box-border [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]"
       >
         {viewMode === 'roadmap' ? (
           <CourseRoadmap
@@ -535,32 +573,36 @@ export const StudentCoursePlayerPage: React.FC = () => {
             activeLessonId={selectedEpisode.id}
           />
         ) : (
-          <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border min-w-0">
+          <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 pb-8 box-border min-w-0">
             
             {/* EDITORIAL LESSON HEADER */}
-            <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta">
+            <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-theme-accent reader-meta">
                 <span>LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}</span>
                 <span className="opacity-40">•</span>
-                <span className="opacity-80 text-current">{currentInfo?.unitTitle || 'Unit 1'}</span>
+                <span className="opacity-80 text-theme-secondary">{currentInfo?.unitTitle || 'Unit 1'}</span>
                 <span className="opacity-40">•</span>
-                <span className="opacity-80 text-current flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[#026fc3]" />
+                <span className="opacity-80 text-theme-secondary flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-theme-accent" />
                   {selectedEpisode.estimated_minutes || 15} min read
                 </span>
                 {isEpisodeCompleted && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Done
+                  <span
+                    className={`px-2 py-0.5 rounded-full bg-emerald-500/15 ${
+                      activeTheme.isDark ? 'text-emerald-300' : 'text-emerald-800'
+                    } text-[10px] font-bold flex items-center gap-1 border border-emerald-500/30`}
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Done
                   </span>
                 )}
               </div>
 
-              <h1 className="font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title">
+              <h1 className="font-extrabold tracking-tight text-theme-primary leading-[1.15] text-left reader-title">
                 {selectedEpisode.title}
               </h1>
 
               {course.short_description && (
-                <p className="text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl reader-quote">
+                <p className="text-base sm:text-lg text-theme-secondary font-serif italic text-left max-w-xl reader-quote">
                   “{course.short_description}”
                 </p>
               )}
@@ -573,51 +615,117 @@ export const StudentCoursePlayerPage: React.FC = () => {
               questions={selectedEpisode.questions || []}
               isStudentView={true}
               textScale={textScale}
+              themeId={themeId}
               userAnswers={userAnswers}
               feedbackState={feedbackState}
               onQuestionAnswer={handleQuestionAnswer}
               onCompleteLesson={handleCompleteEpisode}
+              onProgressChange={handleProgressChange}
             />
 
-            {/* MINIMAL EDITORIAL LESSON FOOTER */}
-            <footer className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 pt-8 sm:pt-12 mt-8 sm:mt-12 border-t border-current/15">
-              <button
-                type="button"
-                onClick={() => setViewMode('roadmap')}
-                className="text-xs font-bold text-[#026fc3] hover:underline flex items-center gap-1"
-              >
-                <Map className="w-3.5 h-3.5" />
-                <span>View Course Roadmap</span>
-              </button>
+            {/* ============================================================== */}
+            {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
+            {/* ============================================================== */}
+            <footer
+              data-testid="lesson-final-action-area"
+              className="w-full pt-6 sm:pt-8 mt-6 sm:mt-10 border-t border-[var(--theme-border-subtle)] space-y-4"
+            >
+              {/* Question Completion Gate Banner (shown when lesson has required questions) */}
+              {totalRequiredQuestions > 0 && (
+                <div className="w-full surface-card rounded-2xl p-4 sm:p-5 border border-[var(--theme-border-primary)] space-y-3 text-left">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs sm:text-sm font-extrabold text-theme-primary">
+                      Lesson Progress: {answeredQuestionsCount} / {totalRequiredQuestions} Questions Answered
+                    </span>
+                    <span className="text-xs font-mono font-bold text-theme-accent">
+                      {Math.round((answeredQuestionsCount / totalRequiredQuestions) * 100)}%
+                    </span>
+                  </div>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                {prevItem && (
-                  <LiquidButton
-                    variant="secondary"
-                    size="md"
-                    onClick={() => {
-                      setSelectedEpisode(prevItem.episode);
-                      mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    icon={<ArrowLeft className="w-4 h-4" />}
-                    className="flex-1 sm:flex-initial"
-                  >
-                    Previous
-                  </LiquidButton>
-                )}
+                  {/* Progress Bar */}
+                  <div className="w-full h-2 rounded-full bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        canCompleteLesson
+                          ? 'bg-emerald-500'
+                          : 'bg-linear-to-r from-[#026fc3] to-[#38bdf8]'
+                      }`}
+                      style={{
+                        width: `${Math.min(100, Math.round((answeredQuestionsCount / totalRequiredQuestions) * 100))}%`
+                      }}
+                    />
+                  </div>
 
-                <LiquidButton
-                  variant="emerald"
-                  size="md"
-                  onClick={handleCompleteEpisode}
-                  disabled={completingEpisode}
-                  loading={completingEpisode}
-                  icon={<Check className="w-4 h-4 stroke-[3]" />}
-                  iconRight={nextItem ? <ArrowRight className="w-4 h-4" /> : undefined}
-                  className="flex-1 sm:flex-initial shadow-md"
+                  {/* Status / Helper Message */}
+                  {canCompleteLesson ? (
+                    <div
+                      className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold ${
+                        activeTheme.isDark ? 'text-emerald-400' : 'text-emerald-700'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>✓ All questions answered</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs sm:text-sm font-medium text-theme-secondary">
+                      Answer all questions to continue.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Bottom Navigation & Complete Lesson Controls */}
+              <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('roadmap')}
+                  className="text-xs font-bold text-theme-accent hover:underline flex items-center justify-center sm:justify-start gap-1.5 py-2 cursor-pointer"
                 >
-                  {nextItem ? 'Complete Lesson' : 'Complete Course! 🎉'}
-                </LiquidButton>
+                  <Map className="w-3.5 h-3.5" />
+                  <span>View Course Roadmap</span>
+                </button>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  {prevItem && (
+                    <LiquidButton
+                      variant="secondary"
+                      size="md"
+                      onClick={() => {
+                        setSelectedEpisode(prevItem.episode);
+                        mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      icon={<ArrowLeft className="w-4 h-4" />}
+                      className="flex-1 sm:flex-initial"
+                    >
+                      Previous
+                    </LiquidButton>
+                  )}
+
+                  {canCompleteLesson ? (
+                    <LiquidButton
+                      variant="emerald"
+                      size="md"
+                      onClick={handleCompleteEpisode}
+                      disabled={completingEpisode}
+                      loading={completingEpisode}
+                      icon={<Check className="w-4 h-4 stroke-[3]" />}
+                      iconRight={nextItem ? <ArrowRight className="w-4 h-4" /> : undefined}
+                      className="flex-1 sm:flex-initial shadow-md"
+                    >
+                      {nextItem ? 'Complete Lesson' : 'Complete Course'}
+                    </LiquidButton>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      title="Answer all questions to unlock lesson completion"
+                      className="flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-full font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 bg-[var(--theme-surface-subtle)] text-theme-muted border border-[var(--theme-border-primary)] opacity-60 cursor-not-allowed select-none"
+                    >
+                      <span>{nextItem ? 'Complete Lesson' : 'Complete Course'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </footer>
 

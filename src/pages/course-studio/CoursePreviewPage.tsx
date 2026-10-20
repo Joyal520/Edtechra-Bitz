@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import { Course, CourseUnit, CourseEpisode, RoadmapLessonItem, CourseBlock, CourseQuestion } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
-import { CourseContentRenderer } from '@/components/course-studio/CourseContentRenderer';
+import { CourseContentRenderer, getValidLessonQuestions } from '@/components/course-studio/CourseContentRenderer';
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
@@ -633,8 +633,30 @@ export const CoursePreviewPage: React.FC = () => {
       })
     : null;
 
+  const [questionProgress, setQuestionProgress] = useState<{ answered: number; total: number }>({ answered: 0, total: 0 });
+
+  const handleProgressChange = React.useCallback((answered: number, total: number) => {
+    setQuestionProgress({ answered, total });
+  }, []);
+
+  useEffect(() => {
+    if (selectedEpisode) {
+      setQuestionProgress({
+        answered: 0,
+        total: getValidLessonQuestions(selectedEpisode.questions).length
+      });
+    }
+  }, [selectedEpisode?.id]);
+
+  const totalRequiredQuestions = getValidLessonQuestions(currentQuestions).length;
+  const answeredQuestionsCount = Math.min(questionProgress.answered, totalRequiredQuestions);
+  const canCompleteLesson = isEditMode || totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions;
+
   const handleCompleteEpisode = () => {
     if (!selectedEpisode) return;
+    if (!isEditMode && totalRequiredQuestions > 0 && answeredQuestionsCount < totalRequiredQuestions) {
+      return;
+    }
     const epId = selectedEpisode.id;
     const pointsForLesson = (selectedEpisode.questions || []).reduce((sum, q) => sum + (q.points || 10), 0) || 10;
     setCompletedEpisodeIds(prev => new Set([...prev, epId]));
@@ -949,7 +971,7 @@ export const CoursePreviewPage: React.FC = () => {
       data-scale={textScale}
       data-theme={themeId}
       data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
-      className={`reader-scale-container ${activeTheme.isDark ? 'dark' : ''} w-full min-h-screen h-screen flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
+      className={`reader-scale-container course-reader-shell ${activeTheme.isDark ? 'dark' : ''} w-full flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
       {/* 1. TOP READING PROGRESS LINE */}
       <div className="w-full h-1 bg-current/5 relative shrink-0">
@@ -1195,7 +1217,14 @@ export const CoursePreviewPage: React.FC = () => {
           )}
 
           {/* Theme Presets Popover */}
-          <ThemeSelectorPopover activeThemeId={themeId} onSelectTheme={handleThemeChange} />
+          <ThemeSelectorPopover
+            activeThemeId={themeId}
+            onSelectTheme={handleThemeChange}
+            textScale={textScale}
+            onScaleDown={handleScaleDown}
+            onScaleUp={handleScaleUp}
+            showFontControls={!isEditMode && viewMode === 'lesson'}
+          />
 
           {/* Bookmark Toggle */}
           <button
@@ -1229,7 +1258,7 @@ export const CoursePreviewPage: React.FC = () => {
       )}
 
       {/* 3. TWO-COLUMN LAYOUT: COURSE OUTLINE SIDEBAR (DESKTOP) + MAIN VIEWPORT */}
-      <div className="flex-1 w-full flex overflow-hidden">
+      <div className="flex-1 min-h-0 w-full flex overflow-hidden">
         {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex) */}
         <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden">
           {renderCourseOutline(false)}
@@ -1239,7 +1268,7 @@ export const CoursePreviewPage: React.FC = () => {
         <main
           ref={mainScrollRef}
           onScroll={handleScroll}
-          className="course-reader-scroll flex-1 h-full overflow-y-auto overflow-x-hidden px-3 sm:px-6 md:px-8 py-5 sm:py-8 md:py-10 scroll-smooth box-border [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]"
+          className="course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 scroll-smooth box-border [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]"
         >
           {viewMode === 'roadmap' ? (
             <CourseRoadmap
@@ -1340,6 +1369,7 @@ export const CoursePreviewPage: React.FC = () => {
                 isStudentView={!isEditMode}
                 textScale={textScale}
                 onCompleteLesson={handleCompleteEpisode}
+                onProgressChange={handleProgressChange}
                 onChangeBlocks={handleBlocksChange}
                 onChangeQuestions={handleQuestionsChange}
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
@@ -1347,41 +1377,103 @@ export const CoursePreviewPage: React.FC = () => {
                 themeId={themeId}
               />
 
-              {/* MINIMAL EDITORIAL LESSON FOOTER */}
-              <footer className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 pt-8 sm:pt-12 mt-8 sm:mt-12 border-t border-current/15">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('roadmap')}
-                  className="text-xs font-bold text-[#026fc3] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Map className="w-3.5 h-3.5" />
-                  <span>View Course Roadmap</span>
-                </button>
+              {/* ============================================================== */}
+              {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
+              {/* ============================================================== */}
+              <footer
+                data-testid="lesson-final-action-area"
+                className="w-full pt-6 sm:pt-8 mt-6 sm:mt-10 pb-6 border-t border-[var(--theme-border-subtle)] space-y-4"
+              >
+                {!isEditMode && totalRequiredQuestions > 0 && (
+                  <div className="w-full surface-card rounded-2xl p-4 sm:p-5 border border-[var(--theme-border-primary)] space-y-3 text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs sm:text-sm font-extrabold text-theme-primary">
+                        Lesson Progress: {answeredQuestionsCount} / {totalRequiredQuestions} Questions Answered
+                      </span>
+                      <span className="text-xs font-mono font-bold text-theme-accent">
+                        {Math.round((answeredQuestionsCount / totalRequiredQuestions) * 100)}%
+                      </span>
+                    </div>
 
-                <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  {prevItem && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedEpisode(prevItem.episode);
-                        mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-current/5 hover:bg-current/10 border border-current/15 text-inherit text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>Previous</span>
-                    </button>
-                  )}
+                    <div className="w-full h-2 rounded-full bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          canCompleteLesson
+                            ? 'bg-emerald-500'
+                            : 'bg-linear-to-r from-[#026fc3] to-[#38bdf8]'
+                        }`}
+                        style={{
+                          width: `${Math.min(100, Math.round((answeredQuestionsCount / totalRequiredQuestions) * 100))}%`
+                        }}
+                      />
+                    </div>
 
+                    {canCompleteLesson ? (
+                      <div
+                        className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold ${
+                          activeTheme.isDark ? 'text-emerald-400' : 'text-emerald-700'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>✓ All questions answered</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs sm:text-sm font-medium text-theme-secondary">
+                        Answer all questions to continue.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={handleCompleteEpisode}
-                    className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-white text-xs sm:text-sm font-bold shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    onClick={() => setViewMode('roadmap')}
+                    className="text-xs font-bold text-theme-accent hover:underline flex items-center justify-center sm:justify-start gap-1.5 py-2 cursor-pointer"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>{nextItem ? 'Complete Lesson' : 'Complete Course! 🎉'}</span>
-                    {nextItem && <ArrowRight className="w-4 h-4" />}
+                    <Map className="w-3.5 h-3.5" />
+                    <span>View Course Roadmap</span>
                   </button>
+
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    {prevItem && (
+                      <LiquidButton
+                        variant="secondary"
+                        size="md"
+                        onClick={() => {
+                          setSelectedEpisode(prevItem.episode);
+                          mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        icon={<ArrowLeft className="w-4 h-4" />}
+                        className="flex-1 sm:flex-initial"
+                      >
+                        Previous
+                      </LiquidButton>
+                    )}
+
+                    {canCompleteLesson ? (
+                      <LiquidButton
+                        variant="emerald"
+                        size="md"
+                        onClick={handleCompleteEpisode}
+                        icon={<Check className="w-4 h-4 stroke-[3]" />}
+                        iconRight={nextItem ? <ArrowRight className="w-4 h-4" /> : undefined}
+                        className="flex-1 sm:flex-initial shadow-md"
+                      >
+                        {nextItem ? 'Complete Lesson' : 'Complete Course'}
+                      </LiquidButton>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title="Answer all questions to unlock lesson completion"
+                        className="flex-1 sm:flex-initial min-h-[44px] px-6 py-2.5 rounded-full font-extrabold text-xs sm:text-sm inline-flex items-center justify-center gap-2 bg-[var(--theme-surface-subtle)] text-theme-muted border border-[var(--theme-border-primary)] opacity-60 cursor-not-allowed select-none"
+                      >
+                        <span>{nextItem ? 'Complete Lesson' : 'Complete Course'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </footer>
             </article>

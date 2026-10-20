@@ -422,15 +422,15 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-0.5 mx-1.5 my-0.5 rounded-lg font-bold text-sm sm:text-base border transition-all ${
               isCorrect
-                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-400'
-                : 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-rose-400'
+                ? 'bg-[var(--theme-success-bg)] text-[var(--theme-success-text)] border-[var(--theme-success-border)]'
+                : 'bg-[var(--theme-error-bg)] text-[var(--theme-error-text)] border-[var(--theme-error-border)]'
             }`}
           >
             <span>{String(response?.answer || '')}</span>
             {isCorrect ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 inline shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 inline shrink-0" />
             ) : (
-              <XCircle className="w-4 h-4 text-rose-600 inline shrink-0" />
+              <XCircle className="w-4 h-4 text-rose-500 inline shrink-0" />
             )}
           </span>
         ) : isInputActive ? (
@@ -453,7 +453,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 }
               }}
               placeholder="one word"
-              className="w-28 sm:w-36 px-2.5 py-1 text-sm sm:text-base font-bold text-[#172033] dark:text-white bg-white dark:bg-slate-900 border-2 border-[#026fc3] rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-[#38BDF8]"
+              className="w-28 sm:w-36 px-2.5 py-1 text-sm sm:text-base font-bold input-theme border-2 border-[var(--theme-accent)] rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-[#38BDF8]"
             />
             <button
               type="button"
@@ -471,7 +471,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               setIsInputActive(true);
               setTimeout(() => shortAnswerInputRef.current?.focus(), 50);
             }}
-            className="inline-flex items-center justify-center px-3 py-0.5 mx-1.5 my-0.5 rounded-lg border-2 border-dashed border-[#026fc3] bg-sky-50 dark:bg-sky-950/40 text-[#026fc3] dark:text-sky-300 font-bold text-sm hover:bg-sky-100 dark:hover:bg-sky-900/60 cursor-pointer transition-all active:scale-95"
+            className="inline-flex items-center justify-center px-3 py-0.5 mx-1.5 my-0.5 rounded-lg border-2 border-dashed border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-theme-accent font-bold text-sm hover:opacity-90 cursor-pointer transition-all active:scale-95"
             title="Tap to type missing word"
           >
             [ &nbsp;______&nbsp; ]
@@ -569,7 +569,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
             </span>
           )}
           {question.skill && (
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100 dark:bg-sky-900/40 px-2 py-0.5 rounded-md w-fit truncate">
+            <span className="text-[10px] font-bold text-theme-accent bg-[var(--theme-accent-soft)] border border-[var(--theme-border-subtle)] px-2 py-0.5 rounded-md w-fit truncate">
               {question.skill}
             </span>
           )}
@@ -645,12 +645,12 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
       {/* READING PASSAGE REFERENCE CALLOUT */}
       {passageText && (
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border-l-4 border-l-[#026fc3] border border-sky-200/40 dark:border-sky-800/40 text-xs leading-relaxed text-theme-primary space-y-1.5 shadow-2xs">
-          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#026fc3] dark:text-sky-400">
+        <div className="p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border-l-4 border-l-[var(--theme-accent)] border border-[var(--theme-border-subtle)] text-xs leading-relaxed text-theme-primary space-y-1.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-theme-accent">
             <BookOpen className="w-3.5 h-3.5" />
             <span>READING PASSAGE REFERENCE</span>
           </div>
-          <blockquote className="italic font-serif text-sm opacity-95 text-theme-primary pl-2 border-l-2 border-sky-400/40">
+          <blockquote className="italic font-serif text-sm opacity-95 text-theme-primary pl-2 border-l-2 border-[var(--theme-accent)]/40">
             "{passageText}"
           </blockquote>
         </div>
@@ -1083,19 +1083,19 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
             {/* AREA 1: Ordered Sentence */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black text-[#026fc3] uppercase tracking-wider block">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <span className="text-[11px] font-black text-theme-accent uppercase tracking-wider block">
                   Your Ordered Sentence:
                 </span>
                 {selectedTokens.length > 0 && !isAnswered && (
-                  <span className="text-[11px] font-semibold text-slate-500">
+                  <span className="text-[11px] font-semibold text-theme-muted">
                     Tap any word to remove it
                   </span>
                 )}
               </div>
-              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-sky-50/70 border-2 border-dashed border-sky-300 flex flex-wrap items-center gap-2 transition-all">
+              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border-2 border-dashed border-[var(--theme-accent)]/60 flex flex-wrap items-center gap-2 transition-all">
                 {selectedTokens.length === 0 ? (
-                  <span className="text-xs sm:text-sm text-slate-400 font-medium italic select-none">
+                  <span className="text-xs sm:text-sm text-theme-muted font-medium italic select-none">
                     Tap the words below in order to assemble the sentence...
                   </span>
                 ) : (
@@ -1119,13 +1119,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
             {/* AREA 2: Available Word Bank */}
             <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+              <span className="text-[11px] font-black text-theme-secondary uppercase tracking-wider block">
                 Available Words:
               </span>
-              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-slate-50/80 border border-slate-200 flex flex-wrap items-center gap-2 transition-all">
+              <div className="min-h-[58px] p-3 sm:p-4 rounded-2xl bg-[var(--theme-surface-subtle)] border border-[var(--theme-border-subtle)] flex flex-wrap items-center gap-2 transition-all">
                 {sentenceTokens.length === 0 ? (
-                  <div className="text-xs sm:text-sm text-emerald-700 font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <div className="text-xs sm:text-sm text-[var(--theme-success-text)] font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                     <span>All words placed! Click "Submit Sentence" below.</span>
                   </div>
                 ) : (
@@ -1148,11 +1148,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
             {!isAnswered && (
               <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                <div className="text-xs text-theme-secondary font-medium">
                   {sentenceTokens.length > 0 ? (
                     <span>{sentenceTokens.length} word{sentenceTokens.length > 1 ? 's' : ''} remaining to place</span>
                   ) : (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="text-[var(--theme-success-text)] font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Ready to submit!
                     </span>
                   )}
@@ -1467,13 +1467,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         <div
           className={`p-4 rounded-xl text-xs leading-relaxed space-y-2 animate-in fade-in duration-150 ${
             isCorrect
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100'
-              : 'bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-100'
+              ? 'bg-[var(--theme-success-bg)] border border-[var(--theme-success-border)] text-[var(--theme-success-text)]'
+              : 'bg-[var(--theme-error-bg)] border border-[var(--theme-error-border)] text-[var(--theme-error-text)]'
           }`}
         >
           <div className="flex items-center justify-between font-black">
             <span className="flex items-center gap-1.5">
-              {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}
+              {isCorrect ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-rose-500" />}
               <span>{isCorrect ? 'Correct!' : (qType === 'essay' ? 'Needs Review' : 'Incorrect')}</span>
             </span>
             <span className="font-mono">
@@ -1485,8 +1485,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
           {/* Language Feedback Coaching for WH / ESL questions */}
           {response?.languageFeedback && (
-            <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-900 dark:text-sky-200 text-xs flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+            <div className="p-2.5 rounded-lg bg-[var(--theme-accent-soft)] border border-[var(--theme-border-subtle)] text-theme-primary text-xs flex items-start gap-2">
+              <Sparkles className="w-4 h-4 text-theme-accent shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Language Coaching: </span>
                 <span>{response.languageFeedback}</span>
@@ -1497,13 +1497,13 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           {/* AI Strengths & Improvements */}
           {response?.strengths && response.strengths.length > 0 && (
             <div className="pt-1 text-[11px]">
-              <span className="font-bold text-emerald-700 dark:text-emerald-300">Strengths: </span>
+              <span className="font-bold">Strengths: </span>
               <span>{response.strengths.join(' • ')}</span>
             </div>
           )}
           {response?.improvements && response.improvements.length > 0 && (
             <div className="text-[11px]">
-              <span className="font-bold text-amber-700 dark:text-amber-300">Areas to improve: </span>
+              <span className="font-bold">Areas to improve: </span>
               <span>{response.improvements.join(' • ')}</span>
             </div>
           )}

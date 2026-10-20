@@ -11,7 +11,6 @@ import {
   Sparkles,
   Volume2,
   VolumeX,
-  ArrowRight,
   Award,
   Plus,
   Trash2,
@@ -56,6 +55,7 @@ interface Props {
     question: CourseQuestion
   ) => void;
   onCompleteLesson?: () => void;
+  onProgressChange?: (answeredCount: number, totalCount: number) => void;
   userAnswers?: Record<string, string>;
   feedbackState?: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>;
   // Edit mode props
@@ -66,13 +66,29 @@ interface Props {
   themeId?: string;
 }
 
+export function getValidLessonQuestions(questions?: CourseQuestion[]): CourseQuestion[] {
+  const seen = new Set<string>();
+  const result: CourseQuestion[] = [];
+  (questions || []).forEach((q, idx) => {
+    if (!q || !q.question_text || !q.question_text.trim()) return;
+    if (q.question_text === 'New practice question' || q.question_text === 'Statement based on the lesson') return;
+    const effectiveId = q.id || `q_pos_${idx}`;
+    if (!seen.has(effectiveId)) {
+      seen.add(effectiveId);
+      result.push({ ...q, id: effectiveId, points: q.points || 10 });
+    }
+  });
+  return result;
+}
+
 export const CourseContentRenderer: React.FC<Props> = ({
   blocks = [],
   questions = [],
   mode = 'student',
   textScale = 'md',
   onQuestionAnswer,
-  onCompleteLesson,
+  onCompleteLesson: _onCompleteLesson,
+  onProgressChange,
   userAnswers = {},
   feedbackState = {},
   isStudentView: _isStudentView = true,
@@ -86,20 +102,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const activeTheme = getThemePreset(themeId);
 
   // Unique canonical questions strictly belonging to this lesson instance
-  const validQuestions = React.useMemo(() => {
-    const seen = new Set<string>();
-    const result: CourseQuestion[] = [];
-    (questions || []).forEach((q, idx) => {
-      if (!q || !q.question_text || !q.question_text.trim()) return;
-      if (q.question_text === 'New practice question' || q.question_text === 'Statement based on the lesson') return;
-      const effectiveId = q.id || `q_pos_${idx}`;
-      if (!seen.has(effectiveId)) {
-        seen.add(effectiveId);
-        result.push({ ...q, id: effectiveId, points: q.points || 10 });
-      }
-    });
-    return result;
-  }, [questions]);
+  const validQuestions = React.useMemo(() => getValidLessonQuestions(questions), [questions]);
 
   const validQuestionIdSet = React.useMemo(() => new Set(validQuestions.map(q => q.id)), [validQuestions]);
 
@@ -390,8 +393,18 @@ export const CourseContentRenderer: React.FC<Props> = ({
     const resp = studentResponses[q.id];
     const ans = localAnswers[q.id];
     const fb = localFeedback[q.id];
-    return (resp && resp.status !== 'unanswered') || Boolean(ans) || Boolean(fb);
+    const hasResp = Boolean(
+      resp &&
+      resp.status !== 'unanswered' &&
+      (Array.isArray(resp.answer) ? resp.answer.length > 0 : String(resp.answer ?? '').trim().length > 0)
+    );
+    const hasAns = typeof ans === 'string' ? ans.trim().length > 0 : Boolean(ans);
+    return hasResp || hasAns || Boolean(fb);
   }).length;
+
+  useEffect(() => {
+    onProgressChange?.(answeredTotal, totalQuestions);
+  }, [answeredTotal, totalQuestions, onProgressChange]);
 
   const correctTotal = validQuestions.filter(q => {
     const resp = studentResponses[q.id];
@@ -1018,9 +1031,19 @@ export const CourseContentRenderer: React.FC<Props> = ({
               );
             }
 
-            let borderStyle = 'border-sky-300 dark:border-sky-800 bg-sky-50/60 dark:bg-sky-950/30 text-sky-950 dark:text-sky-100';
-            if (variant === 'warning') borderStyle = 'border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100';
-            if (variant === 'important') borderStyle = 'border-indigo-300 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100';
+            let borderStyle = activeTheme.isDark
+              ? 'border-sky-800 bg-sky-950/30 text-sky-100'
+              : 'border-sky-300 bg-sky-50/80 text-sky-950';
+            if (variant === 'warning') {
+              borderStyle = activeTheme.isDark
+                ? 'border-amber-800 bg-amber-950/30 text-amber-100'
+                : 'border-amber-300 bg-amber-50/80 text-amber-950';
+            }
+            if (variant === 'important') {
+              borderStyle = activeTheme.isDark
+                ? 'border-indigo-800 bg-indigo-950/30 text-indigo-100'
+                : 'border-indigo-300 bg-indigo-50/80 text-indigo-950';
+            }
 
             return (
               <div key={block.id || idx} className={`w-full my-4 sm:my-6 p-4 sm:p-5 rounded-2xl border ${borderStyle} space-y-1.5 shadow-2xs`}>
@@ -1294,8 +1317,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   <span className="text-xs sm:text-sm font-black text-theme-accent font-mono reader-meta">
                     {validQuestions.length > 0 ? Math.round((answeredTotal / validQuestions.length) * 100) : 0}%
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[10px] sm:text-[11px] font-black border border-amber-400/30 flex items-center gap-1 reader-badge">
-                    <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full bg-amber-500/15 ${
+                      activeTheme.isDark ? 'text-amber-300' : 'text-amber-900'
+                    } text-[10px] sm:text-[11px] font-black border border-amber-400/30 flex items-center gap-1 reader-badge`}
+                  >
+                    <Award className={`w-3 h-3 ${activeTheme.isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                     <span>{earnedPoints} / {totalPointsPossible} XP</span>
                   </span>
                   <button
@@ -1442,26 +1469,13 @@ export const CourseContentRenderer: React.FC<Props> = ({
                 </div>
                 <div className="p-2.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] shadow-2xs">
                   <span className="text-[10px] font-bold text-theme-muted uppercase block reader-meta">Correct</span>
-                  <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 reader-body">{correctTotal}</span>
+                  <span className={`text-sm sm:text-base font-black ${activeTheme.isDark ? 'text-emerald-400' : 'text-emerald-600'} reader-body`}>{correctTotal}</span>
                 </div>
                 <div className="p-2.5 rounded-2xl bg-[var(--theme-surface-interactive)] border border-[var(--theme-border-subtle)] shadow-2xs">
                   <span className="text-[10px] font-bold text-theme-muted uppercase block reader-meta">Incorrect</span>
-                  <span className="text-sm sm:text-base font-black text-rose-500 dark:text-rose-400 reader-body">{incorrectTotal}</span>
+                  <span className={`text-sm sm:text-base font-black ${activeTheme.isDark ? 'text-rose-400' : 'text-rose-600'} reader-body`}>{incorrectTotal}</span>
                 </div>
               </div>
-
-              {onCompleteLesson && (
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={onCompleteLesson}
-                    className="min-h-[44px] px-6 py-2.5 rounded-2xl btn-theme-primary font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-98 reader-button"
-                  >
-                    <span>Continue to Next Lesson</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
