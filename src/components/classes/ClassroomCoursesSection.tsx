@@ -213,11 +213,11 @@ export const ClassroomCoursesSection: React.FC<Props> = ({
                 onClick={handleCardClick}
                 className="bg-white rounded-2xl sm:rounded-[26px] border border-stone-200/90 shadow-xs hover:shadow-xl hover:border-sky-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden group h-full"
               >
-                {/* Course Cover Container */}
-                <div className="relative w-full overflow-hidden bg-slate-950 shrink-0 select-none">
+                {/* Course Cover Container - Strict Uniform 2.35:1 Banner Aspect Ratio */}
+                <div className="relative w-full aspect-[2.35/1] overflow-hidden bg-slate-950 shrink-0 select-none">
                   <CourseCoverImage
                     course={course}
-                    aspectRatio={course.cover_aspect_ratio}
+                    aspectRatio="banner"
                     imgClassName="group-hover:scale-105 transition-transform duration-500 ease-out"
                   />
 

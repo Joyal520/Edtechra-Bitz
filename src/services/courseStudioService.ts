@@ -294,6 +294,7 @@ export const courseStudioService = {
       start_date?: string;
       due_date?: string | null;
       settings?: Partial<CourseAssignmentSettings>;
+      daily_release_enabled?: boolean;
     }
   ): Promise<{ course: Course; assigned_count: number; assignments: CourseClassroomAssignment[] }> {
     const headers = await getAuthHeader();

@@ -1259,8 +1259,8 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
   return withLessonRewardLock(lockKey, async () => {
     const nowIso = new Date().toISOString();
 
-    // 1. Fetch episode metadata (unit_id, title) & classroom teacher_id
-    const [{ data: episodeRow }, { data: classroomRow }, { data: studentProfile }] = await Promise.all([
+    // 1. Fetch episode metadata (unit_id, title), classroom teacher_id, student profile, and course daily release config
+    const [{ data: episodeRow }, { data: classroomRow }, { data: studentProfile }, { data: courseRow }] = await Promise.all([
       supabaseClient
         .from('course_episodes')
         .select('id, title, unit_id, course_id, position, order_index')
@@ -1275,6 +1275,11 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .from('profiles')
         .select('id, full_name, role')
         .eq('id', cleanStudentId)
+        .maybeSingle(),
+      supabaseClient
+        .from('courses')
+        .select('id, daily_release_enabled, course_timezone')
+        .eq('id', cleanCourseId)
         .maybeSingle()
     ]);
 
@@ -1396,6 +1401,53 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
     const hasExistingRewardEvent = Array.isArray(existingRewardEvents) && existingRewardEvents.length > 0;
     const alreadyAwarded = hasExistingPointRow || hasExistingRewardEvent;
+
+    // Authoritative check: Enforce "One Lesson Per Day" locking rule
+    const dailyReleaseActive = Boolean(courseRow?.daily_release_enabled);
+    if (dailyReleaseActive && existingProgress?.status !== 'completed') {
+      const timeZone = courseRow?.course_timezone || 'Asia/Colombo';
+      let todayStr;
+      try {
+        todayStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date());
+      } catch (_e) {
+        todayStr = new Date().toISOString().split('T')[0];
+      }
+
+      // Check if student has completed any lesson today in this course
+      const { data: todayCompletions } = await supabaseClient
+        .from('course_episode_progress')
+        .select('id, episode_id, completed_at')
+        .eq('enrollment_id', enrollment.id)
+        .eq('status', 'completed')
+        .neq('episode_id', cleanEpisodeId);
+
+      const hasCompletedToday = (todayCompletions || []).some(c => {
+        if (!c.completed_at) return false;
+        try {
+          const compDateStr = new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          }).format(new Date(c.completed_at));
+          return compDateStr === todayStr;
+        } catch (_e) {
+          return c.completed_at.startsWith(todayStr);
+        }
+      });
+
+      if (hasCompletedToday) {
+        const lockErr = new Error('One Lesson Per Day is active for this course. You have already completed a lesson today. The next lesson will unlock tomorrow at midnight.');
+        lockErr.statusCode = 403;
+        lockErr.dailyReleaseLocked = true;
+        throw lockErr;
+      }
+    }
 
     // 4. Mark lesson as completed in course_episode_progress
     const numScore = Number(score) || 0;

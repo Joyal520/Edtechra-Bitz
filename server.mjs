@@ -6165,13 +6165,19 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
         allow_retries: true,
         track_mastery: true,
         award_points: true
-      }
+      },
+      daily_release_enabled
     } = req.body;
 
     const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+    const courseUpdates = { status: 'published', updated_at: new Date().toISOString() };
+    if (daily_release_enabled !== undefined) {
+      courseUpdates.daily_release_enabled = Boolean(daily_release_enabled);
+    }
+
     let courseQuery = serverSupabase
       .from('courses')
-      .update({ status: 'published', updated_at: new Date().toISOString() })
+      .update(courseUpdates)
       .eq('id', courseId);
     if (!isAdmin) {
       courseQuery = courseQuery.eq('teacher_id', authData.user.id);
@@ -6226,7 +6232,10 @@ app.post('/api/course-studio/courses/:id/publish-and-assign', async (req, res) =
             start_date,
             due_date,
             status: 'active',
-            settings,
+            settings: {
+              ...settings,
+              ...(daily_release_enabled !== undefined ? { daily_release_enabled: Boolean(daily_release_enabled) } : {})
+            },
             assigned_at: new Date().toISOString()
           },
           { onConflict: 'course_id,classroom_id' }
@@ -6730,12 +6739,19 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       .eq('student_id', student_id);
     const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
 
+    const { data: courseRow } = await serverSupabase
+      .from('courses')
+      .select('daily_release_enabled, course_timezone')
+      .eq('id', course_id)
+      .maybeSingle();
+
     res.json({
       success: true,
       enrollment: enrollment || null,
       completedEpisodeIds,
       progress_percent: enrollment?.progress_percent || 0,
-      total_classroom_points: totalClassroomPoints
+      total_classroom_points: totalClassroomPoints,
+      daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
     });
   } catch (err) {
     console.error('Error in GET student progress:', err);

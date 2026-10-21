@@ -1,7 +1,7 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: COURSE PUBLISH & CLASSROOM ASSIGNMENT MODAL
 // Multi-Classroom Delivery, Lifecycle Management (Draft, Published - Unassigned,
-// Published - Assigned), and Safe Assignment Sync.
+// Published - Assigned), and One-Lesson-Per-Day Learning Pace Engine.
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -15,7 +15,8 @@ import {
   Lock,
   AlertCircle,
   Check,
-  EyeOff
+  EyeOff,
+  Clock
 } from 'lucide-react';
 import { Course, CourseAssignmentSettings } from '@/types/courseStudio';
 import { Classroom } from '@/types/classroom';
@@ -42,11 +43,15 @@ export const CoursePublishModal: React.FC<Props> = ({
   const [alreadyAssignedIds, setAlreadyAssignedIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState('');
+  const [dailyReleaseEnabled, setDailyReleaseEnabled] = useState<boolean>(
+    Boolean(course.daily_release_enabled)
+  );
   const [settings, setSettings] = useState<CourseAssignmentSettings>({
     sequential_unlock: false,
     allow_retries: true,
     track_mastery: true,
-    award_points: true
+    award_points: true,
+    daily_release_enabled: Boolean(course.daily_release_enabled)
   });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -56,13 +61,25 @@ export const CoursePublishModal: React.FC<Props> = ({
 
   const isPublished = course.status === 'published';
 
+  // Prevent background scrolling when modal is open
   useEffect(() => {
     if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDailyReleaseEnabled(Boolean(course.daily_release_enabled));
       loadTeacherClassroomsAndAssignments();
       setSuccessResult(null);
       setError(null);
     }
-  }, [isOpen, course.id, initialClassroomId]);
+  }, [isOpen, course.id, initialClassroomId, course.daily_release_enabled]);
 
   const loadTeacherClassroomsAndAssignments = async () => {
     setLoading(true);
@@ -80,6 +97,10 @@ export const CoursePublishModal: React.FC<Props> = ({
           .filter((a: any) => a.status === 'active')
           .map((a: any) => a.classroom_id);
         currentAssigned = activeAssigned;
+
+        if (typeof (fullCourse as any)?.daily_release_enabled === 'boolean') {
+          setDailyReleaseEnabled((fullCourse as any).daily_release_enabled);
+        }
       } catch (_e) {
         // Do NOT assume zero assignments: saving with an empty list would archive every existing class assignment.
         throw new Error('Could not load the current class assignments for this course. Please try again.');
@@ -89,7 +110,7 @@ export const CoursePublishModal: React.FC<Props> = ({
 
       // Pre-selection logic:
       // If opened from a classroom context (initialClassroomId), preselect it
-      // Otherwise preselect currently assigned classrooms (do not automatically select all)
+      // Otherwise preselect currently assigned classrooms
       if (initialClassroomId) {
         const combined = Array.from(new Set([...currentAssigned, initialClassroomId]));
         setSelectedClassroomIds(combined);
@@ -127,11 +148,25 @@ export const CoursePublishModal: React.FC<Props> = ({
     setError(null);
 
     try {
+      const mergedSettings = {
+        ...settings,
+        daily_release_enabled: dailyReleaseEnabled
+      };
+
+      // 1. Update the course metadata to persist daily_release_enabled on the course record
+      await courseStudioService.updateCourse(course.id, {
+        daily_release_enabled: dailyReleaseEnabled
+      }).catch(err => {
+        console.warn('Non-fatal error updating course daily_release_enabled:', err);
+      });
+
+      // 2. Publish and assign with full multi-classroom and settings sync
       const res = await courseStudioService.publishAndAssignCourse(course.id, {
         classroom_ids: selectedClassroomIds,
         start_date: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
         due_date: dueDate ? new Date(dueDate).toISOString() : null,
-        settings
+        settings: mergedSettings,
+        daily_release_enabled: dailyReleaseEnabled
       });
 
       setSuccessResult({
@@ -171,31 +206,37 @@ export const CoursePublishModal: React.FC<Props> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-[#fcfaf6] rounded-[28px] max-w-xl w-full border border-stone-200/90 shadow-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-xs overflow-hidden">
+      {/* WIDENED & HEIGHT-BOUNDED MODAL SHELL */}
+      <div className="bg-[#fcfaf6] rounded-[24px] sm:rounded-[28px] w-full max-w-[1100px] h-[88dvh] max-h-[88dvh] border border-stone-200/90 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Header */}
-        <div className="p-6 bg-[#0a213c] text-white flex items-center justify-between border-b border-slate-800">
-          <div className="space-y-1">
+        {/* ===================================================================== */}
+        {/* PERSISTENT HEADER (NON-SCROLLING)                                     */}
+        {/* ===================================================================== */}
+        <div className="px-5 sm:px-7 py-4 sm:py-5 bg-[#0a213c] text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+          <div className="space-y-1 min-w-0 pr-4">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[11px] font-black uppercase tracking-wider border border-sky-400/30">
-              <Sparkles className="w-3.5 h-3.5 text-sky-300" />
-              <span>{isPublished ? 'Manage Class Assignments' : 'Publish & Assign Course'}</span>
+              <Sparkles className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+              <span>{isPublished ? 'Manage Class Assignments & Delivery' : 'Publish & Assign Course'}</span>
             </div>
-            <h2 className="text-xl font-black text-white tracking-tight line-clamp-1">
+            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight truncate">
               {course.title}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            aria-label="Close publishing modal"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 space-y-6">
+        {/* ===================================================================== */}
+        {/* SCROLLABLE CENTRAL CONTENT                                            */}
+        {/* ===================================================================== */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-7 space-y-6">
           {error && (
             <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -242,7 +283,7 @@ export const CoursePublishModal: React.FC<Props> = ({
           </div>
 
           {successResult ? (
-            <div className="py-8 text-center space-y-4">
+            <div className="py-12 text-center space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm border border-emerald-200">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
@@ -274,7 +315,7 @@ export const CoursePublishModal: React.FC<Props> = ({
             </div>
           ) : (
             <>
-              {/* Classroom Selection */}
+              {/* Classroom Selection (Expanded Multi-Column Grid on Wide Viewports) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -299,7 +340,7 @@ export const CoursePublishModal: React.FC<Props> = ({
                     No active classrooms found where you are a teacher. Create a classroom first.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-60 sm:max-h-64 overflow-y-auto pr-1">
                     {classrooms.map(c => {
                       const isSelected = selectedClassroomIds.includes(c.id);
                       const isAlreadyAssigned = alreadyAssignedIds.includes(c.id);
@@ -388,28 +429,74 @@ export const CoursePublishModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Delivery Settings Toggles */}
-              <div className="space-y-2.5 pt-1 border-t border-stone-200/70">
+              {/* ============================================================= */}
+              {/* DELIVERABLE 2: LEARNING PACE & ACCESS (ONE LESSON PER DAY)     */}
+              {/* ============================================================= */}
+              <div className="space-y-2.5 pt-2 border-t border-stone-200/70">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#026fc3]" />
+                    <span>Learning Pace & Access</span>
+                  </label>
+                </div>
+
+                <div className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                  dailyReleaseEnabled
+                    ? 'bg-sky-50/70 border-sky-300 ring-1 ring-sky-200 shadow-xs'
+                    : 'bg-white border-stone-200/80 hover:border-slate-300'
+                }`}>
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={dailyReleaseEnabled}
+                      onChange={e => setDailyReleaseEnabled(e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded text-[#026fc3] focus:ring-[#026fc3] accent-[#026fc3] cursor-pointer shrink-0"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-slate-900">
+                          Unlock One Lesson Per Day
+                        </span>
+                        {dailyReleaseEnabled ? (
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-100 text-[#026fc3] border border-sky-200">
+                            Daily Release Active
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                            Pacing Off (All Open)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                        When enabled, enrolled students can complete only <strong>1 newly completed lesson per calendar day</strong>. The next lesson unlocks automatically at midnight. Unfinished lessons remain accessible.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Classroom Experience Settings */}
+              <div className="space-y-2.5 pt-2 border-t border-stone-200/70">
                 <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
                   Classroom Experience Settings
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <label className="p-3 bg-white rounded-xl border border-stone-200/80 flex items-center gap-2 cursor-pointer hover:bg-stone-50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  <label className="p-3 bg-white rounded-xl border border-stone-200/80 flex items-center gap-2.5 cursor-pointer hover:bg-stone-50 select-none">
                     <input
                       type="checkbox"
                       checked={settings.allow_retries}
                       onChange={e => setSettings(s => ({ ...s, allow_retries: e.target.checked }))}
-                      className="rounded text-[#026fc3] focus:ring-[#026fc3]"
+                      className="rounded text-[#026fc3] focus:ring-[#026fc3] accent-[#026fc3]"
                     />
                     <span className="font-bold text-slate-800">Allow Question Retries</span>
                   </label>
 
-                  <label className="p-3 bg-white rounded-xl border border-stone-200/80 flex items-center gap-2 cursor-pointer hover:bg-stone-50">
+                  <label className="p-3 bg-white rounded-xl border border-stone-200/80 flex items-center gap-2.5 cursor-pointer hover:bg-stone-50 select-none">
                     <input
                       type="checkbox"
                       checked={settings.award_points}
                       onChange={e => setSettings(s => ({ ...s, award_points: e.target.checked }))}
-                      className="rounded text-[#026fc3] focus:ring-[#026fc3]"
+                      className="rounded text-[#026fc3] focus:ring-[#026fc3] accent-[#026fc3]"
                     />
                     <span className="font-bold text-slate-800">Award Bitz Points</span>
                   </label>
@@ -419,9 +506,11 @@ export const CoursePublishModal: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Modal Footer Actions */}
+        {/* ===================================================================== */}
+        {/* PERSISTENT FOOTER (NON-SCROLLING ACTIONS)                             */}
+        {/* ===================================================================== */}
         {!successResult && (
-          <div className="p-6 bg-stone-50 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="px-5 sm:px-7 py-4 bg-stone-50 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
             <div>
               {isPublished && (
                 <button
@@ -437,7 +526,7 @@ export const CoursePublishModal: React.FC<Props> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
               <button
                 type="button"
                 onClick={onClose}

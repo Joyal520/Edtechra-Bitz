@@ -53,21 +53,13 @@ export const ClassesPage: React.FC = () => {
   const [createCourseModalOpen, setCreateCourseModalOpen] = useState(false);
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
 
-  const [coursesLoading, setCoursesLoading] = useState(false);
-  const [coursesError, setCoursesError] = useState<string | null>(null);
-
   const loadStudioCourses = useCallback(async () => {
     if (!isTeacher) return;
-    setCoursesLoading(true);
-    setCoursesError(null);
     try {
       const courseList = await courseStudioService.getCourses();
       setStudioCourses(courseList);
     } catch (err: any) {
       console.error('Failed to load studio courses:', err);
-      setCoursesError(err?.message || 'Failed to load courses.');
-    } finally {
-      setCoursesLoading(false);
     }
   }, [isTeacher]);
 
@@ -279,127 +271,70 @@ export const ClassesPage: React.FC = () => {
         <ClassroomStats stats={stats} />
 
         {/* ========================================================================= */}
-        {/* TEACHER COURSE STUDIO COMMAND CENTER (Preserved functionality)            */}
+        {/* COURSE STUDIO HERO SECTION (PROMOTIONAL HERO WITHOUT DUPLICATE CARDS)     */}
         {/* ========================================================================= */}
         {isTeacher && (
-          <section className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div className="space-y-0.5">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-50 text-[#026fc3] text-[10px] font-black uppercase tracking-wider border border-sky-100">
-                  <Sparkles className="w-3 h-3" />
+          <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-sky-200/80 bg-gradient-to-r from-[#e0f2fe]/90 via-[#f0f9ff]/90 to-[#ede9fe]/70 shadow-sm p-6 sm:p-8 lg:p-10">
+            {/* Ambient decorative elements */}
+            <div className="absolute top-0 right-1/4 w-80 h-80 bg-sky-300/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-10 right-10 w-96 h-96 bg-purple-300/15 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center relative z-10">
+              {/* Left Column: Heading, Supporting Text & CTAs */}
+              <div className="lg:col-span-8 space-y-4">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100/90 text-[#026fc3] text-xs font-black uppercase tracking-wider border border-sky-300/50 shadow-2xs">
+                  <Sparkles className="w-3.5 h-3.5 text-[#026fc3]" />
                   <span>Teacher Studio</span>
                 </div>
-                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                  Course Studio
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  Create once. Teach across classrooms. Track every learner.
-                </p>
-              </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setCreateCourseModalOpen(true)}
-                  className="px-3.5 py-2 bg-[#026fc3] hover:bg-[#025ca5] text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Create Course</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => navigate('/course-studio')}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <Layers className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Open Studio ({studioCourses.length})</span>
-                </button>
-              </div>
-            </div>
-
-            {coursesLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2.5 animate-pulse">
-                    <div className="flex justify-between">
-                      <div className="h-4 w-16 bg-slate-200 rounded"></div>
-                      <div className="h-4 w-14 bg-slate-200 rounded"></div>
-                    </div>
-                    <div className="h-4 w-3/4 bg-slate-200 rounded"></div>
-                    <div className="h-3 w-full bg-slate-100 rounded"></div>
-                    <div className="pt-2 border-t border-slate-200/60 flex justify-between">
-                      <div className="h-3 w-20 bg-slate-200 rounded"></div>
-                      <div className="h-3 w-12 bg-slate-200 rounded"></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : coursesError ? (
-              <div className="bg-amber-50/70 rounded-xl p-4 text-center space-y-2 border border-amber-200/60">
-                <p className="text-xs font-bold text-amber-900">Unable to load courses: {coursesError}</p>
-                <button
-                  type="button"
-                  onClick={() => loadStudioCourses()}
-                  className="px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-colors cursor-pointer"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : studioCourses.length === 0 ? (
-              <div className="bg-slate-50/70 rounded-xl p-4 text-center space-y-2 border border-slate-200/60">
-                <div className="w-9 h-9 rounded-xl bg-sky-50 text-[#026fc3] flex items-center justify-center mx-auto">
-                  <BookOpen className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900">No Digital Courses Built Yet</h4>
-                  <p className="text-[11px] text-slate-500 font-medium max-w-md mx-auto">
-                    Build interactive courses with AI lesson generation and deliver them across all your classrooms.
+                <div className="space-y-2">
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+                    Create a Digital Course{' '}
+                    <span className="block sm:inline bg-gradient-to-r from-[#026fc3] via-sky-600 to-fuchsia-600 bg-clip-text text-transparent">
+                      for Your Class
+                    </span>
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl leading-relaxed">
+                    Turn your ideas into interactive lessons with videos, quizzes, activities and more. Teach across any number of classrooms and track every learner&apos;s progress.
                   </p>
                 </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {studioCourses.slice(0, 3).map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => navigate(`/course-studio/${c.id}`)}
-                    className="p-3.5 rounded-xl bg-slate-50/80 hover:bg-sky-50/40 border border-slate-200/80 hover:border-sky-300 transition-all cursor-pointer space-y-2.5 flex flex-col justify-between group"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-sky-100 text-[#026fc3] text-[10px] font-black">
-                          {c.subject}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
-                            c.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                          }`}
-                        >
-                          {c.status}
-                        </span>
-                      </div>
-                      <h4 className="text-xs font-black text-slate-900 group-hover:text-[#026fc3] transition-colors mt-1.5 line-clamp-1">
-                        {c.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-medium line-clamp-2 mt-0.5">
-                        {c.short_description || 'Click to edit and manage lessons.'}
-                      </p>
-                    </div>
 
-                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
-                      <span className="text-[10px] text-slate-500 font-bold">
-                        {c.assigned_classrooms_count || 0} classes &bull; {c.units_count || 1} units
-                      </span>
-                      <span className="text-[#026fc3] font-black flex items-center gap-0.5 text-[10px]">
-                        <span>Manage</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                {/* Action CTAs */}
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateCourseModalOpen(true)}
+                    className="group relative inline-flex items-center justify-center gap-2 px-6 sm:px-7 py-3 rounded-full text-sm font-black text-white bg-gradient-to-r from-[#026fc3] via-[#0284c7] to-[#0ea5e9] hover:from-[#025ca5] hover:via-[#0275b1] hover:to-[#0284c7] shadow-[0_4px_16px_rgba(2,111,195,0.35)] hover:shadow-[0_6px_22px_rgba(2,111,195,0.45)] active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>Create Course</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate('/course-studio')}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-sm font-bold text-slate-700 bg-white/90 hover:bg-white border border-stone-200/90 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                  >
+                    <Layers className="w-4 h-4 text-[#026fc3]" />
+                    <span>Open Studio ({studioCourses.length})</span>
+                  </button>
+                </div>
               </div>
-            )}
+
+              {/* Right Column: Visual Accent */}
+              <div className="lg:col-span-4 hidden lg:flex flex-col items-center justify-center text-center space-y-2">
+                <div className="w-full max-w-[260px] aspect-[4/3] rounded-2xl overflow-hidden bg-white/80 p-4 border border-sky-100 shadow-xs flex flex-col items-center justify-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-50 text-[#026fc3] flex items-center justify-center shadow-inner">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-black text-slate-900">Your Ideas &bull; Your Impact</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Interactive Units &amp; Lessons</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 

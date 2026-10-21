@@ -389,6 +389,7 @@ export interface CourseAssignmentSettings {
   allow_retries: boolean;
   track_mastery: boolean;
   award_points: boolean;
+  daily_release_enabled?: boolean;
 }
 
 export interface CourseClassroomAssignment {

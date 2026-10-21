@@ -20,8 +20,6 @@ import {
   Eye,
   Camera,
   MoreVertical,
-  CheckCircle2,
-  AlertCircle,
   Clock
 } from 'lucide-react';
 import { Course } from '@/types/courseStudio';
@@ -121,19 +119,6 @@ export const CourseStudioDashboardPage: React.FC = () => {
     c => c.status === 'published' && (!c.assigned_classrooms_count || c.assigned_classrooms_count === 0)
   ).length;
   const totalAssignedClassrooms = courses.reduce((s, c) => s + (c.assigned_classrooms_count || 0), 0);
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      return new Date(dateStr).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch {
-      return '';
-    }
-  };
 
   return (
     <div
@@ -329,7 +314,6 @@ export const CourseStudioDashboardPage: React.FC = () => {
               {filteredCourses.map(course => {
                 const isPublished = course.status === 'published';
                 const assignedCount = course.assigned_classrooms_count || 0;
-                const isUnassigned = isPublished && assignedCount === 0;
                 const identity = getCourseSubjectIdentity(course);
                 const SubjectIcon = identity.icon;
                 const isMenuOpen = activeMenuCourseId === course.id;
@@ -338,45 +322,39 @@ export const CourseStudioDashboardPage: React.FC = () => {
                   <div
                     key={course.id}
                     onClick={() => navigate(`/course-studio/${course.id}`)}
-                    className="bg-white rounded-[26px] border border-stone-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] hover:shadow-2xl hover:border-sky-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden group h-full relative"
+                    className="bg-white rounded-[22px] sm:rounded-[24px] border border-stone-200/90 shadow-xs hover:shadow-xl hover:border-sky-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden group h-full relative"
                   >
-                    {/* Cover Image Container */}
-                    <div className="relative w-full overflow-hidden bg-slate-950 shrink-0 select-none">
+                    {/* Fixed 2.35:1 Landscape Banner Cover Container */}
+                    <div className="relative w-full aspect-[2.35/1] overflow-hidden bg-slate-900 shrink-0 select-none">
                       <CourseCoverImage
                         course={course}
-                        aspectRatio={course.cover_aspect_ratio}
+                        aspectRatio="banner"
                         imgClassName="group-hover:scale-105 transition-transform duration-500 ease-out"
                       />
 
-                      {/* Top Bar: Subject Badge + Status Badge */}
+                      {/* Top Badges Overlay (Matching Reference Design) */}
                       <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
-                        <span className="px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider border border-white/20 shadow-xs flex items-center gap-1.5">
-                          <SubjectIcon className="w-3 h-3 text-sky-300" />
-                          <span>{identity.badgeLabel}</span>
+                        {/* Top-Left: White Pill Subject Badge */}
+                        <span className="px-3 py-1 rounded-full bg-white/95 text-slate-800 text-[11px] font-bold shadow-xs border border-white/40 flex items-center gap-1.5">
+                          <SubjectIcon className="w-3 h-3 text-[#026fc3]" />
+                          <span className="truncate max-w-[120px]">
+                            {course.subject || (course.grade_level ? `Grade ${course.grade_level}` : identity.badgeLabel)}
+                          </span>
                         </span>
 
+                        {/* Top-Right: Status Badge */}
                         {isPublished ? (
-                          isUnassigned ? (
-                            <span className="px-2.5 py-1 rounded-full bg-amber-500/95 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs border border-amber-300/40 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              <span>Published — Not Assigned</span>
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-full bg-emerald-500/95 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs border border-emerald-300/40 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>
-                                Published • {assignedCount} Class{assignedCount === 1 ? '' : 'es'}
-                              </span>
-                            </span>
-                          )
+                          <span className="px-2.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200">
+                            PUBLISHED
+                          </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-slate-800/90 text-slate-300 text-[10px] font-black uppercase tracking-wider backdrop-blur-md border border-white/15">
-                            ○ Draft
+                          <span className="px-2.5 py-0.5 rounded-md bg-slate-200/90 text-slate-700 text-[10px] font-black uppercase tracking-wider border border-slate-300">
+                            DRAFT
                           </span>
                         )}
                       </div>
 
-                      {/* Cover Actions Overlay (Quick Cover Change & Preview) */}
+                      {/* Quick Hover Cover Actions Overlay */}
                       <div className="absolute bottom-2.5 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button
                           type="button"
@@ -401,65 +379,44 @@ export const CourseStudioDashboardPage: React.FC = () => {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </div>
-
-                      {/* Bottom Grade Pill on Cover */}
-                      {course.grade_level && (
-                        <div className="absolute bottom-2.5 left-3 pointer-events-none">
-                          <span className="bg-black/60 backdrop-blur-md px-2.5 py-0.5 rounded-full text-white text-[10px] font-bold border border-white/15">
-                            {course.grade_level}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Card Content Body */}
-                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-3.5">
+                    <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between gap-3 bg-white">
                       
                       {/* Title & Description */}
-                      <div className="space-y-1.5">
-                        <h3 className="text-base font-black text-slate-900 group-hover:text-[#026fc3] transition-colors leading-snug line-clamp-2 min-h-[2.5rem]">
+                      <div className="space-y-1">
+                        <h3 className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-[#026fc3] transition-colors leading-snug line-clamp-1">
                           {course.title}
                         </h3>
-                        <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed min-h-[2rem]">
-                          {course.short_description || 'Interactive curriculum designed for your classroom.'}
+                        <p className="text-xs text-slate-500 font-medium line-clamp-1 leading-relaxed">
+                          {course.short_description || 'Click to edit and manage lessons.'}
                         </p>
                       </div>
 
-                      {/* Real Stats Row & Footer Actions */}
-                      <div className="space-y-3.5 pt-1 border-t border-stone-100">
+                      {/* Bottom Row: Metadata & Manage Action (Matching Reference Design) */}
+                      <div className="pt-2.5 border-t border-stone-100 flex items-center justify-between text-xs relative">
                         
-                        {/* 3-Column Accurate Saved Stats */}
-                        <div className="grid grid-cols-3 py-2 px-3 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                          <div>
-                            <p className="text-xs font-black text-slate-900">{course.units_count ?? 0}</p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Units</p>
-                          </div>
-                          <div className="border-x border-slate-200/70">
-                            <p className="text-xs font-black text-slate-900">{course.episodes_count ?? 0}</p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Lessons</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs font-black ${assignedCount > 0 ? 'text-[#026fc3]' : 'text-slate-400'}`}>
-                              {assignedCount}
-                            </p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Classes</p>
-                          </div>
+                        {/* Left: Metadata info */}
+                        <div className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px] sm:text-xs">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{assignedCount} classes • {course.units_count ?? 1} units</span>
                         </div>
 
-                        {/* Last Updated Timestamp */}
-                        {course.updated_at && (
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium px-1">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>Updated {formatDate(course.updated_at)}</span>
-                            </span>
-                          </div>
-                        )}
+                        {/* Right: Manage Link & Three Dots Menu */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/course-studio/${course.id}`);
+                            }}
+                            className="text-xs font-bold text-[#026fc3] hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Manage</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
 
-                        {/* Action Buttons Row */}
-                        <div className="flex items-center justify-between gap-2 pt-0.5 relative">
-                          
-                          {/* Left Menu Trigger & Action */}
                           <div className="relative">
                             <button
                               type="button"
@@ -468,7 +425,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
                                 e.stopPropagation();
                                 setActiveMenuCourseId(isMenuOpen ? null : course.id);
                               }}
-                              className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
+                              className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer flex items-center justify-center"
                             >
                               <MoreVertical className="w-4 h-4" />
                             </button>
@@ -477,8 +434,21 @@ export const CourseStudioDashboardPage: React.FC = () => {
                             {isMenuOpen && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute left-0 bottom-full mb-2 w-48 bg-white rounded-2xl shadow-xl border border-stone-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 text-xs font-bold text-slate-700"
+                                className="absolute right-0 bottom-full mb-2 w-48 bg-white rounded-2xl shadow-xl border border-stone-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 text-xs font-bold text-slate-700"
                               >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMenuCourseId(null);
+                                    setPublishTargetCourse(course);
+                                  }}
+                                  className="w-full px-3.5 py-2 text-left hover:bg-sky-50 hover:text-[#026fc3] flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Send className="w-3.5 h-3.5 text-[#026fc3]" />
+                                  <span>{isPublished ? 'Manage Classes' : 'Publish & Assign'}</span>
+                                </button>
+
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -542,36 +512,6 @@ export const CourseStudioDashboardPage: React.FC = () => {
                               </div>
                             )}
                           </div>
-
-                          {/* Primary Card Buttons */}
-                          <div className="flex items-center gap-2">
-                            <LiquidButton
-                              variant={isPublished ? 'secondary' : 'emerald'}
-                              size="sm"
-                              className="!px-3.5 !py-1.5 !text-[11px] !min-h-[32px]"
-                              icon={<Send className="w-3 h-3" />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPublishTargetCourse(course);
-                              }}
-                            >
-                              {isPublished ? 'Manage Classes' : 'Publish & Assign'}
-                            </LiquidButton>
-
-                            <LiquidButton
-                              variant="primary"
-                              size="sm"
-                              className="!px-3.5 !py-1.5 !text-[11px] !min-h-[32px]"
-                              iconRight={<ArrowRight className="w-3 h-3" />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/course-studio/${course.id}`);
-                              }}
-                            >
-                              Edit Course
-                            </LiquidButton>
-                          </div>
-
                         </div>
 
                       </div>

@@ -233,29 +233,36 @@ export const CourseCoverImage: React.FC<{
   course?: Partial<Course> | null;
   className?: string;
   imgClassName?: string;
-  aspectRatio?: '16:9' | '1:1';
+  aspectRatio?: '16:9' | '1:1' | 'banner';
 }> = ({ course, className = '', imgClassName = '', aspectRatio }) => {
   const [hasError, setHasError] = useState(false);
   const coverInfo = getCourseCoverUrl(course);
-  const effectiveRatio = aspectRatio || (course?.cover_aspect_ratio === '1:1' ? '1:1' : '16:9');
+  
+  // Resolve aspect ratio class
+  let ratioClass = 'aspect-video';
+  if (aspectRatio === 'banner') {
+    ratioClass = 'aspect-[2.35/1]';
+  } else if (aspectRatio === '1:1' || (!aspectRatio && course?.cover_aspect_ratio === '1:1')) {
+    ratioClass = 'aspect-square';
+  }
 
   // If no image url is found or an image load error occurred, render branded fallback
   if (hasError || !coverInfo.url) {
     return (
-      <div className={`w-full overflow-hidden ${effectiveRatio === '1:1' ? 'aspect-square' : 'aspect-video'} ${className}`}>
+      <div className={`w-full overflow-hidden ${ratioClass} ${className}`}>
         <BrandedCourseFallback course={course} />
       </div>
     );
   }
 
   return (
-    <div className={`relative w-full overflow-hidden bg-slate-950 ${effectiveRatio === '1:1' ? 'aspect-square' : 'aspect-video'} ${className}`}>
+    <div className={`relative w-full overflow-hidden bg-slate-950 ${ratioClass} ${className}`}>
       <img
         src={coverInfo.url}
         alt={course?.title || 'Course Cover'}
         loading="lazy"
         onError={() => setHasError(true)}
-        className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 ${imgClassName}`}
+        className={`w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105 ${imgClassName}`}
       />
       {/* Subtle bottom vignette gradient for readable text contrast */}
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-black/20 pointer-events-none" />

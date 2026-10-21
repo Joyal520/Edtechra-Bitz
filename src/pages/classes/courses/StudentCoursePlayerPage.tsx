@@ -257,6 +257,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
     currentActiveEpisodeId: selectedEpisode?.id || null
   }) : null;
 
+  const currentRoadmapItem = roadmapData?.items.find(item => item.id === selectedEpisode?.id);
+  const isCurrentEpisodeLocked = Boolean(currentRoadmapItem && (currentRoadmapItem.is_locked || currentRoadmapItem.status === 'locked'));
+
   const [questionScores, setQuestionScores] = useState<Record<string, number>>({});
   const currentScore = Object.values(questionScores).reduce((sum, pts) => sum + pts, 0);
 
@@ -349,8 +352,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
         setCelebratedIds(prev => new Set([...prev, epId]));
         handleAfterCelebrationContinue();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to mark lesson complete:', err);
+      const errMsg = err?.message || 'Failed to complete lesson.';
+      setToastMessage(errMsg);
+      setTimeout(() => setToastMessage(null), 4500);
     } finally {
       completingEpisodeRef.current = false;
       setCompletingEpisode(false);
@@ -631,20 +637,44 @@ export const StudentCoursePlayerPage: React.FC = () => {
               )}
             </header>
 
-            {/* SHARED EDITORIAL CONTENT RENDERER */}
-            <CourseContentRenderer
-              key={selectedEpisode.id}
-              blocks={selectedEpisode.blocks || []}
-              questions={selectedEpisode.questions || []}
-              isStudentView={true}
-              textScale={textScale}
-              themeId={themeId}
-              userAnswers={userAnswers}
-              feedbackState={feedbackState}
-              onQuestionAnswer={handleQuestionAnswer}
-              onCompleteLesson={handleCompleteEpisode}
-              onProgressChange={handleProgressChange}
-            />
+            {isCurrentEpisodeLocked ? (
+              <div className="py-14 sm:py-20 text-center space-y-4 max-w-md mx-auto surface-card rounded-3xl p-6 sm:p-8 border border-[var(--theme-border-primary)] shadow-sm">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto shadow-xs border border-amber-500/30">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-theme-primary">This Lesson is Locked</h3>
+                  <p className="text-xs sm:text-sm text-theme-secondary font-medium leading-relaxed">
+                    {currentRoadmapItem?.unlock_message || 'Unlock One Lesson Per Day is active for this course. This lesson unlocks tomorrow at midnight.'}
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('roadmap')}
+                    className="px-6 py-2.5 bg-[#026fc3] hover:bg-[#03589e] text-white text-xs font-black rounded-xl shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+                  >
+                    <span>View Course Roadmap</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* SHARED EDITORIAL CONTENT RENDERER */}
+                <CourseContentRenderer
+                  key={selectedEpisode.id}
+                  blocks={selectedEpisode.blocks || []}
+                  questions={selectedEpisode.questions || []}
+                  isStudentView={true}
+                  textScale={textScale}
+                  themeId={themeId}
+                  userAnswers={userAnswers}
+                  feedbackState={feedbackState}
+                  onQuestionAnswer={handleQuestionAnswer}
+                  onCompleteLesson={handleCompleteEpisode}
+                  onProgressChange={handleProgressChange}
+                />
 
             {/* ============================================================== */}
             {/* FINAL LESSON COMPLETION & NAVIGATION ACTION AREA               */}
@@ -751,6 +781,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 </div>
               </div>
             </footer>
+          </>
+        )}
 
           </article>
         )}
