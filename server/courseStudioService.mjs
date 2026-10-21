@@ -1194,8 +1194,79 @@ function buildLocalRuleBasedStructuredLesson(lessonTitle, unitTitle, targetLevel
 // 6. AUTHORITATIVE LESSON COMPLETION & LEADERBOARD REWARD ENGINE
 // ----------------------------------------------------------------------------
 
-const DEFAULT_LESSON_REWARD_POINTS = 10;
+// Default per-question point value. Mirrors the frontend's getValidLessonQuestions()
+// (`q.points || 10`). This is a PER-QUESTION default, NOT a lesson completion reward.
+const DEFAULT_QUESTION_POINTS = 10;
+const PLACEHOLDER_QUESTION_TEXTS = new Set(['New practice question', 'Statement based on the lesson']);
 const lessonRewardMutexMap = new Map();
+
+/**
+ * Returns the maximum points a single lesson question is worth.
+ */
+export function getQuestionMaxPoints(question) {
+  return Math.max(0, Math.round(Number(question?.points) || DEFAULT_QUESTION_POINTS));
+}
+
+/**
+ * Clamps a client-reported question score to the server-known bounds of that question.
+ * Incorrect answers earn 0; correct answers earn at most the question's point value.
+ */
+export function clampQuestionPoints(question, isCorrect, reportedPoints) {
+  if (!isCorrect) return 0;
+  const qMax = getQuestionMaxPoints(question);
+  const reported = Math.round(Number(reportedPoints));
+  if (!Number.isFinite(reported) || reported <= 0) return qMax;
+  return Math.min(qMax, reported);
+}
+
+/**
+ * SERVER-AUTHORITATIVE lesson score.
+ * Computes the earned score and true maximum from the lesson's persisted questions
+ * (course_questions) and the student's persisted attempts (course_question_attempts).
+ * Client-submitted score / max_score values are never trusted.
+ *
+ * - Uses the same "valid question" filter as the student player (non-empty text,
+ *   not a placeholder, de-duplicated by id).
+ * - max_score = sum of each valid question's points (NOT assumed to be 100).
+ * - Unanswered questions earn 0. Incorrect answers earn 0.
+ * - If a question has several attempts, the most recent attempt is used.
+ */
+export function computeLessonScoreFromAttempts(questions, attempts) {
+  const latestAttemptByQuestion = new Map();
+  for (const att of attempts || []) {
+    if (!att?.question_id) continue;
+    const prev = latestAttemptByQuestion.get(att.question_id);
+    const attTime = new Date(att.answered_at || 0).getTime() || 0;
+    const prevTime = prev ? (new Date(prev.answered_at || 0).getTime() || 0) : -1;
+    if (!prev || attTime >= prevTime) latestAttemptByQuestion.set(att.question_id, att);
+  }
+
+  const seen = new Set();
+  let maxScore = 0;
+  let earnedScore = 0;
+  let answeredCount = 0;
+  let correctCount = 0;
+  let questionCount = 0;
+
+  for (const q of questions || []) {
+    if (!q?.id) continue;
+    const text = typeof q.question_text === 'string' ? q.question_text : '';
+    if (!text.trim() || PLACEHOLDER_QUESTION_TEXTS.has(text)) continue;
+    if (seen.has(q.id)) continue;
+    seen.add(q.id);
+
+    questionCount++;
+    maxScore += getQuestionMaxPoints(q);
+
+    const att = latestAttemptByQuestion.get(q.id);
+    if (!att) continue;
+    answeredCount++;
+    if (att.is_correct) correctCount++;
+    earnedScore += clampQuestionPoints(q, Boolean(att.is_correct), att.points_awarded);
+  }
+
+  return { earnedScore, maxScore, answeredCount, correctCount, questionCount };
+}
 
 /**
  * Generates a deterministic, canonical unique reward key for a student's lesson completion.
@@ -1230,16 +1301,25 @@ async function withLessonRewardLock(lockKey, taskFn) {
 /**
  * Authoritatively marks a Course Studio lesson as completed, prevents duplicate rewards,
  * records the reward transaction, and atomically updates the student's classroom leaderboard points.
+ *
+ * SCORING POLICY (score-only, highest-score-wins):
+ * - The leaderboard contribution of a lesson equals the student's EARNED assessment score,
+ *   computed server-side from persisted question attempts (see computeLessonScoreFromAttempts).
+ * - Each lesson owns exactly ONE classroom_points ledger row
+ *   (classroom_id, student_id, source_type='activity', source_id=episode_id).
+ *   That row's `points` is the lesson's credited (best) score.
+ * - Re-submissions with the same or lower score credit 0 additional points.
+ * - An improved score raises the row to the new score, i.e. credits only the difference.
+ *
+ * `score` / `max_score` arguments are accepted for backwards compatibility but are IGNORED
+ * for crediting purposes - the frontend cannot submit an arbitrary score.
  */
 export async function completeCourseLessonAndAwardPoints(supabaseClient, {
   student_id,
   course_id,
   classroom_id,
   episode_id,
-  score = 0,
-  max_score = 100,
-  time_spent_seconds = 0,
-  lesson_points = DEFAULT_LESSON_REWARD_POINTS
+  time_spent_seconds = 0
 }) {
   if (!supabaseClient) {
     throw new Error('Database client is required.');
@@ -1252,7 +1332,6 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
   const cleanCourseId = String(course_id).trim();
   const cleanClassroomId = String(classroom_id).trim();
   const cleanEpisodeId = String(episode_id).trim();
-  const rewardPointsToGrant = Math.max(1, Math.round(Number(lesson_points) || DEFAULT_LESSON_REWARD_POINTS));
 
   const lockKey = `${cleanStudentId}:${cleanCourseId}:${cleanEpisodeId}`;
 
@@ -1386,16 +1465,18 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       }
     }
 
-    // 3. Check whether this lesson was already completed or its reward was already granted
+    // 3. Load existing progress, this lesson's ledger row, current classroom total,
+    //    and the persisted questions + attempts used to compute the authoritative score.
     const [
       { data: existingProgress },
       { data: existingPointRows },
-      { data: existingRewardEvents },
-      { data: currentPointsRows }
+      { data: currentPointsRows },
+      { data: lessonQuestions },
+      { data: lessonAttempts }
     ] = await Promise.all([
       supabaseClient
         .from('course_episode_progress')
-        .select('id, status, completed_at')
+        .select('id, status, completed_at, score, max_score')
         .eq('enrollment_id', enrollment.id)
         .eq('episode_id', cleanEpisodeId)
         .maybeSingle(),
@@ -1408,24 +1489,25 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .eq('source_id', cleanEpisodeId)
         .order('created_at', { ascending: true }),
       supabaseClient
-        .from('course_learning_events')
-        .select('id, metadata, created_at')
-        .eq('student_id', cleanStudentId)
-        .eq('course_id', cleanCourseId)
-        .eq('episode_id', cleanEpisodeId)
-        .eq('event_type', 'lesson_completion_reward')
-        .limit(1),
-      supabaseClient
         .from('classroom_points')
         .select('points')
         .eq('classroom_id', cleanClassroomId)
-        .eq('student_id', cleanStudentId)
+        .eq('student_id', cleanStudentId),
+      supabaseClient
+        .from('course_questions')
+        .select('id, question_text, points, episode_id, course_id')
+        .eq('episode_id', cleanEpisodeId)
+        .eq('course_id', cleanCourseId),
+      supabaseClient
+        .from('course_question_attempts')
+        .select('question_id, is_correct, points_awarded, answered_at')
+        .eq('enrollment_id', enrollment.id)
+        .eq('episode_id', cleanEpisodeId)
     ]);
 
     const previousPoints = (currentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
     const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
-    const hasExistingRewardEvent = Array.isArray(existingRewardEvents) && existingRewardEvents.length > 0;
-    const alreadyAwarded = hasExistingPointRow || hasExistingRewardEvent;
+    const previouslyCreditedPoints = hasExistingPointRow ? Number(existingPointRows[0].points || 0) : 0;
 
     // Authoritative check: Enforce "One Lesson Per Day" locking rule
     const dailyReleaseActive = Boolean(courseRow?.daily_release_enabled);
@@ -1474,9 +1556,18 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       }
     }
 
-    // 4. Mark lesson as completed in course_episode_progress
-    const numScore = Number(score) || 0;
-    const numMaxScore = Number(max_score) || 100;
+    // 4. Compute the AUTHORITATIVE earned score from persisted questions + attempts
+    //    (never from client-submitted score/max_score), then save the lesson result.
+    const wasAlreadyCompleted = existingProgress?.status === 'completed';
+    const {
+      earnedScore,
+      maxScore,
+      answeredCount,
+      correctCount,
+      questionCount
+    } = computeLessonScoreFromAttempts(lessonQuestions, lessonAttempts);
+    const numScore = earnedScore;
+    const numMaxScore = maxScore;
     const percentage = numMaxScore > 0 ? Number(((numScore / numMaxScore) * 100).toFixed(1)) : 100;
 
     await supabaseClient
@@ -1524,66 +1615,109 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       .select()
       .single();
 
-    // 6. Award points and record reward transaction ONLY if not already granted
+    // 6. Credit the EARNED score to the existing classroom leaderboard ledger.
+    //    One ledger row per lesson; its `points` = the lesson's credited (best) score.
+    //    - No row yet          -> INSERT row with the earned score (unique index guards duplicates).
+    //    - Row with lower score -> atomic conditional UPDATE (points < earned) => credits only the difference.
+    //    - Row with >= score    -> nothing credited (refresh / re-submit / lower retry).
+    //    Each write touches only this lesson's row, so concurrent awards from other sources
+    //    (Live Quiz, Exams, Tasks, ...) are never overwritten. Totals are SUM(points) on read.
     let pointsAwarded = 0;
-    let rewardTransaction = null;
+    let creditedLessonPoints = previouslyCreditedPoints;
+    let lessonPointRowId = hasExistingPointRow ? existingPointRows[0].id : null;
+    let creditAction = 'none';
+    const scoreReason = `Course Lesson Score: ${episodeTitle} (${numScore}/${numMaxScore})`;
 
-    if (!alreadyAwarded && !isClassroomOwner) {
-      const { data: insertedPoint, error: ptErr } = await supabaseClient
-        .from('classroom_points')
-        .insert({
-          classroom_id: cleanClassroomId,
-          student_id: cleanStudentId,
-          points: rewardPointsToGrant,
-          reason: `Completed Lesson: ${episodeTitle}`,
-          source_type: 'activity',
-          source_id: cleanEpisodeId,
-          awarded_by: cleanStudentId
-        })
-        .select()
-        .single();
-
-      if (ptErr) {
-        // If a database unique constraint caught a concurrent insert, treat as already awarded
-        console.warn('[CourseStudioPoints] Insert notice:', ptErr.message);
-      }
-
-      // Post-insert deduplication guard: ensure strictly 1 point record exists for (classroom_id, student_id, activity, episode_id)
-      const { data: verifyRows } = await supabaseClient
-        .from('classroom_points')
-        .select('id, points, created_at')
-        .eq('classroom_id', cleanClassroomId)
-        .eq('student_id', cleanStudentId)
-        .eq('source_type', 'activity')
-        .eq('source_id', cleanEpisodeId)
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true });
-
-      if (Array.isArray(verifyRows) && verifyRows.length > 1) {
-        const duplicateIds = verifyRows.slice(1).map(r => r.id);
-        await supabaseClient
+    if (!isClassroomOwner && numScore > 0) {
+      if (!lessonPointRowId) {
+        const { data: insertedPoint, error: ptErr } = await supabaseClient
           .from('classroom_points')
-          .delete()
-          .in('id', duplicateIds);
+          .insert({
+            classroom_id: cleanClassroomId,
+            student_id: cleanStudentId,
+            points: numScore,
+            reason: scoreReason,
+            source_type: 'activity',
+            source_id: cleanEpisodeId,
+            awarded_by: cleanStudentId
+          })
+          .select()
+          .single();
+
+        if (ptErr) {
+          // A database unique constraint caught a concurrent insert - fall through to the upgrade path
+          console.warn('[CourseStudioPoints] Insert notice:', ptErr.message);
+        }
+
+        // Post-insert deduplication guard: ensure strictly 1 point record exists for (classroom_id, student_id, activity, episode_id)
+        const { data: verifyRows } = await supabaseClient
+          .from('classroom_points')
+          .select('id, points, created_at')
+          .eq('classroom_id', cleanClassroomId)
+          .eq('student_id', cleanStudentId)
+          .eq('source_type', 'activity')
+          .eq('source_id', cleanEpisodeId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
+
+        if (Array.isArray(verifyRows) && verifyRows.length > 1) {
+          const duplicateIds = verifyRows.slice(1).map(r => r.id);
+          await supabaseClient
+            .from('classroom_points')
+            .delete()
+            .in('id', duplicateIds);
+        }
+
+        const primaryPointRow = (verifyRows && verifyRows[0]) || insertedPoint || null;
+        if (primaryPointRow) {
+          lessonPointRowId = primaryPointRow.id;
+          if (insertedPoint && primaryPointRow.id === insertedPoint.id) {
+            pointsAwarded = numScore;
+            creditedLessonPoints = numScore;
+            creditAction = 'initial_score';
+          } else {
+            creditedLessonPoints = Number(primaryPointRow.points || 0);
+          }
+        }
       }
 
-      const primaryPointRow = (verifyRows && verifyRows[0]) || insertedPoint;
-      if (primaryPointRow && (!insertedPoint || primaryPointRow.id === insertedPoint.id)) {
-        pointsAwarded = rewardPointsToGrant;
+      // Highest-score retry policy: raise the lesson's credited contribution by the difference only.
+      if (lessonPointRowId && creditAction === 'none' && creditedLessonPoints < numScore) {
+        const { data: upgradedRows, error: upErr } = await supabaseClient
+          .from('classroom_points')
+          .update({ points: numScore, reason: scoreReason })
+          .eq('id', lessonPointRowId)
+          .lt('points', numScore)
+          .select('id, points');
+
+        if (upErr) {
+          console.warn('[CourseStudioPoints] Score upgrade notice:', upErr.message);
+        } else if (Array.isArray(upgradedRows) && upgradedRows.length > 0) {
+          pointsAwarded = numScore - creditedLessonPoints;
+          creditedLessonPoints = numScore;
+          creditAction = 'improved_score';
+        }
       }
+    }
 
-      rewardTransaction = {
-        user_id: cleanStudentId,
-        course_id: cleanCourseId,
-        unit_id: unitId,
-        lesson_id: cleanEpisodeId,
-        points: rewardPointsToGrant,
-        reward_type: 'lesson_completion',
-        reward_key: uniqueRewardKey,
-        created_at: nowIso
-      };
+    const rewardTransaction = (lessonPointRowId || pointsAwarded > 0)
+      ? {
+          user_id: cleanStudentId,
+          course_id: cleanCourseId,
+          unit_id: unitId,
+          lesson_id: cleanEpisodeId,
+          points: creditedLessonPoints,
+          points_delta: pointsAwarded,
+          previous_credited_points: previouslyCreditedPoints,
+          reward_type: 'lesson_score',
+          credit_action: creditAction,
+          reward_key: uniqueRewardKey,
+          created_at: nowIso
+        }
+      : null;
 
-      // Record authoritative reward transaction event
+    if (pointsAwarded > 0) {
+      // Record authoritative reward transaction event (audit trail of each credited change)
       await supabaseClient.from('course_learning_events').insert({
         student_id: cleanStudentId,
         course_id: cleanCourseId,
@@ -1595,11 +1729,14 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
           score: numScore,
           max_score: numMaxScore,
           percentage,
+          completion_bonus_points: 0,
           progress_percent: progressPercent
         }
       });
+    }
 
-      // Record standard episode_completed telemetry event once
+    if (!wasAlreadyCompleted) {
+      // Record standard episode_completed telemetry event once (first completion)
       await supabaseClient.from('course_learning_events').insert({
         student_id: cleanStudentId,
         course_id: cleanCourseId,
@@ -1615,7 +1752,9 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
           reward_key: uniqueRewardKey
         }
       });
+    }
 
+    if (pointsAwarded > 0 || !wasAlreadyCompleted) {
       // Invalidate Teaching Intelligence cache so new evidence & points are reflected
       try {
         await supabaseClient
@@ -1625,19 +1764,6 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       } catch (_tiErr) {
         // Non-critical
       }
-    } else if (hasExistingRewardEvent && existingRewardEvents[0]?.metadata) {
-      rewardTransaction = existingRewardEvents[0].metadata;
-    } else if (hasExistingPointRow) {
-      rewardTransaction = {
-        user_id: cleanStudentId,
-        course_id: cleanCourseId,
-        unit_id: unitId,
-        lesson_id: cleanEpisodeId,
-        points: existingPointRows[0].points || rewardPointsToGrant,
-        reward_type: 'lesson_completion',
-        reward_key: uniqueRewardKey,
-        created_at: existingPointRows[0].created_at || nowIso
-      };
     }
 
     // 7. Query authoritative updated leaderboard total for this student in this classroom
@@ -1652,9 +1778,24 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     return {
       success: true,
       enrollment: updatedEnrollment,
+      // Points newly added to the leaderboard by THIS request (0 for duplicates / lower retries)
       points_awarded: pointsAwarded,
-      lesson_reward_points: rewardPointsToGrant,
-      already_awarded: alreadyAwarded,
+      // Authoritative assessment result
+      earned_score: numScore,
+      max_score: numMaxScore,
+      percentage,
+      answered_questions: answeredCount,
+      correct_questions: correctCount,
+      total_questions: questionCount,
+      // Lesson's total contribution to the leaderboard after this request
+      credited_lesson_points: creditedLessonPoints,
+      previous_credited_points: previouslyCreditedPoints,
+      lesson_reward_points: creditedLessonPoints,
+      completion_bonus_points: 0,
+      scoring_policy: 'score_only_highest_attempt',
+      credit_action: creditAction,
+      already_completed: wasAlreadyCompleted,
+      already_awarded: pointsAwarded === 0 && (wasAlreadyCompleted || hasExistingPointRow),
       previous_points: previousPoints,
       total_classroom_points: totalClassroomPoints,
       reward_key: uniqueRewardKey,
@@ -1666,13 +1807,16 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
 /**
  * Backfills missing lesson completion rewards for any student lessons that were marked
  * 'completed' before the leaderboard reward integration was active. Idempotent and safe.
+ * Because crediting is score-based (highest score wins), this also re-syncs legacy lessons
+ * that were credited a fixed 10 points: if the persisted attempts show a higher earned score,
+ * only the difference is added. Existing credited points are never reduced.
  */
 export async function backfillMissingCourseLessonPoints(supabaseClient, classroomId = null) {
   if (!supabaseClient) return { backfilledCount: 0 };
 
   let query = supabaseClient
     .from('course_episode_progress')
-    .select('enrollment_id, student_id, course_id, classroom_id, episode_id, score, max_score, time_spent_seconds, completed_at')
+    .select('enrollment_id, student_id, course_id, classroom_id, episode_id, time_spent_seconds, completed_at')
     .eq('status', 'completed');
 
   if (classroomId) {
@@ -1688,13 +1832,12 @@ export async function backfillMissingCourseLessonPoints(supabaseClient, classroo
   for (const row of completedRows) {
     if (!row.student_id || !row.course_id || !row.classroom_id || !row.episode_id) continue;
     try {
+      // Score is recomputed server-side from persisted attempts inside the engine.
       const res = await completeCourseLessonAndAwardPoints(supabaseClient, {
         student_id: row.student_id,
         course_id: row.course_id,
         classroom_id: row.classroom_id,
         episode_id: row.episode_id,
-        score: row.score || 0,
-        max_score: row.max_score || 100,
         time_spent_seconds: row.time_spent_seconds || 0
       });
       if (res && !res.already_awarded && res.points_awarded > 0) {

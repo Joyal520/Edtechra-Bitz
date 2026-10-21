@@ -21,7 +21,12 @@ interface Props {
   studentName?: string;
   lessonTitle: string;
   lessonPosition?: number;
+  /** Leaderboard points newly credited by the backend for this completion. */
   pointsEarned?: number;
+  /** Server-confirmed assessment score earned in this lesson. */
+  earnedScore?: number;
+  /** Server-confirmed maximum possible score for this lesson. */
+  maxScore?: number;
   totalLeaderboardPoints?: number;
   progressPercent?: number;
   completedLessonsCount?: number;
@@ -49,7 +54,9 @@ export const LessonCompletionModal: React.FC<Props> = ({
   studentName,
   lessonTitle,
   lessonPosition = 1,
-  pointsEarned = 10,
+  pointsEarned = 0,
+  earnedScore,
+  maxScore,
   totalLeaderboardPoints,
   progressPercent = 0,
   completedLessonsCount = 1,
@@ -126,11 +133,18 @@ export const LessonCompletionModal: React.FC<Props> = ({
 
         {/* Points & Progress Pill */}
         <div className="flex flex-wrap items-center justify-center gap-2.5">
+          {typeof earnedScore === 'number' && typeof maxScore === 'number' && maxScore > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-900 dark:text-sky-300 text-xs font-black border border-sky-200 dark:border-sky-800 reader-badge">
+              <CheckCircle2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+              <span>SCORE {earnedScore} / {maxScore}</span>
+            </div>
+          )}
+
           {pointsEarned > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-black border border-amber-200 dark:border-amber-800 reader-badge">
               <Award className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>
-                +{pointsEarned} POINTS
+                +{pointsEarned} LEADERBOARD PTS
                 {typeof totalLeaderboardPoints === 'number' && totalLeaderboardPoints > 0
                   ? ` • ${totalLeaderboardPoints.toLocaleString()} TOTAL PTS`
                   : ''}

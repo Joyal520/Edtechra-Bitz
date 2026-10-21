@@ -71,13 +71,17 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [celebrationOpen, setCelebrationOpen] = useState(false);
   const [lastCompletedTitle, setLastCompletedTitle] = useState('');
   const [lastCompletedPos, setLastCompletedPos] = useState(1);
-  const [lastCompletedPoints, setLastCompletedPoints] = useState(10);
+  const [lastCompletedPoints, setLastCompletedPoints] = useState(0);
+  const [lastCompletedScore, setLastCompletedScore] = useState<{ earned: number; max: number } | null>(null);
   const [totalClassroomPoints, setTotalClassroomPoints] = useState<number | undefined>(undefined);
   const [celebratedIds, setCelebratedIds] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const mainScrollRef = useRef<HTMLElement>(null);
   const completingEpisodeRef = useRef(false);
+  // In-flight question-attempt writes. Lesson completion waits for these so the
+  // server-side score (computed from persisted attempts) includes every answer.
+  const pendingAttemptsRef = useRef<Set<Promise<unknown>>>(new Set());
 
   const handleProgressChange = React.useCallback((answered: number, total: number) => {
     setQuestionProgress({ answered, total });
@@ -298,7 +302,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }));
 
     try {
-      await courseStudioService.recordQuestionAttempt({
+      const attemptPromise = courseStudioService.recordQuestionAttempt({
         course_id: courseId,
         classroom_id: classroomId,
         episode_id: selectedEpisode.id,
@@ -310,6 +314,12 @@ export const StudentCoursePlayerPage: React.FC = () => {
         concept: question.concept,
         difficulty: question.difficulty
       });
+      pendingAttemptsRef.current.add(attemptPromise);
+      try {
+        await attemptPromise;
+      } finally {
+        pendingAttemptsRef.current.delete(attemptPromise);
+      }
     } catch (err) {
       console.error('Failed to record question attempt telemetry:', err);
     }
@@ -352,15 +362,18 @@ export const StudentCoursePlayerPage: React.FC = () => {
     completingEpisodeRef.current = true;
     setCompletingEpisode(true);
 
-    const calculatedScore = Object.values(questionScores).reduce((sum, pts) => sum + pts, 0);
-
     try {
+      // Make sure every answer has been persisted before the server computes the score.
+      if (pendingAttemptsRef.current.size > 0) {
+        await Promise.allSettled(Array.from(pendingAttemptsRef.current));
+      }
+
+      // The server computes the authoritative earned score and max score from the
+      // persisted question attempts; no client score is submitted for crediting.
       const res = await courseStudioService.recordStudentProgress({
         course_id: courseId,
         classroom_id: classroomId,
         episode_id: epId,
-        score: calculatedScore,
-        max_score: 100,
         time_spent_seconds: (selectedEpisode.estimated_minutes || 15) * 60
       });
 
@@ -375,9 +388,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
       setCompletedEpisodeIds(prev => new Set([...prev, epId]));
 
       const alreadyAwarded = Boolean(res?.already_awarded);
-      const awardedByBackend = typeof res?.points_awarded === 'number'
-        ? res.points_awarded
-        : (alreadyAwarded ? 0 : 10);
+      // Only show what the backend actually confirmed - never a client-side guess.
+      const awardedByBackend = typeof res?.points_awarded === 'number' ? res.points_awarded : 0;
+      const confirmedScore = typeof res?.earned_score === 'number' && typeof res?.max_score === 'number'
+        ? { earned: res.earned_score, max: res.max_score }
+        : null;
 
       // Only trigger celebration modal ONCE when backend confirms new lesson completion & reward
       if (!alreadyAwarded && !celebratedIds.has(epId)) {
@@ -385,6 +400,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         setLastCompletedTitle(selectedEpisode.title);
         setLastCompletedPos(selectedEpisode.position || (currentIndex + 1));
         setLastCompletedPoints(awardedByBackend);
+        setLastCompletedScore(confirmedScore);
         setCelebrationOpen(true);
       } else {
         setCelebratedIds(prev => new Set([...prev, epId]));
@@ -958,6 +974,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
         lessonTitle={lastCompletedTitle}
         lessonPosition={lastCompletedPos}
         pointsEarned={lastCompletedPoints}
+        earnedScore={lastCompletedScore?.earned}
+        maxScore={lastCompletedScore?.max}
         totalLeaderboardPoints={totalClassroomPoints}
         progressPercent={roadmapData?.progressPercent || 0}
         completedLessonsCount={roadmapData?.completedLessons || 1}

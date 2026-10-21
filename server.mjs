@@ -97,7 +97,8 @@ import {
   compileCrossClassroomAnalytics,
   calculateConceptMastery,
   completeCourseLessonAndAwardPoints,
-  backfillMissingCourseLessonPoints
+  backfillMissingCourseLessonPoints,
+  clampQuestionPoints
 } from './server/courseStudioService.mjs';
 import {
   generateExam,
@@ -6924,7 +6925,9 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
     const authData = await verifyAuthUser(req);
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
-    const { course_id, classroom_id, episode_id, score = 0, max_score = 100, time_spent_seconds = 0 } = req.body;
+    // NOTE: client-supplied `score` / `max_score` are intentionally NOT used for crediting.
+    // The engine computes the authoritative earned score from persisted question attempts.
+    const { course_id, classroom_id, episode_id, time_spent_seconds = 0 } = req.body;
     const student_id = authData.user.id;
 
     if (!course_id || !classroom_id || !episode_id) {
@@ -6983,8 +6986,6 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
       course_id,
       classroom_id,
       episode_id,
-      score,
-      max_score,
       time_spent_seconds
     });
 
@@ -7107,6 +7108,21 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     if (!enrollment) return res.status(404).json({ success: false, error: 'Enrollment could not be established.' });
 
+    // Server-side question validation: the question must belong to this lesson/course,
+    // and the recorded points are clamped to the question's real point value
+    // (0 for incorrect answers). The client cannot inflate a lesson score.
+    const { data: questionRow } = await serverSupabase
+      .from('course_questions')
+      .select('id, episode_id, course_id, points')
+      .eq('id', question_id)
+      .maybeSingle();
+
+    if (!questionRow || String(questionRow.episode_id) !== String(episode_id) || String(questionRow.course_id) !== String(course_id)) {
+      return res.status(400).json({ success: false, error: 'Question does not belong to this lesson.' });
+    }
+
+    const validatedPointsAwarded = clampQuestionPoints(questionRow, Boolean(is_correct), points_awarded);
+
     // Anti-Retry Protection: Reject duplicate submissions for the same question
     const { data: existingAttempt } = await serverSupabase
       .from('course_question_attempts')
@@ -7135,7 +7151,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
         question_id,
         student_answer: String(student_answer || ''),
         is_correct: Boolean(is_correct),
-        points_awarded: Number(points_awarded) || 0,
+        points_awarded: validatedPointsAwarded,
         skill: skill || 'General',
         concept: concept || 'General',
         difficulty: difficulty || 'medium'
