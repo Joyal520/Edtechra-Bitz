@@ -22,7 +22,9 @@ import {
   MoreVertical,
   Clock,
   Pause,
-  Play
+  Play,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { Course } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
@@ -31,7 +33,7 @@ import { CreateCourseModal } from '@/components/course-studio/CreateCourseModal'
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 import { AICourseDesignerModal } from '@/components/course-studio/AICourseDesignerModal';
-import { BotanicalPaperCutFrame } from '@/components/classes/ClassroomIllustrations';
+import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
 import { LiquidButton, LiquidTab } from '@/components/course-studio/liquid';
 import { CourseCoverImage, getCourseSubjectIdentity } from '@/utils/courseCover';
 
@@ -43,6 +45,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'published' | 'draft' | 'unassigned'>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -61,11 +64,13 @@ export const CourseStudioDashboardPage: React.FC = () => {
 
   const loadCourses = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await courseStudioService.getCourses();
       setCourses(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load studio courses:', err);
+      setLoadError(err?.message || 'Unable to load courses from Course Studio.');
     } finally {
       setLoading(false);
     }
@@ -101,10 +106,12 @@ export const CourseStudioDashboardPage: React.FC = () => {
   };
 
   const filteredCourses = courses.filter(c => {
+    const q = search.trim().toLowerCase();
     const matchSearch =
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.subject.toLowerCase().includes(search.toLowerCase()) ||
-      c.grade_level.toLowerCase().includes(search.toLowerCase());
+      !q ||
+      (c.title || '').toLowerCase().includes(q) ||
+      (c.subject || '').toLowerCase().includes(q) ||
+      (c.grade_level || '').toLowerCase().includes(q);
 
     if (!matchSearch) return false;
     if (filterTab === 'published') return c.status === 'published';
@@ -116,7 +123,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
   });
 
   const totalPublished = courses.filter(c => c.status === 'published').length;
-  const totalDrafts = courses.length - totalPublished;
+  const totalDrafts = courses.filter(c => c.status === 'draft').length;
   const totalUnassigned = courses.filter(
     c => c.status === 'published' && (!c.assigned_classrooms_count || c.assigned_classrooms_count === 0)
   ).length;
@@ -125,9 +132,10 @@ export const CourseStudioDashboardPage: React.FC = () => {
   return (
     <div
       onClick={() => setActiveMenuCourseId(null)}
-      className="min-h-screen bg-[#f9f7f1] font-sans antialiased text-slate-800 py-6 sm:py-8 relative overflow-x-hidden"
+      className="min-h-screen bg-[#f3f8ff] font-sans antialiased text-slate-800 py-6 sm:py-8 relative overflow-x-hidden"
     >
-      <BotanicalPaperCutFrame />
+      {/* Course Studio Educational Background Visual */}
+      <CourseStudioWorkspaceBackground />
 
       <main className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-8 relative z-10">
         
@@ -285,6 +293,37 @@ export const CourseStudioDashboardPage: React.FC = () => {
                 </div>
               ))}
             </div>
+          ) : loadError ? (
+            <div
+              role="alert"
+              className="bg-white/95 rounded-[28px] p-10 sm:p-14 text-center border border-rose-200 shadow-xs space-y-4"
+            >
+              <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-xs border border-rose-100">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  We couldn&apos;t load your courses
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
+                  Your courses are safe. The Course Studio service did not respond correctly.
+                </p>
+                <p className="text-[11px] text-rose-600 font-mono break-words max-w-md mx-auto">{loadError}</p>
+              </div>
+              <div className="pt-2 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    loadCourses();
+                  }}
+                  className="px-6 py-3 bg-[#026fc3] hover:bg-[#03589e] text-white rounded-2xl text-xs font-black shadow-md active:scale-95 transition-all cursor-pointer inline-flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Retry</span>
+                </button>
+              </div>
+            </div>
           ) : filteredCourses.length === 0 ? (
             <div className="bg-white rounded-[28px] p-10 sm:p-14 text-center border border-stone-200/70 shadow-xs space-y-4">
               <div className="w-16 h-16 rounded-full bg-sky-50 text-[#026fc3] flex items-center justify-center mx-auto shadow-xs border border-sky-100">
@@ -292,7 +331,11 @@ export const CourseStudioDashboardPage: React.FC = () => {
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base sm:text-lg font-black text-slate-900">
-                  {search ? 'No courses match your search' : 'No courses created yet in Studio'}
+                  {search
+                    ? 'No courses match your search'
+                    : courses.length > 0
+                    ? 'No courses in this filter'
+                    : 'No courses created yet in Studio'}
                 </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
                   {search

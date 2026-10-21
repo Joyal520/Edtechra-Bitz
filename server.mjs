@@ -5145,7 +5145,9 @@ app.get('/api/course-studio/courses', async (req, res) => {
     const enriched = (courses || []).map(c => {
       const units = c.course_units || [];
       const episodesCount = units.reduce((sum, u) => sum + (u.course_episodes?.length || 0), 0);
-      const activeAssignments = (c.course_classroom_assignments || []).filter(a => a.status === 'active');
+      const assignments = c.course_classroom_assignments || [];
+      const activeAssignments = assignments.filter(a => a.status === 'active');
+      const isPaused = assignments.length > 0 && assignments.every(a => a.status === 'paused');
       return {
         id: c.id,
         teacher_id: c.teacher_id,
@@ -5158,9 +5160,14 @@ app.get('/api/course-studio/courses', async (req, res) => {
         cover_aspect_ratio: c.cover_aspect_ratio || '16:9',
         course_type: c.course_type,
         status: c.status,
+        daily_release_enabled: Boolean(c.daily_release_enabled),
+        course_timezone: c.course_timezone || 'Asia/Colombo',
+        course_start_date: c.course_start_date,
         units_count: units.length,
         episodes_count: episodesCount,
         assigned_classrooms_count: activeAssignments.length,
+        is_paused: isPaused,
+        assignments,
         created_at: c.created_at,
         updated_at: c.updated_at
       };

@@ -1371,8 +1371,6 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     }
 
     // Ensure student is registered in classroom_members so they appear on the leaderboard
-    const isClassroomOwner = classroomRow?.teacher_id && classroomRow.teacher_id === cleanStudentId;
-    const isTeacherOrAdmin = isClassroomOwner || studentProfile?.role === 'teacher' || studentProfile?.role === 'admin';
     if (!isTeacherOrAdmin) {
       try {
         await supabaseClient

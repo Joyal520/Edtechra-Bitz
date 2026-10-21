@@ -51,11 +51,16 @@ export const courseStudioService = {
   async getCourses(): Promise<Course[]> {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/courses`, { headers });
-    const json = await res.json();
-    if (!res.ok || !json.success) {
-      throw new Error(json.error || 'Failed to fetch courses.');
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(`Unable to load Course Studio courses (HTTP ${res.status}).`);
     }
-    return json.courses || [];
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.error || `Failed to fetch courses (HTTP ${res.status}).`);
+    }
+    return Array.isArray(json.courses) ? json.courses : [];
   },
 
   async getCourse(courseId: string): Promise<Course> {
