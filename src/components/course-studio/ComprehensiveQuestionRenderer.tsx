@@ -69,7 +69,7 @@ function extractSentenceTokens(q: any): string[] {
 }
 
 function extractSentenceCorrectOrder(q: any): string[] {
-  const rawCorrect = q.correct_order || q.correctOrder || q.items;
+  const rawCorrect = q.correct_order || q.correctOrder;
   if (Array.isArray(rawCorrect) && rawCorrect.length > 0) {
     return rawCorrect
       .map((item: any) => {
@@ -84,6 +84,19 @@ function extractSentenceCorrectOrder(q: any): string[] {
 
   if (q.correct_answer && typeof q.correct_answer === 'string') {
     return q.correct_answer.trim().split(/\s+/).filter(Boolean);
+  }
+
+  const rawFallback = q.items || q.options;
+  if (Array.isArray(rawFallback) && rawFallback.length > 0) {
+    return rawFallback
+      .map((item: any) => {
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object' && item !== null) {
+          return String(item.text ?? item.label ?? item.value ?? item.word ?? '').trim();
+        }
+        return String(item ?? '').trim();
+      })
+      .filter(Boolean);
   }
 
   return [];
@@ -165,21 +178,40 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const [isInputActive, setIsInputActive] = useState<boolean>(false);
   const shortAnswerInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  // Stable tracking refs to guarantee sentence ordering state isolation across scroll and parent re-renders
+  const lastSentenceQuestionKeyRef = React.useRef<string | null>(null);
+  const lastSentenceResponseKeyRef = React.useRef<string | null>(null);
+
   // Initialize Sentence Reordering tokens from question items / options / correct_order
   useEffect(() => {
     if (qType === 'sentence_reordering' || qType === 'word_ordering' || qType === 'sentence_builder') {
+      const questionKey = `${qId}:::${qType}:::${question.correct_answer || ''}:::${JSON.stringify(question.options || '')}:::${JSON.stringify((question as any).items || '')}`;
+      const responseKey = response ? `${response.status}:::${typeof response.answer === 'string' ? response.answer : JSON.stringify(response.answer)}` : 'none';
+
+      // 1. If question is already answered, restore or keep answered state
       if (response && response.status !== 'unanswered' && response.answer) {
-        let prevWords: string[] = [];
-        if (Array.isArray(response.answer)) {
-          prevWords = response.answer.map(String);
-        } else if (typeof response.answer === 'string') {
-          prevWords = response.answer.trim().split(/\s+/);
+        if (lastSentenceResponseKeyRef.current !== responseKey || lastSentenceQuestionKeyRef.current !== questionKey) {
+          let prevWords: string[] = [];
+          if (Array.isArray(response.answer)) {
+            prevWords = response.answer.map(String);
+          } else if (typeof response.answer === 'string') {
+            prevWords = response.answer.trim().split(/\s+/);
+          }
+          setSelectedTokens(prevWords.map((w, i) => ({ id: `prev_${qId}_${i}`, text: w })));
+          setSentenceTokens([]);
+          lastSentenceResponseKeyRef.current = responseKey;
+          lastSentenceQuestionKeyRef.current = questionKey;
         }
-        setSelectedTokens(prevWords.map((w, i) => ({ id: `prev_${qId}_${i}`, text: w })));
-        setSentenceTokens([]);
         return;
       }
 
+      // 2. If question is unanswered and has already been initialized with this identity & content,
+      // DO NOT reset selectedTokens or reshuffle sentenceTokens on re-render or scroll!
+      if (lastSentenceQuestionKeyRef.current === questionKey && lastSentenceResponseKeyRef.current === responseKey) {
+        return;
+      }
+
+      // 3. First time mounting this question, navigating to a new question, or question content updated in edit mode
       const itemsList = extractSentenceTokens(question);
       const canonicalOrder = extractSentenceCorrectOrder(question);
       const tokenObjects: SentenceToken[] = itemsList.map((text, idx) => ({
@@ -201,6 +233,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         setSentenceTokens(tokenObjects);
       }
       setSelectedTokens([]);
+      lastSentenceQuestionKeyRef.current = questionKey;
+      lastSentenceResponseKeyRef.current = responseKey;
     }
   }, [qId, qType, question, response]);
 
@@ -1167,6 +1201,7 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       onClick={() => {
                         courseAudio.playClick();
                         const lastToken = selectedTokens[selectedTokens.length - 1];
+                        if (!lastToken) return;
                         setSelectedTokens(prev => prev.slice(0, -1));
                         setSentenceTokens(prev => [...prev, lastToken]);
                       }}
@@ -1183,7 +1218,14 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                       onClick={() => {
                         courseAudio.playClick();
                         const all = [...selectedTokens, ...sentenceTokens];
-                        const shuffled = [...all].sort(() => 0.5 - Math.random());
+                        let shuffled = shuffleWordsGuaranteed(all);
+                        const canonicalOrder = extractSentenceCorrectOrder(question);
+                        if (
+                          canonicalOrder.length === shuffled.length &&
+                          shuffled.every((t, i) => t.text.toLowerCase() === canonicalOrder[i].toLowerCase())
+                        ) {
+                          shuffled = shuffleWordsGuaranteed(shuffled);
+                        }
                         setSentenceTokens(shuffled);
                         setSelectedTokens([]);
                       }}

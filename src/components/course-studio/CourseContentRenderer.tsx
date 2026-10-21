@@ -1352,7 +1352,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
           <div className="w-full space-y-4 sm:space-y-5">
             {(isEditMode ? questions : validQuestions).map((q, qIndex, arr) => {
               const effectiveQId = q.id || `q_${qIndex}`;
-              const qWithId = { ...q, id: effectiveQId };
+              const qWithId = q.id ? q : { ...q, id: effectiveQId };
               const qResponse = studentResponses[effectiveQId];
 
               const isFirstShortAnswer =

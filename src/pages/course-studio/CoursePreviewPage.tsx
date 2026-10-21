@@ -273,7 +273,7 @@ export const CoursePreviewPage: React.FC = () => {
       const { scrollTop, scrollHeight, clientHeight } = mainScrollRef.current;
       const progress =
         scrollHeight <= clientHeight ? 100 : Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
-      setScrollProgress(progress);
+      setScrollProgress(prev => (prev === progress ? prev : progress));
     }
   };
 
