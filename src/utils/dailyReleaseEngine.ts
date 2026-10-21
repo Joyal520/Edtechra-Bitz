@@ -1,7 +1,15 @@
 // ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: DAILY RELEASE & PROGRESSION ENGINE
 // Calculates student lesson unlock schedule based on course timezone,
-// student start date, explicit lesson positions, and completion states.
+// authoritative lesson completions, explicit lesson order, and pause states.
+//
+// STRICT RULE:
+// When One Lesson Per Day is ON:
+// - A student can complete at most ONE newly completed lesson per calendar day.
+// - The next sequential lesson unlocks at midnight (00:00) after the previous
+//   lesson's completion date.
+// - Unfinished lessons in progress remain accessible across days until completed.
+// - All subsequent lessons remain strictly locked until prior lessons are finished.
 // ============================================================================
 
 import {
@@ -14,9 +22,13 @@ import {
 export interface DailyReleaseCalculationOptions {
   course: Course;
   completedEpisodeIds?: Set<string> | string[];
+  completedEpisodesMap?: Record<string, { completed_at?: string | null }>;
+  lastCompletedAt?: string | Date | null;
   studentStartDate?: string | Date | null;
   currentDate?: string | Date | null;
   currentActiveEpisodeId?: string | null;
+  isPaused?: boolean;
+  isTeacher?: boolean;
 }
 
 /**
@@ -32,9 +44,28 @@ export function getDateStringInTimezone(dateInput: Date | string | number, timeZ
       day: '2-digit'
     });
     return formatter.format(d);
-  } catch (err) {
+  } catch (_err) {
     // Fallback to UTC if timezone is invalid
     return new Date(dateInput).toISOString().split('T')[0];
+  }
+}
+
+/**
+ * Checks if two dates fall on the exact same calendar day within the given timezone.
+ */
+export function isSameCalendarDay(
+  dateA: Date | string | number,
+  dateB: Date | string | number,
+  timeZone = 'Asia/Colombo'
+): boolean {
+  try {
+    const strA = getDateStringInTimezone(dateA, timeZone);
+    const strB = getDateStringInTimezone(dateB, timeZone);
+    return strA === strB;
+  } catch (_e) {
+    const a = new Date(dateA).toISOString().split('T')[0];
+    const b = new Date(dateB).toISOString().split('T')[0];
+    return a === b;
   }
 }
 
@@ -78,13 +109,17 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   dailyReleaseEnabled: boolean;
   daysElapsed: number;
   timeZone: string;
+  isPaused: boolean;
 } {
   const {
     course,
     completedEpisodeIds = new Set<string>(),
+    completedEpisodesMap = {},
+    lastCompletedAt,
     studentStartDate,
     currentDate = new Date(),
-    currentActiveEpisodeId
+    currentActiveEpisodeId,
+    isPaused = false
   } = options;
 
   const completedSet = completedEpisodeIds instanceof Set
@@ -120,6 +155,9 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
   const totalLessons = rawEpisodes.length;
   let globalPosition = 1;
 
+  // Identify the index of the first uncompleted lesson in the sequence
+  const firstUncompletedIndex = rawEpisodes.findIndex(item => !completedSet.has(item.ep.id));
+
   const items: RoadmapLessonItem[] = rawEpisodes.map((item, index) => {
     const ep = item.ep;
     const position = ep.position || globalPosition++;
@@ -133,28 +171,60 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     if (isCompleted) {
       status = 'completed';
       isLocked = false;
+    } else if (isPaused) {
+      // Course is paused by teacher
+      isLocked = true;
+      status = 'paused';
+      unlockMessage = 'Student access is temporarily disabled by the teacher.';
+    } else if (ep.is_manually_unlocked) {
+      // Teacher manual override to unlock specific episode
+      isLocked = false;
+      status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
     } else if (dailyReleaseEnabled) {
-      // Position 1 is always unlocked (never lock the first lesson)
-      if (position === 1 || ep.is_manually_unlocked) {
+      // One Lesson Per Day is active
+      if (firstUncompletedIndex === -1) {
+        // All lessons completed
+        status = 'completed';
         isLocked = false;
-        status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
-      } else if (position <= daysElapsed) {
-        // Unlocked by day progression
-        isLocked = false;
-        status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
+      } else if (index === firstUncompletedIndex) {
+        // This is the FIRST uncompleted lesson
+        if (index === 0) {
+          // Lesson 1 is ALWAYS available to start
+          isLocked = false;
+          status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
+        } else {
+          // Lesson 2 or higher: check when the previous lesson was completed
+          const prevEpId = rawEpisodes[index - 1].ep.id;
+          const prevCompletion = completedEpisodesMap[prevEpId];
+          const prevCompletedAt = prevCompletion?.completed_at || lastCompletedAt;
+
+          if (prevCompletedAt) {
+            const completedToday = isSameCalendarDay(prevCompletedAt, effectiveCurrentDate, timeZone);
+            if (completedToday) {
+              // The previous lesson was completed TODAY -> next lesson unlocks tomorrow at midnight
+              isLocked = true;
+              status = 'locked';
+              unlockMessage = `Lesson ${index + 1} is locked. It will open tomorrow at 12:00 AM.`;
+            } else {
+              // The previous lesson was completed on a PREVIOUS calendar day -> unlocked!
+              isLocked = false;
+              status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
+            }
+          } else {
+            // No completion timestamp found for previous lesson -> default lock
+            isLocked = true;
+            status = 'locked';
+            unlockMessage = `Lesson ${index + 1} is locked. It will open tomorrow at 12:00 AM.`;
+          }
+        }
       } else {
-        // Locked
+        // Any uncompleted lesson beyond the first uncompleted lesson is strictly locked
         isLocked = true;
         status = 'locked';
-        const dayDifference = position - daysElapsed;
-        if (dayDifference === 1) {
-          unlockMessage = `Lesson ${index + 1} is locked. It will open tomorrow at midnight.`;
-        } else {
-          unlockMessage = `Lesson ${index + 1} is locked. It will open on Day ${releaseDay}.`;
-        }
+        unlockMessage = `Lesson ${index + 1} is locked. Complete Lesson ${index} first.`;
       }
     } else {
-      // Daily release is OFF -> all uncompleted lessons are available
+      // Daily release is OFF -> sequential availability or all available
       isLocked = false;
       status = (currentActiveEpisodeId === ep.id) ? 'in_progress' : 'available';
     }
@@ -194,6 +264,7 @@ export function computeCourseRoadmap(options: DailyReleaseCalculationOptions): {
     currentAvailableEpisode,
     dailyReleaseEnabled,
     daysElapsed,
-    timeZone
+    timeZone,
+    isPaused
   };
 }

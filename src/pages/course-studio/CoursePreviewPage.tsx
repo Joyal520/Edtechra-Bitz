@@ -32,10 +32,13 @@ import {
   Layers,
   HelpCircle,
   AlertCircle,
-  Camera
+  Camera,
+  Pause,
+  Play
 } from 'lucide-react';
 import { Course, CourseUnit, CourseEpisode, RoadmapLessonItem, CourseBlock, CourseQuestion } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
+import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
 import { CourseContentRenderer, getValidLessonQuestions } from '@/components/course-studio/CourseContentRenderer';
 import { CourseRoadmap } from '@/components/course-studio/CourseRoadmap';
 import { LessonCompletionModal } from '@/components/course-studio/LessonCompletionModal';
@@ -83,6 +86,8 @@ export const CoursePreviewPage: React.FC = () => {
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [addQuestionsModalOpen, setAddQuestionsModalOpen] = useState(false);
   const [questionPlanModalOpen, setQuestionPlanModalOpen] = useState(false);
+  const [pauseModalOpen, setPauseModalOpen] = useState(false);
+  const [pausingInProgress, setPausingInProgress] = useState(false);
 
   // Saving & Sync Status
   const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -136,6 +141,13 @@ export const CoursePreviewPage: React.FC = () => {
   });
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  const isCoursePaused = useMemo(() => {
+    if (!course) return false;
+    if (course.is_paused) return true;
+    const assignments = course.assignments || (course as any).course_classroom_assignments || [];
+    return assignments.length > 0 && assignments.every((a: any) => a.status === 'paused');
+  }, [course]);
 
   // Student Progress Simulation & Celebration
   const [completedEpisodeIds, setCompletedEpisodeIds] = useState<Set<string>>(new Set());
@@ -1185,6 +1197,20 @@ export const CoursePreviewPage: React.FC = () => {
             </>
           )}
 
+          {/* PAUSE / RESUME ACCESS BUTTON (when course is published) */}
+          {course.status === 'published' && (
+            <LiquidButton
+              variant={isCoursePaused ? 'emerald' : 'secondary'}
+              size="sm"
+              onClick={() => setPauseModalOpen(true)}
+              icon={isCoursePaused ? <Play className="w-3.5 h-3.5 text-emerald-500" /> : <Pause className="w-3.5 h-3.5 text-amber-500" />}
+              title={isCoursePaused ? 'Resume student course access' : 'Pause student course access'}
+              className="!px-2.5 !py-1 !text-xs font-bold shrink-0"
+            >
+              <span className="hidden sm:inline">{isCoursePaused ? 'Resume Course' : 'Pause Course'}</span>
+            </LiquidButton>
+          )}
+
           {/* Reading % Badge */}
           <span className="text-[11px] font-mono font-bold opacity-80 px-1 py-0.5 text-theme-primary shrink-0">
             {viewMode === 'roadmap' ? `${roadmapData?.progressPercent || 0}%` : `${scrollProgress}%`}
@@ -1240,6 +1266,25 @@ export const CoursePreviewPage: React.FC = () => {
         </div>
       </header>
 
+      {/* 2B. COURSE PAUSED NOTICE BANNER */}
+      {isCoursePaused && (
+        <div className="bg-amber-500/15 dark:bg-amber-500/25 border-b border-amber-500/30 px-3 sm:px-6 py-2 text-xs font-bold text-amber-800 dark:text-amber-200 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <Pause className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              <strong>Course Access is Paused:</strong> Student learning access and question submissions are currently suspended.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPauseModalOpen(true)}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-all shrink-0"
+          >
+            Resume Access
+          </button>
+        </div>
+      )}
+
       {/* Non-blocking Toast Notification */}
       {toastMessage && (
         <div className="bg-[#026fc3] text-white px-4 py-2 text-xs sm:text-sm font-bold flex items-center justify-between shadow-md z-30 animate-in fade-in duration-150 reader-meta shrink-0">
@@ -1258,9 +1303,12 @@ export const CoursePreviewPage: React.FC = () => {
       )}
 
       {/* 3. TWO-COLUMN LAYOUT: COURSE OUTLINE SIDEBAR (DESKTOP) + MAIN VIEWPORT */}
-      <div className="flex-1 min-h-0 w-full flex overflow-hidden">
+      <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
+        {/* Course Studio Workspace Background Visual */}
+        <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} />
+
         {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex) */}
-        <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden">
+        <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
           {renderCourseOutline(false)}
         </aside>
 
@@ -1268,7 +1316,7 @@ export const CoursePreviewPage: React.FC = () => {
         <main
           ref={mainScrollRef}
           onScroll={handleScroll}
-          className="course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 scroll-smooth box-border [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]"
+          className="course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 scroll-smooth box-border [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem] relative z-1"
         >
           {viewMode === 'roadmap' ? (
             <CourseRoadmap
@@ -1593,6 +1641,76 @@ export const CoursePreviewPage: React.FC = () => {
             showToast('Course cover artwork updated!');
           }}
         />
+      )}
+
+      {/* 11. PAUSE / RESUME ACCESS CONFIRMATION MODAL */}
+      {pauseModalOpen && course && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                isCoursePaused ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400'
+              }`}>
+                {isCoursePaused ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-black text-slate-900 dark:text-white truncate">
+                  {isCoursePaused ? 'Resume Course for Students?' : 'Pause Course for Students?'}
+                </h3>
+                <p className="text-xs text-slate-500 truncate">
+                  {course.title}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              {isCoursePaused
+                ? 'Resuming access will allow enrolled students to view lessons and complete exercises according to the course schedule.'
+                : 'Pausing will temporarily prevent students from opening lessons or submitting answers. Your course content, structure, and all student learning records will remain safely intact.'}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+              <button
+                type="button"
+                onClick={() => setPauseModalOpen(false)}
+                disabled={pausingInProgress}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setPausingInProgress(true);
+                  try {
+                    if (isCoursePaused) {
+                      await courseStudioService.resumeCourse(course.id);
+                      showToast('Course resumed for students.');
+                    } else {
+                      await courseStudioService.pauseCourse(course.id);
+                      showToast('Course access paused for students.');
+                    }
+                    await loadCourse(course.id);
+                    setPauseModalOpen(false);
+                  } catch (err: any) {
+                    showToast(err.message || 'Failed to update course status.');
+                  } finally {
+                    setPausingInProgress(false);
+                  }
+                }}
+                disabled={pausingInProgress}
+                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all cursor-pointer flex items-center gap-2 ${
+                  isCoursePaused
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {pausingInProgress && <Sparkles className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isCoursePaused ? 'Confirm Resume' : 'Confirm Pause'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

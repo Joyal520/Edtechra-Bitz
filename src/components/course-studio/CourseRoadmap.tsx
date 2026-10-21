@@ -121,7 +121,8 @@ export const CourseRoadmap: React.FC<Props> = ({
       <div className="space-y-3 relative before:absolute before:left-6 sm:before:left-7 before:top-6 before:bottom-6 before:w-0.5 before:bg-[var(--theme-border-subtle)] before:z-0">
         {roadmapItems.map(item => {
           const isCompleted = item.status === 'completed';
-          const isLocked = item.status === 'locked' || item.is_locked;
+          const isPaused = item.status === 'paused';
+          const isLocked = item.status === 'locked' || item.is_locked || isPaused;
           const isAvailable = !isCompleted && !isLocked;
           const isActive = item.id === activeLessonId;
 
@@ -134,6 +135,8 @@ export const CourseRoadmap: React.FC<Props> = ({
                   ? 'bg-[var(--theme-surface-interactive)] border-emerald-300 dark:border-emerald-800 shadow-2xs cursor-pointer hover:border-emerald-500'
                   : isAvailable
                   ? 'bg-[var(--theme-surface-interactive)] border-[var(--theme-accent)] shadow-md ring-2 ring-[var(--theme-accent)]/15 cursor-pointer hover:shadow-lg scale-[1.01]'
+                  : isPaused
+                  ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 opacity-85 cursor-not-allowed'
                   : 'bg-[var(--theme-surface-subtle)] border-[var(--theme-border-subtle)] opacity-75 cursor-not-allowed'
               }`}
             >
@@ -146,6 +149,10 @@ export const CourseRoadmap: React.FC<Props> = ({
                 ) : isAvailable ? (
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[var(--theme-accent)] text-[var(--theme-accent-contrast)] flex items-center justify-center shadow-md animate-pulse font-black">
                     <Play className="w-4 h-4 ml-0.5" />
+                  </div>
+                ) : isPaused ? (
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs font-black">
+                    <Lock className="w-4 h-4" />
                   </div>
                 ) : (
                   <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[var(--theme-surface-subtle)] text-theme-muted flex items-center justify-center border border-[var(--theme-border-subtle)]">
@@ -169,12 +176,21 @@ export const CourseRoadmap: React.FC<Props> = ({
                   )}
                   {isAvailable && (
                     <span className="px-2 py-0.5 rounded-full bg-[var(--theme-accent-soft)] text-theme-accent text-[10px] font-black uppercase tracking-wider border border-[var(--theme-border-subtle)] reader-badge">
-                      ▶ {isActive ? 'In Progress' : 'Continue'}
+                      ▶ {isActive ? 'In Progress' : 'Available'}
                     </span>
                   )}
-                  {isLocked && (
+                  {isPaused && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-500/30 reader-badge">
+                      ⏸ Course Paused
+                    </span>
+                  )}
+                  {isLocked && !isPaused && (
                     <span className="px-2 py-0.5 rounded-full bg-[var(--theme-surface-subtle)] text-theme-muted text-[10px] font-black uppercase tracking-wider border border-[var(--theme-border-subtle)] reader-badge">
-                      🔒 Opens Day {item.release_day}
+                      {item.unlock_message?.includes('tomorrow')
+                        ? '🔒 Available Tomorrow'
+                        : item.unlock_message
+                        ? `🔒 ${item.unlock_message.replace(/^Lesson \d+ is locked\.\s*/, '')}`
+                        : `🔒 Locked`}
                     </span>
                   )}
                 </div>

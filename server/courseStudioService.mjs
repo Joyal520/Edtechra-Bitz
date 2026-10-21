@@ -1278,10 +1278,31 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .maybeSingle(),
       supabaseClient
         .from('courses')
-        .select('id, daily_release_enabled, course_timezone')
+        .select('id, teacher_id, daily_release_enabled, course_timezone')
         .eq('id', cleanCourseId)
         .maybeSingle()
     ]);
+
+    // Check if user is teacher/creator/admin previewing the course
+    const isCourseOwner = courseRow?.teacher_id && courseRow.teacher_id === cleanStudentId;
+    const isClassroomOwner = classroomRow?.teacher_id && classroomRow.teacher_id === cleanStudentId;
+    const isTeacherOrAdmin = isCourseOwner || isClassroomOwner || studentProfile?.role === 'teacher' || studentProfile?.role === 'admin';
+
+    // Prevent teachers from being enrolled as students or accumulating leaderboard points
+    if (isTeacherOrAdmin) {
+      return {
+        success: true,
+        is_preview: true,
+        is_teacher: true,
+        message: 'Teacher preview mode - student progress and leaderboard points are not recorded.',
+        episode_id: cleanEpisodeId,
+        already_awarded: true,
+        points_awarded: 0,
+        previous_points: 0,
+        new_points: 0,
+        enrollment: null
+      };
+    }
 
     const unitId = episodeRow?.unit_id || 'default_unit';
     const episodeTitle = episodeRow?.title || 'Course Lesson';
@@ -1292,7 +1313,27 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       lesson_id: cleanEpisodeId
     });
 
-    // 2. Resolve or create student enrollment
+    // 2. Resolve student enrollment and verify assignment status
+    const { data: assignment } = await supabaseClient
+      .from('course_classroom_assignments')
+      .select('id, status')
+      .eq('course_id', cleanCourseId)
+      .eq('classroom_id', cleanClassroomId)
+      .maybeSingle();
+
+    if (!assignment) {
+      const notAssignedErr = new Error('Course is not actively assigned to this classroom.');
+      notAssignedErr.statusCode = 404;
+      throw notAssignedErr;
+    }
+
+    if (assignment.status === 'paused') {
+      const pauseErr = new Error('This course is currently paused by the teacher. Lessons and submissions are on hold.');
+      pauseErr.statusCode = 403;
+      pauseErr.is_paused = true;
+      throw pauseErr;
+    }
+
     let { data: enrollment } = await supabaseClient
       .from('course_enrollments')
       .select('*')
@@ -1302,20 +1343,6 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       .maybeSingle();
 
     if (!enrollment) {
-      const { data: assignment } = await supabaseClient
-        .from('course_classroom_assignments')
-        .select('id')
-        .eq('course_id', cleanCourseId)
-        .eq('classroom_id', cleanClassroomId)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (!assignment) {
-        const notAssignedErr = new Error('Course is not actively assigned to this classroom.');
-        notAssignedErr.statusCode = 404;
-        throw notAssignedErr;
-      }
-
       const { data: allEpisodes } = await supabaseClient
         .from('course_episodes')
         .select('id')

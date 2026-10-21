@@ -319,10 +319,41 @@ export const courseStudioService = {
     return json.course;
   },
 
+  async pauseCourse(courseId: string, classroomId?: string): Promise<{ success: boolean; status: string; message: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/pause`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ classroom_id: classroomId })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to pause course.');
+    return json;
+  },
+
+  async resumeCourse(courseId: string, classroomId?: string): Promise<{ success: boolean; status: string; message: string }> {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/resume`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ classroom_id: classroomId })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to resume course.');
+    return json;
+  },
+
   async getStudentProgress(courseId: string, classroomId: string): Promise<{
     enrollment: any;
     completedEpisodeIds: string[];
+    completedEpisodesMap?: Record<string, { completed_at?: string | null; score?: number; percentage?: number }>;
+    last_completed_at?: string | null;
     progress_percent: number;
+    daily_release_enabled?: boolean;
+    is_paused?: boolean;
+    is_teacher?: boolean;
+    is_preview?: boolean;
+    total_classroom_points?: number;
   }> {
     const headers = await getAuthHeader();
     const params = new URLSearchParams({ course_id: courseId, classroom_id: classroomId });

@@ -20,7 +20,9 @@ import {
   Eye,
   Camera,
   MoreVertical,
-  Clock
+  Clock,
+  Pause,
+  Play
 } from 'lucide-react';
 import { Course } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
@@ -344,9 +346,16 @@ export const CourseStudioDashboardPage: React.FC = () => {
 
                         {/* Top-Right: Status Badge */}
                         {isPublished ? (
-                          <span className="px-2.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200">
-                            PUBLISHED
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="px-2.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 text-[10px] font-black uppercase tracking-wider border border-emerald-200">
+                              PUBLISHED
+                            </span>
+                            {course.is_paused && (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-100/90 text-amber-800 text-[10px] font-black uppercase tracking-wider border border-amber-300 flex items-center gap-1">
+                                <Pause className="w-2.5 h-2.5 text-amber-600" /> PAUSED
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-md bg-slate-200/90 text-slate-700 text-[10px] font-black uppercase tracking-wider border border-slate-300">
                             DRAFT
@@ -476,18 +485,51 @@ export const CourseStudioDashboardPage: React.FC = () => {
                                 </button>
 
                                 {isPublished && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveMenuCourseId(null);
-                                      navigate(`/course-studio/${course.id}/analytics`);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left hover:bg-sky-50 hover:text-[#026fc3] flex items-center gap-2 cursor-pointer"
-                                  >
-                                    <BarChart3 className="w-3.5 h-3.5 text-[#026fc3]" />
-                                    <span>Course Analytics</span>
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveMenuCourseId(null);
+                                        navigate(`/course-studio/${course.id}/analytics`);
+                                      }}
+                                      className="w-full px-3.5 py-2 text-left hover:bg-sky-50 hover:text-[#026fc3] flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <BarChart3 className="w-3.5 h-3.5 text-[#026fc3]" />
+                                      <span>Course Analytics</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveMenuCourseId(null);
+                                        try {
+                                          if (course.is_paused) {
+                                            await courseStudioService.resumeCourse(course.id);
+                                          } else {
+                                            await courseStudioService.pauseCourse(course.id);
+                                          }
+                                          await loadCourses();
+                                        } catch (err: any) {
+                                          alert(err.message || 'Failed to update course pause status.');
+                                        }
+                                      }}
+                                      className="w-full px-3.5 py-2 text-left hover:bg-amber-50 hover:text-amber-800 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      {course.is_paused ? (
+                                        <>
+                                          <Play className="w-3.5 h-3.5 text-emerald-600" />
+                                          <span>Resume Course Access</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Pause className="w-3.5 h-3.5 text-amber-600" />
+                                          <span>Pause Course Access</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </>
                                 )}
 
                                 <button

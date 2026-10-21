@@ -5323,8 +5323,28 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
       const activeAssignments = (assignments || []).filter(a => a.status === 'active');
       const assignedClassroomIds = activeAssignments.map(a => a.classroom_id);
 
+      // Check if course access has been explicitly paused for this student's classroom
+      const pausedAssignments = (assignments || []).filter(a => a.status === 'paused');
+      if (pausedAssignments.length > 0) {
+        const { data: pausedMember } = await serverSupabase
+          .from('classroom_members')
+          .select('id')
+          .in('classroom_id', pausedAssignments.map(a => a.classroom_id))
+          .eq('profile_id', authData.user.id)
+          .eq('status', 'active')
+          .limit(1);
+
+        if (pausedMember && pausedMember.length > 0 && assignedClassroomIds.length === 0) {
+          return res.status(403).json({
+            success: false,
+            is_paused: true,
+            error: 'This course is currently paused by your teacher. Access to lessons is temporarily suspended.'
+          });
+        }
+      }
+
       if (assignedClassroomIds.length === 0) {
-        return res.status(403).json({ success: false, error: 'This course is not assigned to any classroom.' });
+        return res.status(403).json({ success: false, error: 'This course is not assigned to any active classroom.' });
       }
 
       const { data: memberRecord } = await serverSupabase
@@ -5422,7 +5442,8 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
         assignments: assignments || [],
         // Alias kept for frontend components that read this key
         course_classroom_assignments: assignments || [],
-        assigned_classrooms_count: (assignments || []).filter(a => a.status === 'active').length
+        assigned_classrooms_count: (assignments || []).filter(a => a.status === 'active').length,
+        is_paused: (assignments || []).length > 0 && (assignments || []).every(a => a.status === 'paused')
       }
     });
   } catch (err) {
@@ -6312,6 +6333,98 @@ app.post('/api/course-studio/courses/:id/unpublish', async (req, res) => {
   }
 });
 
+// 15C. POST /api/course-studio/courses/:id/pause - Pause student course access
+app.post('/api/course-studio/courses/:id/pause', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { classroom_id } = req.body || {};
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+
+    const { data: course } = await serverSupabase
+      .from('courses')
+      .select('id, teacher_id')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (!course) return res.status(404).json({ success: false, error: 'Course not found.' });
+
+    if (!isAdmin && course.teacher_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Only the course author or admin can pause student access.' });
+    }
+
+    let query = serverSupabase
+      .from('course_classroom_assignments')
+      .update({ status: 'paused', updated_at: new Date().toISOString() })
+      .eq('course_id', courseId);
+
+    if (classroom_id) {
+      query = query.eq('classroom_id', classroom_id);
+    }
+
+    const { data: updatedAssignments, error: aErr } = await query.select();
+    if (aErr) throw aErr;
+
+    res.json({
+      success: true,
+      is_paused: true,
+      message: 'Course access has been paused for students.',
+      assignments: updatedAssignments || []
+    });
+  } catch (err) {
+    console.error('Error in pause course:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to pause course access.' });
+  }
+});
+
+// 15D. POST /api/course-studio/courses/:id/resume - Resume student course access
+app.post('/api/course-studio/courses/:id/resume', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const { classroom_id } = req.body || {};
+    const isAdmin = authData.profile?.role === 'admin' || authData.user.email === 'roshanjoyal520@gmail.com';
+
+    const { data: course } = await serverSupabase
+      .from('courses')
+      .select('id, teacher_id')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (!course) return res.status(404).json({ success: false, error: 'Course not found.' });
+
+    if (!isAdmin && course.teacher_id !== authData.user.id) {
+      return res.status(403).json({ success: false, error: 'Only the course author or admin can resume student access.' });
+    }
+
+    let query = serverSupabase
+      .from('course_classroom_assignments')
+      .update({ status: 'active', updated_at: new Date().toISOString() })
+      .eq('course_id', courseId);
+
+    if (classroom_id) {
+      query = query.eq('classroom_id', classroom_id);
+    }
+
+    const { data: updatedAssignments, error: aErr } = await query.select();
+    if (aErr) throw aErr;
+
+    res.json({
+      success: true,
+      is_paused: false,
+      message: 'Course access has been resumed for students.',
+      assignments: updatedAssignments || []
+    });
+  } catch (err) {
+    console.error('Error in resume course:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to resume course access.' });
+  }
+});
+
 // 16. GET /api/course-studio/courses/:id/analytics - Cross-Classroom Course Intelligence
 app.get('/api/course-studio/courses/:id/analytics', async (req, res) => {
   try {
@@ -6676,7 +6789,53 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
 
     const student_id = authData.user.id;
 
-    // Retrieve or auto-create enrollment
+    // Check course & classroom ownership to detect teacher preview mode
+    const [{ data: courseRow }, { data: classroomRow }] = await Promise.all([
+      serverSupabase
+        .from('courses')
+        .select('id, teacher_id, daily_release_enabled, course_timezone')
+        .eq('id', course_id)
+        .maybeSingle(),
+      serverSupabase
+        .from('classrooms')
+        .select('id, teacher_id')
+        .eq('id', classroom_id)
+        .maybeSingle()
+    ]);
+
+    const { data: assignment } = await serverSupabase
+      .from('course_classroom_assignments')
+      .select('id, status, settings')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .maybeSingle();
+
+    const isTeacher =
+      (courseRow?.teacher_id && courseRow.teacher_id === student_id) ||
+      (classroomRow?.teacher_id && classroomRow.teacher_id === student_id) ||
+      authData.profile?.role === 'teacher' ||
+      authData.profile?.role === 'admin' ||
+      authData.user.email === 'roshanjoyal520@gmail.com';
+
+    // If teacher, return preview state without enrolling as student or polluting database
+    if (isTeacher) {
+      return res.json({
+        success: true,
+        is_teacher: true,
+        is_preview: true,
+        is_paused: assignment?.status === 'paused',
+        enrollment: null,
+        completedEpisodeIds: [],
+        completedEpisodesMap: {},
+        progress_percent: 0,
+        total_classroom_points: 0,
+        daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
+      });
+    }
+
+    const isPaused = assignment?.status === 'paused';
+
+    // Retrieve or auto-create student enrollment (only when active)
     let { data: enrollment } = await serverSupabase
       .from('course_enrollments')
       .select('*')
@@ -6685,48 +6844,43 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       .eq('student_id', student_id)
       .maybeSingle();
 
-    if (!enrollment) {
-      const { data: assignment } = await serverSupabase
-        .from('course_classroom_assignments')
+    if (!enrollment && !isPaused && assignment) {
+      const { data: allEpisodes } = await serverSupabase
+        .from('course_episodes')
         .select('id')
-        .eq('course_id', course_id)
-        .eq('classroom_id', classroom_id)
-        .eq('status', 'active')
-        .maybeSingle();
+        .eq('course_id', course_id);
+      const totalEpisodesCount = (allEpisodes || []).length;
 
-      if (assignment) {
-        const { data: allEpisodes } = await serverSupabase
-          .from('course_episodes')
-          .select('id')
-          .eq('course_id', course_id);
-        const totalEpisodesCount = (allEpisodes || []).length;
+      const { data: created } = await serverSupabase
+        .from('course_enrollments')
+        .upsert({
+          course_id,
+          classroom_id,
+          classroom_assignment_id: assignment.id,
+          student_id,
+          status: 'enrolled',
+          total_episodes_count: totalEpisodesCount
+        }, { onConflict: 'classroom_assignment_id,student_id' })
+        .select()
+        .single();
 
-        const { data: created } = await serverSupabase
-          .from('course_enrollments')
-          .upsert({
-            course_id,
-            classroom_id,
-            classroom_assignment_id: assignment.id,
-            student_id,
-            status: 'enrolled',
-            total_episodes_count: totalEpisodesCount
-          }, { onConflict: 'classroom_assignment_id,student_id' })
-          .select()
-          .single();
-
-        enrollment = created;
-      }
+      enrollment = created;
     }
 
     let completedEpisodeIds = [];
+    const completedEpisodesMap = {};
     if (enrollment) {
       const { data: progressRows } = await serverSupabase
         .from('course_episode_progress')
-        .select('episode_id')
+        .select('episode_id, completed_at, status')
         .eq('enrollment_id', enrollment.id)
         .eq('status', 'completed');
 
-      completedEpisodeIds = (progressRows || []).map(r => r.episode_id);
+      (progressRows || []).forEach(r => {
+        completedEpisodeIds.push(r.episode_id);
+        completedEpisodesMap[r.episode_id] = { completed_at: r.completed_at };
+      });
+
       if (completedEpisodeIds.length > 0) {
         await backfillMissingCourseLessonPoints(serverSupabase, classroom_id).catch(() => {});
       }
@@ -6739,16 +6893,14 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       .eq('student_id', student_id);
     const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
 
-    const { data: courseRow } = await serverSupabase
-      .from('courses')
-      .select('daily_release_enabled, course_timezone')
-      .eq('id', course_id)
-      .maybeSingle();
-
     res.json({
       success: true,
+      is_teacher: false,
+      is_preview: false,
+      is_paused: isPaused,
       enrollment: enrollment || null,
       completedEpisodeIds,
+      completedEpisodesMap,
       progress_percent: enrollment?.progress_percent || 0,
       total_classroom_points: totalClassroomPoints,
       daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
@@ -6770,6 +6922,53 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
 
     if (!course_id || !classroom_id || !episode_id) {
       return res.status(400).json({ success: false, error: 'course_id, classroom_id, and episode_id are required.' });
+    }
+
+    // Check course ownership & role
+    const [{ data: courseRow }, { data: classroomRow }] = await Promise.all([
+      serverSupabase
+        .from('courses')
+        .select('teacher_id')
+        .eq('id', course_id)
+        .maybeSingle(),
+      serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroom_id)
+        .maybeSingle()
+    ]);
+
+    const isTeacher =
+      (courseRow?.teacher_id && courseRow.teacher_id === student_id) ||
+      (classroomRow?.teacher_id && classroomRow.teacher_id === student_id) ||
+      authData.profile?.role === 'teacher' ||
+      authData.profile?.role === 'admin' ||
+      authData.user.email === 'roshanjoyal520@gmail.com';
+
+    if (isTeacher) {
+      return res.json({
+        success: true,
+        is_preview: true,
+        is_teacher: true,
+        message: 'Teacher preview mode - student progress and leaderboard points are not recorded.',
+        points_awarded: 0,
+        already_awarded: true
+      });
+    }
+
+    const { data: assignment } = await serverSupabase
+      .from('course_classroom_assignments')
+      .select('id, status')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .maybeSingle();
+
+    if (assignment?.status === 'paused') {
+      return res.status(403).json({
+        success: false,
+        is_paused: true,
+        error: 'This course is currently paused by the teacher. Lessons and submissions are temporarily on hold.'
+      });
     }
 
     const result = await completeCourseLessonAndAwardPoints(serverSupabase, {
@@ -6810,6 +7009,52 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
     } = req.body;
 
     const student_id = authData.user.id;
+
+    // Check course ownership & role
+    const [{ data: courseRow }, { data: classroomRow }] = await Promise.all([
+      serverSupabase
+        .from('courses')
+        .select('teacher_id')
+        .eq('id', course_id)
+        .maybeSingle(),
+      serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroom_id)
+        .maybeSingle()
+    ]);
+
+    const isTeacher =
+      (courseRow?.teacher_id && courseRow.teacher_id === student_id) ||
+      (classroomRow?.teacher_id && classroomRow.teacher_id === student_id) ||
+      authData.profile?.role === 'teacher' ||
+      authData.profile?.role === 'admin' ||
+      authData.user.email === 'roshanjoyal520@gmail.com';
+
+    if (isTeacher) {
+      return res.json({
+        success: true,
+        is_preview: true,
+        is_teacher: true,
+        message: 'Teacher preview - question attempt not recorded.',
+        points_awarded: 0
+      });
+    }
+
+    const { data: assignment } = await serverSupabase
+      .from('course_classroom_assignments')
+      .select('id, status')
+      .eq('course_id', course_id)
+      .eq('classroom_id', classroom_id)
+      .maybeSingle();
+
+    if (assignment?.status === 'paused') {
+      return res.status(403).json({
+        success: false,
+        is_paused: true,
+        error: 'This course is currently paused by the teacher.'
+      });
+    }
 
     let { data: enrollment } = await serverSupabase
       .from('course_enrollments')

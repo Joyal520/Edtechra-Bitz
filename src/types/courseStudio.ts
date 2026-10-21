@@ -289,7 +289,7 @@ export interface CourseBlock {
   updated_at?: string;
 }
 
-export type LessonProgressionStatus = 'locked' | 'available' | 'in_progress' | 'completed';
+export type LessonProgressionStatus = 'locked' | 'available' | 'in_progress' | 'completed' | 'paused';
 
 export interface CourseEpisode {
   id: string;
@@ -351,6 +351,8 @@ export interface Course {
   episodes_count?: number;
   assigned_classrooms_count?: number;
   enrolled_students_count?: number;
+  is_paused?: boolean;
+  assignments?: CourseClassroomAssignment[];
   units?: CourseUnit[];
   teacher?: {
     id: string;

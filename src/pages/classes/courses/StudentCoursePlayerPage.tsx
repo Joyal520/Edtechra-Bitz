@@ -20,7 +20,9 @@ import {
   X,
   Bookmark,
   Map,
-  Lock
+  Lock,
+  Pause,
+  Edit3
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Course, CourseEpisode, CourseEnrollment, RoadmapLessonItem } from '@/types/courseStudio';
@@ -56,6 +58,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [scrollProgress, setScrollProgress] = useState(0);
 
   const [completedEpisodeIds, setCompletedEpisodeIds] = useState<Set<string>>(new Set());
+  const [completedEpisodesMap, setCompletedEpisodesMap] = useState<Record<string, { completed_at?: string }>>({});
+  const [isTeacherPreview, setIsTeacherPreview] = useState(false);
+  const [isCoursePaused, setIsCoursePaused] = useState(false);
   const [completingEpisode, setCompletingEpisode] = useState(false);
 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
@@ -158,6 +163,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
       setCourse(courseData);
 
+      const isTeacher = Boolean((progressData as any)?.is_teacher);
+      const isPaused = Boolean((progressData as any)?.is_paused) || Boolean(courseData?.is_paused);
+      setIsTeacherPreview(isTeacher);
+      setIsCoursePaused(isPaused);
+
+      if ((progressData as any)?.completedEpisodesMap) {
+        setCompletedEpisodesMap((progressData as any).completedEpisodesMap);
+      }
+
       // Restore persistent completed episode states from database
       const completedSet = new Set(progressData.completedEpisodeIds || []);
       setCompletedEpisodeIds(completedSet);
@@ -170,11 +184,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
         setEnrollment(progressData.enrollment as CourseEnrollment);
       }
 
-      // Compute initial roadmap with actual completed lessons
+      // Compute initial roadmap with actual completed lessons & exact daily release state
       const roadmap = computeCourseRoadmap({
         course: courseData,
         completedEpisodeIds: completedSet,
-        studentStartDate: progressData.enrollment?.created_at || null
+        completedEpisodesMap: (progressData as any)?.completedEpisodesMap,
+        studentStartDate: progressData.enrollment?.created_at || null,
+        isPaused,
+        isTeacher
       });
 
       if (roadmap.currentAvailableEpisode) {
@@ -249,12 +266,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const prevItem = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
   const nextItem = currentIndex < allEpisodes.length - 1 ? allEpisodes[currentIndex + 1] : null;
 
-  // Compute live roadmap
+  // Compute live roadmap with strict daily lock state
   const roadmapData = course ? computeCourseRoadmap({
     course,
     completedEpisodeIds,
+    completedEpisodesMap,
     studentStartDate: enrollment?.created_at || null,
-    currentActiveEpisodeId: selectedEpisode?.id || null
+    currentActiveEpisodeId: selectedEpisode?.id || null,
+    isPaused: isCoursePaused,
+    isTeacher: isTeacherPreview
   }) : null;
 
   const currentRoadmapItem = roadmapData?.items.find(item => item.id === selectedEpisode?.id);
@@ -311,6 +331,24 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
 
     const epId = selectedEpisode.id;
+
+    // Teacher Preview Guard: Do NOT record student progress or alter leaderboard points
+    if (isTeacherPreview) {
+      setCompletedEpisodeIds(prev => new Set([...prev, epId]));
+      setCelebratedIds(prev => new Set([...prev, epId]));
+      setToastMessage('Teacher Preview: Lesson completed in simulation. No student progress or points were recorded to the database.');
+      setTimeout(() => setToastMessage(null), 4000);
+      handleAfterCelebrationContinue();
+      return;
+    }
+
+    // Paused Course Guard: Prevent submissions while paused
+    if (isCoursePaused) {
+      setToastMessage('Course is currently paused by your teacher. Lesson submissions are temporarily on hold.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
     completingEpisodeRef.current = true;
     setCompletingEpisode(true);
 
@@ -382,7 +420,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   };
 
   const handleSelectLessonFromRoadmap = (item: RoadmapLessonItem) => {
-    if (item.status === 'locked' || item.is_locked) {
+    if ((item.status === 'locked' || item.is_locked) && !isTeacherPreview) {
       const msg = item.unlock_message || `Lesson ${item.position} is locked. It will open tomorrow at midnight.`;
       setToastMessage(msg);
       setTimeout(() => setToastMessage(null), 3500);
@@ -450,6 +488,47 @@ export const StudentCoursePlayerPage: React.FC = () => {
       data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
       className={`reader-scale-container course-reader-shell ${activeTheme.isDark ? 'dark' : ''} w-full flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
+      {/* 0A. TEACHER PREVIEW MODE BANNER */}
+      {isTeacherPreview && (
+        <aside aria-label="Teacher preview mode" className="bg-slate-900 text-white px-3 sm:px-6 py-2 text-xs font-bold flex items-center justify-between gap-3 border-b border-indigo-500/40 shrink-0 z-30 shadow-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 text-[10px] font-black uppercase tracking-wider shrink-0">
+              Teacher Preview
+            </span>
+            <span className="hidden sm:inline text-slate-300 text-[11px] truncate">
+              Testing course as author. Student progress and leaderboard scores are not recorded.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate(`/course-studio/${courseId}`)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 shadow-2xs"
+            >
+              <Edit3 className="w-3 h-3" />
+              <span>Edit Course</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/classes/${classroomId}`)}
+              className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              <span className="hidden xs:inline">Classroom</span>
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* 0B. PAUSED ACCESS BANNER */}
+      {isCoursePaused && !isTeacherPreview && (
+        <aside aria-label="Course paused" className="bg-amber-500/15 border-b border-amber-500/30 text-amber-900 dark:text-amber-200 px-3 sm:px-6 py-2.5 text-xs font-bold flex items-center gap-2 shrink-0 z-30">
+          <Pause className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>
+            <strong>Course Paused:</strong> Your teacher has temporarily paused access to this course. Lessons and exercises are currently on hold.
+          </span>
+        </aside>
+      )}
       
       {/* 1. TOP READING PROGRESS LINE */}
       <div className="w-full h-1 bg-current/5 relative shrink-0">
