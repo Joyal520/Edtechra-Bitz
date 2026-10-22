@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Learn English with Creepy Legends — 12-Day Interactive English Course (A1–A2)</title>
+  <meta name="description" content="A 12-day interactive English course for A1–A2 learners. Learn reading, vocabulary, grammar, and speaking through world mysteries and folklore.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Sticky Header -->
+  <header class="header">
+    <div class="header-container">
+      <div class="brand" onclick="window.location.hash='overview'">
+        <span class="brand-icon">🕯️</span>
+        <div>
+          <span class="brand-title">CREEPY LEGENDS</span>
+          <span class="brand-badge">A1–A2</span>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <div class="header-progress-pill" title="Your Course Progress">
+          <span id="header-progress-text">0/12 Days (0%)</span>
+          <div class="progress-bar-mini">
+            <div class="progress-fill-mini" id="header-progress-fill"></div>
+          </div>
+        </div>
+
+        <button class="btn-drawer-toggle" id="btn-drawer-toggle" aria-label="Toggle Navigation">
+          <span>☰</span>
+          <span>Lessons</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="layout">
+    <!-- Sticky / Drawer Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <nav class="lesson-list" id="sidebar-nav">
+        <!-- Rendered dynamically by app.js -->
+      </nav>
+    </aside>
+
+    <!-- Main Content Container -->
+    <main class="main-content" id="main-content">
+      <!-- Injected dynamically by app.js -->
+    </main>
+  </div>
+
+  <!-- Course Data & Scripts -->
+  <script src="course-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
