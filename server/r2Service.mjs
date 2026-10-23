@@ -888,7 +888,7 @@ export function validateLibraryUpload({ contentType, filename, size, isCover = f
     return true;
   }
 
-  // V1 Resource: strictly PDF or PPTX
+  // Library Resource: PDF, PPTX, or HTML
   const normType = (contentType || '').toLowerCase().trim();
   const normName = (filename || '').toLowerCase().trim();
 
@@ -898,12 +898,18 @@ export function validateLibraryUpload({ contentType, filename, size, isCover = f
     normType === 'application/vnd.ms-powerpoint' ||
     normName.endsWith('.pptx') ||
     normName.endsWith('.ppt');
+  const isHtml = normType === 'text/html' || normName.endsWith('.html') || normName.endsWith('.htm');
 
-  if (!isPdf && !isPptx) {
-    throw new Error('Unsupported format for EdTechra Library. For V1, only PDF (.pdf) and PowerPoint (.pptx) documents are supported.');
+  if (!isPdf && !isPptx && !isHtml) {
+    throw new Error('Unsupported format for EdTechra Library. Only PDF (.pdf), PowerPoint (.pptx), and Web / Blog (.html) documents are supported.');
   }
 
+  const MAX_HTML_SIZE = 50 * 1024 * 1024; // 50 MB
   const MAX_LIBRARY_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+  if (isHtml && size && Number(size) > MAX_HTML_SIZE) {
+    throw new Error('HTML file exceeds the 50 MB limit.');
+  }
   if (size && Number(size) > MAX_LIBRARY_FILE_SIZE) {
     throw new Error('Resource file exceeds the 100 MB limit.');
   }

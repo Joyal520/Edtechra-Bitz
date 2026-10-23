@@ -292,12 +292,15 @@ class LibraryService {
 
   async uploadFileToR2(
     file: File,
-    isCover: boolean = false
+    isCover: boolean = false,
+    onProgress?: (percent: number) => void
   ): Promise<{ publicUrl: string; objectKey: string }> {
     const token = await this.getAuthToken();
     if (!token) {
       throw new Error('Authentication required for uploading.');
     }
+
+    if (onProgress) onProgress(5);
 
     // 1. Request presigned upload URL from backend
     const presignRes = await fetch('/api/library/presign-upload', {
@@ -308,7 +311,7 @@ class LibraryService {
       },
       body: JSON.stringify({
         filename: file.name,
-        contentType: file.type || (isCover ? 'image/jpeg' : 'application/pdf'),
+        contentType: file.type || (isCover ? 'image/jpeg' : file.name.endsWith('.html') ? 'text/html' : 'application/pdf'),
         size: file.size,
         isCover
       })
@@ -320,19 +323,43 @@ class LibraryService {
     }
 
     const { uploadUrl, publicUrl, objectKey } = presignJson.data;
+    if (onProgress) onProgress(15);
 
-    // 2. Direct binary PUT to Cloudflare R2
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type || (isCover ? 'image/jpeg' : 'application/octet-stream')
-      },
-      body: file
+    // 2. Direct binary PUT to Cloudflare R2 with progress tracking
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('Content-Type', file.type || (isCover ? 'image/jpeg' : file.name.endsWith('.html') ? 'text/html' : 'application/octet-stream'));
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable) {
+            // Scale progress from 15% to 95%
+            const pct = 15 + Math.round((evt.loaded / evt.total) * 80);
+            onProgress(pct);
+          }
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          if (onProgress) onProgress(100);
+          resolve();
+        } else {
+          reject(new Error(`Cloudflare R2 upload rejected with status: ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error('Network error during file upload to Cloudflare R2.'));
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error('Upload to Cloudflare R2 timed out.'));
+      };
+
+      xhr.send(file);
     });
-
-    if (!uploadRes.ok) {
-      throw new Error(`Cloudflare R2 upload rejected with status: ${uploadRes.status}`);
-    }
 
     return {
       publicUrl,

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { LibraryResource } from '@/types/library';
 import { extractPptxCoverFromUrl } from '@/utils/pptxParser';
+import { getDefaultCoverDataUri } from '@/utils/libraryCovers';
 
 interface LibraryCardProps {
   resource: LibraryResource;
@@ -30,7 +31,8 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
     resource.category === 'Web / Blogs' ||
     resource.file_url?.endsWith('.html') ||
     resource.file_key?.endsWith('.html');
-  const [coverUrl, setCoverUrl] = useState<string | null>(resource.cover_image_url || null);
+  const defaultFallbackCover = getDefaultCoverDataUri(resource.file_type, resource.title);
+  const [coverUrl, setCoverUrl] = useState<string | null>(resource.cover_image_url || defaultFallbackCover);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -54,8 +56,10 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
       return () => {
         isMounted = false;
       };
+    } else {
+      setCoverUrl(defaultFallbackCover);
     }
-  }, [resource.cover_image_url, isPptx, resource.file_url]);
+  }, [resource.cover_image_url, isPptx, resource.file_url, defaultFallbackCover]);
 
   const formatFileSize = (bytes?: number): string => {
     if (!bytes || bytes <= 0) return '';
@@ -198,8 +202,12 @@ export const LibraryCard: React.FC<LibraryCardProps> = ({
           {/* Author/Uploader attribution */}
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-semibold truncate min-w-0">
             <User className="w-3 h-3 text-slate-400 shrink-0" />
-            <span className="truncate">
-              {resource.author || resource.uploader?.full_name || 'EdTechra Faculty'}
+            <span className="truncate" title={resource.uploader?.full_name ? `Uploaded by ${resource.uploader.full_name}` : resource.author ? `Uploaded by ${resource.author}` : 'Uploaded by EdTechra'}>
+              {resource.uploader?.full_name
+                ? `Uploaded by ${resource.uploader.full_name}`
+                : resource.author
+                ? (resource.author.startsWith('Uploaded by') ? resource.author : `Uploaded by ${resource.author}`)
+                : 'Uploaded by EdTechra'}
             </span>
           </div>
 

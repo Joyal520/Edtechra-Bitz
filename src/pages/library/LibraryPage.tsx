@@ -8,7 +8,8 @@ import {
   ShieldCheck,
   Sparkles,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 import { LibraryResource, LibraryFilterState } from '@/types/library';
 import { libraryService } from '@/services/libraryService';
@@ -16,11 +17,12 @@ import { LibraryCard } from '@/components/library/LibraryCard';
 import { LibraryFilters } from '@/components/library/LibraryFilters';
 import { PdfViewerModal } from '@/components/library/PdfViewerModal';
 import { WebBlogViewerModal } from '@/components/library/WebBlogViewerModal';
+import { UploadResourceModal } from '@/components/library/UploadResourceModal';
 import { useAuth } from '@/context/AuthContext';
 
 export const LibraryPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAuthenticated, openAuthModal } = useAuth();
 
   const [resources, setResources] = useState<LibraryResource[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -36,8 +38,25 @@ export const LibraryPage: React.FC = () => {
   });
 
   // Modal states
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [activePdfResource, setActivePdfResource] = useState<LibraryResource | null>(null);
   const [activeWebBlogResource, setActiveWebBlogResource] = useState<LibraryResource | null>(null);
+
+  const handleOpenUploadModal = () => {
+    if (!isAuthenticated) {
+      openAuthModal('signup');
+      return;
+    }
+    setIsUploadModalOpen(true);
+  };
+
+  const handleUploadSuccess = (newResource: LibraryResource, action: 'view' | 'close') => {
+    // Prepend immediately so that Library updates in real-time without manual refresh
+    setResources((prev) => [newResource, ...prev.filter((r) => r.id !== newResource.id)]);
+    if (action === 'view') {
+      handleOpenResource(newResource);
+    }
+  };
 
   const loadResources = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -105,8 +124,18 @@ export const LibraryPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Admin Shortcuts & Remote Shortcut */}
+            {/* Header Actions: Upload Resource, Remote, Admin, Refresh */}
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-[#026fc3] hover:bg-[#025ea6] text-white rounded-xl text-xs sm:text-sm font-black shadow-xs hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                title="Upload a PDF, PowerPoint presentation, or Web/Blog resource"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Upload Resource</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => navigate('/library/controller')}
@@ -238,6 +267,13 @@ export const LibraryPage: React.FC = () => {
         isOpen={Boolean(activeWebBlogResource)}
         resource={activeWebBlogResource}
         onClose={() => setActiveWebBlogResource(null)}
+      />
+
+      {/* Upload Resource Modal */}
+      <UploadResourceModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onSuccess={handleUploadSuccess}
       />
 
     </div>

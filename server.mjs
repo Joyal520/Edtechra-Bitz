@@ -2365,14 +2365,7 @@ app.post('/api/library/presign-upload', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
 
-    const isAdmin =
-      authData.profile?.role === 'admin' ||
-      authData.user.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
-
-    if (!isAdmin) {
-      return res.status(403).json({ success: false, error: 'Administrator privileges required to upload to Library.' });
-    }
-
+    // Any authenticated user (teacher, student, admin) can contribute resources to the library
     const { filename = 'document.pdf', contentType = 'application/pdf', size, isCover = false } = req.body;
 
     try {
