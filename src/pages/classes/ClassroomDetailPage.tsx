@@ -691,7 +691,7 @@ export const ClassroomDetailPage: React.FC = () => {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // Close floating options menu on click outside
+  // Close floating options menu on click outside or Escape key
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -701,11 +701,20 @@ export const ClassroomDetailPage: React.FC = () => {
         setOptionsMenuOpen(false);
       }
     };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOptionsMenuOpen(false);
+      }
+    };
+
     if (optionsMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [optionsMenuOpen]);
 
@@ -749,7 +758,7 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
-        <section className="relative bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] overflow-hidden transition-all">
+        <section className="relative bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all">
           
           {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
           <div className="flex sm:hidden items-center justify-between gap-2 mb-3.5 relative z-20">
@@ -772,8 +781,10 @@ export const ClassroomDetailPage: React.FC = () => {
                       ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
                       : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-600 hover:text-slate-900'
                   }`}
-                  title="Classroom Options"
-                  aria-label="Classroom Options"
+                  title="Classroom options"
+                  aria-label="Classroom options"
+                  aria-expanded={optionsMenuOpen}
+                  aria-haspopup="true"
                 >
                   <MoreHorizontal className="w-4 h-4 stroke-[2.2]" />
                 </button>
@@ -873,9 +884,9 @@ export const ClassroomDetailPage: React.FC = () => {
               <span>Back to Classes</span>
             </Link>
 
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs">
-              <Sparkles className="w-3.5 h-3.5 text-[#0284c7]" />
-              <span>CLASSROOM</span>
+            <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs leading-none select-none">
+              <Sparkles className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+              <span className="leading-none pt-[0.5px]">CLASSROOM</span>
             </div>
           </div>
 
@@ -916,8 +927,8 @@ export const ClassroomDetailPage: React.FC = () => {
                           type="button"
                           onClick={() => setEditClassroomModalOpen(true)}
                           className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-900 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
-                          title="Edit Classroom Name & Colour"
-                          aria-label="Edit Classroom"
+                          title="Edit classroom"
+                          aria-label="Edit classroom"
                         >
                           <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3]" />
                         </button>
@@ -982,15 +993,17 @@ export const ClassroomDetailPage: React.FC = () => {
                           ? 'bg-sky-50 border-sky-300 text-[#0284c7]'
                           : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                       }`}
-                      title="Classroom Options"
-                      aria-label="Classroom Options"
+                      title="Classroom options"
+                      aria-label="Classroom options"
+                      aria-expanded={optionsMenuOpen}
+                      aria-haspopup="true"
                     >
                       <MoreHorizontal className="w-5 h-5 stroke-[2.2]" />
                     </button>
 
                     {/* Floating Dropdown Menu */}
                     {optionsMenuOpen && (
-                      <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.15)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
+                      <div className="absolute left-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-[0_16px_36px_-4px_rgba(15,23,42,0.18)] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 text-slate-800">
                         <div className="py-1">
                           {/* Copy Code */}
                           <button
@@ -1082,13 +1095,18 @@ export const ClassroomDetailPage: React.FC = () => {
 
             </div>
 
-            {/* RIGHT on Desktop / UNDER CTA on Mobile: Seamless White Educational Illustration */}
-            <div className="lg:col-span-5 relative flex items-center justify-center lg:justify-end pt-2 lg:pt-0 select-none pointer-events-none">
-              <img
-                src="/images/classroom/classroom-hero-student.jpg"
-                alt="Classroom Student Learning"
-                className="w-full max-w-[260px] sm:max-w-[320px] lg:max-w-[380px] h-auto object-contain transition-transform duration-300 select-none pointer-events-none"
-              />
+            {/* RIGHT on Desktop / UNDER CTA on Mobile: Classroom Cover Image */}
+            <div className="lg:col-span-5 relative flex items-center justify-center lg:justify-end pt-2 lg:pt-0">
+              <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] aspect-[4/3] rounded-2xl overflow-hidden shadow-xs border border-sky-100/80 bg-white">
+                <img
+                  src={classroom.banner_url || '/images/classroom/classroom-hero-student.jpg'}
+                  alt={classroom.title || "Classroom Cover"}
+                  className="w-full h-full object-cover transition-transform duration-300"
+                  onError={(e) => {
+                    e.currentTarget.src = '/images/classroom/classroom-hero-student.jpg';
+                  }}
+                />
+              </div>
             </div>
 
           </div>
@@ -1853,7 +1871,7 @@ export const ClassroomDetailPage: React.FC = () => {
 
 
         {/* ========================================================================= */}
-        {/* SECTION 7 — DANGER ZONE (Teacher/Admin Only)                              */}
+        {/* SECTION 7 — DANGER ZONE & STUDENT MANAGEMENT (Teacher/Admin Only)          */}
         {/* ========================================================================= */}
         {isTeacher && classroom && (
           <section id="classroom-danger-zone">
@@ -1861,6 +1879,8 @@ export const ClassroomDetailPage: React.FC = () => {
               classroom={classroom}
               isOwnerOrAdmin={isTeacher}
               stats={stats}
+              members={members}
+              onMembersUpdated={() => loadAllClassroomData(true)}
             />
           </section>
         )}
@@ -2517,7 +2537,14 @@ export const ClassroomDetailPage: React.FC = () => {
           onClose={() => setEditClassroomModalOpen(false)}
           onSuccess={(updated) => {
             setClassroom((prev) =>
-              prev ? { ...prev, title: updated.title, theme: updated.theme } : null
+              prev
+                ? {
+                    ...prev,
+                    title: updated.title,
+                    theme: updated.theme,
+                    banner_url: updated.banner_url !== undefined ? updated.banner_url : prev.banner_url
+                  }
+                : null
             );
             setToastMessage('Classroom updated');
             setTimeout(() => setToastMessage(null), 3500);

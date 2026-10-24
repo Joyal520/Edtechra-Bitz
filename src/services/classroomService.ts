@@ -9,6 +9,7 @@ import {
   ClassroomInvite,
   ClassroomStats
 } from '@/types/classroom';
+import { optimizeImageForUpload } from '@/utils/imageOptimization';
 
 class ClassroomService {
   /**
@@ -243,7 +244,7 @@ class ClassroomService {
       grade: string;
       theme: string;
       description: string;
-      banner_url: string;
+      banner_url: string | null;
     }>
   ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
@@ -261,6 +262,102 @@ class ClassroomService {
       return {};
     } catch (err: any) {
       return { error: err.message || 'Failed to update classroom.' };
+    }
+  }
+
+  /**
+   * Helper to retrieve authorization header with current Supabase JWT session
+   */
+  private async getAuthHeaders(): Promise<HeadersInit> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+    return headers;
+  }
+
+  /**
+   * Uploads a custom classroom cover image to Cloudflare R2
+   */
+  async uploadClassroomCover(
+    classroomId: string,
+    file: File
+  ): Promise<{ publicUrl?: string; storageKey?: string; error?: string }> {
+    try {
+      // 1. Optimize image for upload (responsive webp compression)
+      const optimized = await optimizeImageForUpload(file, {
+        maxWidth: 1920,
+        maxHeight: 1080,
+        quality: 0.85,
+        format: 'image/webp'
+      });
+
+      // 2. Request presigned upload URL from backend
+      const headers = await this.getAuthHeaders();
+      const presignRes = await fetch('/api/classes/presign-upload', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          classroomId: classroomId || 'general',
+          filename: optimized.file.name.replace(/\.[^/.]+$/, "") + '.webp',
+          contentType: optimized.mimeType,
+          size: optimized.optimizedSize
+        })
+      });
+
+      const presignJson = await presignRes.json();
+      if (!presignRes.ok || !presignJson.success) {
+        return { error: presignJson.error || 'Failed to prepare cover upload credentials.' };
+      }
+
+      const { uploadUrl, publicUrl, objectKey } = presignJson.data;
+
+      // 3. Binary PUT directly to Cloudflare R2
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': optimized.mimeType
+        },
+        body: optimized.blob
+      });
+
+      if (!uploadRes.ok) {
+        return { error: `Direct storage upload failed with status ${uploadRes.status}` };
+      }
+
+      return { publicUrl, storageKey: objectKey };
+    } catch (err: any) {
+      console.error('[ClassroomService] uploadClassroomCover error:', err);
+      return { error: err.message || 'Cover image could not be uploaded. Please try again.' };
+    }
+  }
+
+  /**
+   * Safely cleans up replaced or removed classroom cover image from Cloudflare R2
+   */
+  async cleanupClassroomCover(bannerUrl?: string | null): Promise<void> {
+    if (!bannerUrl || typeof bannerUrl !== 'string') return;
+    try {
+      // Extract object key if the URL belongs to classrooms R2 storage
+      const match = bannerUrl.match(/(classrooms\/[^?#]+)/);
+      if (!match) return;
+      const objectKey = match[1];
+
+      const headers = await this.getAuthHeaders();
+      await fetch('/api/classes/cleanup-file', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ objectKey })
+      });
+    } catch (err) {
+      // Cleanup failure is non-fatal and should never interrupt user workflows
+      console.warn('[ClassroomService] Non-fatal cover cleanup notice:', err);
     }
   }
 

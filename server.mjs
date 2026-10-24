@@ -2353,6 +2353,28 @@ app.post('/api/classes/presign-upload', async (req, res) => {
   }
 });
 
+// POST /api/classes/cleanup-file - Safe cleanup of replaced classroom covers/files from Cloudflare R2
+app.post('/api/classes/cleanup-file', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required for classroom cleanup.' });
+    }
+
+    const { objectKey } = req.body;
+    if (objectKey && typeof objectKey === 'string' && objectKey.startsWith('classrooms/')) {
+      await deleteObjects([objectKey]);
+      console.log(`[R2 Classroom Cleanup] Safely removed replaced object: ${objectKey}`);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in /api/classes/cleanup-file:', error);
+    // Graceful non-blocking error response
+    res.json({ success: false, error: error.message || 'Cleanup operation failed.' });
+  }
+});
+
 // ============================================================================
 // EDTECHRA LIBRARY: Cloudflare R2 Presigned Upload & Management
 // ============================================================================

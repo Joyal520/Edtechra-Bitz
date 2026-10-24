@@ -251,9 +251,6 @@ export const ClassesPage: React.FC = () => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
-                <div className="absolute top-2.5 left-2.5 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-full text-[10px] font-black text-sky-700 shadow-2xs border border-sky-100">
-                  ✨ Better Learning, Brighter Tomorrow
-                </div>
               </div>
 
               <div className="text-right text-[11px] sm:text-xs text-slate-500 italic font-medium">
