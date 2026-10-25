@@ -342,20 +342,20 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
 
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 2B. SHORT ANSWER: DETERMINISTIC ONE-WORD EVALUATOR (0 OR 10 MARKS, NO AI)
+  // 2B. SHORT ANSWER: DETERMINISTIC EVALUATOR (0 OR FULL MARKS, NO AI)
   // --------------------------------------------------------------------------
   const handleEvaluateShortAnswer = () => {
     if (isAnswered) return;
     const rawInput = shortAnswerInput.trim();
     if (!rawInput) {
-      setAiError('Please enter a word.');
+      setAiError('Please enter your answer.');
       return;
     }
 
-    // Reject multi-word submissions
+    const hasInlineBlank = /_{2,}/.test(String(question.question_text || ''));
     const words = rawInput.split(/\s+/).filter(Boolean);
-    if (words.length > 1) {
-      setAiError('Please enter exactly ONE word.');
+    if (hasInlineBlank && words.length > 3) {
+      setAiError('Please enter a short word or phrase.');
       return;
     }
     setAiError(null);

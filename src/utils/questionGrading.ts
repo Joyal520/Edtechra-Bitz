@@ -730,12 +730,10 @@ export function evaluateQuestionAnswer(
     };
   }
 
-  // 6B. SHORT ANSWER: CONTROLLED ONE-WORD FILL-IN-THE-BLANK TASK (PART 4 REQUIREMENT)
+  // 6B. SHORT ANSWER: SUPPORTS BOTH ONE-WORD FILL-IN AND MULTI-WORD SHORT ANSWERS
   if (qType === 'short_answer') {
     const rawStudentStr = String(studentAnswer || '').trim();
-    // Validate: student must provide exactly one word. Multiple words or empty string are invalid.
     const words = rawStudentStr ? rawStudentStr.split(/\s+/).filter(Boolean) : [];
-    const isSingleWord = words.length === 1;
 
     const expectedAns = String(
       rawCorrect ||
@@ -752,17 +750,26 @@ export function evaluateQuestionAnswer(
       ...(Array.isArray(question.options) ? question.options.map(o => typeof o === 'string' ? o : o?.text || '') : [])
     ].map(s => String(s || '').trim()).filter(Boolean);
 
-    // Normalize one-word answer: clean surrounding punctuation, trim, lowercase
     const cleanStudent = cleanTextForComparison(rawStudentStr);
     const acceptableCleaned = acceptableAnswers.map(cleanTextForComparison).filter(Boolean);
 
-    const isMatch = isSingleWord && cleanStudent.length > 0 && acceptableCleaned.includes(cleanStudent);
+    const hasInlineBlank = /_{2,}/.test(String(question.question_text || ''));
+    const allAcceptableAreSingleWord =
+      acceptableCleaned.length > 0 && acceptableCleaned.every(ans => ans.split(/\s+/).length === 1);
+    const enforceSingleWord = hasInlineBlank && allAcceptableAreSingleWord;
+
+    const isDirectOrSemanticMatch =
+      cleanStudent.length > 0 &&
+      (acceptableCleaned.includes(cleanStudent) ||
+        (!enforceSingleWord && isSemanticWhMatch(rawStudentStr, expectedAns, acceptableAnswers)));
+
+    const isMatch = enforceSingleWord ? (words.length === 1 && isDirectOrSemanticMatch) : isDirectOrSemanticMatch;
 
     let feedback = '';
     if (!rawStudentStr) {
       feedback = 'Please provide an answer.';
-    } else if (!isSingleWord) {
-      feedback = 'Please enter exactly one word.';
+    } else if (enforceSingleWord && words.length > 1) {
+      feedback = 'Please enter a single word for the blank.';
     } else if (isMatch) {
       feedback = explanation ? `Correct! +${maxScore} marks. ${explanation}` : `Correct! +${maxScore} marks.`;
     } else {

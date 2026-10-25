@@ -57,6 +57,11 @@ import { AddQuestionsModal } from '@/components/course-studio/AddQuestionsModal'
 import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
 import { CourseQualityAuditModal } from '@/components/course-studio/CourseQualityAuditModal';
+import {
+  CreepyLegendsStudentView,
+  EpisodeNavItem
+} from '@/components/course-studio/CreepyLegendsStudentView';
+import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
@@ -78,12 +83,14 @@ export const CoursePreviewPage: React.FC = () => {
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
 
-  // Mode: Default to Edit mode when teacher opens a course (or check query params)
+  // Mode: Default to Student Preview if opened via /preview or ?mode=student, otherwise Edit mode
   const [isEditMode, setIsEditMode] = useState<boolean>(() => {
     const modeParam = searchParams.get('mode');
     const editParam = searchParams.get('edit');
     if (modeParam === 'student' || editParam === '0') return false;
-    return true; // Single unified editor: defaults to edit mode
+    if (modeParam === 'edit' || editParam === '1') return true;
+    if (typeof window !== 'undefined' && window.location.pathname.endsWith('/preview')) return false;
+    return true;
   });
 
   // UI Panels & Drawers
@@ -180,7 +187,24 @@ export const CoursePreviewPage: React.FC = () => {
   }, [courseId]);
 
   const loadCourse = async (id: string) => {
-    setLoading(true);
+    const cached = courseStudioService.getCachedCourseSync(id);
+    if (cached && !course) {
+      setCourse(cached);
+      setTempCourseTitle(cached.title || '');
+      const initialExpanded: Record<string, boolean> = {};
+      (cached.units || []).forEach(u => {
+        initialExpanded[u.id] = true;
+      });
+      setExpandedUnits(initialExpanded);
+      const firstEp = cached.units?.[0]?.episodes?.[0];
+      if (firstEp && !selectedEpisode) {
+        setSelectedEpisode(firstEp);
+      }
+      setLoading(false);
+    } else if (!course) {
+      setLoading(true);
+    }
+
     try {
       const data = await courseStudioService.getCourse(id);
       setCourse(data);
@@ -199,6 +223,9 @@ export const CoursePreviewPage: React.FC = () => {
       if (targetEpId) {
         found = findEpisodeById(data, targetEpId);
       }
+      if (!found && selectedEpisode) {
+        found = findEpisodeById(data, selectedEpisode.id);
+      }
       if (!found) {
         const firstUnit = data.units?.[0];
         if (firstUnit?.episodes?.[0]) {
@@ -210,7 +237,9 @@ export const CoursePreviewPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to load course preview/editor:', err);
-      showToast('Failed to load course details.');
+      if (!cached) {
+        showToast('Failed to load course details.');
+      }
     } finally {
       setLoading(false);
     }
@@ -720,16 +749,7 @@ export const CoursePreviewPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#fcfaf6] flex items-center justify-center p-6">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center mx-auto animate-spin text-[#026fc3]">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <p className="text-sm font-serif italic text-stone-600">Opening Course Studio...</p>
-        </div>
-      </div>
-    );
+    return <CoursePlayerSkeleton />;
   }
 
   if (!course) {
@@ -752,6 +772,26 @@ export const CoursePreviewPage: React.FC = () => {
 
   const activeTheme = getThemePreset(themeId);
   const isEpisodeCompleted = selectedEpisode ? completedEpisodeIds.has(selectedEpisode.id) : false;
+
+  const isCreepyLegendsOrVideoCourse = Boolean(
+    course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+      course.title?.toLowerCase().includes('creepy legends') ||
+      currentBlocks.some(b => b.block_type === 'video')
+  );
+
+  const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {
+    const roadItem = roadmapData?.items.find(r => r.id === item.episode.id);
+    const dayNum = item.episode.position || idx + 1;
+    const cleanTitle = item.episode.title.replace(/^Day\s+\d+\s*:\s*/i, '').trim() || item.episode.title;
+    return {
+      ...item,
+      dayNumber: dayNum,
+      cleanTitle,
+      isCompleted: completedEpisodeIds.has(item.episode.id),
+      isLocked: Boolean(roadItem && (roadItem.is_locked || roadItem.status === 'locked')),
+      unlockMessage: roadItem?.unlock_message || null
+    };
+  });
 
   // --------------------------------------------------------------------------
   // REUSABLE COURSE OUTLINE RENDERER (SHARED BETWEEN DESKTOP SIDEBAR & MOBILE DRAWER)
@@ -1194,30 +1234,28 @@ export const CoursePreviewPage: React.FC = () => {
             <span className="hidden sm:inline">Quality Audit</span>
           </LiquidButton>
 
-          {isEditMode && (
-            <>
-              <LiquidButton
-                variant="secondary"
-                size="sm"
-                onClick={() => setCoverModalOpen(true)}
-                icon={<Camera className="w-3.5 h-3.5 text-[#026fc3]" />}
-                title="Manage course cover artwork"
-                className="!px-3 !py-1 !text-xs font-bold shrink-0"
-              >
-                <span>Cover</span>
-              </LiquidButton>
+          <LiquidButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setCoverModalOpen(true)}
+            icon={<Camera className="w-3.5 h-3.5 text-[#026fc3]" />}
+            title="Manage 16:9 course cover image"
+            className="!px-3 !py-1 !text-xs font-bold shrink-0"
+          >
+            <span>Cover</span>
+          </LiquidButton>
 
-              <LiquidButton
-                variant="emerald"
-                size="sm"
-                onClick={() => setPublishModalOpen(true)}
-                icon={<Send className="w-3.5 h-3.5" />}
-                title="Publish course & assign to classrooms"
-                className="!px-3 !py-1 !text-xs font-bold shrink-0"
-              >
-                <span>Publish</span>
-              </LiquidButton>
-            </>
+          {isEditMode && (
+            <LiquidButton
+              variant="emerald"
+              size="sm"
+              onClick={() => setPublishModalOpen(true)}
+              icon={<Send className="w-3.5 h-3.5" />}
+              title="Publish course & assign to classrooms"
+              className="!px-3 !py-1 !text-xs font-bold shrink-0"
+            >
+              <span>Publish</span>
+            </LiquidButton>
           )}
 
           {/* PAUSE / RESUME ACCESS BUTTON (when course is published) */}
@@ -1330,16 +1368,22 @@ export const CoursePreviewPage: React.FC = () => {
         {/* Course Studio Workspace Background Visual */}
         <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} />
 
-        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex) */}
-        <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
-          {renderCourseOutline(false)}
-        </aside>
+        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy student mode) */}
+        {(isEditMode || !isCreepyLegendsOrVideoCourse || viewMode === 'roadmap') && (
+          <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
+            {renderCourseOutline(false)}
+          </aside>
+        )}
 
         {/* MAIN SCROLLABLE LEARNING & EDITING VIEWPORT */}
         <main
           ref={mainScrollRef}
           onScroll={handleScroll}
-          className="course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 scroll-smooth box-border [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem] relative z-1"
+          className={`course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden scroll-smooth box-border relative z-1 ${
+            !isEditMode && viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && selectedEpisode
+              ? 'bg-[#071326] p-0'
+              : 'px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]'
+          }`}
         >
           {viewMode === 'roadmap' ? (
             <CourseRoadmap
@@ -1369,6 +1413,34 @@ export const CoursePreviewPage: React.FC = () => {
                 </button>
               )}
             </div>
+          ) : !isEditMode && isCreepyLegendsOrVideoCourse ? (
+            <CreepyLegendsStudentView
+              course={course}
+              selectedEpisode={{
+                ...selectedEpisode,
+                title: currentEpisodeTitle || selectedEpisode.title,
+                estimated_minutes: currentEpisodeMins || selectedEpisode.estimated_minutes,
+                blocks: currentBlocks,
+                questions: currentQuestions
+              }}
+              allEpisodes={episodeNavItems}
+              completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+              totalCount={roadmapData?.totalLessons || allEpisodes.length || 1}
+              progressPercent={roadmapData?.progressPercent || 0}
+              isCompleted={isEpisodeCompleted}
+              isPreviewMode={true}
+              onSelectEpisode={(ep, locked, unlockMsg) => {
+                if (locked) {
+                  showToast(unlockMsg || 'This lesson is locked.');
+                  return;
+                }
+                setSelectedEpisode(ep);
+                mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onCompleteLesson={handleCompleteEpisode}
+              onProgressChange={handleProgressChange}
+              onOpenCoverModal={() => setCoverModalOpen(true)}
+            />
           ) : (
             <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border min-w-0">
               {/* PREMIUM COURSE OPENING HERO BANNER */}

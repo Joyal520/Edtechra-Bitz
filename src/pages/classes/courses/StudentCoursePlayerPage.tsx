@@ -11,7 +11,6 @@ import {
   ArrowLeft,
   BookOpen,
   CheckCircle2,
-  Sparkles,
   Award,
   ArrowRight,
   Clock,
@@ -36,6 +35,12 @@ import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPo
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
+import {
+  CreepyLegendsStudentView,
+  EpisodeNavItem
+} from '@/components/course-studio/CreepyLegendsStudentView';
+import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
+import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 
 export const StudentCoursePlayerPage: React.FC = () => {
   const { classroomId, courseId } = useParams<{ classroomId: string; courseId: string }>();
@@ -66,7 +71,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [feedbackState, setFeedbackState] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
+  const [attemptsByQuestionId, setAttemptsByQuestionId] = useState<Record<string, any>>({});
   const [questionProgress, setQuestionProgress] = useState<{ answered: number; total: number }>({ answered: 0, total: 0 });
+  const [coverModalOpen, setCoverModalOpen] = useState(false);
 
   // Celebration Modal State
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -94,79 +101,118 @@ export const StudentCoursePlayerPage: React.FC = () => {
     }
   }, [courseId, classroomId]);
 
+  const applyAttemptsList = React.useCallback((attempts: any[]) => {
+    const answersMap: Record<string, string> = {};
+    const feedbackMap: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }> = {};
+    const scoresMap: Record<string, number> = {};
+    const rawMap: Record<string, any> = {};
+
+    (attempts || []).forEach((att: any) => {
+      if (att && att.question_id) {
+        rawMap[att.question_id] = att;
+      }
+      if (att.student_answer !== undefined && att.student_answer !== null && String(att.student_answer).trim() !== '') {
+        answersMap[att.question_id] = att.student_answer;
+        feedbackMap[att.question_id] = {
+          isCorrect: att.is_correct,
+          showExplanation: true,
+          selected: att.student_answer
+        };
+        scoresMap[att.question_id] = att.is_correct ? (att.points_awarded || 10) : 0;
+      }
+    });
+
+    setAttemptsByQuestionId(prev => ({ ...prev, ...rawMap }));
+    setUserAnswers(prev => ({ ...prev, ...answersMap }));
+    setFeedbackState(prev => ({ ...prev, ...feedbackMap }));
+    setQuestionScores(prev => ({ ...prev, ...scoresMap }));
+  }, []);
+
   useEffect(() => {
     if (courseId && classroomId && selectedEpisode) {
       const initialTotal = getValidLessonQuestions(selectedEpisode.questions).length;
-      setUserAnswers({});
-      setFeedbackState({});
-      setQuestionScores({});
       setQuestionProgress({ answered: 0, total: initialTotal });
-      loadEpisodeAttempts(courseId, classroomId, selectedEpisode.id);
+      // Only fetch episode attempts if we don't already have attempts loaded for this episode
+      const epQuestionIds = (selectedEpisode.questions || []).map(q => q.id);
+      const hasCachedAttempts = epQuestionIds.some(qId => Boolean(attemptsByQuestionId[qId]));
+      if (!hasCachedAttempts) {
+        loadEpisodeAttempts(courseId, classroomId, selectedEpisode.id);
+      }
     }
   }, [courseId, classroomId, selectedEpisode?.id]);
 
   const loadEpisodeAttempts = async (cId: string, clId: string, epId: string) => {
     try {
       const attempts = await courseStudioService.getStudentQuestionAttempts(cId, clId, epId);
-      const answersMap: Record<string, string> = {};
-      const feedbackMap: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }> = {};
-      const scoresMap: Record<string, number> = {};
-
-      attempts.forEach((att: any) => {
-        if (att.student_answer !== undefined && att.student_answer !== null && String(att.student_answer).trim() !== '') {
-          answersMap[att.question_id] = att.student_answer;
-          feedbackMap[att.question_id] = {
-            isCorrect: att.is_correct,
-            showExplanation: true,
-            selected: att.student_answer
-          };
-          scoresMap[att.question_id] = att.is_correct ? (att.points_awarded || 10) : 0;
-        }
-      });
-
-      setUserAnswers(answersMap);
-      setFeedbackState(feedbackMap);
-      setQuestionScores(scoresMap);
+      applyAttemptsList(attempts);
     } catch (err) {
       console.error('Failed to load past attempts:', err);
     }
   };
 
   const loadCourseAndProgress = async (cId: string, clId: string) => {
-    setLoading(true);
+    // Hydrate synchronously from cache if available for instant initial render
+    const cachedCourse = courseStudioService.getCachedCourseSync(cId);
+    if (cachedCourse) {
+      setCourse(cachedCourse);
+      const firstEp = cachedCourse.units?.[0]?.episodes?.[0];
+      if (firstEp && !selectedEpisode) {
+        setSelectedEpisode(firstEp);
+      }
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setLoadError(null);
+
     try {
-      if (supabase) {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user) {
+      // Run course fetch, student progress (including attempts), and user profile lookup in parallel!
+      const resolveProfileName = async () => {
+        if (!supabase) return;
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const user = sessionData?.session?.user;
+          if (!user) return;
+          const metaName =
+            (user.user_metadata as any)?.full_name ||
+            (user.user_metadata as any)?.name ||
+            '';
+          if (metaName && !metaName.includes('@')) {
+            setStudentName(metaName.trim());
+            return;
+          }
           const { data: profileRow } = await supabase
             .from('profiles')
             .select('full_name')
-            .eq('id', userData.user.id)
+            .eq('id', user.id)
             .maybeSingle();
-
-          const dbProfileName = profileRow?.full_name && !profileRow.full_name.includes('@')
-            ? profileRow.full_name.trim()
-            : '';
-          const metaName = (userData.user.user_metadata as any)?.full_name
-            || (userData.user.user_metadata as any)?.name
-            || '';
+          const dbProfileName =
+            profileRow?.full_name && !profileRow.full_name.includes('@')
+              ? profileRow.full_name.trim()
+              : '';
           setStudentName(dbProfileName || metaName);
+        } catch {
+          // ignore profile name error
         }
-      }
+      };
 
-      // Fetch course and actual student progress concurrently
       const [courseData, progressData] = await Promise.all([
         courseStudioService.getCourse(cId),
         courseStudioService.getStudentProgress(cId, clId).catch(() => ({
           enrollment: null,
           completedEpisodeIds: [],
           progress_percent: 0,
-          total_classroom_points: undefined
-        }))
+          total_classroom_points: undefined,
+          attempts: []
+        })),
+        resolveProfileName()
       ]);
 
       setCourse(courseData);
+
+      if (Array.isArray((progressData as any)?.attempts) && (progressData as any).attempts.length > 0) {
+        applyAttemptsList((progressData as any).attempts);
+      }
 
       const isTeacher = Boolean((progressData as any)?.is_teacher);
       const isPaused = Boolean((progressData as any)?.is_paused) || Boolean(courseData?.is_paused);
@@ -208,7 +254,9 @@ export const StudentCoursePlayerPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Failed to load course player:', err);
-      setLoadError(err.message || 'Access restricted. You do not have permission to access this course.');
+      if (!cachedCourse) {
+        setLoadError(err.message || 'Access restricted. You do not have permission to access this course.');
+      }
     } finally {
       setLoading(false);
     }
@@ -300,6 +348,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
     setQuestionScores(prev => ({
       ...prev,
       [questionId]: isCorrect ? pointsAwarded : 0
+    }));
+    setAttemptsByQuestionId(prev => ({
+      ...prev,
+      [questionId]: {
+        question_id: questionId,
+        student_answer: answer,
+        is_correct: isCorrect,
+        points_awarded: isCorrect ? pointsAwarded : 0
+      }
     }));
 
     try {
@@ -455,16 +512,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#fcfaf6] flex items-center justify-center p-6">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center mx-auto animate-spin text-[#026fc3]">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <p className="text-sm font-serif italic text-stone-600">Opening Digital Book...</p>
-        </div>
-      </div>
-    );
+    return <CoursePlayerSkeleton />;
   }
 
   if (loadError || !course || !selectedEpisode) {
@@ -497,6 +545,26 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const activeTheme = getThemePreset(themeId);
   const isEpisodeCompleted = completedEpisodeIds.has(selectedEpisode.id);
+
+  const isCreepyLegendsOrVideoCourse = Boolean(
+    course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+      course.title?.toLowerCase().includes('creepy legends') ||
+      (selectedEpisode.blocks || []).some(b => b.block_type === 'video')
+  );
+
+  const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {
+    const roadItem = roadmapData?.items.find(r => r.id === item.episode.id);
+    const dayNum = item.episode.position || idx + 1;
+    const cleanTitle = item.episode.title.replace(/^Day\s+\d+\s*:\s*/i, '').trim() || item.episode.title;
+    return {
+      ...item,
+      dayNumber: dayNum,
+      cleanTitle,
+      isCompleted: completedEpisodeIds.has(item.episode.id),
+      isLocked: Boolean(roadItem && (roadItem.is_locked || roadItem.status === 'locked') && !isTeacherPreview),
+      unlockMessage: roadItem?.unlock_message || null
+    };
+  });
 
   return (
     <div
@@ -684,7 +752,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
       <main
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 scroll-smooth box-border [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]"
+        className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden scroll-smooth box-border ${
+          viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked
+            ? 'bg-[#071326] p-0'
+            : 'px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]'
+        }`}
       >
         {viewMode === 'roadmap' ? (
           <CourseRoadmap
@@ -696,6 +768,34 @@ export const StudentCoursePlayerPage: React.FC = () => {
             dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
             onSelectLesson={handleSelectLessonFromRoadmap}
             activeLessonId={selectedEpisode.id}
+          />
+        ) : isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked ? (
+          <CreepyLegendsStudentView
+            course={course}
+            selectedEpisode={selectedEpisode}
+            allEpisodes={episodeNavItems}
+            completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+            totalCount={roadmapData?.totalLessons || allEpisodes.length || 1}
+            progressPercent={roadmapData?.progressPercent || 0}
+            attemptsMap={attemptsByQuestionId}
+            isCompleted={isEpisodeCompleted}
+            isCompleting={completingEpisode}
+            isPreviewMode={isTeacherPreview}
+            onSelectEpisode={(ep, locked, unlockMsg) => {
+              if (locked && !isTeacherPreview) {
+                setToastMessage(unlockMsg || 'This lesson is currently locked.');
+                setTimeout(() => setToastMessage(null), 3500);
+                return;
+              }
+              setSelectedEpisode(ep);
+              mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onRecordAttempt={(question, studentAnswer, isCorrect, pointsAwarded) =>
+              handleQuestionAnswer(question.id, studentAnswer, isCorrect, pointsAwarded, question)
+            }
+            onCompleteLesson={handleCompleteEpisode}
+            onProgressChange={handleProgressChange}
+            onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
           />
         ) : (
           <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 pb-8 box-border min-w-0">
@@ -995,6 +1095,18 @@ export const StudentCoursePlayerPage: React.FC = () => {
         dailyReleaseEnabled={Boolean(course.daily_release_enabled)}
         onContinue={handleAfterCelebrationContinue}
       />
+
+      {/* 6. COURSE COVER MODAL (Teacher Preview) */}
+      {course && (
+        <CourseCoverModal
+          isOpen={coverModalOpen}
+          course={course}
+          onClose={() => setCoverModalOpen(false)}
+          onSuccess={updated => {
+            setCourse(prev => (prev ? { ...prev, ...updated } : prev));
+          }}
+        />
+      )}
 
     </div>
   );

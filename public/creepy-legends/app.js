@@ -241,86 +241,35 @@
         <div class="day-lesson-subtitle">${lesson.subtitle}</div>
       </div>
 
-      <!-- Section 1: Introduction & Goals -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-icon">📖</span>
-          <h2 class="section-title">Section 1 — Lesson Introduction</h2>
-        </div>
-        <p style="font-size: 1.05rem; line-height: 1.7; color: #f1f5f9; margin-bottom: 1.25rem;">
-          ${lesson.intro}
-        </p>
-        <h3 style="font-size: 1.05rem; color: var(--accent-gold); margin-bottom: 0.5rem;">🎯 Today's Learning Goals</h3>
-        <ul class="goals-list">
-          ${lesson.learningGoals.map(goal => `
-            <li class="goal-item">
-              <span class="goal-icon">✓</span>
-              <span>${goal}</span>
-            </li>
-          `).join('')}
-        </ul>
-      </div>
-
-      <!-- Section 2: Watch the Story -->
+      <!-- Section 1: Watch the Story -->
       <div class="section-card">
         <div class="section-header">
           <span class="section-icon">🎬</span>
-          <h2 class="section-title">Section 2 — Watch the Story</h2>
+          <h2 class="section-title">1. Watch the Story</h2>
         </div>
         <p style="color: var(--text-muted); font-size: 0.95rem;">
-          <strong>Instruction:</strong> Watch the video carefully. Try to understand the main story and remember important details.
+          <strong>Instruction:</strong> Watch the video carefully and complete the activities below.
         </p>
-
-        <div class="pre-question-box">
-          <span class="pre-question-icon">💡</span>
-          <div class="pre-question-text">
-            <strong>Pre-Watching Question:</strong> ${lesson.preWatchingQuestion}
-          </div>
-        </div>
 
         <div class="video-container">
           <iframe 
             src="https://www.youtube.com/embed/${lesson.videoId}" 
             title="${lesson.title}" 
+            loading="lazy"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
             allowfullscreen>
           </iframe>
         </div>
       </div>
 
-      <!-- Section 3: Simple English Story -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-icon">📜</span>
-          <h2 class="section-title">Section 3 — Simple English Story</h2>
-        </div>
-        <p style="font-size: 0.9rem; color: var(--text-muted);">
-          Read the simplified A1–A2 English story below. Click <strong>Listen to Story</strong> to hear native pronunciation!
-        </p>
-
-        <div class="story-wrapper">
-          <div class="story-toolbar">
-            <span style="font-size: 0.85rem; color: var(--accent-gold); font-weight: 700; text-transform: uppercase;">
-              Story Reader (A1–A2)
-            </span>
-            <button class="btn-audio" id="btn-read-story">
-              <span>🎧</span> <span id="btn-read-text">Listen to Story</span>
-            </button>
-          </div>
-          <div class="story-text" id="story-paragraphs">
-            ${lesson.story.split('\n\n').map(p => `<p>${p}</p>`).join('')}
-          </div>
-        </div>
-      </div>
-
-      <!-- Section 4: Vocabulary -->
+      <!-- Section 2: Key Vocabulary -->
       <div class="section-card">
         <div class="section-header">
           <span class="section-icon">🔤</span>
-          <h2 class="section-title">Section 4 — Vocabulary</h2>
+          <h2 class="section-title">Key Vocabulary</h2>
         </div>
         <p style="font-size: 0.9rem; color: var(--text-muted);">
-          Master these 8 key words from today's lesson. Click the speaker icon to practice your pronunciation!
+          Master these key words from today's lesson. Click the speaker icon to practice your pronunciation!
         </p>
         <div class="vocab-table-wrapper">
           <table class="vocab-table">
@@ -349,11 +298,11 @@
         </div>
       </div>
 
-      <!-- Section 5: Grammar -->
+      <!-- Section 3: Grammar Spotlight -->
       <div class="section-card">
         <div class="section-header">
           <span class="section-icon">⚡</span>
-          <h2 class="section-title">Section 5 — Grammar Spotlight</h2>
+          <h2 class="section-title">Grammar Spotlight</h2>
         </div>
         <div class="grammar-box">
           <div class="grammar-title">${lesson.grammar.title}</div>
@@ -365,59 +314,11 @@
         </div>
       </div>
 
-      <!-- Section 6: Speaking Activity -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-icon">🗣️</span>
-          <h2 class="section-title">Section 6 — Speaking Activity</h2>
-        </div>
-        <p style="font-size: 1rem; color: #fff; margin-bottom: 0.75rem;">
-          <strong>Prompt:</strong> ${lesson.speaking.prompt}
-        </p>
-        <p style="font-size: 0.88rem; color: var(--text-muted);">
-          Click any sentence starter below to practice speaking aloud:
-        </p>
-        <div class="speaking-starters">
-          ${lesson.speaking.starters.map(s => `
-            <button class="starter-pill" onclick="window.speechSynthesis && window.speechSynthesis.speak(new SpeechSynthesisUtterance('${s.replace(/'/g, "\\'")}'))">
-              💬 "${s}"
-            </button>
-          `).join('')}
-        </div>
-        <div style="background: var(--bg-card-alt); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
-          <div style="font-size: 0.9rem; color: #cbd5e1;">
-            ⏱️ <strong>Speaking Practice:</strong> Set a 30–60 second timer and summarize the story out loud!
-          </div>
-          <button class="btn-audio" id="btn-timer-toggle" style="background: var(--bg-card);">
-            ⏱️ <span id="timer-label">Start 60s Timer</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Section 7: Writing Activity -->
-      <div class="section-card">
-        <div class="section-header">
-          <span class="section-icon">✍️</span>
-          <h2 class="section-title">Section 7 — Writing Activity</h2>
-        </div>
-        <p style="font-size: 1rem; color: #fff;">
-          <strong>Task:</strong> ${lesson.writing.prompt}
-        </p>
-        <textarea 
-          class="interactive-textarea" 
-          id="writing-input-${lesson.day}" 
-          placeholder="Type your sentences here in simple English..."></textarea>
-        <div class="word-counter-row">
-          <span id="word-count-${lesson.day}">Words: 0</span>
-          <span id="writing-status-${lesson.day}" style="color: var(--accent-gold);">Aim for at least 25 words!</span>
-        </div>
-      </div>
-
-      <!-- Section 8: Daily 10-Question Assessment -->
+      <!-- Section 4: Daily 10-Question Assessment -->
       <div class="section-card" id="quiz-section-${lesson.day}">
         <div class="section-header">
           <span class="section-icon">📝</span>
-          <h2 class="section-title">Section 8 — Daily 10-Question Assessment</h2>
+          <h2 class="section-title">Daily Assessment (10 Questions • 100 XP)</h2>
         </div>
         <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
           Every question gives instant feedback. Answer all 10 questions to complete Day ${lesson.day}!
@@ -426,16 +327,6 @@
         <div class="quiz-wrapper" id="quiz-container-${lesson.day}">
           <!-- Injected via buildDailyQuiz() -->
         </div>
-      </div>
-
-      <!-- Section 9: Daily Challenge -->
-      <div class="challenge-card">
-        <div class="challenge-header">
-          <span>🔥</span> Daily Real-World English Challenge
-        </div>
-        <p style="font-size: 0.95rem; color: #f1f5f9; line-height: 1.6;">
-          ${lesson.challenge}
-        </p>
       </div>
 
       <!-- Section 10: Daily Completion -->

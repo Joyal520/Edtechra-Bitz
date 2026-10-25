@@ -106,12 +106,17 @@ export const CourseCoverModal: React.FC<Props> = ({
         {/* Header */}
         <div className="p-6 bg-[#0a213c] text-white flex items-center justify-between border-b border-slate-800">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[11px] font-black uppercase tracking-wider border border-sky-400/30">
-              <Sparkles className="w-3.5 h-3.5 text-sky-300" />
-              <span>Course Cover Artwork</span>
+            <div className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[11px] font-black uppercase tracking-wider border border-sky-400/30">
+                <Sparkles className="w-3.5 h-3.5 text-sky-300" />
+                <span>Course Cover</span>
+              </span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-[11px] font-black uppercase tracking-wider border border-amber-400/30">
+                Recommended: 16:9
+              </span>
             </div>
             <h2 className="text-xl font-black text-white tracking-tight">
-              Manage Course Cover
+              Manage Course Cover Image
             </h2>
           </div>
           <button
@@ -137,25 +142,35 @@ export const CourseCoverModal: React.FC<Props> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4 text-[#026fc3]" />
-                <span>Live Cover Preview</span>
+                <span>Preview • Student Course Header (Recommended: 16:9)</span>
               </span>
               <span className="text-[11px] font-semibold text-slate-500">
-                {coverUrl ? 'Custom Image Active' : 'Branded Fallback Active'}
+                {coverUrl ? 'Custom 16:9 Cover Active' : 'Branded Fallback Active'}
               </span>
             </div>
 
-            <div className="rounded-2xl overflow-hidden border-2 border-slate-200 shadow-md max-w-md mx-auto bg-slate-900">
+            <div className="rounded-2xl overflow-hidden border-2 border-slate-200 shadow-md w-full bg-[#08162b]">
               {coverUrl ? (
-                <div className={`relative w-full ${aspectRatio === '1:1' ? 'aspect-square' : 'aspect-video'}`}>
+                <div className={`relative w-full ${aspectRatio === '1:1' ? 'aspect-square max-w-xs mx-auto' : 'aspect-video'}`}>
                   <img
                     src={coverUrl}
                     alt={course.title}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#08162b]/90 via-[#08162b]/25 to-transparent pointer-events-none" />
+                  <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-2 pointer-events-none">
+                    <div>
+                      <span className="inline-block px-2 py-0.5 rounded bg-sky-500/80 text-white text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                        16:9 Student Header Preview
+                      </span>
+                      <p className="text-sm font-black text-white drop-shadow line-clamp-1">
+                        {course.title}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className={`w-full ${aspectRatio === '1:1' ? 'aspect-square' : 'aspect-video'}`}>
+                <div className={`w-full ${aspectRatio === '1:1' ? 'aspect-square max-w-xs mx-auto' : 'aspect-video'}`}>
                   <BrandedCourseFallback course={previewCourse} />
                 </div>
               )}
@@ -164,9 +179,14 @@ export const CourseCoverModal: React.FC<Props> = ({
 
           {/* Aspect Ratio Selector */}
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
-              Display Aspect Ratio
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                Display Aspect Ratio
+              </label>
+              <span className="text-[11px] font-bold text-[#026fc3]">
+                Recommended: 16:9 (1920×1080 WebP)
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
@@ -177,7 +197,7 @@ export const CourseCoverModal: React.FC<Props> = ({
                     : 'bg-white border-stone-200 text-slate-600 hover:bg-stone-50'
                 }`}
               >
-                <span>16:9 Widescreen (Standard)</span>
+                <span>16:9 Widescreen (Recommended)</span>
               </button>
               <button
                 type="button"
@@ -212,12 +232,12 @@ export const CourseCoverModal: React.FC<Props> = ({
               {uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Optimizing & Uploading to R2...</span>
+                  <span>Optimizing 16:9 WebP & Uploading...</span>
                 </>
               ) : (
                 <>
                   <UploadCloud className="w-4 h-4" />
-                  <span>{coverUrl ? 'Replace Cover Image' : 'Upload Custom Cover'}</span>
+                  <span>{coverUrl ? 'Replace Image' : 'Upload Image'}</span>
                 </>
               )}
             </button>

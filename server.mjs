@@ -763,6 +763,11 @@ console.log(`  OPENAI_API_KEY: ${openaiApiKey ? '✓ configured' : '✗ MISSING'
 console.log(`  serverOpenAI initialized: ${serverOpenAI ? '✓ yes' : '✗ NO — will use smart rule fallback'}`);
 console.log(`  NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
 
+// In-memory short-lived cache for verified user tokens (60s TTL) + in-flight deduplication
+const _authTokenCache = new Map();
+const _authTokenInFlight = new Map();
+const AUTH_CACHE_TTL_MS = 60 * 1000;
+
 // Helper: Verify Supabase User Token from Request Authorization Header
 async function verifyAuthUser(req) {
   // Allow development / test mock admin header in non-production environments
@@ -784,34 +789,57 @@ async function verifyAuthUser(req) {
     return null;
   }
 
-  try {
-    const { data: { user }, error } = await serverSupabase.auth.getUser(token);
-    if (error || !user) {
-      console.warn('[verifyAuthUser] Supabase getUser rejected token:', error?.message || 'Invalid or expired session');
-      return null;
-    }
-
-    // Retrieve user profile
-    const { data: profile } = await serverSupabase
-      .from('profiles')
-      .select('id, full_name, email, avatar_url, role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    return {
-      user,
-      profile: profile || {
-        id: user.id,
-        full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Student',
-        email: user.email || '',
-        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        role: user.email === 'roshanjoyal520@gmail.com' ? 'admin' : 'student'
-      }
-    };
-  } catch (err) {
-    console.error('[verifyAuthUser error]:', err);
-    return null;
+  const now = Date.now();
+  const cached = _authTokenCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
   }
+
+  if (_authTokenInFlight.has(token)) {
+    return _authTokenInFlight.get(token);
+  }
+
+  const lookupPromise = (async () => {
+    try {
+      const { data: { user }, error } = await serverSupabase.auth.getUser(token);
+      if (error || !user) {
+        console.warn('[verifyAuthUser] Supabase getUser rejected token:', error?.message || 'Invalid or expired session');
+        return null;
+      }
+
+      // Retrieve user profile
+      const { data: profile } = await serverSupabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url, role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const authResult = {
+        user,
+        profile: profile || {
+          id: user.id,
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Student',
+          email: user.email || '',
+          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+          role: user.email === 'roshanjoyal520@gmail.com' ? 'admin' : 'student'
+        }
+      };
+
+      if (_authTokenCache.size > 500) {
+        _authTokenCache.clear();
+      }
+      _authTokenCache.set(token, { data: authResult, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+      return authResult;
+    } catch (err) {
+      console.error('[verifyAuthUser error]:', err);
+      return null;
+    } finally {
+      _authTokenInFlight.delete(token);
+    }
+  })();
+
+  _authTokenInFlight.set(token, lookupPromise);
+  return lookupPromise;
 }
 
 // Helper: Authoritative server-side teacher authorization check
@@ -5289,45 +5317,50 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
     const courseId = req.params.id;
     if (!serverSupabase) return res.status(500).json({ success: false, error: 'Database uninitialized' });
 
-    const { data: course, error: cErr } = await serverSupabase
-      .from('courses')
-      .select('*')
-      .eq('id', courseId)
-      .maybeSingle();
+    // Run all 6 course structure queries in parallel instead of sequentially
+    const [
+      { data: course, error: cErr },
+      { data: units },
+      { data: episodes },
+      { data: blocks },
+      { data: questions },
+      { data: assignments }
+    ] = await Promise.all([
+      serverSupabase
+        .from('courses')
+        .select('*')
+        .eq('id', courseId)
+        .maybeSingle(),
+      serverSupabase
+        .from('course_units')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true }),
+      serverSupabase
+        .from('course_episodes')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true }),
+      serverSupabase
+        .from('course_blocks')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true }),
+      serverSupabase
+        .from('course_questions')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true }),
+      serverSupabase
+        .from('course_classroom_assignments')
+        .select(`
+          *,
+          classroom:classrooms(id, title, subject, grade)
+        `)
+        .eq('course_id', courseId)
+    ]);
 
     if (cErr || !course) return res.status(404).json({ success: false, error: 'Course not found.' });
-
-    const { data: units } = await serverSupabase
-      .from('course_units')
-      .select('*')
-      .eq('course_id', courseId)
-      .order('order_index', { ascending: true });
-
-    const { data: episodes } = await serverSupabase
-      .from('course_episodes')
-      .select('*')
-      .eq('course_id', courseId)
-      .order('order_index', { ascending: true });
-
-    const { data: blocks } = await serverSupabase
-      .from('course_blocks')
-      .select('*')
-      .eq('course_id', courseId)
-      .order('order_index', { ascending: true });
-
-    const { data: questions } = await serverSupabase
-      .from('course_questions')
-      .select('*')
-      .eq('course_id', courseId)
-      .order('order_index', { ascending: true });
-
-    const { data: assignments } = await serverSupabase
-      .from('course_classroom_assignments')
-      .select(`
-        *,
-        classroom:classrooms(id, title, subject, grade)
-      `)
-      .eq('course_id', courseId);
 
     // Teachers (owner/admin) receive full authoring data. Students only receive
     // what they need: private video transcripts are stripped unless the teacher
@@ -6856,8 +6889,15 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
 
     const student_id = authData.user.id;
 
-    // Check course & classroom ownership to detect teacher preview mode
-    const [{ data: courseRow }, { data: classroomRow }] = await Promise.all([
+    // Check course & classroom ownership, assignment, enrollment, points, and attempts in parallel
+    const [
+      { data: courseRow },
+      { data: classroomRow },
+      { data: assignment },
+      { data: existingEnrollment },
+      { data: studentPointsRows },
+      { data: studentAttempts }
+    ] = await Promise.all([
       serverSupabase
         .from('courses')
         .select('id, teacher_id, daily_release_enabled, course_timezone')
@@ -6867,15 +6907,32 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .from('classrooms')
         .select('id, teacher_id')
         .eq('id', classroom_id)
-        .maybeSingle()
+        .maybeSingle(),
+      serverSupabase
+        .from('course_classroom_assignments')
+        .select('id, status, settings')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .maybeSingle(),
+      serverSupabase
+        .from('course_enrollments')
+        .select('*')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('student_id', student_id)
+        .maybeSingle(),
+      serverSupabase
+        .from('classroom_points')
+        .select('points')
+        .eq('classroom_id', classroom_id)
+        .eq('student_id', student_id),
+      serverSupabase
+        .from('course_question_attempts')
+        .select('*')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('student_id', student_id)
     ]);
-
-    const { data: assignment } = await serverSupabase
-      .from('course_classroom_assignments')
-      .select('id, status, settings')
-      .eq('course_id', course_id)
-      .eq('classroom_id', classroom_id)
-      .maybeSingle();
 
     const isTeacher =
       (courseRow?.teacher_id && courseRow.teacher_id === student_id) ||
@@ -6896,6 +6953,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         completedEpisodesMap: {},
         progress_percent: 0,
         total_classroom_points: 0,
+        attempts: [],
         daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
       });
     }
@@ -6903,13 +6961,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
     const isPaused = assignment?.status === 'paused';
 
     // Retrieve or auto-create student enrollment (only when active)
-    let { data: enrollment } = await serverSupabase
-      .from('course_enrollments')
-      .select('*')
-      .eq('course_id', course_id)
-      .eq('classroom_id', classroom_id)
-      .eq('student_id', student_id)
-      .maybeSingle();
+    let enrollment = existingEnrollment;
 
     if (!enrollment && !isPaused && assignment) {
       const { data: allEpisodes } = await serverSupabase
@@ -6949,15 +7001,11 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       });
 
       if (completedEpisodeIds.length > 0) {
-        await backfillMissingCourseLessonPoints(serverSupabase, classroom_id).catch(() => {});
+        // Non-blocking background point backfill so student page load is never delayed
+        backfillMissingCourseLessonPoints(serverSupabase, classroom_id).catch(() => {});
       }
     }
 
-    const { data: studentPointsRows } = await serverSupabase
-      .from('classroom_points')
-      .select('points')
-      .eq('classroom_id', classroom_id)
-      .eq('student_id', student_id);
     const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
 
     res.json({
@@ -6970,6 +7018,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       completedEpisodesMap,
       progress_percent: enrollment?.progress_percent || 0,
       total_classroom_points: totalClassroomPoints,
+      attempts: studentAttempts || [],
       daily_release_enabled: Boolean(courseRow?.daily_release_enabled)
     });
   } catch (err) {

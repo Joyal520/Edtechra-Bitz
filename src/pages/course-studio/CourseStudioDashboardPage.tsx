@@ -434,6 +434,9 @@ export const CourseStudioDashboardPage: React.FC = () => {
                 return (
                   <div
                     key={course.id}
+                    onMouseEnter={() => {
+                      courseStudioService.getCourse(course.id).catch(() => {});
+                    }}
                     onClick={() => navigate(`/course-studio/${course.id}`)}
                     className="bg-white rounded-[22px] sm:rounded-[24px] border border-stone-200/90 shadow-xs hover:shadow-xl hover:border-sky-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden group h-full relative"
                   >
@@ -492,7 +495,7 @@ export const CourseStudioDashboardPage: React.FC = () => {
                           title="Preview Course Player"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/course-studio/${course.id}/preview`);
+                            navigate(`/course-studio/${course.id}/preview?mode=student`);
                           }}
                           className="p-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white backdrop-blur-md border border-white/20 shadow-xs cursor-pointer transition-all hover:scale-105"
                         >

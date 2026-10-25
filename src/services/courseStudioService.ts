@@ -28,11 +28,20 @@ import { optimizeImageForUpload } from '@/utils/imageOptimization';
 
 const API_BASE = '/api/course-studio';
 
+// Short-lived auth token cache to avoid redundant supabase.auth.getSession() calls during parallel fetches
+let _cachedAuthToken = '';
+let _cachedAuthTokenExpiresAt = 0;
+
 async function getAuthHeader(): Promise<Record<string, string>> {
-  let token = '';
-  if (supabase) {
+  const now = Date.now();
+  let token = _cachedAuthToken && _cachedAuthTokenExpiresAt > now ? _cachedAuthToken : '';
+  if (!token && supabase) {
     const { data: sessionData } = await supabase.auth.getSession();
     token = sessionData?.session?.access_token || '';
+    if (token) {
+      _cachedAuthToken = token;
+      _cachedAuthTokenExpiresAt = now + 15000; // 15s cache
+    }
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -43,7 +52,68 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   return headers;
 }
 
+// Fast in-memory + sessionStorage cache for course details
+const _courseMemoryCache = new Map<string, { course: Course; timestamp: number }>();
+const _courseInFlight = new Map<string, Promise<Course>>();
+const COURSE_CACHE_TTL_MS = 60 * 1000; // 60 seconds fresh TTL
+
+function getCourseCacheKey(courseId: string): string {
+  return `edtechra_course_cache_v1_${courseId}`;
+}
+
+function readCachedCourse(courseId: string): { course: Course; isFresh: boolean } | null {
+  const now = Date.now();
+  const mem = _courseMemoryCache.get(courseId);
+  if (mem) {
+    return { course: mem.course, isFresh: now - mem.timestamp < COURSE_CACHE_TTL_MS };
+  }
+  try {
+    const raw = sessionStorage.getItem(getCourseCacheKey(courseId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.course && parsed.course.id === courseId) {
+        _courseMemoryCache.set(courseId, { course: parsed.course, timestamp: parsed.timestamp || 0 });
+        return { course: parsed.course, isFresh: now - (parsed.timestamp || 0) < COURSE_CACHE_TTL_MS };
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+function writeCachedCourse(courseId: string, course: Course): void {
+  const entry = { course, timestamp: Date.now() };
+  _courseMemoryCache.set(courseId, entry);
+  try {
+    sessionStorage.setItem(getCourseCacheKey(courseId), JSON.stringify(entry));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function invalidateCourseCache(courseId?: string): void {
+  if (courseId) {
+    _courseMemoryCache.delete(courseId);
+    _courseInFlight.delete(courseId);
+    try {
+      sessionStorage.removeItem(getCourseCacheKey(courseId));
+    } catch {
+      // ignore
+    }
+  } else {
+    _courseMemoryCache.clear();
+    _courseInFlight.clear();
+  }
+}
+
 export const courseStudioService = {
+  getCachedCourseSync(courseId: string): Course | null {
+    return readCachedCourse(courseId)?.course || null;
+  },
+
+  invalidateCourseCache,
+
   // --------------------------------------------------------------------------
   // 1. COURSE CRUD
   // --------------------------------------------------------------------------
@@ -63,14 +133,36 @@ export const courseStudioService = {
     return Array.isArray(json.courses) ? json.courses : [];
   },
 
-  async getCourse(courseId: string): Promise<Course> {
-    const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
-    const json = await res.json();
-    if (!res.ok || !json.success) {
-      throw new Error(json.error || 'Failed to fetch course details.');
+  async getCourse(courseId: string, options?: { forceRefresh?: boolean }): Promise<Course> {
+    if (!options?.forceRefresh) {
+      const cached = readCachedCourse(courseId);
+      if (cached?.isFresh) {
+        return cached.course;
+      }
     }
-    return json.course;
+
+    const existingInFlight = _courseInFlight.get(courseId);
+    if (existingInFlight && !options?.forceRefresh) {
+      return existingInFlight;
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        const headers = await getAuthHeader();
+        const res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'Failed to fetch course details.');
+        }
+        writeCachedCourse(courseId, json.course);
+        return json.course as Course;
+      } finally {
+        _courseInFlight.delete(courseId);
+      }
+    })();
+
+    _courseInFlight.set(courseId, fetchPromise);
+    return fetchPromise;
   },
 
   async createCourse(payload: {
@@ -122,6 +214,7 @@ export const courseStudioService = {
     if (!res.ok || !json.success) {
       throw new Error(json.error || 'Failed to update course.');
     }
+    invalidateCourseCache(courseId);
     return json.course;
   },
 
@@ -135,6 +228,7 @@ export const courseStudioService = {
     if (!res.ok || !json.success) {
       throw new Error(json.error || 'Failed to delete course.');
     }
+    invalidateCourseCache(courseId);
   },
 
   async duplicateCourse(courseId: string): Promise<Course> {
@@ -163,6 +257,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to create unit.');
+    invalidateCourseCache(courseId);
     return json.unit;
   },
 
@@ -175,6 +270,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update unit.');
+    invalidateCourseCache(courseId);
     return json.unit;
   },
 
@@ -186,6 +282,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete unit.');
+    invalidateCourseCache(courseId);
   },
 
   async createEpisode(
@@ -200,6 +297,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to create episode.');
+    invalidateCourseCache(courseId);
     return json.episode;
   },
 
@@ -225,6 +323,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update episode.');
+    invalidateCourseCache(courseId);
     return json.episode;
   },
 
@@ -237,6 +336,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reorder episodes.');
+    invalidateCourseCache(courseId);
   },
 
   async manuallyUnlockEpisode(courseId: string, episodeId: string): Promise<CourseEpisode> {
@@ -247,6 +347,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to unlock episode.');
+    invalidateCourseCache(courseId);
     return json.episode;
   },
 
@@ -258,6 +359,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete episode.');
+    invalidateCourseCache(courseId);
   },
 
   // --------------------------------------------------------------------------
@@ -273,6 +375,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save blocks.');
+    invalidateCourseCache(courseId);
     return json.blocks;
   },
 
@@ -285,6 +388,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save questions.');
+    invalidateCourseCache(courseId);
     return json.questions;
   },
 
@@ -310,6 +414,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to publish & assign course.');
+    invalidateCourseCache(courseId);
     return json;
   },
 
@@ -321,6 +426,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to unpublish course.');
+    invalidateCourseCache(courseId);
     return json.course;
   },
 
@@ -333,6 +439,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to pause course.');
+    invalidateCourseCache(courseId);
     return json;
   },
 
@@ -345,6 +452,7 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to resume course.');
+    invalidateCourseCache(courseId);
     return json;
   },
 
@@ -359,6 +467,7 @@ export const courseStudioService = {
     is_teacher?: boolean;
     is_preview?: boolean;
     total_classroom_points?: number;
+    attempts?: any[];
   }> {
     const headers = await getAuthHeader();
     const params = new URLSearchParams({ course_id: courseId, classroom_id: classroomId });

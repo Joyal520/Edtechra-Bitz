@@ -34,6 +34,7 @@ import {
 import { FormattedLessonText, TextScale } from '@/utils/courseTextFormatting';
 import { courseAudio } from '@/utils/courseAudio';
 import { ComprehensiveQuestionRenderer } from '@/components/course-studio/ComprehensiveQuestionRenderer';
+import { isExcludedStudentSection } from '@/components/course-studio/CreepyLegendsStudentView';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
 import { getThemePreset } from '@/utils/courseThemes';
 import {
@@ -527,6 +528,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
       {/* ===================================================================== */}
       <div className="w-full space-y-6 sm:space-y-8">
         {blocks.map((block, idx) => {
+          if (!isEditMode && isExcludedStudentSection(block)) {
+            return null;
+          }
           const { block_type, content } = block;
 
           // Block Toolbar wrapper for Edit Mode
