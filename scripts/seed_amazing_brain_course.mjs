@@ -914,27 +914,62 @@ const AMAZING_BRAIN_LESSONS = [
 ];
 
 async function run() {
-  console.log('🔍 Finding teacher/admin profile in Supabase...');
-  const { data: profiles, error: pErr } = await supabase
-    .from('profiles')
-    .select('id, email, full_name, role')
-    .in('role', ['teacher', 'admin'])
+  console.log('🔍 Finding active teacher profile in Supabase...');
+  // Find the teacher_id that owns existing courses in Course Studio
+  const { data: existingCourseOwners } = await supabase
+    .from('courses')
+    .select('teacher_id, title')
+    .not('title', 'ilike', '%AMAZING BRAIN%')
     .limit(5);
 
-  if (pErr || !profiles || profiles.length === 0) {
-    console.error('Could not find teacher profile:', pErr);
+  let targetTeacherId = existingCourseOwners?.[0]?.teacher_id;
+
+  if (!targetTeacherId) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, role')
+      .in('role', ['teacher', 'admin'])
+      .limit(5);
+    targetTeacherId = profiles?.[0]?.id;
+  }
+
+  if (!targetTeacherId) {
+    console.error('Could not find teacher profile');
     process.exit(1);
   }
 
-  // Prefer primary teacher account if present
-  const teacher = profiles.find(p => p.email === 'roshanjoyal520@gmail.com') || profiles[0];
-  console.log(`✅ Using teacher account: ${teacher.email || teacher.id}`);
+  console.log(`✅ Using teacher_id: ${targetTeacherId}`);
 
-  // Check if "🧠 AMAZING BRAIN" already exists for this teacher
+  const svgCover = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#1e1b4b"/>
+        <stop offset="50%" stop-color="#4338ca"/>
+        <stop offset="100%" stop-color="#0284c7"/>
+      </linearGradient>
+    </defs>
+    <rect width="800" height="450" fill="url(#bg)"/>
+    <circle cx="580" cy="225" r="155" fill="#ffffff" opacity="0.1"/>
+    <circle cx="580" cy="225" r="120" fill="#ffffff" opacity="0.15"/>
+    <ellipse cx="580" cy="220" rx="105" ry="82" fill="#fda4af" stroke="#fff1f2" stroke-width="6"/>
+    <path d="M515 195 Q550 165 585 195 M585 170 Q620 198 648 180 M505 232 Q545 215 582 238 M590 218 Q628 208 655 235" stroke="#ffe4e6" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <circle cx="550" cy="228" r="7" fill="#1e1b4b"/>
+    <circle cx="610" cy="228" r="7" fill="#1e1b4b"/>
+    <path d="M562 248 Q580 265 598 248" stroke="#1e1b4b" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <rect x="55" y="75" width="195" height="38" rx="19" fill="#fbbf24"/>
+    <text x="152" y="99" text-anchor="middle" fill="#1e1b4b" font-family="sans-serif" font-size="15" font-weight="900">⭐ 1-DAY INTERACTIVE</text>
+    <text x="55" y="185" fill="#ffffff" font-family="sans-serif" font-size="52" font-weight="900">AMAZING</text>
+    <text x="55" y="245" fill="#38bdf8" font-family="sans-serif" font-size="54" font-weight="900">BRAIN</text>
+    <text x="55" y="295" fill="#e0e7ff" font-family="sans-serif" font-size="21" font-weight="700">Discover how your brain works</text>
+    <rect x="55" y="330" width="340" height="44" rx="14" fill="#ffffff" opacity="0.15"/>
+    <text x="225" y="358" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="16" font-weight="800">Think • Remember • Move • Feel • Sleep</text>
+  </svg>`;
+  const coverDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svgCover)}`;
+
+  // Check if "🧠 AMAZING BRAIN" already exists
   const { data: existingCourses } = await supabase
     .from('courses')
     .select('id, title')
-    .eq('teacher_id', teacher.id)
     .ilike('title', '%AMAZING BRAIN%');
 
   let courseId;
@@ -948,11 +983,13 @@ async function run() {
     await supabase
       .from('courses')
       .update({
+        teacher_id: targetTeacherId,
         title: '🧠 AMAZING BRAIN',
         short_description:
           'Discover the amazing machine inside your head! Learn how your brain helps you think, remember, move, and feel through visual guides and interactive challenges.',
         subject: 'Science & English (A1–A2)',
         grade_level: 'Beginner (A1–A2)',
+        cover_image_url: coverDataUri,
         status: 'published',
         estimated_hours: 1.5,
         updated_at: new Date().toISOString()
@@ -962,12 +999,13 @@ async function run() {
     const { data: createdCourse, error: cErr } = await supabase
       .from('courses')
       .insert({
-        teacher_id: teacher.id,
+        teacher_id: targetTeacherId,
         title: '🧠 AMAZING BRAIN',
         short_description:
           'Discover the amazing machine inside your head! Learn how your brain helps you think, remember, move, and feel through visual guides and interactive challenges.',
         subject: 'Science & English (A1–A2)',
         grade_level: 'Beginner (A1–A2)',
+        cover_image_url: coverDataUri,
         course_type: 'quick',
         status: 'published',
         estimated_hours: 1.5
