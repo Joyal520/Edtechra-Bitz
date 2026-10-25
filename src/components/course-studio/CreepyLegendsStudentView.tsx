@@ -24,7 +24,6 @@ import {
   FileText,
   ArrowRight,
   RotateCcw,
-  GripVertical,
   AlertCircle,
   X,
   Camera,
@@ -44,6 +43,76 @@ import {
   isOptionMatchingStudentAnswer
 } from '@/utils/questionGrading';
 import { courseAudio } from '@/utils/courseAudio';
+import { parseCoverPosition } from '@/utils/courseCover';
+
+// Inline fill-in-the-blank sentence templates for Creepy Legends short-answer questions
+const INLINE_SENTENCE_TEMPLATES: Record<string, { before: string; after: string }> = {
+  'e10c7ee9-0012-4000-8004-000000000017': { before: 'The bridge in the story is called', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000018': { before: 'A dog has a very powerful sense of', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000019': { before: 'In the local legend, the ghost was the', after: 'Lady.' },
+  'e10c7ee9-0012-4000-8004-000000000027': { before: 'The mysterious woman wore a', after: 'dress.' },
+  'e10c7ee9-0012-4000-8004-000000000028': { before: 'The drive took about', after: 'minutes.' },
+  'e10c7ee9-0012-4000-8004-000000000029': { before: 'Ten years earlier, the daughter died in a car', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000037': { before: 'The legend of Kuchisake-onna began in', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000038': { before: 'Travelers can throw hard', after: 'to escape.' },
+  'e10c7ee9-0012-4000-8004-000000000039': { before: 'She first asks travelers, "', after: '"' },
+  'e10c7ee9-0012-4000-8004-000000000047': { before: 'The painted mummy lid was originally made in', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000048': { before: 'The famous ship Titanic sank in the year', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000049': { before: 'Sensational rumors about the curse were invented by', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000057': { before: 'In the story, the plane landed in', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000058': { before: 'The plane supposedly returned after', after: 'years.' },
+  'e10c7ee9-0012-4000-8004-000000000059': { before: 'Inside the cockpit, the police found a', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000067': { before: 'The story of the Black-Eyed Kids began in', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000068': { before: 'The two boys were wearing dark', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000069': { before: 'Before entering the car, the boys needed an', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000077': { before: 'The ship was caught in a storm near the', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000078': { before: 'In the legend, the ghost ship was', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000079': { before: 'Sailors said the ghost ship glowed with an eerie', after: 'light.' },
+  'e10c7ee9-0012-4000-8004-000000000087': { before: 'During the mirror ritual, light comes from a', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000088': { before: 'This mirror ritual is commonly done in the', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000089': { before: 'Science says the face in the mirror is', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000097': { before: "In English, the Swedish word 'Silverpilen' means", after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000098': { before: 'In the Stockholm metro, Kymlinge was an', after: 'station.' },
+  'e10c7ee9-0012-4000-8004-000000000099': { before: 'The preposition', after: 'means moving from the outside to the inside.' },
+  'e10c7ee9-0012-4000-8004-000000000107': { before: 'In Sleepy Hollow, Ichabod Crane worked as a', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000108': { before: 'According to legend, the soldier lost his head to a', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000109': { before: 'The Horseman threw a round', after: 'at Ichabod.' },
+  'e10c7ee9-0012-4000-8004-000000000117': { before: 'Like a turtle, the Kappa has a hard', after: 'on its back.' },
+  'e10c7ee9-0012-4000-8004-000000000118': { before: 'Making a polite', after: 'causes the Kappa to spill its water.' },
+  'e10c7ee9-0012-4000-8004-000000000119': { before: 'In Japanese folklore, supernatural spirits like the Kappa are called', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000127': { before: 'When the two children were found, their skin was', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000128': { before: 'The girl described her twilight homeland as', after: '.' },
+  'e10c7ee9-0012-4000-8004-000000000129': { before: 'Medieval chroniclers wrote that this event happened in the', after: 'century.' }
+};
+
+function getInlineSentenceParts(q: CourseQuestion): {
+  promptLabel?: string;
+  before: string;
+  after: string;
+} {
+  const rawText = String(q.question_text || '').trim();
+  const blankRegex = /_{2,}|\[blank\]|\(\s*blank\s*\)/i;
+  if (blankRegex.test(rawText)) {
+    const parts = rawText.split(blankRegex);
+    return {
+      before: (parts[0] || '').trim(),
+      after: parts.slice(1).join(' ').trim()
+    };
+  }
+  const mapped = INLINE_SENTENCE_TEMPLATES[q.id];
+  if (mapped) {
+    return {
+      promptLabel: rawText,
+      before: mapped.before,
+      after: mapped.after
+    };
+  }
+  return {
+    promptLabel: rawText,
+    before: 'My answer is',
+    after: '.'
+  };
+}
 
 function contentAny(block?: CourseBlock | null): any {
   return (block?.content as any) || {};
@@ -217,7 +286,7 @@ export function extractYouTubeId(urlOrId?: string | null): string | null {
   const trimmed = String(urlOrId).trim();
   if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
   const match = trimmed.match(
-    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    /(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i
   );
   return match ? match[1] : null;
 }
@@ -312,7 +381,17 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     () =>
       rawBlocks.find(b => {
         const c = contentAny(b);
-        return b.block_type === 'video' || c.video_url || c.url || c.video_id;
+        return (
+          b.block_type === 'video' ||
+          b.block_type === 'youtube_video' ||
+          b.block_type === 'text_video' ||
+          Boolean(c.video?.url) ||
+          Boolean(c.video?.video_url) ||
+          Boolean(c.video?.video_id) ||
+          Boolean(c.video_url) ||
+          Boolean(c.url) ||
+          Boolean(c.video_id)
+        );
       }),
     [rawBlocks]
   );
@@ -324,20 +403,32 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   const extraBlocks = useMemo(() => {
     return rawBlocks.filter(b => {
       if (isExcludedStudentSection(b)) return false;
-      if (b.block_type === 'video') return false;
+      if (
+        b.block_type === 'video' ||
+        b.block_type === 'youtube_video' ||
+        b.block_type === 'text_video' ||
+        (videoBlock && b.id === videoBlock.id)
+      ) {
+        return false;
+      }
       if (b.block_type === 'vocabulary_cards') return false;
       const c = contentAny(b);
+      if (c.video?.url || c.video_url || c.video_id) return false;
       const t = String(c.title || '').toLowerCase();
       if (t.includes('vocabulary') || t.startsWith('grammar:') || t.includes('grammar')) return false;
       return true;
     });
-  }, [rawBlocks]);
+  }, [rawBlocks, videoBlock]);
 
-  // Video state (Lite facade for instant page load)
+  // Video playback states: 'ready' | 'loading' | 'playing' | 'error' | 'completed'
   const [videoPlaying, setVideoPlaying] = useState(false);
+  const [videoStatus, setVideoStatus] = useState<'ready' | 'loading' | 'playing' | 'error' | 'completed'>('ready');
+  const [videoRetryKey, setVideoRetryKey] = useState(0);
   const [videoWatched, setVideoWatched] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [showFullVocabModal, setShowFullVocabModal] = useState(false);
+  const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const htmlVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Mobile collapsible section states (all open by default on desktop, collapsible on mobile)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -382,6 +473,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
 
   // Local interactive state per question
   const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({});
+  const [activeBlankMap, setActiveBlankMap] = useState<Record<string, boolean>>({});
   const [evaluatedMap, setEvaluatedMap] = useState<
     Record<string, { isCorrect: boolean; pointsAwarded: number; feedback: string; submittedAnswer: string }>
   >({});
@@ -394,10 +486,13 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   // Reset state when switching episodes
   useEffect(() => {
     setVideoPlaying(false);
+    setVideoStatus('ready');
+    setVideoRetryKey(0);
     setVideoWatched(Boolean(isCompleted));
     setShowTranscript(false);
     setValidationError(null);
     setCollapsedSections({});
+    setActiveBlankMap({});
 
     // Initialize ordering word banks for each ordering question
     const initialSlots: Record<string, string[]> = {};
@@ -494,10 +589,20 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     const currentIdx = allEpisodes.findIndex(item => item.episode.id === selectedEpisode.id);
     const nextEp = currentIdx >= 0 && currentIdx + 1 < allEpisodes.length ? allEpisodes[currentIdx + 1].episode : null;
     if (!nextEp) return;
-    const nextVideoBlock = (nextEp.blocks || []).find(b => b.block_type === 'video');
+    const nextVideoBlock = (nextEp.blocks || []).find(b => {
+      const c = contentAny(b);
+      return (
+        b.block_type === 'video' ||
+        b.block_type === 'youtube_video' ||
+        b.block_type === 'text_video' ||
+        Boolean(c.video?.url) ||
+        Boolean(c.video_url) ||
+        Boolean(c.url)
+      );
+    });
     const nc = contentAny(nextVideoBlock);
     const nextVidId = extractYouTubeId(
-      nc.video_id || nc.url || nc.video_url
+      nc.video_id || nc.video?.video_id || nc.video?.url || nc.video?.video_url || nc.url || nc.video_url
     );
     if (nextVidId) {
       const img = new Image();
@@ -633,28 +738,125 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     }
   };
 
-  // Video metadata
+  // Video metadata (supports both top-level and nested content.video structures, plus direct MP4/WebM URLs)
   const vc = contentAny(videoBlock);
+  const rawVideoSourceUrl = String(
+    vc.video?.url ||
+      vc.video?.video_url ||
+      vc.url ||
+      vc.video_url ||
+      vc.video_id ||
+      vc.video?.video_id ||
+      (selectedEpisode as any)?.video_url ||
+      (selectedEpisode as any)?.video_id ||
+      ''
+  ).trim();
   const videoId = extractYouTubeId(
     vc.video_id ||
       vc.video?.video_id ||
+      vc.video?.url ||
+      vc.video?.video_url ||
       vc.url ||
-      vc.video_url
+      vc.video_url ||
+      rawVideoSourceUrl
   );
+  const directVideoUrl = !videoId && /^https?:\/\//i.test(rawVideoSourceUrl) ? rawVideoSourceUrl : null;
+  const hasPlayableVideoSource = Boolean(videoId || directVideoUrl);
+
   const videoTranscript = String(
     vc.transcript ||
       vc.video?.transcript ||
       ''
   ).trim();
+  const coverPos = parseCoverPosition(course.cover_image_url, (course as any)?.cover_object_position);
+  const coverImageUrl =
+    coverPos.cleanUrl || '/images/creepy-legends-cover.jpg';
+
   const videoPosterUrl = videoId
     ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
-    : course.cover_image_url || '/images/creepy-legends-cover.jpg';
+    : vc.poster || vc.video?.poster || coverImageUrl;
   const videoFallbackPosterUrl = videoId
     ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-    : '/images/creepy-legends-cover.jpg';
+    : coverImageUrl;
 
-  const coverImageUrl =
-    course.cover_image_url || '/images/creepy-legends-cover.jpg';
+  // Send playVideo command & subscribe to YouTube IFrame API events via postMessage
+  const triggerYouTubePlayCommand = useCallback(() => {
+    const win = ytIframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+      win.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
+    } catch {
+      // ignore cross-origin postMessage errors
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!videoPlaying || !videoId) return;
+
+    const handleYouTubeMessage = (event: MessageEvent) => {
+      if (!event.origin.includes('youtube.com') && !event.origin.includes('youtube-nocookie.com')) {
+        return;
+      }
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (!data) return;
+
+        if (data.event === 'onReady') {
+          setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
+          triggerYouTubePlayCommand();
+        } else if (data.event === 'onStateChange' || data.event === 'infoDelivery') {
+          const playerState =
+            typeof data.info === 'number'
+              ? data.info
+              : typeof data.info?.playerState === 'number'
+              ? data.info.playerState
+              : undefined;
+
+          if (playerState === 1) {
+            // YT.PlayerState.PLAYING
+            setVideoStatus('playing');
+            setVideoWatched(true);
+          } else if (playerState === 2) {
+            // YT.PlayerState.PAUSED
+            setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
+          } else if (playerState === 0) {
+            // YT.PlayerState.ENDED
+            setVideoStatus('completed');
+            setVideoWatched(true);
+          }
+        } else if (data.event === 'onError' || (data.info && typeof data.info.errorCode === 'number')) {
+          setVideoStatus('error');
+        }
+      } catch {
+        // ignore non-JSON messages
+      }
+    };
+
+    window.addEventListener('message', handleYouTubeMessage);
+    return () => window.removeEventListener('message', handleYouTubeMessage);
+  }, [videoPlaying, videoId, triggerYouTubePlayCommand]);
+
+  const handleStartVideoPlayback = () => {
+    if (!hasPlayableVideoSource) {
+      setVideoPlaying(true);
+      setVideoStatus('error');
+      return;
+    }
+    setVideoPlaying(true);
+    setVideoStatus('loading');
+    setVideoWatched(true);
+  };
+
+  const handleRetryVideoPlayback = () => {
+    setVideoRetryKey(prev => prev + 1);
+    if (!hasPlayableVideoSource) {
+      setVideoStatus('error');
+      return;
+    }
+    setVideoPlaying(true);
+    setVideoStatus('loading');
+  };
 
   // Section numbering (1 = Video, 2 = MCQs, 3 = True/False or Very Short, 4 = Short Answer, 5 = Ordering)
   let sectionCounter = 1; // 1 is Watch the Story
@@ -685,40 +887,41 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
         {/* ================================================================ */}
         <header
           data-testid="creepy-legends-hero-header"
-          className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-sky-400/25 shadow-2xl bg-[#091933]"
+          className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-sky-400/30 shadow-2xl bg-[#07152b]"
         >
-          {/* 16:9 Background Artwork Layer */}
-          <div className="relative w-full min-h-[190px] sm:min-h-[240px] md:min-h-[270px] flex flex-col justify-between p-4 sm:p-7 md:p-8">
+          {/* 16:9 Background Artwork Layer with Strong Atmospheric Visibility & Saved Focal Point */}
+          <div className="relative w-full min-h-[195px] sm:min-h-[245px] md:min-h-[280px] flex flex-col justify-between p-4 sm:p-7 md:p-8">
             <img
               src={coverImageUrl}
               alt={course.title}
               loading="eager"
               fetchPriority="high"
+              style={{ objectPosition: coverPos.objectPosition }}
               onError={e => {
                 const target = e.currentTarget;
                 if (!target.src.endsWith('/images/creepy-legends-cover.jpg')) {
                   target.src = '/images/creepy-legends-cover.jpg';
                 }
               }}
-              className="absolute inset-0 w-full h-full object-cover object-center opacity-55 scale-[1.01]"
+              className="absolute inset-0 w-full h-full object-cover opacity-90 brightness-105 contrast-105 scale-[1.01] transition-all duration-500"
             />
-            {/* Multi-stop atmospheric dark blue gradient overlays for crisp readability */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#061124]/95 via-[#081b38]/80 to-[#061124]/75 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#061124] via-transparent to-[#061124]/40 pointer-events-none" />
+            {/* Controlled cinematic gradient & soft vignette: keeps artwork vivid while guaranteeing title readability */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#050e1f]/90 via-[#07162e]/50 to-[#050e1f]/25 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050e1f]/95 via-[#050e1f]/20 to-[#050e1f]/25 pointer-events-none" />
 
             {/* Top Badges Row */}
             <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/35 text-sky-200 text-[11px] font-black uppercase tracking-wider backdrop-blur-xs">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-slate-950/65 border border-sky-400/40 text-sky-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs">
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>Interactive English Course</span>
                 </span>
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-[11px] font-black uppercase tracking-wider">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-950/65 border border-amber-300/45 text-amber-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs">
                   {course.grade_level || 'A1–A2'}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/35 text-emerald-200 text-[11px] font-black">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-950/65 border border-emerald-400/40 text-emerald-200 text-[10px] sm:text-[11px] font-black backdrop-blur-md shadow-xs">
                   <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  <span>{totalLessonXP} XP Available</span>
+                  <span>{totalLessonXP} XP</span>
                 </span>
               </div>
 
@@ -726,36 +929,36 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 <button
                   type="button"
                   onClick={onOpenCoverModal}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold backdrop-blur-xs transition-all cursor-pointer shadow-sm"
-                  title="Upload or Replace 16:9 Course Cover Image"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/70 hover:bg-slate-950/90 border border-white/25 text-white text-xs font-bold backdrop-blur-md transition-all cursor-pointer shadow-md"
+                  title="Edit or Reposition Course Cover Image"
                 >
                   <Camera className="w-3.5 h-3.5 text-sky-300" />
-                  <span>Course Cover (16:9)</span>
+                  <span>Cover</span>
                 </button>
               )}
             </div>
 
             {/* Center & Bottom Hero Content */}
-            <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4 pt-6 sm:pt-8">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-3.5 sm:gap-5 pt-5 sm:pt-8">
               <div className="space-y-1.5 max-w-2xl">
-                <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-sky-300/90 drop-shadow">
+                <p className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-sky-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]">
                   {course.subject || 'English Language'} • {totalCount} Lessons
                 </p>
-                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.6)] leading-[1.1]">
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] leading-[1.1]">
                   {course.title}
                 </h1>
-                <p className="text-xs sm:text-base text-slate-200/90 font-medium max-w-xl drop-shadow">
+                <p className="text-xs sm:text-base text-slate-100 font-medium max-w-xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
                   {course.short_description || '12 Days of Stories, Vocabulary & Mystery'}
                 </p>
               </div>
 
               {/* Featured Current Day Plaque (Matches Reference Header Plaque) */}
-              <div className="shrink-0 self-start md:self-end bg-gradient-to-b from-[#2b1d12]/95 to-[#1a110a]/95 border-2 border-amber-500/50 rounded-2xl px-4 sm:px-5 py-3 shadow-[0_10px_25px_rgba(0,0,0,0.6)] backdrop-blur-md min-w-[230px] sm:min-w-[260px]">
-                <div className="flex items-center justify-between gap-3 mb-1">
-                  <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+              <div className="shrink-0 w-full sm:w-auto self-start md:self-end bg-gradient-to-b from-[#2b1d12]/95 to-[#1a110a]/95 border-2 border-amber-500/60 rounded-2xl px-4 sm:px-5 py-2.5 sm:py-3 shadow-[0_10px_25px_rgba(0,0,0,0.7)] backdrop-blur-md sm:min-w-[250px]">
+                <div className="flex items-center justify-between gap-3 mb-0.5 sm:mb-1">
+                  <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider shadow-xs">
                     Day {dayNumber}
                   </span>
-                  <span className="text-[11px] font-bold text-amber-300/90">
+                  <span className="text-[11px] font-bold text-amber-300/95">
                     Lesson {dayNumber} of {totalCount}
                   </span>
                 </div>
@@ -885,8 +1088,8 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
           <div className="lg:col-span-8 space-y-5 min-w-0">
             
             {/* CURRENT DAY BANNER CARD */}
-            <div className="rounded-2xl bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border border-sky-400/25 p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1 min-w-0">
+            <div className="rounded-2xl bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border border-sky-400/25 p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-xs shrink-0">
                     Day {dayNumber}
@@ -895,9 +1098,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                     {cleanLessonTitle}
                   </h2>
                 </div>
-                <p className="text-xs sm:text-sm text-sky-200/85 font-medium">
-                  Watch the video and complete the activities.
-                </p>
               </div>
 
               {/* XP Badge Card */}
@@ -924,16 +1124,16 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 1: WATCH THE STORY (VIDEO-FIRST LEARNING CARD)       */}
+            {/* SECTION 1: WATCH THE STORY (EDGE-TO-EDGE MOBILE VIDEO)       */}
             {/* ============================================================ */}
             <section
               data-testid="lesson-video-section"
-              className="rounded-2xl bg-[#0d213f] border border-sky-400/25 shadow-xl overflow-hidden"
+              className="-mx-3 sm:mx-0 rounded-none sm:rounded-2xl bg-[#0d213f] border-y sm:border border-sky-400/25 shadow-xl overflow-hidden"
             >
               {/* Section Header */}
-              <div className="px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-2 border-b border-sky-400/15">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-8 h-8 rounded-full bg-[#1d6ef2] text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+              <div className="px-3.5 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 border-b border-sky-400/15">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#1d6ef2] text-white font-black text-xs sm:text-sm flex items-center justify-center shrink-0 shadow-sm">
                     1
                   </span>
                   <h3 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
@@ -949,7 +1149,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         setShowTranscript(prev => !prev);
                         setVideoWatched(true);
                       }}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                         showTranscript
                           ? 'bg-sky-500 text-white border-sky-300'
                           : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 border-sky-400/30'
@@ -959,30 +1159,122 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       <span>{showTranscript ? 'Hide Transcript' : 'Transcript'}</span>
                     </button>
                   )}
-                  <span className="px-3 py-1 rounded-lg bg-[#15305b] border border-sky-400/25 text-sky-200 text-xs font-mono font-bold">
+                  <span className="px-2.5 sm:px-3 py-1 rounded-lg bg-[#15305b] border border-sky-400/25 text-sky-200 text-xs font-mono font-bold">
                     04:25
                   </span>
                 </div>
               </div>
 
-              {/* Responsive 16:9 Video Player Container */}
-              <div className="p-3 sm:p-5 space-y-3">
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-sky-300/20 shadow-2xl group">
-                  {videoPlaying && videoId ? (
-                    <iframe
-                      src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`}
-                      title={cleanLessonTitle}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                      allowFullScreen
-                      className="w-full h-full border-0"
-                    />
+              {/* Responsive 16:9 Video Player Container — Edge-to-Edge on Mobile */}
+              <div className="p-0 sm:p-5 space-y-0 sm:space-y-3">
+                <div
+                  data-video-status={videoStatus}
+                  className="relative w-full aspect-video rounded-none sm:rounded-xl overflow-hidden bg-slate-950 border-0 sm:border border-sky-300/20 shadow-2xl group"
+                >
+                  {videoStatus === 'error' ? (
+                    <div
+                      data-testid="video-error-state"
+                      className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-slate-950 to-[#081529] space-y-3"
+                    >
+                      <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <p className="text-sm sm:text-base font-extrabold text-white max-w-md">
+                        This video could not be loaded. Please try again.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleRetryVideoPlayback}
+                          className="px-4 py-2 rounded-xl bg-[#1d6ef2] hover:bg-[#026fc3] text-white text-xs sm:text-sm font-black inline-flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Retry</span>
+                        </button>
+                        {videoId && (
+                          <a
+                            href={`https://www.youtube.com/watch?v=${videoId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setVideoWatched(true)}
+                            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-sky-200 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-all"
+                          >
+                            <span>Watch on YouTube</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ) : videoPlaying && videoId ? (
+                    <div className="relative w-full h-full bg-black">
+                      {videoStatus === 'loading' && (
+                        <div
+                          data-testid="video-loading-state"
+                          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2.5 bg-slate-950/75 backdrop-blur-xs pointer-events-none"
+                        >
+                          <div className="w-10 h-10 rounded-full border-3 border-sky-400/30 border-t-sky-400 animate-spin" />
+                          <span className="text-xs font-bold text-sky-100">Loading video...</span>
+                        </div>
+                      )}
+                      <iframe
+                        key={`${videoId}-${videoRetryKey}`}
+                        ref={ytIframeRef}
+                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=${
+                          typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
+                        }`}
+                        title={cleanLessonTitle}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        allowFullScreen
+                        onLoad={() => {
+                          setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
+                          setVideoWatched(true);
+                          triggerYouTubePlayCommand();
+                          setTimeout(triggerYouTubePlayCommand, 200);
+                        }}
+                        onError={() => setVideoStatus('error')}
+                        className="w-full h-full border-0"
+                      />
+                    </div>
+                  ) : videoPlaying && directVideoUrl ? (
+                    <div className="relative w-full h-full bg-black">
+                      {videoStatus === 'loading' && (
+                        <div
+                          data-testid="video-loading-state"
+                          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2.5 bg-slate-950/75 backdrop-blur-xs pointer-events-none"
+                        >
+                          <div className="w-10 h-10 rounded-full border-3 border-sky-400/30 border-t-sky-400 animate-spin" />
+                          <span className="text-xs font-bold text-sky-100">Loading video...</span>
+                        </div>
+                      )}
+                      <video
+                        key={`${directVideoUrl}-${videoRetryKey}`}
+                        ref={htmlVideoRef}
+                        src={directVideoUrl}
+                        poster={videoPosterUrl}
+                        controls
+                        autoPlay
+                        playsInline
+                        preload="auto"
+                        onLoadStart={() => setVideoStatus('loading')}
+                        onLoadedMetadata={() => setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev))}
+                        onCanPlay={() => setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev))}
+                        onPlaying={() => {
+                          setVideoStatus('playing');
+                          setVideoWatched(true);
+                        }}
+                        onWaiting={() => setVideoStatus('loading')}
+                        onEnded={() => {
+                          setVideoStatus('completed');
+                          setVideoWatched(true);
+                        }}
+                        onError={() => setVideoStatus('error')}
+                        className="w-full h-full object-contain bg-black"
+                      />
+                    </div>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        setVideoPlaying(true);
-                        setVideoWatched(true);
-                      }}
+                      onClick={handleStartVideoPlayback}
                       className="relative w-full h-full block text-left cursor-pointer focus:outline-none"
                       aria-label={`Play video: ${cleanLessonTitle}`}
                     >
@@ -996,21 +1288,21 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                             target.src = videoFallbackPosterUrl;
                           }
                         }}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 opacity-90"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 opacity-95"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-slate-950/30" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-slate-950/25" />
 
                       {/* Center Big Play Button */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#1d6ef2]/95 group-hover:bg-[#026fc3] border-2 border-white/80 text-white flex items-center justify-center shadow-[0_0_35px_rgba(29,110,242,0.8)] transition-all duration-200 group-hover:scale-110">
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 sm:gap-3">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#1d6ef2]/95 group-hover:bg-[#026fc3] border-2 border-white/85 text-white flex items-center justify-center shadow-[0_0_35px_rgba(29,110,242,0.85)] transition-all duration-200 group-hover:scale-110">
                           <Play className="w-8 h-8 sm:w-9 sm:h-9 fill-current ml-1" />
                         </div>
-                        <span className="px-3.5 py-1 rounded-full bg-slate-950/80 border border-white/15 text-xs font-bold text-sky-100 backdrop-blur-xs">
-                          Click to Play Lesson Video
+                        <span className="px-3.5 py-1 rounded-full bg-slate-950/80 border border-white/20 text-xs font-bold text-sky-100 backdrop-blur-xs">
+                          Tap to Play Story Video
                         </span>
                       </div>
 
-                      {/* Bottom Player Bar UI (Matches Reference Image) */}
+                      {/* Bottom Player Bar UI */}
                       <div className="absolute bottom-0 inset-x-0 px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent flex items-center gap-3">
                         <Play className="w-4 h-4 text-white fill-current shrink-0" />
                         <div className="flex-1 h-1.5 rounded-full bg-white/25 overflow-hidden flex items-center">
@@ -1026,16 +1318,16 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                   )}
                 </div>
 
-                {/* Video Footer Helper & External Link */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-sky-200/80 px-1">
+                {/* Single Concise Video Footer Helper & Secondary YouTube Link */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-sky-200/85 px-3.5 py-3 sm:px-1 sm:py-0">
                   <div className="flex items-center gap-2">
-                    {videoWatched ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-300 font-bold">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Video opened</span>
+                    {videoStatus === 'completed' || videoWatched ? (
+                      <span className="inline-flex items-center gap-1.5 text-emerald-300 font-bold">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>Watch the story carefully before answering the questions below.</span>
                       </span>
                     ) : (
-                      <span>Watch the story video carefully before answering the questions below.</span>
+                      <span>Watch the story carefully before answering the questions below.</span>
                     )}
                   </div>
                   {videoId && (
@@ -1044,7 +1336,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setVideoWatched(true)}
-                      className="inline-flex items-center gap-1 text-sky-300 hover:text-white font-bold underline-offset-2 hover:underline"
+                      className="inline-flex items-center gap-1 text-sky-300 hover:text-white font-bold underline-offset-2 hover:underline shrink-0"
                     >
                       <span>Watch on YouTube</span>
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -1054,7 +1346,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
 
                 {/* Collapsible Video Transcript Drawer */}
                 {showTranscript && videoTranscript && (
-                  <div className="mt-3 rounded-xl bg-[#081529] border border-sky-400/25 p-4 sm:p-5 space-y-3 animate-in fade-in duration-200">
+                  <div className="mx-3.5 mb-3.5 sm:mx-0 sm:mb-0 mt-1 sm:mt-3 rounded-xl bg-[#081529] border border-sky-400/25 p-4 sm:p-5 space-y-3 animate-in fade-in duration-200">
                     <div className="flex items-center justify-between gap-2 border-b border-sky-400/15 pb-2.5">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-sky-400" />
@@ -1088,7 +1380,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 className="rounded-2xl bg-gradient-to-br from-[#0e2344] to-[#0a1930] border border-sky-400/25 p-4 sm:p-5 shadow-lg space-y-3"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
                     <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/30 text-sky-300 text-xs font-black uppercase tracking-wider">
                       Grammar Spotlight
                     </span>
@@ -1128,39 +1420,41 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 data-testid="section-mcq"
                 className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 shadow-xl overflow-hidden"
               >
-                {/* Section Header */}
+                {/* Responsive Section Header */}
                 <div
                   onClick={() => toggleSection('mcq')}
-                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center justify-between gap-2 cursor-pointer sm:cursor-default"
+                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer sm:cursor-default"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0">
-                      {mcqSectionNum}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                        Multiple Choice Questions
-                      </h3>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Choose the best answer for each question ({mcqQuestions[0]?.points || 10} marks each)
-                      </p>
+                  <div className="flex items-start sm:items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+                        {mcqSectionNum}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
+                          Multiple Choice Questions
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
+                          Choose the best answer for each question ({mcqQuestions[0]?.points || 10} marks each)
+                        </p>
+                      </div>
                     </div>
+                    <span className="sm:hidden text-slate-500 shrink-0 mt-1">
+                      {collapsedSections['mcq'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
-                      {mcqQuestions.length} {mcqQuestions.length === 1 ? 'question' : 'questions'} |{' '}
+                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                    <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0c2d57] text-xs font-extrabold">
+                      {mcqQuestions.length} {mcqQuestions.length === 1 ? 'question' : 'questions'} •{' '}
                       {mcqQuestions.reduce((s, q) => s + (Number(q.points) || 10), 0)} marks
-                    </span>
-                    <span className="sm:hidden text-slate-500">
-                      {collapsedSections['mcq'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
                     </span>
                   </div>
                 </div>
 
-                {/* 3-Column Desktop / 1-Column Mobile Question Cards Grid */}
+                {/* Full-Width Responsive Question Cards */}
                 {!collapsedSections['mcq'] && (
-                  <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 sm:p-6 space-y-4">
                     {mcqQuestions.map((q, qIdx) => {
                       const options = normalizeQuestionOptions(q.options);
                       const selectedVal = draftAnswers[q.id] || '';
@@ -1171,26 +1465,32 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         <div
                           key={q.id}
                           id={`question-card-${q.id}`}
-                          className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-all ${
+                          className={`rounded-2xl border-2 p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
                             evaluated
                               ? evaluated.isCorrect
-                                ? 'bg-emerald-50/50 border-emerald-300'
-                                : 'bg-rose-50/40 border-rose-300'
+                                ? 'bg-emerald-50/60 border-emerald-300 shadow-xs'
+                                : 'bg-rose-50/50 border-rose-300 shadow-xs'
                               : selectedVal
-                              ? 'bg-sky-50/40 border-[#1d6ef2]'
-                              : 'bg-slate-50/60 border-slate-200/90 hover:border-slate-300'
+                              ? 'bg-sky-50/50 border-[#1d6ef2] shadow-sm'
+                              : 'bg-slate-50/70 border-slate-200/90 hover:border-sky-300'
                           }`}
                         >
-                          <div className="space-y-3">
+                          <div className="space-y-3.5">
                             {/* Question Number & Marks */}
-                            <div className="flex items-start justify-between gap-2">
-                              <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                                {qIdx + 1}. {q.question_text}
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="text-sm sm:text-base font-extrabold text-slate-900 leading-snug">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#13294b] text-white text-xs font-black mr-2 align-middle">
+                                  {qIdx + 1}
+                                </span>
+                                <span className="align-middle">{q.question_text}</span>
                               </h4>
+                              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-extrabold text-slate-600">
+                                {q.points || 10} pts
+                              </span>
                             </div>
 
-                            {/* Answer Choices */}
-                            <div className="space-y-2">
+                            {/* Answer Choices — 2-col on tablet/desktop, 1-col on mobile */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                               {options.map(opt => {
                                 const isSelected =
                                   selectedVal === opt.id ||
@@ -1199,23 +1499,23 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                                   resolvedCorrect?.id === opt.id;
 
                                 let btnStyle =
-                                  'bg-white hover:bg-slate-100 border-slate-200 text-slate-800';
+                                  'bg-white hover:bg-sky-50/70 hover:border-sky-300 border-slate-200 text-slate-800 shadow-2xs';
                                 let badgeStyle =
-                                  'bg-slate-100 text-slate-700 border-slate-200';
+                                  'bg-sky-100 text-[#0c2d57] border-sky-200';
 
                                 if (evaluated) {
                                   if (isCorrectOpt) {
                                     btnStyle =
-                                      'bg-emerald-600 border-emerald-600 text-white font-bold shadow-xs';
+                                      'bg-emerald-600 border-emerald-600 text-white font-bold shadow-sm';
                                     badgeStyle = 'bg-white/20 text-white border-white/30';
                                   } else if (isSelected && !evaluated.isCorrect) {
                                     btnStyle =
-                                      'bg-rose-600 border-rose-600 text-white font-bold';
+                                      'bg-rose-600 border-rose-600 text-white font-bold shadow-sm';
                                     badgeStyle = 'bg-white/20 text-white border-white/30';
                                   }
                                 } else if (isSelected) {
                                   btnStyle =
-                                    'bg-[#1d6ef2] border-[#1d6ef2] text-white font-bold shadow-sm';
+                                    'bg-[#1d6ef2] border-[#1d6ef2] text-white font-bold shadow-md ring-2 ring-sky-300/60';
                                   badgeStyle = 'bg-white/20 text-white border-white/30';
                                 }
 
@@ -1229,14 +1529,14 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                                       setDraftAnswers(prev => ({ ...prev, [q.id]: opt.id }));
                                       setValidationError(null);
                                     }}
-                                    className={`w-full px-3 py-2.5 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-center gap-2.5 cursor-pointer disabled:cursor-default ${btnStyle}`}
+                                    className={`w-full px-3.5 py-3 rounded-xl border-2 text-left text-xs sm:text-sm transition-all flex items-center gap-3 cursor-pointer active:scale-[0.99] disabled:cursor-default ${btnStyle}`}
                                   >
                                     <span
-                                      className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 border ${badgeStyle}`}
+                                      className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 border ${badgeStyle}`}
                                     >
                                       {opt.id}
                                     </span>
-                                    <span className="flex-1 leading-snug">{opt.text}</span>
+                                    <span className="flex-1 leading-snug font-semibold">{opt.text}</span>
                                     {evaluated && isCorrectOpt && (
                                       <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
                                     )}
@@ -1250,7 +1550,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                           </div>
 
                           {/* Card Footer: Marks or Feedback */}
-                          <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between gap-2 text-[11px]">
+                          <div className="pt-2.5 border-t border-slate-200/80 flex items-center justify-between gap-2 text-xs">
                             <span className="font-bold text-slate-500">
                               {q.points || 10} marks
                             </span>
@@ -1262,18 +1562,18 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                               >
                                 {evaluated.isCorrect
                                   ? `✓ Correct (+${evaluated.pointsAwarded} XP)`
-                                  : `✗ Correct: ${resolvedCorrect?.id || q.correct_answer}`}
+                                  : `✗ Correct answer: ${resolvedCorrect?.id || q.correct_answer}`}
                               </span>
                             ) : selectedVal ? (
                               <button
                                 type="button"
                                 onClick={() => evaluateAndPersistQuestion(q)}
-                                className="text-[#026fc3] hover:underline font-extrabold cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-[#1d6ef2]/10 hover:bg-[#1d6ef2]/20 text-[#026fc3] font-extrabold cursor-pointer transition-colors"
                               >
                                 Check Answer →
                               </button>
                             ) : (
-                              <span className="text-slate-400 font-medium">Select an option</span>
+                              <span className="text-slate-400 font-semibold">Tap an option above</span>
                             )}
                           </div>
                         </div>
@@ -1285,89 +1585,118 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 3: VERY SHORT / TRUE OR FALSE QUESTIONS              */}
+            {/* SECTION 3: TRUE / FALSE QUESTIONS (CUTE COLOURFUL BUTTONS)   */}
             {/* ============================================================ */}
             {tfQuestions.length > 0 && (
               <section
                 data-testid="section-true-false"
                 className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 shadow-xl overflow-hidden"
               >
+                {/* Responsive Section Header */}
                 <div
                   onClick={() => toggleSection('tf')}
-                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center justify-between gap-2 cursor-pointer sm:cursor-default"
+                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer sm:cursor-default"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0">
-                      {tfSectionNum}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                        Very Short Questions (True / False)
-                      </h3>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Decide whether each statement from the story is True or False
-                      </p>
+                  <div className="flex items-start sm:items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+                        {tfSectionNum}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
+                          True or False Questions
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
+                          Decide whether each statement from the story is True or False
+                        </p>
+                      </div>
                     </div>
+                    <span className="sm:hidden text-slate-500 shrink-0 mt-1">
+                      {collapsedSections['tf'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
-                      {tfQuestions.length} {tfQuestions.length === 1 ? 'question' : 'questions'} |{' '}
+                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                    <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0c2d57] text-xs font-extrabold">
+                      {tfQuestions.length} {tfQuestions.length === 1 ? 'question' : 'questions'} •{' '}
                       {tfQuestions.reduce((s, q) => s + (Number(q.points) || 10), 0)} marks
-                    </span>
-                    <span className="sm:hidden text-slate-500">
-                      {collapsedSections['tf'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
                     </span>
                   </div>
                 </div>
 
+                {/* Full-Width Question Cards with Cute Colourful True/False Icon Buttons */}
                 {!collapsedSections['tf'] && (
-                  <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 sm:p-6 space-y-4">
                     {tfQuestions.map((q, qIdx) => {
                       const selectedVal = draftAnswers[q.id] || '';
                       const evaluated = evaluatedMap[q.id];
-                      const choices = ['True', 'False'];
+                      const choices: Array<'True' | 'False'> = ['True', 'False'];
 
                       return (
                         <div
                           key={q.id}
                           id={`question-card-${q.id}`}
-                          className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-all ${
+                          className={`rounded-2xl border-2 p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
                             evaluated
                               ? evaluated.isCorrect
-                                ? 'bg-emerald-50/50 border-emerald-300'
-                                : 'bg-rose-50/40 border-rose-300'
+                                ? 'bg-emerald-50/60 border-emerald-300 shadow-xs'
+                                : 'bg-rose-50/50 border-rose-300 shadow-xs'
                               : selectedVal
-                              ? 'bg-sky-50/40 border-[#1d6ef2]'
-                              : 'bg-slate-50/60 border-slate-200/90 hover:border-slate-300'
+                              ? 'bg-sky-50/40 border-[#1d6ef2] shadow-sm'
+                              : 'bg-slate-50/70 border-slate-200/90 hover:border-sky-300'
                           }`}
                         >
-                          <div className="space-y-3">
-                            <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                              {qIdx + 1}. {q.question_text}
-                            </h4>
+                          <div className="space-y-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="text-sm sm:text-base font-extrabold text-slate-900 leading-snug">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#13294b] text-white text-xs font-black mr-2 align-middle">
+                                  {qIdx + 1}
+                                </span>
+                                <span className="align-middle">{q.question_text}</span>
+                              </h4>
+                              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-extrabold text-slate-600">
+                                {q.points || 10} pts
+                              </span>
+                            </div>
 
-                            <div className="grid grid-cols-2 gap-2.5 pt-1">
+                            {/* Cute Playful True / False Buttons with Distinct Icon Badges */}
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-1">
                               {choices.map(choice => {
+                                const isTrueBtn = choice === 'True';
                                 const isSelected =
                                   selectedVal.toLowerCase() === choice.toLowerCase();
                                 const isCorrectChoice =
                                   String(q.correct_answer || '').toLowerCase() ===
                                   choice.toLowerCase();
 
-                                let btnClass =
-                                  'bg-white hover:bg-slate-100 border-slate-200 text-slate-800';
+                                let cardClass = isTrueBtn
+                                  ? 'bg-gradient-to-b from-emerald-50/90 to-teal-50/50 hover:from-emerald-100/90 hover:to-teal-100/70 border-emerald-300 text-emerald-900 shadow-xs'
+                                  : 'bg-gradient-to-b from-rose-50/90 to-pink-50/50 hover:from-rose-100/90 hover:to-pink-100/70 border-rose-300 text-rose-900 shadow-xs';
+
+                                let iconBadgeClass = isTrueBtn
+                                  ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                                  : 'bg-rose-500 text-white shadow-sm shadow-rose-500/30';
+
                                 if (evaluated) {
                                   if (isCorrectChoice) {
-                                    btnClass =
-                                      'bg-emerald-600 border-emerald-600 text-white font-black shadow-xs';
+                                    cardClass = isTrueBtn
+                                      ? 'bg-gradient-to-r from-emerald-600 to-teal-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300'
+                                      : 'bg-gradient-to-r from-rose-600 to-pink-600 border-rose-600 text-white shadow-md ring-2 ring-rose-300';
+                                    iconBadgeClass = 'bg-white/25 text-white';
                                   } else if (isSelected && !evaluated.isCorrect) {
-                                    btnClass =
-                                      'bg-rose-600 border-rose-600 text-white font-black';
+                                    cardClass =
+                                      'bg-slate-200/80 border-rose-400 text-rose-900 opacity-85';
+                                    iconBadgeClass = 'bg-rose-600 text-white';
+                                  } else {
+                                    cardClass =
+                                      'bg-slate-100 border-slate-200 text-slate-400 opacity-60';
+                                    iconBadgeClass = 'bg-slate-300 text-white';
                                   }
                                 } else if (isSelected) {
-                                  btnClass =
-                                    'bg-[#1d6ef2] border-[#1d6ef2] text-white font-black shadow-sm';
+                                  cardClass = isTrueBtn
+                                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 border-emerald-600 text-white shadow-lg shadow-emerald-500/25 ring-2 ring-emerald-300 scale-[1.01]'
+                                    : 'bg-gradient-to-r from-rose-500 to-pink-500 border-rose-600 text-white shadow-lg shadow-rose-500/25 ring-2 ring-rose-300 scale-[1.01]';
+                                  iconBadgeClass = 'bg-white/25 text-white';
                                 }
 
                                 return (
@@ -1380,19 +1709,25 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                                       setDraftAnswers(prev => ({ ...prev, [q.id]: choice }));
                                       setValidationError(null);
                                     }}
-                                    className={`py-2.5 px-3 rounded-xl border text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-default ${btnClass}`}
+                                    className={`py-3 px-3.5 sm:px-4 rounded-2xl border-2 text-sm sm:text-base font-black transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-95 disabled:cursor-default ${cardClass}`}
                                   >
+                                    <span
+                                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform ${iconBadgeClass}`}
+                                    >
+                                      {isTrueBtn ? (
+                                        <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+                                      ) : (
+                                        <XCircle className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+                                      )}
+                                    </span>
                                     <span>{choice}</span>
-                                    {evaluated && isCorrectChoice && (
-                                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                                    )}
                                   </button>
                                 );
                               })}
                             </div>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between gap-2 text-[11px]">
+                          <div className="pt-2.5 border-t border-slate-200/80 flex items-center justify-between gap-2 text-xs">
                             <span className="font-bold text-slate-500">
                               {q.points || 10} marks
                             </span>
@@ -1404,18 +1739,18 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                               >
                                 {evaluated.isCorrect
                                   ? `✓ Correct (+${evaluated.pointsAwarded} XP)`
-                                  : `✗ Answer: ${q.correct_answer}`}
+                                  : `✗ Correct answer: ${q.correct_answer}`}
                               </span>
                             ) : selectedVal ? (
                               <button
                                 type="button"
                                 onClick={() => evaluateAndPersistQuestion(q)}
-                                className="text-[#026fc3] hover:underline font-extrabold cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-[#1d6ef2]/10 hover:bg-[#1d6ef2]/20 text-[#026fc3] font-extrabold cursor-pointer transition-colors"
                               >
                                 Check Answer →
                               </button>
                             ) : (
-                              <span className="text-slate-400 font-medium">Select True or False</span>
+                              <span className="text-slate-400 font-semibold">Tap True or False</span>
                             )}
                           </div>
                         </div>
@@ -1427,93 +1762,151 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 4: SHORT ANSWER QUESTIONS                            */}
+            {/* SECTION 4: SHORT ANSWER QUESTIONS (INLINE SENTENCE BLANK)    */}
             {/* ============================================================ */}
             {shortQuestions.length > 0 && (
               <section
                 data-testid="section-short-answer"
                 className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 shadow-xl overflow-hidden"
               >
+                {/* Responsive Section Header */}
                 <div
                   onClick={() => toggleSection('short')}
-                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center justify-between gap-2 cursor-pointer sm:cursor-default"
+                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer sm:cursor-default"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0">
-                      {shortSectionNum}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                        Short Answer Questions
-                      </h3>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Write a short answer for each question ({shortQuestions[0]?.points || 10} marks each)
-                      </p>
+                  <div className="flex items-start sm:items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+                        {shortSectionNum}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
+                          Short Answer Questions
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
+                          Tap the blank space inside each sentence and type the missing word or phrase
+                        </p>
+                      </div>
                     </div>
+                    <span className="sm:hidden text-slate-500 shrink-0 mt-1">
+                      {collapsedSections['short'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
-                      {shortQuestions.length} {shortQuestions.length === 1 ? 'question' : 'questions'} |{' '}
+                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                    <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0c2d57] text-xs font-extrabold">
+                      {shortQuestions.length} {shortQuestions.length === 1 ? 'question' : 'questions'} •{' '}
                       {shortQuestions.reduce((s, q) => s + (Number(q.points) || 10), 0)} marks
-                    </span>
-                    <span className="sm:hidden text-slate-500">
-                      {collapsedSections['short'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
                     </span>
                   </div>
                 </div>
 
+                {/* Full-Width Question Cards with Inline Sentence Fill-in-the-Blank */}
                 {!collapsedSections['short'] && (
-                  <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 sm:p-6 space-y-4">
                     {shortQuestions.map((q, qIdx) => {
                       const val = draftAnswers[q.id] || '';
-                      const charCount = val.length;
-                      const wordCount = val.trim() ? val.trim().split(/\s+/).length : 0;
                       const evaluated = evaluatedMap[q.id];
+                      const isBlankActive = Boolean(activeBlankMap[q.id]) || Boolean(val);
+                      const { promptLabel, before: beforeBlank, after: afterBlank } = getInlineSentenceParts(q);
 
                       return (
                         <div
                           key={q.id}
                           id={`question-card-${q.id}`}
-                          className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-all ${
+                          className={`rounded-2xl border-2 p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
                             evaluated
                               ? evaluated.isCorrect
-                                ? 'bg-emerald-50/50 border-emerald-300'
-                                : 'bg-rose-50/40 border-rose-300'
+                                ? 'bg-emerald-50/60 border-emerald-300 shadow-xs'
+                                : 'bg-rose-50/50 border-rose-300 shadow-xs'
                               : val.trim()
-                              ? 'bg-sky-50/30 border-[#1d6ef2]'
-                              : 'bg-slate-50/60 border-slate-200/90'
+                              ? 'bg-sky-50/40 border-[#1d6ef2] shadow-sm'
+                              : 'bg-slate-50/70 border-slate-200/90 hover:border-sky-300'
                           }`}
                         >
-                          <div className="space-y-2.5">
-                            <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                              {qIdx + 1}. {q.question_text}
-                            </h4>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              Type a key word, phrase, or short sentence from the lesson.
-                            </p>
+                          <div className="space-y-3">
+                            {/* Question Prompt Header */}
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-600 leading-snug">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#13294b] text-white text-xs font-black mr-2 align-middle">
+                                  {qIdx + 1}
+                                </span>
+                                <span className="align-middle">
+                                  {promptLabel || 'Complete the sentence from the story:'}
+                                </span>
+                              </h4>
+                              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-extrabold text-slate-600">
+                                {q.points || 10} pts
+                              </span>
+                            </div>
 
-                            <div className="relative">
-                              <textarea
-                                rows={3}
-                                maxLength={150}
-                                disabled={Boolean(evaluated)}
-                                value={val}
-                                onChange={e => {
-                                  setDraftAnswers(prev => ({ ...prev, [q.id]: e.target.value }));
-                                  setValidationError(null);
-                                }}
-                                placeholder="Write your answer here..."
-                                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#1d6ef2] focus:outline-none resize-none disabled:bg-slate-100"
-                              />
-                              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400 pt-1 px-0.5">
-                                <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-                                <span>{charCount}/150</span>
+                            {/* Interactive Inline Fill-in-the-Blank Sentence Box */}
+                            <div
+                              onClick={() => {
+                                if (!evaluated) {
+                                  setActiveBlankMap(prev => ({ ...prev, [q.id]: true }));
+                                }
+                              }}
+                              className="rounded-xl bg-white border-2 border-sky-200/90 px-4 py-3.5 sm:px-5 sm:py-4 shadow-inner cursor-text"
+                            >
+                              <div className="text-sm sm:text-base font-extrabold text-slate-900 leading-relaxed flex flex-wrap items-baseline gap-x-1.5 gap-y-2">
+                                {beforeBlank && <span>{beforeBlank}</span>}
+
+                                {/* Inline Blank / Input Control */}
+                                {isBlankActive || evaluated ? (
+                                  <span className="inline-flex items-center">
+                                    <input
+                                      type="text"
+                                      maxLength={120}
+                                      disabled={Boolean(evaluated)}
+                                      autoFocus={Boolean(activeBlankMap[q.id]) && !val}
+                                      value={val}
+                                      onChange={e => {
+                                        setDraftAnswers(prev => ({
+                                          ...prev,
+                                          [q.id]: e.target.value
+                                        }));
+                                        setValidationError(null);
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter' && val.trim() && !evaluated) {
+                                          e.preventDefault();
+                                          evaluateAndPersistQuestion(q);
+                                        }
+                                      }}
+                                      placeholder="type answer..."
+                                      style={{
+                                        width: `${Math.max(11, Math.min(28, (val.length || 10) + 3))}ch`
+                                      }}
+                                      className={`inline-block rounded-lg border-2 px-3 py-1 text-center text-sm sm:text-base font-black transition-all focus:outline-none ${
+                                        evaluated
+                                          ? evaluated.isCorrect
+                                            ? 'bg-emerald-100 border-emerald-500 text-emerald-900'
+                                            : 'bg-rose-100 border-rose-500 text-rose-900'
+                                          : 'bg-sky-50/90 border-[#1d6ef2] text-[#0c2d57] placeholder:text-sky-400/80 placeholder:font-semibold shadow-[0_0_12px_rgba(29,110,242,0.2)]'
+                                      }`}
+                                    />
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      courseAudio.playClick();
+                                      setActiveBlankMap(prev => ({ ...prev, [q.id]: true }));
+                                    }}
+                                    className="inline-flex items-center justify-center px-4 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 border-2 border-dashed border-[#1d6ef2] text-[#1d6ef2] font-black text-sm sm:text-base tracking-wider transition-all cursor-pointer shadow-2xs hover:scale-[1.02]"
+                                  >
+                                    [ ______ ]
+                                  </button>
+                                )}
+
+                                {afterBlank && <span>{afterBlank}</span>}
                               </div>
                             </div>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between gap-2 text-[11px]">
+                          <div className="pt-2.5 border-t border-slate-200/80 flex items-center justify-between gap-2 text-xs">
                             <span className="font-bold text-slate-500">
                               {q.points || 10} marks
                             </span>
@@ -1525,18 +1918,20 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                               >
                                 {evaluated.isCorrect
                                   ? `✓ Correct (+${evaluated.pointsAwarded} XP)`
-                                  : `✗ Expected: "${q.correct_answer}"`}
+                                  : `✗ Answer: "${q.correct_answer}"`}
                               </span>
                             ) : val.trim() ? (
                               <button
                                 type="button"
                                 onClick={() => evaluateAndPersistQuestion(q)}
-                                className="text-[#026fc3] hover:underline font-extrabold cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-[#1d6ef2]/10 hover:bg-[#1d6ef2]/20 text-[#026fc3] font-extrabold cursor-pointer transition-colors"
                               >
                                 Check Answer →
                               </button>
                             ) : (
-                              <span className="text-slate-400 font-medium">Required</span>
+                              <span className="text-sky-600 font-bold">
+                                Tap [ ______ ] to type your answer
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1548,37 +1943,40 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 5: SENTENCE / EVENT ORDERING ACTIVITY                */}
+            {/* SECTION 5: SENTENCE-MAKING / ORDERING (NEON-BLUE PILL CHIPS) */}
             {/* ============================================================ */}
             {orderingQuestions.length > 0 && (
               <section
                 data-testid="section-ordering"
                 className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 shadow-xl overflow-hidden"
               >
+                {/* Responsive Section Header */}
                 <div
                   onClick={() => toggleSection('ordering')}
-                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center justify-between gap-2 cursor-pointer sm:cursor-default"
+                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer sm:cursor-default"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0">
-                      {orderingSectionNum}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                        Put the Words / Events in the Correct Order
-                      </h3>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        Drag and drop or tap each item in the right order
-                      </p>
+                  <div className="flex items-start sm:items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+                        {orderingSectionNum}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
+                          Sentence Builder — Put the Words in Order
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
+                          Tap or drag the glowing word chips in the right order to build the sentence
+                        </p>
+                      </div>
                     </div>
+                    <span className="sm:hidden text-slate-500 shrink-0 mt-1">
+                      {collapsedSections['ordering'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
+                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                    <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0c2d57] text-xs font-extrabold">
                       {orderingQuestions.reduce((s, q) => s + (Number(q.points) || 10), 0)} marks
-                    </span>
-                    <span className="sm:hidden text-slate-500">
-                      {collapsedSections['ordering'] ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
                     </span>
                   </div>
                 </div>
@@ -1621,6 +2019,13 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         }));
                       };
 
+                      const handleUndoLastWord = () => {
+                        if (evaluated || placed.length === 0) return;
+                        const lastIdx = placed.length - 1;
+                        const lastWord = placed[lastIdx];
+                        handleRemoveSlotWord(lastWord, lastIdx);
+                      };
+
                       const handleSwapSlots = (fromIdx: number, toIdx: number) => {
                         if (evaluated || toIdx < 0 || toIdx >= placed.length) return;
                         courseAudio.playClick();
@@ -1646,125 +2051,148 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                           className="space-y-4"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-extrabold text-slate-800">
+                            <p className="text-sm sm:text-base font-extrabold text-slate-900">
                               {q.question_text}
                             </p>
                             {!evaluated && placed.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={handleResetOrder}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>Reset Order</span>
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleUndoLastWord}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-50 hover:bg-sky-100 border border-sky-200 text-[#0c2d57] text-xs font-extrabold cursor-pointer transition-colors"
+                                >
+                                  <span>↩ Undo</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleResetOrder}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Reset</span>
+                                </button>
+                              </div>
                             )}
                           </div>
 
-                          {/* Numbered Target Slots (Matches Reference Design 1..N) */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
-                            {Array.from({ length: totalSlots }).map((_, slotIdx) => {
-                              const wordInSlot = placed[slotIdx];
-                              return (
-                                <div
-                                  key={slotIdx}
-                                  onDragOver={e => e.preventDefault()}
-                                  onDrop={e => {
-                                    e.preventDefault();
-                                    if (!draggedItem || draggedItem.qId !== q.id || evaluated) return;
-                                    if (draggedItem.source === 'bank') {
-                                      handlePlaceWord(draggedItem.word, draggedItem.index);
-                                    } else if (draggedItem.source === 'slot' && draggedItem.index !== slotIdx && slotIdx < placed.length) {
-                                      handleSwapSlots(draggedItem.index, slotIdx);
-                                    }
-                                    setDraggedItem(null);
-                                  }}
-                                  className={`min-h-[54px] rounded-xl border-2 p-2.5 flex items-center justify-between gap-2 transition-all ${
-                                    wordInSlot
-                                      ? evaluated
-                                        ? evaluated.isCorrect
-                                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
-                                          : 'bg-rose-50 border-rose-300 text-rose-950'
-                                        : 'bg-sky-50 border-[#1d6ef2] text-slate-900 shadow-xs'
-                                      : 'bg-slate-50 border-dashed border-slate-300 text-slate-400'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span
-                                      className={`w-6 h-6 rounded-full text-xs font-black flex items-center justify-center shrink-0 ${
-                                        wordInSlot
-                                          ? 'bg-[#13294b] text-white'
-                                          : 'bg-slate-200 text-slate-600'
-                                      }`}
-                                    >
-                                      {slotIdx + 1}
-                                    </span>
-                                    {wordInSlot ? (
-                                      <button
-                                        type="button"
-                                        draggable={!evaluated}
-                                        onDragStart={() =>
-                                          setDraggedItem({
-                                            qId: q.id,
-                                            word: wordInSlot,
-                                            source: 'slot',
-                                            index: slotIdx
-                                          })
-                                        }
-                                        onClick={() => handleRemoveSlotWord(wordInSlot, slotIdx)}
-                                        className="text-xs sm:text-sm font-extrabold truncate text-left flex-1 cursor-pointer"
-                                        title="Tap to remove"
-                                      >
-                                        {wordInSlot}
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs italic select-none">
-                                        Drag or tap item
-                                      </span>
-                                    )}
-                                  </div>
+                          {/* Sentence Construction Slots */}
+                          <div className="rounded-2xl bg-[#0b1d38] border-2 border-sky-400/35 p-3.5 sm:p-4 shadow-inner space-y-3">
+                            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-sky-300/80">
+                              <span>Your Sentence ({placed.length}/{totalSlots} placed)</span>
+                              {placed.length > 0 && !evaluated && (
+                                <span className="text-sky-200/75 normal-case font-semibold">
+                                  Tap any placed chip to remove it
+                                </span>
+                              )}
+                            </div>
 
-                                  {/* Touch-friendly reorder arrows when placed */}
-                                  {wordInSlot && !evaluated && (
-                                    <div className="flex items-center gap-0.5 shrink-0">
-                                      {slotIdx > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
+                              {Array.from({ length: totalSlots }).map((_, slotIdx) => {
+                                const wordInSlot = placed[slotIdx];
+                                return (
+                                  <div
+                                    key={slotIdx}
+                                    onDragOver={e => e.preventDefault()}
+                                    onDrop={e => {
+                                      e.preventDefault();
+                                      if (!draggedItem || draggedItem.qId !== q.id || evaluated) return;
+                                      if (draggedItem.source === 'bank') {
+                                        handlePlaceWord(draggedItem.word, draggedItem.index);
+                                      } else if (draggedItem.source === 'slot' && draggedItem.index !== slotIdx && slotIdx < placed.length) {
+                                        handleSwapSlots(draggedItem.index, slotIdx);
+                                      }
+                                      setDraggedItem(null);
+                                    }}
+                                    className={`min-h-[52px] rounded-xl border-2 p-2 flex items-center justify-between gap-2 transition-all ${
+                                      wordInSlot
+                                        ? evaluated
+                                          ? evaluated.isCorrect
+                                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
+                                            : 'bg-rose-500/20 border-rose-400 text-rose-100'
+                                          : 'bg-gradient-to-r from-[#0284c7] to-[#1d6ef2] border-sky-300 text-white shadow-[0_0_16px_rgba(56,189,248,0.45)]'
+                                        : 'bg-[#081529]/80 border-dashed border-sky-400/30 text-sky-300/45'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <span
+                                        className={`w-6 h-6 rounded-full text-xs font-black flex items-center justify-center shrink-0 ${
+                                          wordInSlot
+                                            ? 'bg-white/20 text-white border border-white/30'
+                                            : 'bg-sky-950/90 text-sky-300/70 border border-sky-400/20'
+                                        }`}
+                                      >
+                                        {slotIdx + 1}
+                                      </span>
+                                      {wordInSlot ? (
                                         <button
                                           type="button"
-                                          onClick={() => handleSwapSlots(slotIdx, slotIdx - 1)}
-                                          className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
-                                          title="Move earlier"
+                                          draggable={!evaluated}
+                                          onDragStart={() =>
+                                            setDraggedItem({
+                                              qId: q.id,
+                                              word: wordInSlot,
+                                              source: 'slot',
+                                              index: slotIdx
+                                            })
+                                          }
+                                          onClick={() => handleRemoveSlotWord(wordInSlot, slotIdx)}
+                                          className="text-xs sm:text-sm font-black truncate text-left flex-1 cursor-pointer text-white"
+                                          title="Tap to remove"
                                         >
-                                          <ChevronLeft className="w-3.5 h-3.5" />
+                                          {wordInSlot}
                                         </button>
-                                      )}
-                                      {slotIdx < placed.length - 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSwapSlots(slotIdx, slotIdx + 1)}
-                                          className="p-1 rounded hover:bg-slate-200 text-slate-600 cursor-pointer"
-                                          title="Move later"
-                                        >
-                                          <ChevronRight className="w-3.5 h-3.5" />
-                                        </button>
+                                      ) : (
+                                        <span className="text-xs italic select-none">
+                                          Slot {slotIdx + 1}
+                                        </span>
                                       )}
                                     </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+
+                                    {/* Touch-friendly reorder arrows when placed */}
+                                    {wordInSlot && !evaluated && (
+                                      <div className="flex items-center gap-0.5 shrink-0">
+                                        {slotIdx > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSwapSlots(slotIdx, slotIdx - 1)}
+                                            className="p-1 rounded hover:bg-white/20 text-white/90 cursor-pointer"
+                                            title="Move earlier"
+                                          >
+                                            <ChevronLeft className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                        {slotIdx < placed.length - 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSwapSlots(slotIdx, slotIdx + 1)}
+                                            className="p-1 rounded hover:bg-white/20 text-white/90 cursor-pointer"
+                                            title="Move later"
+                                          >
+                                            <ChevronRight className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
 
-                          {/* Draggable / Tap-to-Place Bank */}
-                          <div className="rounded-xl bg-slate-100/90 border border-slate-200 p-3.5">
+                          {/* Cute Neon-Blue Interactive Pill Chips Bank */}
+                          <div className="rounded-2xl bg-gradient-to-br from-[#07152b] via-[#0c2244] to-[#081730] border-2 border-sky-400/35 p-4 shadow-lg">
                             {bank.length === 0 ? (
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-xs sm:text-sm font-bold text-slate-700">
-                                  Your sentence: <strong className="text-[#026fc3]">“{placed.join(' ')}”</strong>
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <span className="text-xs sm:text-sm font-bold text-sky-100">
+                                  Built sentence:{' '}
+                                  <strong className="text-sky-300 font-black">
+                                    “{placed.join(' ')}”
+                                  </strong>
                                 </span>
                                 {evaluated ? (
                                   <span
-                                    className={`text-xs font-extrabold ${
-                                      evaluated.isCorrect ? 'text-emerald-700' : 'text-rose-700'
+                                    className={`text-xs sm:text-sm font-extrabold ${
+                                      evaluated.isCorrect ? 'text-emerald-300' : 'text-rose-300'
                                     }`}
                                   >
                                     {evaluated.isCorrect
@@ -1775,34 +2203,39 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                                   <button
                                     type="button"
                                     onClick={() => evaluateAndPersistQuestion(q)}
-                                    className="px-4 py-1.5 rounded-xl bg-[#1d6ef2] hover:bg-[#026fc3] text-white text-xs font-black shadow-xs cursor-pointer"
+                                    className="px-4 py-2 rounded-full bg-gradient-to-r from-[#0ea5e9] to-[#1d6ef2] hover:from-[#38bdf8] hover:to-[#0284c7] text-white text-xs sm:text-sm font-black shadow-[0_0_18px_rgba(56,189,248,0.45)] cursor-pointer transition-all"
                                   >
                                     Check Order →
                                   </button>
                                 )}
                               </div>
                             ) : (
-                              <div className="flex flex-wrap items-center gap-2.5">
-                                {bank.map((word, bIdx) => (
-                                  <button
-                                    key={`${word}-${bIdx}`}
-                                    type="button"
-                                    draggable={!evaluated}
-                                    onDragStart={() =>
-                                      setDraggedItem({
-                                        qId: q.id,
-                                        word,
-                                        source: 'bank',
-                                        index: bIdx
-                                      })
-                                    }
-                                    onClick={() => handlePlaceWord(word, bIdx)}
-                                    className="px-3.5 py-2.5 rounded-xl bg-[#13294b] hover:bg-[#1d6ef2] text-white text-xs sm:text-sm font-bold shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                                  >
-                                    <GripVertical className="w-3.5 h-3.5 text-sky-300 shrink-0" />
-                                    <span>{word}</span>
-                                  </button>
-                                ))}
+                              <div className="space-y-2.5">
+                                <div className="text-[11px] font-extrabold uppercase tracking-wider text-sky-300/85">
+                                  Tap a glowing word chip to place it next:
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  {bank.map((word, bIdx) => (
+                                    <button
+                                      key={`${word}-${bIdx}`}
+                                      type="button"
+                                      draggable={!evaluated}
+                                      onDragStart={() =>
+                                        setDraggedItem({
+                                          qId: q.id,
+                                          word,
+                                          source: 'bank',
+                                          index: bIdx
+                                        })
+                                      }
+                                      onClick={() => handlePlaceWord(word, bIdx)}
+                                      className="px-4 py-2.5 rounded-full bg-gradient-to-b from-[#0f3161] to-[#091f40] hover:from-[#0284c7] hover:to-[#1d6ef2] border-2 border-[#38bdf8]/85 hover:border-white text-sky-100 hover:text-white text-xs sm:text-sm font-extrabold shadow-[0_0_15px_rgba(56,189,248,0.32)] hover:shadow-[0_0_22px_rgba(56,189,248,0.65)] flex items-center gap-2 cursor-pointer transition-all hover:-translate-y-0.5 active:scale-95"
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-[#38bdf8] shadow-[0_0_8px_#38bdf8]" />
+                                      <span>{word}</span>
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>

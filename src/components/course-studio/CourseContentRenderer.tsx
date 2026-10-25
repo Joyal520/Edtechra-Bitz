@@ -753,11 +753,12 @@ export const CourseContentRenderer: React.FC<Props> = ({
                         value={vidUrl}
                         onChange={e => {
                           const nextUrl = e.target.value;
-                          if (item.video) {
-                            updateBlockContent(idx, { ...item, video: { ...item.video, url: nextUrl } });
-                          } else {
-                            updateBlockContent(idx, { ...item, url: nextUrl });
-                          }
+                          updateBlockContent(idx, {
+                            ...item,
+                            url: nextUrl,
+                            video_url: nextUrl,
+                            video: { ...(item.video || {}), url: nextUrl }
+                          });
                         }}
                         placeholder="Paste YouTube Video URL (e.g. https://www.youtube.com/watch?v=...)"
                         style={{

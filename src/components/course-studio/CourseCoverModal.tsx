@@ -4,7 +4,7 @@
 // Updates existing course records without duplicating courses.
 // ============================================================================
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   UploadCloud,
@@ -13,11 +13,17 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Move,
+  RotateCcw
 } from 'lucide-react';
 import { Course } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
-import { BrandedCourseFallback } from '@/utils/courseCover';
+import {
+  BrandedCourseFallback,
+  parseCoverPosition,
+  applyCoverPositionToUrl
+} from '@/utils/courseCover';
 
 interface Props {
   course: Course;
@@ -32,8 +38,20 @@ export const CourseCoverModal: React.FC<Props> = ({
   onClose,
   onSuccess
 }) => {
-  const [coverUrl, setCoverUrl] = useState<string | null>(course.cover_image_url || null);
+  const initialPos = parseCoverPosition(course.cover_image_url, (course as any)?.cover_object_position);
+  const defaultCreepyCover =
+    course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+    course.title?.toLowerCase().includes('creepy legends')
+      ? '/images/creepy-legends-cover.jpg'
+      : null;
+
+  const [coverUrl, setCoverUrl] = useState<string | null>(
+    initialPos.cleanUrl || defaultCreepyCover
+  );
   const [coverKey, setCoverKey] = useState<string | null>(course.cover_image_key || null);
+  const [posX, setPosX] = useState<number>(initialPos.x);
+  const [posY, setPosY] = useState<number>(initialPos.y);
+  const [isDragging, setIsDragging] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '1:1'>(
     course.cover_aspect_ratio === '1:1' ? '1:1' : '16:9'
   );
@@ -42,8 +60,71 @@ export const CourseCoverModal: React.FC<Props> = ({
   const [error, setError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      const parsed = parseCoverPosition(course.cover_image_url, (course as any)?.cover_object_position);
+      setCoverUrl(parsed.cleanUrl || defaultCreepyCover);
+      setCoverKey(course.cover_image_key || null);
+      setPosX(parsed.x);
+      setPosY(parsed.y);
+      setAspectRatio(course.cover_aspect_ratio === '1:1' ? '1:1' : '16:9');
+      setError(null);
+    }
+  }, [isOpen, course.id, course.cover_image_url, course.cover_image_key, course.cover_aspect_ratio]);
 
   if (!isOpen) return null;
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!coverUrl) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore pointer capture error
+    }
+    setIsDragging(true);
+    dragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      startX: posX,
+      startY: posY
+    };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !dragStartRef.current || !previewContainerRef.current) return;
+    const rect = previewContainerRef.current.getBoundingClientRect();
+    const width = Math.max(1, rect.width);
+    const height = Math.max(1, rect.height);
+
+    // Dragging image right moves focal point left (natural pan feel)
+    const deltaXPercent = ((e.clientX - dragStartRef.current.clientX) / width) * -100;
+    const deltaYPercent = ((e.clientY - dragStartRef.current.clientY) / height) * -100;
+
+    const nextX = Math.max(0, Math.min(100, Math.round(dragStartRef.current.startX + deltaXPercent)));
+    const nextY = Math.max(0, Math.min(100, Math.round(dragStartRef.current.startY + deltaYPercent)));
+    setPosX(nextX);
+    setPosY(nextY);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setIsDragging(false);
+    dragStartRef.current = null;
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,6 +142,8 @@ export const CourseCoverModal: React.FC<Props> = ({
       const res = await courseStudioService.uploadCourseImage(file, course.id, true);
       setCoverUrl(res.publicUrl);
       setCoverKey(res.storageKey);
+      setPosX(50);
+      setPosY(38);
     } catch (err: any) {
       setError(err.message || 'Failed to upload cover image.');
     } finally {
@@ -70,8 +153,10 @@ export const CourseCoverModal: React.FC<Props> = ({
   };
 
   const handleRemoveCover = () => {
-    setCoverUrl(null);
+    setCoverUrl(defaultCreepyCover);
     setCoverKey(null);
+    setPosX(50);
+    setPosY(38);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -79,12 +164,17 @@ export const CourseCoverModal: React.FC<Props> = ({
     setSaving(true);
     setError(null);
     try {
+      const finalCoverUrl = coverUrl ? applyCoverPositionToUrl(coverUrl, posX, posY) : null;
       const updated = await courseStudioService.updateCourse(course.id, {
-        cover_image_url: coverUrl,
+        cover_image_url: finalCoverUrl,
         cover_image_key: coverKey,
         cover_aspect_ratio: aspectRatio
       });
-      onSuccess(updated);
+      onSuccess({
+        ...course,
+        ...updated,
+        cover_image_url: finalCoverUrl
+      });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save cover changes.');
@@ -137,33 +227,62 @@ export const CourseCoverModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Live Preview Card */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          {/* Live Preview Card with Interactive Drag-to-Reposition */}
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4 text-[#026fc3]" />
-                <span>Preview • Student Course Header (Recommended: 16:9)</span>
+                <span>Preview • Drag Image to Reposition Focal Point</span>
               </span>
-              <span className="text-[11px] font-semibold text-slate-500">
-                {coverUrl ? 'Custom 16:9 Cover Active' : 'Branded Fallback Active'}
-              </span>
+              {coverUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPosX(50);
+                    setPosY(38);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Position ({posX}%, {posY}%)</span>
+                </button>
+              )}
             </div>
 
             <div className="rounded-2xl overflow-hidden border-2 border-slate-200 shadow-md w-full bg-[#08162b]">
               {coverUrl ? (
-                <div className={`relative w-full ${aspectRatio === '1:1' ? 'aspect-square max-w-xs mx-auto' : 'aspect-video'}`}>
+                <div
+                  ref={previewContainerRef}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                  className={`relative w-full select-none touch-none ${
+                    aspectRatio === '1:1' ? 'aspect-square max-w-xs mx-auto' : 'aspect-[16/7] sm:aspect-[16/6.5]'
+                  } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                >
                   <img
                     src={coverUrl}
                     alt={course.title}
-                    className="w-full h-full object-cover"
+                    draggable={false}
+                    style={{ objectPosition: `${posX}% ${posY}%` }}
+                    className="w-full h-full object-cover opacity-90 pointer-events-none select-none"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#08162b]/90 via-[#08162b]/25 to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#061124]/85 via-[#081b38]/40 to-[#061124]/35 pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#061124]/90 via-transparent to-[#061124]/25 pointer-events-none" />
+
+                  {/* Drag Helper Pill */}
+                  <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-slate-950/75 border border-white/20 text-white text-[11px] font-bold flex items-center gap-1.5 backdrop-blur-md pointer-events-none shadow-sm">
+                    <Move className="w-3.5 h-3.5 text-sky-300" />
+                    <span>Drag ↔ ↕ to reposition</span>
+                  </div>
+
                   <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-2 pointer-events-none">
                     <div>
                       <span className="inline-block px-2 py-0.5 rounded bg-sky-500/80 text-white text-[10px] font-extrabold uppercase tracking-wider mb-1">
-                        16:9 Student Header Preview
+                        Student Header Preview
                       </span>
-                      <p className="text-sm font-black text-white drop-shadow line-clamp-1">
+                      <p className="text-sm sm:text-base font-black text-white drop-shadow line-clamp-1">
                         {course.title}
                       </p>
                     </div>
@@ -175,6 +294,39 @@ export const CourseCoverModal: React.FC<Props> = ({
                 </div>
               )}
             </div>
+
+            {coverUrl && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 bg-slate-50 rounded-xl p-3 border border-slate-200/80">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                    <span>Horizontal Position (← →)</span>
+                    <span className="font-mono text-[#026fc3]">{posX}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={posX}
+                    onChange={e => setPosX(Number(e.target.value))}
+                    className="w-full accent-[#026fc3] cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                    <span>Vertical Position (↑ ↓)</span>
+                    <span className="font-mono text-[#026fc3]">{posY}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={posY}
+                    onChange={e => setPosY(Number(e.target.value))}
+                    className="w-full accent-[#026fc3] cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Aspect Ratio Selector */}

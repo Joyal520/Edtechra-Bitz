@@ -71,11 +71,13 @@ import {
   extractCanonicalLessonTranscript,
   extractCanonicalLessonText
 } from '@/utils/questionSchemaValidator';
+import { useAuth } from '@/context/AuthContext';
 
 export const CoursePreviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Core Course State
   const [course, setCourse] = useState<Course | null>(null);
@@ -83,13 +85,19 @@ export const CoursePreviewPage: React.FC = () => {
   const [selectedEpisode, setSelectedEpisode] = useState<CourseEpisode | null>(null);
   const [viewMode, setViewMode] = useState<'lesson' | 'roadmap'>('lesson');
 
-  // Mode: Default to Student Preview if opened via /preview or ?mode=student, otherwise Edit mode
+  // Mode: Default to Student Preview if opened via /preview, ?mode=student, or for featured interactive video courses
   const [isEditMode, setIsEditMode] = useState<boolean>(() => {
     const modeParam = searchParams.get('mode');
     const editParam = searchParams.get('edit');
     if (modeParam === 'student' || editParam === '0') return false;
     if (modeParam === 'edit' || editParam === '1') return true;
     if (typeof window !== 'undefined' && window.location.pathname.endsWith('/preview')) return false;
+    if (
+      courseId === 'e10c7ee9-0012-4000-8000-000000000012' ||
+      courseId === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535'
+    ) {
+      return false;
+    }
     return true;
   });
 
@@ -184,7 +192,7 @@ export const CoursePreviewPage: React.FC = () => {
     if (courseId) {
       loadCourse(courseId);
     }
-  }, [courseId]);
+  }, [courseId, user?.id]);
 
   const loadCourse = async (id: string) => {
     const cached = courseStudioService.getCachedCourseSync(id);
@@ -775,8 +783,15 @@ export const CoursePreviewPage: React.FC = () => {
 
   const isCreepyLegendsOrVideoCourse = Boolean(
     course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+      course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
       course.title?.toLowerCase().includes('creepy legends') ||
-      currentBlocks.some(b => b.block_type === 'video')
+      currentBlocks.some(
+        b =>
+          b.block_type === 'video' ||
+          b.block_type === 'youtube_video' ||
+          b.block_type === 'text_video' ||
+          Boolean((b.content as any)?.video?.url)
+      )
   );
 
   const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {

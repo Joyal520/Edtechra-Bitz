@@ -41,10 +41,12 @@ import {
 } from '@/components/course-studio/CreepyLegendsStudentView';
 import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
 import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
+import { useAuth } from '@/context/AuthContext';
 
 export const StudentCoursePlayerPage: React.FC = () => {
   const { classroomId, courseId } = useParams<{ classroomId: string; courseId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [enrollment, setEnrollment] = useState<CourseEnrollment | null>(null);
@@ -99,7 +101,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
     if (courseId && classroomId) {
       loadCourseAndProgress(courseId, classroomId);
     }
-  }, [courseId, classroomId]);
+  }, [courseId, classroomId, user?.id]);
 
   const applyAttemptsList = React.useCallback((attempts: any[]) => {
     const answersMap: Record<string, string> = {};
@@ -548,8 +550,15 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
   const isCreepyLegendsOrVideoCourse = Boolean(
     course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+      course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
       course.title?.toLowerCase().includes('creepy legends') ||
-      (selectedEpisode.blocks || []).some(b => b.block_type === 'video')
+      (selectedEpisode.blocks || []).some(
+        b =>
+          b.block_type === 'video' ||
+          b.block_type === 'youtube_video' ||
+          b.block_type === 'text_video' ||
+          Boolean((b.content as any)?.video?.url)
+      )
   );
 
   const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {

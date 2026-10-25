@@ -148,14 +148,28 @@ export const courseStudioService = {
 
     const fetchPromise = (async () => {
       try {
-        const headers = await getAuthHeader();
-        const res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
+        let headers = await getAuthHeader();
+        let res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
+        if (res.status === 401 && supabase) {
+          // Session may still be hydrating or refreshing on mobile/PWA; refresh and retry once
+          _cachedAuthToken = '';
+          _cachedAuthTokenExpiresAt = 0;
+          await supabase.auth.refreshSession().catch(() => {});
+          headers = await getAuthHeader();
+          res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
+        }
         const json = await res.json();
         if (!res.ok || !json.success) {
           throw new Error(json.error || 'Failed to fetch course details.');
         }
         writeCachedCourse(courseId, json.course);
         return json.course as Course;
+      } catch (err) {
+        const stale = readCachedCourse(courseId);
+        if (stale?.course) {
+          return stale.course;
+        }
+        throw err;
       } finally {
         _courseInFlight.delete(courseId);
       }

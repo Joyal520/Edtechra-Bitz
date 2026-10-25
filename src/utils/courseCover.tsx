@@ -226,6 +226,55 @@ export const BrandedCourseFallback: React.FC<{
 };
 
 /**
+ * Parses a saved focal point position from a cover URL hash (#pos=x,y) or explicit string.
+ * Defaults to 50% horizontal, 38% vertical for balanced cinematic framing.
+ */
+export function parseCoverPosition(
+  url?: string | null,
+  explicitPosition?: string | null
+): { x: number; y: number; objectPosition: string; cleanUrl: string } {
+  let x = 50;
+  let y = 38;
+  const rawUrl = String(url || '').trim();
+  const cleanUrl = rawUrl.replace(/#pos=[-0-9.,]+/i, '');
+
+  const matchHash = rawUrl.match(/#pos=([0-9.]+),([0-9.]+)/i);
+  if (matchHash) {
+    const px = Number.parseFloat(matchHash[1]);
+    const py = Number.parseFloat(matchHash[2]);
+    if (Number.isFinite(px)) x = Math.max(0, Math.min(100, Math.round(px)));
+    if (Number.isFinite(py)) y = Math.max(0, Math.min(100, Math.round(py)));
+  } else if (explicitPosition) {
+    const matchExplicit = String(explicitPosition).match(/([0-9.]+)%?\s*[, ]\s*([0-9.]+)%?/);
+    if (matchExplicit) {
+      const px = Number.parseFloat(matchExplicit[1]);
+      const py = Number.parseFloat(matchExplicit[2]);
+      if (Number.isFinite(px)) x = Math.max(0, Math.min(100, Math.round(px)));
+      if (Number.isFinite(py)) y = Math.max(0, Math.min(100, Math.round(py)));
+    }
+  }
+
+  return {
+    x,
+    y,
+    objectPosition: `${x}% ${y}%`,
+    cleanUrl
+  };
+}
+
+/**
+ * Encodes the focal point (x%, y%) into the cover URL hash so it persists in `cover_image_url`
+ * across Desktop, Tablet, and Mobile without requiring database schema migrations.
+ */
+export function applyCoverPositionToUrl(url: string, x: number, y: number): string {
+  const clean = String(url || '').trim().replace(/#pos=[-0-9.,]+/i, '');
+  if (!clean) return '';
+  const clampedX = Math.max(0, Math.min(100, Math.round(x)));
+  const clampedY = Math.max(0, Math.min(100, Math.round(y)));
+  return `${clean}#pos=${clampedX},${clampedY}`;
+}
+
+/**
  * Universal Resilient Course Cover Component.
  * Implements full 3-priority fallback, error recovery, smooth hover scale, and aspect ratio awareness.
  */
@@ -237,6 +286,7 @@ export const CourseCoverImage: React.FC<{
 }> = ({ course, className = '', imgClassName = '', aspectRatio }) => {
   const [hasError, setHasError] = useState(false);
   const coverInfo = getCourseCoverUrl(course);
+  const pos = parseCoverPosition(coverInfo.url, (course as any)?.cover_object_position);
   
   // Resolve aspect ratio class
   let ratioClass = 'aspect-video';
@@ -258,14 +308,15 @@ export const CourseCoverImage: React.FC<{
   return (
     <div className={`relative w-full overflow-hidden bg-slate-950 ${ratioClass} ${className}`}>
       <img
-        src={coverInfo.url}
+        src={pos.cleanUrl || coverInfo.url}
         alt={course?.title || 'Course Cover'}
         loading="lazy"
         onError={() => setHasError(true)}
-        className={`w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105 ${imgClassName}`}
+        style={{ objectPosition: pos.objectPosition }}
+        className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 ${imgClassName}`}
       />
       {/* Subtle bottom vignette gradient for readable text contrast */}
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-black/20 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-transparent to-black/15 pointer-events-none" />
     </div>
   );
 };
