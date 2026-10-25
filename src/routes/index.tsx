@@ -2,17 +2,17 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { HomePage } from '@/pages/HomePage';
+import { ExplorePage } from '@/pages/ExplorePage';
+import { DashboardPage } from '@/pages/DashboardPage';
+import { ClassesPage } from '@/pages/classes/ClassesPage';
+import { ClassroomDetailPage } from '@/pages/classes/ClassroomDetailPage';
 import { AuthPage } from '@/pages/AuthPage';
 import { AdminRoute } from '@/routes/AdminRoute';
 import { CoursePlayerSkeleton } from '@/components/course-studio/CoursePlayerSkeleton';
 
 // Lazy-loaded feature bundles for fast initial page load & code splitting
-const ExplorePage = lazy(() => import('@/pages/ExplorePage').then(m => ({ default: m.ExplorePage })));
-const DashboardPage = lazy(() => import('@/pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const BitzLessonPage = lazy(() => import('@/pages/BitzLessonPage').then(m => ({ default: m.BitzLessonPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
-const ClassesPage = lazy(() => import('@/pages/classes/ClassesPage').then(m => ({ default: m.ClassesPage })));
-const ClassroomDetailPage = lazy(() => import('@/pages/classes/ClassroomDetailPage').then(m => ({ default: m.ClassroomDetailPage })));
 const JoinClassroomPage = lazy(() => import('@/pages/classes/JoinClassroomPage').then(m => ({ default: m.JoinClassroomPage })));
 const CreateClassroomPage = lazy(() => import('@/pages/classes/CreateClassroomPage').then(m => ({ default: m.CreateClassroomPage })));
 const TeacherResourcesPage = lazy(() => import('@/pages/classes/TeacherResourcesPage').then(m => ({ default: m.TeacherResourcesPage })));

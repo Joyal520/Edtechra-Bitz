@@ -25,6 +25,7 @@ import {
   validateImageUpload,
   sanitizeSegment,
   putJsonContent,
+  putBinaryContent,
   getJsonContent,
   listObjects,
   getStorageStats,
@@ -1839,7 +1840,7 @@ app.post('/api/profile/upload-avatar', async (req, res) => {
       }
 
       try {
-        if (serverSupabase.auth?.admin) {
+        if (serverSupabase.auth?.admin && publicUrl && !publicUrl.startsWith('data:') && publicUrl.length <= 1024) {
           await serverSupabase.auth.admin.updateUserById(userId, {
             user_metadata: {
               avatar_url: publicUrl,
@@ -1934,8 +1935,11 @@ app.post('/api/profile', async (req, res) => {
           metaUpdates.name = updatePayload.full_name;
         }
         if (avatar_url !== undefined) {
-          metaUpdates.avatar_url = avatar_url;
-          metaUpdates.picture = avatar_url;
+          const isSafeUrl = !avatar_url || (!String(avatar_url).startsWith('data:') && String(avatar_url).length <= 1024);
+          if (isSafeUrl) {
+            metaUpdates.avatar_url = avatar_url;
+            metaUpdates.picture = avatar_url;
+          }
         }
         if (updatePayload.text_size) {
           metaUpdates.text_size = updatePayload.text_size;

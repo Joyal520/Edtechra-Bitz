@@ -29,7 +29,7 @@ import { CreateCourseModal } from '@/components/course-studio/CreateCourseModal'
 import { CoursePublishModal } from '@/components/course-studio/CoursePublishModal';
 
 export const ClassesPage: React.FC = () => {
-  const { user, isTeacher, isAuthenticated, openAuthModal } = useAuth();
+  const { user, isTeacher, isAuthenticated, isLoading: authLoading, openAuthModal } = useAuth();
   const navigate = useNavigate();
 
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
@@ -80,12 +80,13 @@ export const ClassesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     if (isAuthenticated) {
       loadData();
     } else {
       setLoading(false);
     }
-  }, [isAuthenticated, user, loadData]);
+  }, [authLoading, isAuthenticated, user?.id, isTeacher, loadData]);
 
   useEffect(() => {
     if (isAuthenticated && isTeacher) {

@@ -98,7 +98,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const isTeacher = Boolean(
-    isAdmin || profile?.role === 'teacher' || profile?.role === 'admin'
+    isAdmin ||
+    profile?.role === 'teacher' ||
+    profile?.role === 'admin' ||
+    user?.user_metadata?.role === 'teacher' ||
+    user?.user_metadata?.role === 'admin'
   );
 
   // Safely fetch or resolve user profile from Supabase
@@ -120,9 +124,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const effectiveName = data?.full_name?.trim() || metaName.trim() || '';
 
       const isUserAdmin = currentUser.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com';
+      const metaRole = currentUser.user_metadata?.role;
       const resolvedRole: 'student' | 'teacher' | 'admin' = isUserAdmin
         ? 'admin'
-        : (data?.role === 'admin' ? 'admin' : (data?.role === 'teacher' ? 'teacher' : (data?.role || 'student')));
+        : (data?.role === 'admin' || metaRole === 'admin'
+          ? 'admin'
+          : (data?.role === 'teacher' || metaRole === 'teacher'
+            ? 'teacher'
+            : (data?.role || 'student')));
 
       if (data) {
         const userProfile: UserProfile = {
@@ -378,8 +387,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           metaUpdates.name = payload.full_name.trim();
         }
         if (payload.avatar_url !== undefined) {
-          metaUpdates.avatar_url = payload.avatar_url;
-          metaUpdates.picture = payload.avatar_url;
+          const isCompactUrl =
+            !payload.avatar_url ||
+            (!payload.avatar_url.startsWith('data:') && payload.avatar_url.length <= 1024);
+          if (isCompactUrl) {
+            metaUpdates.avatar_url = payload.avatar_url;
+            metaUpdates.picture = payload.avatar_url;
+          }
         }
         if (payload.text_size !== undefined) {
           metaUpdates.text_size = payload.text_size;
@@ -543,9 +557,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        let { data: { session: currentSession }, error } = await supabase.auth.getSession();
         if (error) {
           console.warn('[AuthContext] Error retrieving session:', error.message);
+        }
+
+        // If the cached JWT access_token is oversized (> 4KB due to legacy base64 metadata), refresh immediately
+        if (
+          currentSession?.access_token &&
+          (currentSession.access_token.length > 4000 ||
+            (typeof currentSession.user?.user_metadata?.avatar_url === 'string' &&
+              currentSession.user.user_metadata.avatar_url.startsWith('data:')))
+        ) {
+          try {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            if (refreshed?.session) {
+              currentSession = refreshed.session;
+            }
+          } catch (refreshErr) {
+            console.warn('[AuthContext] Oversized token refresh notice:', refreshErr);
+          }
         }
 
         if (!isMounted) return;
@@ -558,11 +589,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setSession(currentSession);
           setUser(currentSession.user);
-          setAuthState('authenticated');
 
           const userProfile = await fetchUserProfile(currentSession.user);
           if (isMounted) {
             setProfile(userProfile);
+            setAuthState('authenticated');
 
             const isComplete = checkIsProfileComplete(currentSession.user, userProfile);
             if (!isComplete) {
@@ -609,9 +640,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (newSession?.user) {
             setSession(newSession);
             setUser(newSession.user);
-            setAuthState('authenticated');
 
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
               let userProfile = await fetchUserProfile(newSession.user);
 
               // Check if user has a pending onboarding role from Google OAuth redirect
@@ -642,6 +672,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               if (isMounted) {
                 setProfile(userProfile);
+                setAuthState('authenticated');
 
                 const isComplete = checkIsProfileComplete(newSession.user, userProfile);
                 if (!isComplete) {
