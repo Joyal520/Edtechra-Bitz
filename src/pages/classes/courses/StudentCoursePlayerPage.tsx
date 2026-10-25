@@ -35,6 +35,7 @@ import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
+import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
 
 export const StudentCoursePlayerPage: React.FC = () => {
   const { classroomId, courseId } = useParams<{ classroomId: string; courseId: string }>();
@@ -698,9 +699,20 @@ export const StudentCoursePlayerPage: React.FC = () => {
           />
         ) : (
           <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 pb-8 box-border min-w-0">
-            
+            {/* PREMIUM COURSE OPENING HERO BANNER */}
+            <CourseHeroBanner
+              course={course}
+              completedLessonsCount={roadmapData?.completedLessons || 0}
+              totalLessonsCount={roadmapData?.totalLessons || 1}
+              defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
+              onStartOrContinue={() => {
+                const el = document.getElementById('student-lesson-header');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+
             {/* EDITORIAL LESSON HEADER */}
-            <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left">
+            <header id="student-lesson-header" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left">
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-theme-accent reader-meta">
                 <span>LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}</span>
                 <span className="opacity-40">•</span>

@@ -476,8 +476,8 @@ export function evaluateQuestionAnswer(
   const explanation = question.explanation || '';
   const rawCorrect = getRawCorrectAnswer(question);
 
-  // 1. MULTIPLE CHOICE
-  if (qType === 'multiple_choice') {
+  // 1. MULTIPLE CHOICE & IMAGE SELECTION
+  if (qType === 'multiple_choice' || qType === 'image_selection' || qType === 'dropdown_selection' || qType === 'word_choice') {
     const resolved = resolveCorrectOption(question);
 
     // If resolved via option mapper
@@ -485,7 +485,7 @@ export function evaluateQuestionAnswer(
       const matched = isOptionMatchingStudentAnswer(resolved, studentAnswer);
       const feedback = matched
         ? (explanation ? `Correct! ${explanation}` : 'Correct answer!')
-        : `The correct answer is: ${resolved.display}. ${explanation}`.trim();
+        : `Not quite. The correct answer is: ${resolved.display}. ${explanation}`.trim();
 
       return {
         isCorrect: matched,
@@ -507,9 +507,83 @@ export function evaluateQuestionAnswer(
       maxScore,
       feedback: matchedFallback
         ? (explanation ? `Correct! ${explanation}` : 'Correct!')
-        : `The correct answer is: ${rawCorrect}. ${explanation}`.trim(),
+        : `Not quite. The correct answer is: ${rawCorrect}. ${explanation}`.trim(),
       correctOption: null
     };
+  }
+
+  // 1B. MATCHING / MATCHING PAIRS
+  if (qType === 'matching' || qType === 'matching_pairs' || qType === 'drag_drop_matching') {
+    // Extract canonical pairs from question.matching_pairs, question.options.matching_pairs, or question.options
+    const rawOpts: any = question.options;
+    let pairs: Array<{ left: string; right: string }> = [];
+
+    if (Array.isArray((question as any).matching_pairs) && (question as any).matching_pairs.length > 0) {
+      pairs = (question as any).matching_pairs;
+    } else if (rawOpts && typeof rawOpts === 'object' && !Array.isArray(rawOpts) && Array.isArray(rawOpts.matching_pairs)) {
+      pairs = rawOpts.matching_pairs;
+    } else if (Array.isArray(rawOpts)) {
+      pairs = rawOpts
+        .map((item: any) => {
+          if (item && typeof item === 'object' && item.left && item.right) {
+            return { left: String(item.left).trim(), right: String(item.right).trim() };
+          }
+          const str = typeof item === 'string' ? item : String(item?.text || '');
+          const split = str.split(/\s*(?:->|→|:|=|\|)\s*/);
+          if (split.length >= 2) {
+            return { left: split[0].trim(), right: split.slice(1).join(' ').trim() };
+          }
+          return null;
+        })
+        .filter(Boolean) as Array<{ left: string; right: string }>;
+    }
+
+    if (pairs.length > 0) {
+      let studentMap: Record<string, string> = {};
+      if (studentAnswer && typeof studentAnswer === 'object' && !Array.isArray(studentAnswer)) {
+        Object.entries(studentAnswer).forEach(([k, v]) => {
+          studentMap[cleanTextForComparison(k)] = cleanTextForComparison(v);
+        });
+      } else if (Array.isArray(studentAnswer)) {
+        studentAnswer.forEach((entry: any) => {
+          if (entry && typeof entry === 'object' && entry.left && entry.right) {
+            studentMap[cleanTextForComparison(entry.left)] = cleanTextForComparison(entry.right);
+          } else if (typeof entry === 'string') {
+            const sp = entry.split(/\s*(?:->|→|:|=|\|)\s*/);
+            if (sp.length >= 2) {
+              studentMap[cleanTextForComparison(sp[0])] = cleanTextForComparison(sp.slice(1).join(' '));
+            }
+          }
+        });
+      } else if (typeof studentAnswer === 'string') {
+        studentAnswer.split(/\s*[;|,]\s*/).forEach(seg => {
+          const sp = seg.split(/\s*(?:->|→|:|=)\s*/);
+          if (sp.length >= 2) {
+            studentMap[cleanTextForComparison(sp[0])] = cleanTextForComparison(sp.slice(1).join(' '));
+          }
+        });
+      }
+
+      let matchedCount = 0;
+      for (const pair of pairs) {
+        const expectedLeft = cleanTextForComparison(pair.left);
+        const expectedRight = cleanTextForComparison(pair.right);
+        if (studentMap[expectedLeft] && studentMap[expectedLeft] === expectedRight) {
+          matchedCount++;
+        }
+      }
+
+      const allMatched = matchedCount === pairs.length;
+      const correctSummary = pairs.map(p => `${p.left} → ${p.right}`).join(', ');
+      return {
+        isCorrect: allMatched,
+        score: allMatched ? maxScore : 0,
+        maxScore,
+        feedback: allMatched
+          ? (explanation ? `Correct! All ${pairs.length} pairs matched! ${explanation}` : `Correct! You matched all ${pairs.length} pairs!`)
+          : `Not quite (${matchedCount}/${pairs.length} matched). Correct pairs: ${correctSummary}. ${explanation}`.trim()
+      };
+    }
   }
 
   // 2. TRUE / FALSE & YES / NO

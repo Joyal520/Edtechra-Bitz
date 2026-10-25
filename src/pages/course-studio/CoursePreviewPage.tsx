@@ -34,9 +34,17 @@ import {
   AlertCircle,
   Camera,
   Pause,
-  Play
+  Play,
+  ShieldCheck
 } from 'lucide-react';
-import { Course, CourseUnit, CourseEpisode, RoadmapLessonItem, CourseBlock, CourseQuestion } from '@/types/courseStudio';
+import {
+  Course,
+  CourseUnit,
+  CourseEpisode,
+  RoadmapLessonItem,
+  CourseBlock,
+  CourseQuestion
+} from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
 import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
 import { CourseContentRenderer, getValidLessonQuestions } from '@/components/course-studio/CourseContentRenderer';
@@ -47,6 +55,8 @@ import { CourseCoverModal } from '@/components/course-studio/CourseCoverModal';
 import { AILessonAssistantModal } from '@/components/course-studio/AILessonAssistantModal';
 import { AddQuestionsModal } from '@/components/course-studio/AddQuestionsModal';
 import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
+import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
+import { CourseQualityAuditModal } from '@/components/course-studio/CourseQualityAuditModal';
 import { TextScale } from '@/utils/courseTextFormatting';
 import { getThemePreset, DEFAULT_THEME_ID } from '@/utils/courseThemes';
 import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPopover';
@@ -88,6 +98,7 @@ export const CoursePreviewPage: React.FC = () => {
   const [questionPlanModalOpen, setQuestionPlanModalOpen] = useState(false);
   const [pauseModalOpen, setPauseModalOpen] = useState(false);
   const [pausingInProgress, setPausingInProgress] = useState(false);
+  const [qualityAuditOpen, setQualityAuditOpen] = useState(false);
 
   // Saving & Sync Status
   const [savingStatus, setSavingStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -1171,6 +1182,18 @@ export const CoursePreviewPage: React.FC = () => {
 
         {/* Right: Publish (in Edit Mode), Reading %, Font Size, Theme Popover */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Course Quality Audit Trigger */}
+          <LiquidButton
+            variant="secondary"
+            size="sm"
+            onClick={() => setQualityAuditOpen(true)}
+            icon={<ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />}
+            title="Open 10-Metric Course Quality Audit & Improver"
+            className="!px-2.5 !py-1 !text-xs font-bold shrink-0"
+          >
+            <span className="hidden sm:inline">Quality Audit</span>
+          </LiquidButton>
+
           {isEditMode && (
             <>
               <LiquidButton
@@ -1348,8 +1371,20 @@ export const CoursePreviewPage: React.FC = () => {
             </div>
           ) : (
             <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border min-w-0">
+              {/* PREMIUM COURSE OPENING HERO BANNER */}
+              <CourseHeroBanner
+                course={course}
+                completedLessonsCount={roadmapData?.completedLessons || 0}
+                totalLessonsCount={roadmapData?.totalLessons || 1}
+                defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
+                onStartOrContinue={() => {
+                  const el = document.getElementById('lesson-content-anchor');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+
               {/* EDITORIAL LESSON HEADER */}
-              <header className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
+              <header id="lesson-content-anchor" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta">
                   <span>
                     LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}
@@ -1639,6 +1674,188 @@ export const CoursePreviewPage: React.FC = () => {
           onSuccess={(updated) => {
             setCourse(prev => (prev ? { ...prev, ...updated } : prev));
             showToast('Course cover artwork updated!');
+          }}
+        />
+      )}
+
+      {/* 10B. COURSE QUALITY AUDIT & AUTO-IMPROVER MODAL */}
+      {course && (
+        <CourseQualityAuditModal
+          isOpen={qualityAuditOpen}
+          onClose={() => setQualityAuditOpen(false)}
+          course={course}
+          onApplyImprovement={async (imp) => {
+            const allEps = (course.units || []).flatMap(u => u.episodes || []);
+            const targetEp = allEps.find(e => e.id === imp.episodeId) || selectedEpisode || allEps[0];
+            if (!targetEp) return;
+            const epBlocks = [...(targetEp.id === selectedEpisode?.id ? currentBlocks : (targetEp.blocks || []))];
+
+            if (imp.actionType === 'add_visual_block') {
+              epBlocks.splice(Math.min(1, epBlocks.length), 0, {
+                id: `b_vis_${Date.now()}`,
+                episode_id: targetEp.id,
+                course_id: course.id,
+                block_type: 'illustration',
+                order_index: 1,
+                content: {
+                  title: `Visual Guide: ${targetEp.title}`,
+                  illustration_key: 'friendly_brain',
+                  caption: 'Explore the visual concept for this lesson.',
+                  badges: ['Visual Guide', 'Key Concept']
+                }
+              });
+              await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+            } else if (imp.actionType === 'add_interactive_activity') {
+              epBlocks.push({
+                id: `b_int_${Date.now()}`,
+                episode_id: targetEp.id,
+                course_id: course.id,
+                block_type: 'interactive_activity',
+                order_index: epBlocks.length,
+                content: {
+                  activity_type: 'click_to_reveal',
+                  title: 'Interactive Discovery Check',
+                  instruction: 'Tap each card below to reveal how this works in everyday life!',
+                  items: [
+                    { icon: '💡', label: 'Key Concept 1', detail: 'Tap-to-discover explanation for learners.' },
+                    { icon: '🌟', label: 'Key Concept 2', detail: 'Real-world example to help you remember.' }
+                  ]
+                }
+              });
+              await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+            } else if (imp.actionType === 'add_objective') {
+              epBlocks.unshift({
+                id: `b_obj_${Date.now()}`,
+                episode_id: targetEp.id,
+                course_id: course.id,
+                block_type: 'objective',
+                order_index: 0,
+                content: {
+                  title: `Learning Goal • ${targetEp.title}`,
+                  text: `Discover the core concepts of ${targetEp.title} through visual guides and interactive practice.`,
+                  outcomes: ['Understand the main idea', 'Practise key vocabulary']
+                }
+              });
+              await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+            } else if (imp.actionType === 'add_key_takeaway') {
+              epBlocks.push({
+                id: `b_take_${Date.now()}`,
+                episode_id: targetEp.id,
+                course_id: course.id,
+                block_type: 'key_takeaway',
+                order_index: epBlocks.length,
+                content: {
+                  title: 'Remember This!',
+                  points: [
+                    `Review the key ideas from ${targetEp.title}.`,
+                    'Practise using the new words and complete the quiz below!'
+                  ]
+                }
+              });
+              await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+            } else if (imp.actionType === 'add_vocabulary_cards') {
+              epBlocks.push({
+                id: `b_voc_${Date.now()}`,
+                episode_id: targetEp.id,
+                course_id: course.id,
+                block_type: 'vocabulary_cards',
+                order_index: epBlocks.length,
+                content: {
+                  title: 'Key Vocabulary Words',
+                  words: [
+                    { word: 'brain', partOfSpeech: 'noun', icon: '🧠', definition: 'The organ inside your head that controls your body and mind.', example: 'Your brain helps you think and learn.' },
+                    { word: 'memory', partOfSpeech: 'noun', icon: '📓', definition: 'Your ability to store and remember information.', example: 'Practice helps build strong memory.' }
+                  ]
+                }
+              });
+              await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+            } else if (imp.actionType === 'add_explanations') {
+              for (const ep of allEps) {
+                const qs = (ep.questions || []).map(q => ({
+                  ...q,
+                  explanation: q.explanation && q.explanation.trim().length > 5
+                    ? q.explanation
+                    : `Correct answer: ${q.correct_answer}. Review the lesson visuals above to reinforce this concept.`
+                }));
+                if (qs.length > 0) {
+                  await courseStudioService.saveEpisodeQuestions(course.id, ep.id, qs);
+                }
+              }
+            }
+
+            await loadCourse(course.id);
+            showToast(`Applied improvement: ${imp.title}`);
+          }}
+          onApplyAllImprovements={async (improvements) => {
+            for (const imp of improvements) {
+              const allEps = (course.units || []).flatMap(u => u.episodes || []);
+              const targetEp = allEps.find(e => e.id === imp.episodeId) || selectedEpisode || allEps[0];
+              if (!targetEp) continue;
+              const epBlocks = [...(targetEp.blocks || [])];
+              if (imp.actionType === 'add_visual_block') {
+                epBlocks.splice(Math.min(1, epBlocks.length), 0, {
+                  id: `b_vis_${Date.now()}_${Math.random()}`,
+                  episode_id: targetEp.id,
+                  course_id: course.id,
+                  block_type: 'illustration',
+                  order_index: 1,
+                  content: {
+                    title: `Visual Guide: ${targetEp.title}`,
+                    illustration_key: 'friendly_brain',
+                    caption: 'Explore the visual concept for this lesson.',
+                    badges: ['Visual Guide', 'Key Concept']
+                  }
+                });
+                await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+              } else if (imp.actionType === 'add_interactive_activity') {
+                epBlocks.push({
+                  id: `b_int_${Date.now()}_${Math.random()}`,
+                  episode_id: targetEp.id,
+                  course_id: course.id,
+                  block_type: 'interactive_activity',
+                  order_index: epBlocks.length,
+                  content: {
+                    activity_type: 'click_to_reveal',
+                    title: 'Interactive Discovery Check',
+                    instruction: 'Tap each card below to reveal how this works!',
+                    items: [
+                      { icon: '💡', label: 'Key Concept 1', detail: 'Tap-to-discover explanation for learners.' },
+                      { icon: '🌟', label: 'Key Concept 2', detail: 'Real-world example to help you remember.' }
+                    ]
+                  }
+                });
+                await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+              } else if (imp.actionType === 'add_objective') {
+                epBlocks.unshift({
+                  id: `b_obj_${Date.now()}_${Math.random()}`,
+                  episode_id: targetEp.id,
+                  course_id: course.id,
+                  block_type: 'objective',
+                  order_index: 0,
+                  content: {
+                    title: `Learning Goal • ${targetEp.title}`,
+                    text: `Discover the core concepts of ${targetEp.title}.`,
+                    outcomes: ['Understand the main idea', 'Practise key vocabulary']
+                  }
+                });
+                await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+              } else if (imp.actionType === 'add_key_takeaway') {
+                epBlocks.push({
+                  id: `b_take_${Date.now()}_${Math.random()}`,
+                  episode_id: targetEp.id,
+                  course_id: course.id,
+                  block_type: 'key_takeaway',
+                  order_index: epBlocks.length,
+                  content: {
+                    title: 'Remember This!',
+                    points: [`Review the key ideas from ${targetEp.title}.`]
+                  }
+                });
+                await courseStudioService.saveEpisodeBlocks(course.id, targetEp.id, epBlocks);
+              }
+            }
+            await loadCourse(course.id);
+            showToast('All recommended quality improvements applied!');
           }}
         />
       )}

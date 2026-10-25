@@ -5413,8 +5413,12 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
 
     const blocksByEpisode = new Map();
     (blocks || []).forEach(b => {
+      const normalizedBlock = {
+        ...b,
+        block_type: (b.content && typeof b.content === 'object' && b.content._block_type) ? b.content._block_type : b.block_type
+      };
       if (!blocksByEpisode.has(b.episode_id)) blocksByEpisode.set(b.episode_id, []);
-      blocksByEpisode.get(b.episode_id).push(sanitizeBlockForStudent(b));
+      blocksByEpisode.get(b.episode_id).push(sanitizeBlockForStudent(normalizedBlock));
     });
 
     const questionsByEpisode = new Map();
@@ -5426,6 +5430,10 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
           passage: q.options.passage,
           expected_answer: q.options.expected_answer,
           acceptable_answers: q.options.acceptable_answers,
+          matching_pairs: q.options.matching_pairs,
+          image_url: q.options.image_url,
+          illustration_key: q.options.illustration_key,
+          question_type: q.options._question_type || q.question_type,
           options: q.options.options || []
         };
       }
@@ -5435,7 +5443,10 @@ app.get('/api/course-studio/courses/:id', async (req, res) => {
         passage: q.passage || extra.passage || undefined,
         wh_type: q.wh_type || extra.wh_type || undefined,
         expected_answer: q.expected_answer || extra.expected_answer || undefined,
-        acceptable_answers: q.acceptable_answers || extra.acceptable_answers || undefined
+        acceptable_answers: q.acceptable_answers || extra.acceptable_answers || undefined,
+        matching_pairs: q.matching_pairs || extra.matching_pairs || undefined,
+        image_url: q.image_url || extra.image_url || undefined,
+        illustration_key: q.illustration_key || extra.illustration_key || undefined
       };
       if (!questionsByEpisode.has(q.episode_id)) questionsByEpisode.set(q.episode_id, []);
       questionsByEpisode.get(q.episode_id).push(enrichedQ);
@@ -5923,12 +5934,18 @@ app.post('/api/course-studio/courses/:id/episodes/:episodeId/blocks', async (req
     await serverSupabase.from('course_blocks').delete().eq('episode_id', episodeId);
 
     if (blocks.length > 0) {
+      const legacyAllowedBlockTypes = new Set([
+        'text', 'image', 'youtube_video', 'youtube_short', 'question_set', 'audio', 'callout', 'code', 'quote'
+      ]);
       const toInsert = blocks.map((b, idx) => ({
         episode_id: episodeId,
         course_id: courseId,
         block_type: b.block_type,
         order_index: idx,
-        content: b.content || {}
+        content: {
+          ...(b.content || {}),
+          _block_type: b.block_type
+        }
       }));
 
       const { data: saved, error } = await serverSupabase
@@ -5943,7 +5960,9 @@ app.post('/api/course-studio/courses/:id/episodes/:episodeId/blocks', async (req
         if (error.code === '23514' || (error.message && error.message.includes('course_blocks_block_type_check'))) {
           const fallbackToInsert = toInsert.map(b => ({
             ...b,
-            block_type: (b.block_type === 'text_image' || b.block_type === 'text_video') ? 'text' : (b.block_type === 'video' ? 'youtube_video' : b.block_type)
+            block_type: b.block_type === 'video'
+              ? 'youtube_video'
+              : (legacyAllowedBlockTypes.has(b.block_type) ? b.block_type : 'text')
           }));
           const { data: fallbackSaved, error: fbError } = await serverSupabase
             .from('course_blocks')
@@ -5963,7 +5982,11 @@ app.post('/api/course-studio/courses/:id/episodes/:episodeId/blocks', async (req
         return res.status(500).json({ success: false, error: "Couldn't save this section. Please try again." });
       }
 
-      return res.json({ success: true, blocks: saved });
+      const normalizedSaved = (saved || []).map((b, idx) => ({
+        ...b,
+        block_type: (b.content && b.content._block_type) || toInsert[idx]?.block_type || b.block_type
+      }));
+      return res.json({ success: true, blocks: normalizedSaved });
     }
 
     res.json({ success: true, blocks: [] });
@@ -6005,13 +6028,27 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
 
       const toInsert = deduplicated.map((q, idx) => {
         let optionsToSave = (typeof q.options === 'object' && q.options !== null) || Array.isArray(q.options) ? q.options : [];
-        if (q.question_type === 'wh_question' || q.wh_type || q.passage) {
+        const hasExtraQuestionMeta = Boolean(
+          q.question_type === 'wh_question' ||
+          q.wh_type ||
+          q.passage ||
+          q.matching_pairs ||
+          q.image_url ||
+          q.illustration_key ||
+          q.question_type === 'image_selection' ||
+          q.question_type === 'matching_pairs'
+        );
+        if (hasExtraQuestionMeta) {
           optionsToSave = {
             options: Array.isArray(q.options) ? q.options : (typeof q.options === 'object' && q.options?.options ? q.options.options : []),
             acceptable_answers: Array.isArray(q.acceptable_answers) ? q.acceptable_answers : (typeof q.options === 'object' && Array.isArray(q.options?.acceptable_answers) ? q.options.acceptable_answers : []),
             expected_answer: q.expected_answer || q.correct_answer || (typeof q.options === 'object' && q.options?.expected_answer) || '',
-            wh_type: q.wh_type || (typeof q.options === 'object' && q.options?.wh_type) || 'what',
-            passage: q.passage || (typeof q.options === 'object' && q.options?.passage) || ''
+            wh_type: q.wh_type || (typeof q.options === 'object' && q.options?.wh_type) || undefined,
+            passage: q.passage || (typeof q.options === 'object' && q.options?.passage) || undefined,
+            matching_pairs: q.matching_pairs || (typeof q.options === 'object' && q.options?.matching_pairs) || undefined,
+            image_url: q.image_url || (typeof q.options === 'object' && q.options?.image_url) || undefined,
+            illustration_key: q.illustration_key || (typeof q.options === 'object' && q.options?.illustration_key) || undefined,
+            _question_type: q.question_type || 'multiple_choice'
           };
         }
         return {
@@ -6020,7 +6057,7 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
           course_id: courseId,
           block_id: q.block_id || null,
           question_text: q.question_text,
-          question_type: q.question_type || 'multiple_choice',
+          question_type: q.question_type === 'matching_pairs' ? 'matching' : (q.question_type || 'multiple_choice'),
           options: optionsToSave,
           correct_answer: q.correct_answer || (q.question_type === 'essay' ? 'AI Evaluated' : 'Answer'),
           explanation: q.explanation || '',
@@ -6040,6 +6077,10 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
             passage: q.options.passage,
             expected_answer: q.options.expected_answer,
             acceptable_answers: q.options.acceptable_answers,
+            matching_pairs: q.options.matching_pairs,
+            image_url: q.options.image_url,
+            illustration_key: q.options.illustration_key,
+            question_type: q.options._question_type || q.question_type,
             options: q.options.options || []
           };
         }
@@ -6049,7 +6090,10 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
           passage: q.passage || extra.passage,
           wh_type: q.wh_type || extra.wh_type,
           expected_answer: q.expected_answer || extra.expected_answer,
-          acceptable_answers: q.acceptable_answers || extra.acceptable_answers
+          acceptable_answers: q.acceptable_answers || extra.acceptable_answers,
+          matching_pairs: q.matching_pairs || extra.matching_pairs,
+          image_url: q.image_url || extra.image_url,
+          illustration_key: q.illustration_key || extra.illustration_key
         };
       });
 

@@ -36,6 +36,7 @@ import { AICourseDesignerModal } from '@/components/course-studio/AICourseDesign
 import { CourseStudioWorkspaceBackground } from '@/components/course-studio/CourseStudioWorkspaceBackground';
 import { LiquidButton, LiquidTab } from '@/components/course-studio/liquid';
 import { CourseCoverImage, getCourseSubjectIdentity } from '@/utils/courseCover';
+import { AMAZING_BRAIN_COURSE_META, AMAZING_BRAIN_LESSONS } from '@/utils/amazingBrainCourseData';
 
 export const CourseStudioDashboardPage: React.FC = () => {
   const { isAuthenticated, openAuthModal } = useAuth();
@@ -53,6 +54,62 @@ export const CourseStudioDashboardPage: React.FC = () => {
   const [publishTargetCourse, setPublishTargetCourse] = useState<Course | null>(null);
   const [coverTargetCourse, setCoverTargetCourse] = useState<Course | null>(null);
   const [activeMenuCourseId, setActiveMenuCourseId] = useState<string | null>(null);
+  const [buildingAmazingBrain, setBuildingAmazingBrain] = useState(false);
+
+  const handleOpenOrBuildAmazingBrain = async () => {
+    if (!isAuthenticated) {
+      openAuthModal('login', { type: 'action', action: 'create_course' });
+      return;
+    }
+    const existing = courses.find(c => c.title.toLowerCase().includes('amazing brain'));
+    if (existing) {
+      navigate(`/course-studio/${existing.id}`);
+      return;
+    }
+    setBuildingAmazingBrain(true);
+    try {
+      const created = await courseStudioService.createCourse({
+        title: AMAZING_BRAIN_COURSE_META.title,
+        short_description: AMAZING_BRAIN_COURSE_META.short_description,
+        subject: AMAZING_BRAIN_COURSE_META.subject,
+        grade_level: AMAZING_BRAIN_COURSE_META.grade_level,
+        course_type: AMAZING_BRAIN_COURSE_META.course_type
+      });
+      const firstUnit = created.units?.[0];
+      if (firstUnit) {
+        const firstEp = firstUnit.episodes?.[0];
+        for (let i = 0; i < AMAZING_BRAIN_LESSONS.length; i++) {
+          const bp = AMAZING_BRAIN_LESSONS[i];
+          let epId = '';
+          if (i === 0 && firstEp) {
+            await courseStudioService.updateEpisode(created.id, firstEp.id, {
+              title: bp.title,
+              episode_type: bp.episode_type,
+              order_index: 0,
+              estimated_minutes: bp.estimated_minutes
+            });
+            epId = firstEp.id;
+          } else {
+            const newEp = await courseStudioService.createEpisode(created.id, {
+              unit_id: firstUnit.id,
+              title: bp.title,
+              episode_type: bp.episode_type,
+              order_index: i,
+              estimated_minutes: bp.estimated_minutes
+            });
+            epId = newEp.id;
+          }
+          await courseStudioService.saveEpisodeBlocks(created.id, epId, bp.blocks as any);
+          await courseStudioService.saveEpisodeQuestions(created.id, epId, bp.questions as any);
+        }
+      }
+      navigate(`/course-studio/${created.id}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to build Amazing Brain course.');
+    } finally {
+      setBuildingAmazingBrain(false);
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -202,6 +259,17 @@ export const CourseStudioDashboardPage: React.FC = () => {
                   className="shadow-xl"
                 >
                   My Classrooms
+                </LiquidButton>
+
+                <LiquidButton
+                  variant="secondary"
+                  size="lg"
+                  disabled={buildingAmazingBrain}
+                  onClick={handleOpenOrBuildAmazingBrain}
+                  icon={<BookOpen className="w-4 h-4 text-indigo-600" />}
+                  className="shadow-xl"
+                >
+                  {buildingAmazingBrain ? 'Building Amazing Brain...' : '🧠 Amazing Brain Course'}
                 </LiquidButton>
               </div>
             </div>

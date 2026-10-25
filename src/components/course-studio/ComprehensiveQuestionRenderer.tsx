@@ -40,6 +40,7 @@ import { shuffleWordsGuaranteed } from '@/utils/questionSchemaValidator';
 import { LiquidButton, LiquidChip, LiquidOption } from '@/components/course-studio/liquid';
 import { DraggableOrderingQuestion } from './DraggableOrderingQuestion';
 import { ClozePassageQuestion } from './ClozePassageQuestion';
+import { CourseIllustrationGraphic } from './BrainIllustrations';
 
 interface SentenceToken {
   id: string;
@@ -176,6 +177,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const [isEvaluatingAi, setIsEvaluatingAi] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isInputActive, setIsInputActive] = useState<boolean>(false);
+  const [selectedMatchLeft, setSelectedMatchLeft] = useState<string | null>(null);
+  const [matchedPairsMap, setMatchedPairsMap] = useState<Record<string, string>>({});
   const shortAnswerInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Stable tracking refs to guarantee sentence ordering state isolation across scroll and parent re-renders
@@ -707,10 +710,29 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
         </h4>
       )}
 
+      {/* OPTIONAL VISUAL / ILLUSTRATION FOR IMAGE-BASED QUESTIONS */}
+      {(question.illustration_key || (question.image_url && qType !== 'essay')) && (
+        <div className="rounded-2xl bg-slate-50/90 dark:bg-slate-900/70 p-3 sm:p-4 border border-slate-200/80 dark:border-slate-800">
+          {question.illustration_key ? (
+            <CourseIllustrationGraphic
+              illustrationKey={question.illustration_key}
+              alt={question.question_text}
+            />
+          ) : (
+            <img
+              src={question.image_url}
+              alt={question.question_text}
+              className="w-full max-h-[260px] object-contain mx-auto rounded-xl"
+              loading="lazy"
+            />
+          )}
+        </div>
+      )}
+
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 1: MULTIPLE CHOICE (4-OPTION SINGLE SELECT)                    */}
+      {/* TYPE 1: MULTIPLE CHOICE & IMAGE SELECTION (SINGLE SELECT)           */}
       {/* ------------------------------------------------------------------- */}
-      {qType === 'multiple_choice' && (
+      {(qType === 'multiple_choice' || qType === 'image_selection') && (
         mode === 'edit' ? (
           <div className="space-y-2.5 pt-1">
             {normalizedOptions.map((opt, oIdx) => {
@@ -1501,6 +1523,222 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
           }}
         />
       )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TYPE 9E: INTERACTIVE MATCHING PAIRS ('matching' / 'matching_pairs') */}
+      {/* ------------------------------------------------------------------- */}
+      {(qType === 'matching' || qType === 'matching_pairs') && (() => {
+        const rawOpts: any = question.options;
+        let canonicalPairs: Array<{ left: string; right: string }> = [];
+        if (Array.isArray(question.matching_pairs) && question.matching_pairs.length > 0) {
+          canonicalPairs = question.matching_pairs;
+        } else if (rawOpts && typeof rawOpts === 'object' && !Array.isArray(rawOpts) && Array.isArray(rawOpts.matching_pairs)) {
+          canonicalPairs = rawOpts.matching_pairs;
+        } else if (Array.isArray(rawOpts)) {
+          canonicalPairs = rawOpts
+            .map((item: any) => {
+              if (item && typeof item === 'object' && item.left && item.right) {
+                return { left: String(item.left).trim(), right: String(item.right).trim() };
+              }
+              const s = typeof item === 'string' ? item : String(item?.text || '');
+              const sp = s.split(/\s*(?:->|→|:|=|\|)\s*/);
+              if (sp.length >= 2) {
+                return { left: sp[0].trim(), right: sp.slice(1).join(' ').trim() };
+              }
+              return null;
+            })
+            .filter(Boolean) as Array<{ left: string; right: string }>;
+        }
+
+        if (canonicalPairs.length === 0) {
+          canonicalPairs = [
+            { left: 'Cerebrum', right: 'Thinking and learning' },
+            { left: 'Cerebellum', right: 'Balance and movement' },
+            { left: 'Brain stem', right: 'Breathing and heartbeat' }
+          ];
+        }
+
+        // Deterministic shuffled right side for student view
+        const rightItems = canonicalPairs.map((p, idx) => ({
+          text: p.right,
+          sortKey: (p.right.length * 17 + idx * 31) % 97
+        })).sort((a, b) => a.sortKey - b.sortKey).map(x => x.text);
+
+        if (mode === 'edit') {
+          return (
+            <div className="space-y-2.5 pt-1">
+              <div className="text-xs font-bold text-slate-500">Matching Pairs (Left Item → Correct Match):</div>
+              {canonicalPairs.map((pair, pIdx) => (
+                <div key={pIdx} className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={pair.left}
+                    onChange={e => {
+                      const next = [...canonicalPairs];
+                      next[pIdx] = { ...pair, left: e.target.value };
+                      onUpdateQuestion?.({
+                        ...question,
+                        matching_pairs: next,
+                        options: next.map(p => `${p.left} -> ${p.right}`)
+                      });
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold bg-white dark:bg-slate-800"
+                    placeholder="Left item..."
+                  />
+                  <input
+                    type="text"
+                    value={pair.right}
+                    onChange={e => {
+                      const next = [...canonicalPairs];
+                      next[pIdx] = { ...pair, right: e.target.value };
+                      onUpdateQuestion?.({
+                        ...question,
+                        matching_pairs: next,
+                        options: next.map(p => `${p.left} -> ${p.right}`)
+                      });
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-800"
+                    placeholder="Matching function..."
+                  />
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        const matchedCount = Object.keys(matchedPairsMap).length;
+        const allPaired = matchedCount === canonicalPairs.length;
+
+        return (
+          <div className="space-y-4 pt-1">
+            <p className="text-xs sm:text-sm text-theme-secondary font-medium">
+              Tap an item on the left, then tap its matching function on the right:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Left Column */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-black uppercase tracking-wider text-theme-accent">
+                  1. Select Item
+                </div>
+                {canonicalPairs.map((pair, idx) => {
+                  const isSelected = selectedMatchLeft === pair.left;
+                  const pairedRight = matchedPairsMap[pair.left];
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isAnswered}
+                      onClick={() => {
+                        courseAudio.playClick();
+                        setSelectedMatchLeft(isSelected ? null : pair.left);
+                      }}
+                      className={`w-full min-h-[48px] p-3 rounded-2xl text-left border-2 transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : pairedRight
+                          ? 'bg-indigo-50/80 dark:bg-indigo-950/40 text-theme-primary border-indigo-400'
+                          : 'bg-[var(--theme-surface-subtle)] text-theme-primary border-[var(--theme-border-subtle)] hover:border-indigo-400'
+                      }`}
+                    >
+                      <span className="text-xs sm:text-sm font-black">{pair.left}</span>
+                      {pairedRight && (
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold truncate max-w-[140px] ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-indigo-600 text-white'
+                        }`}>
+                          → {pairedRight}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-black uppercase tracking-wider text-theme-secondary">
+                  2. Tap Matching Function
+                </div>
+                {rightItems.map((rightText, idx) => {
+                  const assignedLeft = Object.entries(matchedPairsMap).find(([, r]) => r === rightText)?.[0];
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isAnswered}
+                      onClick={() => {
+                        courseAudio.playClick();
+                        const targetLeft = selectedMatchLeft || canonicalPairs.find(p => !matchedPairsMap[p.left])?.left;
+                        if (!targetLeft) return;
+                        setMatchedPairsMap(prev => {
+                          const next = { ...prev };
+                          // Remove any existing assignment of this rightText
+                          Object.keys(next).forEach(k => {
+                            if (next[k] === rightText) delete next[k];
+                          });
+                          next[targetLeft] = rightText;
+                          return next;
+                        });
+                        setSelectedMatchLeft(null);
+                      }}
+                      className={`w-full min-h-[48px] p-3 rounded-2xl text-left border-2 transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        assignedLeft
+                          ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-theme-primary border-emerald-400'
+                          : 'bg-[var(--theme-surface-subtle)] text-theme-primary border-[var(--theme-border-subtle)] hover:border-emerald-400'
+                      }`}
+                    >
+                      <span className="text-xs sm:text-sm font-semibold">{rightText}</span>
+                      {assignedLeft && (
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black shrink-0">
+                          {assignedLeft}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {!isAnswered && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs font-bold text-theme-secondary">
+                  {matchedCount} of {canonicalPairs.length} matched
+                </span>
+                <div className="flex items-center gap-2">
+                  {matchedCount > 0 && (
+                    <LiquidButton
+                      variant="secondary"
+                      size="sm"
+                      icon={<RotateCcw className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setMatchedPairsMap({});
+                        setSelectedMatchLeft(null);
+                      }}
+                    >
+                      Clear
+                    </LiquidButton>
+                  )}
+                  <LiquidButton
+                    variant="primary"
+                    size="md"
+                    disabled={!allPaired}
+                    icon={<Check className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      const evalRes = evaluateQuestionAnswer(question, matchedPairsMap);
+                      const formattedAns = Object.entries(matchedPairsMap)
+                        .map(([l, r]) => `${l} -> ${r}`)
+                        .join(' | ');
+                      commitAnswer(formattedAns, evalRes.isCorrect, evalRes.feedback);
+                    }}
+                  >
+                    Check Matches
+                  </LiquidButton>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ------------------------------------------------------------------- */}
       {/* FEEDBACK BANNER (STRICTLY ISOLATED PER QUESTION)                    */}

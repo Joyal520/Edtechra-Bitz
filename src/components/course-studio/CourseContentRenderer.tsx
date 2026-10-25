@@ -40,6 +40,18 @@ import {
   getCanonicalBlockTranscript,
   setCanonicalBlockTranscript
 } from '@/utils/questionSchemaValidator';
+import {
+  ObjectiveBannerBlock,
+  IllustrationBlock,
+  LabelledDiagramBlock,
+  IconCardsGridBlock,
+  VocabularyCardsBlock,
+  ComparisonBlock,
+  DidYouKnowBlock,
+  InteractiveActivityBlock,
+  KeyTakeawayBlock,
+  CourseCompletionBlock
+} from '@/components/course-studio/InteractiveCourseBlocks';
 
 interface Props {
   blocks: CourseBlock[];
@@ -302,6 +314,78 @@ export const CourseContentRenderer: React.FC<Props> = ({
         transcript: '',
         show_transcript: false,
         video: { url: '', position: 'above' }
+      };
+    } else if (type === 'objective') {
+      content = {
+        title: 'Learning Goal',
+        text: 'Discover the main idea of this lesson through visuals and interactive practice.',
+        outcomes: ['Understand key concepts', 'Practise new vocabulary']
+      };
+    } else if (type === 'illustration') {
+      content = {
+        title: 'Visual Guide',
+        illustration_key: 'friendly_brain',
+        caption: 'Look closely at how each part works together.',
+        badges: ['Visual Concept', 'Easy Guide']
+      };
+    } else if (type === 'labelled_diagram') {
+      content = {
+        title: 'Interactive Diagram: Click Each Part',
+        subtitle: 'Tap each label to discover what it does.',
+        illustration_key: 'brain_anatomy'
+      };
+    } else if (type === 'icon_cards') {
+      content = {
+        title: 'Key Functions',
+        subtitle: 'Tap any card to see an example!',
+        cards: [
+          { icon: '💡', title: 'Thinking', description: 'Helps you solve problems and make choices.', example: 'Answering a question in class.' },
+          { icon: '📚', title: 'Remembering', description: 'Stores your favourite moments and facts.', example: 'Remembering your best friend’s name.' },
+          { icon: '🏃', title: 'Moving', description: 'Sends fast messages to your muscles.', example: 'Running, jumping, and writing.' }
+        ]
+      };
+    } else if (type === 'vocabulary_cards') {
+      content = {
+        title: 'Key Vocabulary Words',
+        words: [
+          { word: 'brain', partOfSpeech: 'noun', definition: 'The soft organ inside your head that controls your body and mind.', example: 'Your brain helps you think and learn.', icon: '🧠' },
+          { word: 'memory', partOfSpeech: 'noun', definition: 'Your ability to keep and remember information.', example: 'I have a happy memory of my birthday.', icon: '📓' }
+        ]
+      };
+    } else if (type === 'comparison') {
+      content = {
+        title: 'Compare & Contrast',
+        left: { title: 'Short-Term Memory', subtitle: 'Quick Sticky Note', icon: '📝', points: ['Holds a few items at once', 'Lasts 15–30 seconds'] },
+        right: { title: 'Long-Term Memory', subtitle: 'Big Notebook', icon: '📚', points: ['Stores important skills & facts', 'Can last for many years'] }
+      };
+    } else if (type === 'did_you_know') {
+      content = {
+        title: 'Did You Know?',
+        question_prompt: 'Does your brain rest when you go to sleep?',
+        text: 'No! While you sleep, your brain stays busy cleaning itself and saving everything you learned today!'
+      };
+    } else if (type === 'interactive_activity') {
+      content = {
+        activity_type: 'click_to_reveal',
+        title: 'Quick Discovery: Tap to Check!',
+        instruction: 'Tap each card below to see how it works.',
+        items: [
+          { icon: '🧩', label: 'Solving a puzzle', detail: 'Yes! Your cerebrum thinks through each piece.' },
+          { icon: '🚲', label: 'Riding a bicycle', detail: 'Yes! Your cerebellum keeps your balance steady.' }
+        ]
+      };
+    } else if (type === 'key_takeaway') {
+      content = {
+        title: 'Remember This!',
+        points: [
+          'Your brain is the command center of your body.',
+          'Practice and good sleep make your brain stronger.'
+        ]
+      };
+    } else if (type === 'course_completion') {
+      content = {
+        course_title: '🧠 AMAZING BRAIN',
+        badge_title: 'Junior Brain Explorer'
       };
     }
 
@@ -1124,6 +1208,112 @@ export const CourseContentRenderer: React.FC<Props> = ({
             );
           }
 
+          // J. COURSE STUDIO 2.0 INTERACTIVE & VISUAL BLOCKS
+          const updateInteractiveBlock = (updates: Record<string, any>) => {
+            updateBlockContent(idx, { ...(content as any), ...updates });
+          };
+
+          if (block_type === 'objective') {
+            return renderBlockWrapper(
+              <ObjectiveBannerBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'illustration') {
+            return renderBlockWrapper(
+              <IllustrationBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'labelled_diagram') {
+            return renderBlockWrapper(
+              <LabelledDiagramBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'icon_cards') {
+            return renderBlockWrapper(
+              <IconCardsGridBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'vocabulary_cards') {
+            return renderBlockWrapper(
+              <VocabularyCardsBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'comparison') {
+            return renderBlockWrapper(
+              <ComparisonBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'did_you_know') {
+            return renderBlockWrapper(
+              <DidYouKnowBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'interactive_activity') {
+            return renderBlockWrapper(
+              <InteractiveActivityBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'key_takeaway') {
+            return renderBlockWrapper(
+              <KeyTakeawayBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+              />
+            );
+          }
+
+          if (block_type === 'course_completion') {
+            return renderBlockWrapper(
+              <CourseCompletionBlock
+                block={block}
+                isEditMode={isEditMode}
+                onUpdateContent={updateInteractiveBlock}
+                courseScore={{ earned: earnedPoints, max: totalPointsPossible }}
+              />
+            );
+          }
+
           return null;
         })}
 
@@ -1258,6 +1448,96 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold text-white leading-tight">Decorative Divider</div>
                       <div className="text-[10px] text-[#DCE8F5] leading-tight">Subtle visual break between topics</div>
+                    </div>
+                  </button>
+
+                  <div className="px-3 py-1.5 border-t border-b border-[#315579] my-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                      Interactive Studio 2.0 Blocks
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('labelled_diagram')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/25 text-indigo-300 flex items-center justify-center shrink-0 text-sm">
+                      🧠
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Interactive Labelled Diagram</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Click-to-inspect visual parts</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('icon_cards')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/25 text-emerald-300 flex items-center justify-center shrink-0 text-sm">
+                      🃏
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Visual Icon Cards Grid</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Micro-learning cards with examples</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('vocabulary_cards')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/25 text-amber-300 flex items-center justify-center shrink-0 text-sm">
+                      🗣️
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Vocabulary &amp; Audio Cards</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Pronunciation + quick word practice</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('interactive_activity')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-teal-500/25 text-teal-300 flex items-center justify-center shrink-0 text-sm">
+                      🎮
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Interactive Discovery Activity</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Tap-to-reveal or memory challenge</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('comparison')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-violet-500/25 text-violet-300 flex items-center justify-center shrink-0 text-sm">
+                      ⚖️
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Comparison Card</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">Side-by-side concept comparison</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddSection('key_takeaway')}
+                    className="w-full p-2 rounded-xl text-left hover:bg-[#174A75] flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/25 text-sky-300 flex items-center justify-center shrink-0 text-sm">
+                      ⭐
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white leading-tight">Key Takeaway Summary</div>
+                      <div className="text-[10px] text-[#DCE8F5] leading-tight">“Remember This” lesson recap</div>
                     </div>
                   </button>
 

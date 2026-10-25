@@ -24,7 +24,17 @@ export type BlockType =
   | 'quote'
   | 'list'
   | 'divider'
-  | 'interactive_question';
+  | 'interactive_question'
+  | 'objective'
+  | 'illustration'
+  | 'vocabulary_cards'
+  | 'labelled_diagram'
+  | 'icon_cards'
+  | 'comparison'
+  | 'did_you_know'
+  | 'interactive_activity'
+  | 'key_takeaway'
+  | 'course_completion';
 
 export type QuestionType =
   | 'multiple_choice'
@@ -256,6 +266,8 @@ export interface CourseQuestion {
   passage?: string;
   blanks?: ClozeBlank[];
   image_url?: string;
+  illustration_key?: string;
+  matching_pairs?: Array<{ left: string; right: string; id?: string }>;
   min_words?: number;
   max_words?: number;
   evaluation_criteria?: string[];
@@ -681,4 +693,92 @@ export interface AIStructuredLessonResponse {
     points: number;
   }>;
 }
+
+// ----------------------------------------------------------------------------
+// 6. COURSE STUDIO 2.0: QUALITY AUDIT & INTERACTIVE BLOCK SCHEMAS
+// ----------------------------------------------------------------------------
+
+export interface VocabularyCardItem {
+  word: string;
+  partOfSpeech?: string;
+  definition: string;
+  example: string;
+  icon?: string;
+  phonetic?: string;
+}
+
+export interface DiagramHotspotItem {
+  id: string;
+  label: string;
+  subtitle?: string;
+  description: string;
+  example?: string;
+  funFact?: string;
+  color?: string;
+  x?: number; // percentage 0-100
+  y?: number; // percentage 0-100
+}
+
+export interface IconCardItem {
+  id?: string;
+  icon: string;
+  title: string;
+  description: string;
+  example?: string;
+  badge?: string;
+  color?: string;
+}
+
+export interface ComparisonSide {
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  color?: string;
+  points: string[];
+}
+
+export interface CourseQualityImprovement {
+  id: string;
+  dimension: string;
+  title: string;
+  description: string;
+  impactPoints: number;
+  episodeId?: string;
+  actionType:
+    | 'add_visual_block'
+    | 'add_vocabulary_cards'
+    | 'add_interactive_activity'
+    | 'add_key_takeaway'
+    | 'split_long_text'
+    | 'add_explanations'
+    | 'add_alt_text'
+    | 'add_objective';
+}
+
+export interface CourseQualityDimensionScore {
+  key: string;
+  label: string;
+  score: number;
+  maxScore: 100;
+  status: 'excellent' | 'good' | 'needs_work';
+  summary: string;
+}
+
+export interface CourseQualityAuditReport {
+  overallScore: number;
+  dimensions: {
+    visualQuality: CourseQualityDimensionScore;
+    instructionalQuality: CourseQualityDimensionScore;
+    interactivity: CourseQualityDimensionScore;
+    assessmentQuality: CourseQualityDimensionScore;
+    mobileExperience: CourseQualityDimensionScore;
+    accessibility: CourseQualityDimensionScore;
+    contentStructure: CourseQualityDimensionScore;
+    consistency: CourseQualityDimensionScore;
+    engagement: CourseQualityDimensionScore;
+    difficultyBalance: CourseQualityDimensionScore;
+  };
+  topImprovements: CourseQualityImprovement[];
+}
+
 
