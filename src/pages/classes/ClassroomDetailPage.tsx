@@ -23,7 +23,8 @@ import {
   GraduationCap,
   Trophy,
   Flame,
-  Pencil
+  Pencil,
+  Camera
 } from 'lucide-react';
 import {
   Classroom,
@@ -86,6 +87,7 @@ import { getQuizCover, DEFAULT_QUIZ_COVER } from '@/utils/quizCover';
 import { StudentReportModal } from '@/components/classes/student/StudentReportModal';
 import { EditClassroomModal } from '@/components/classes/EditClassroomModal';
 import { getClassroomTheme } from '@/utils/classroomThemes';
+import { DEFAULT_CLASSROOM_HEADER_IMAGE, getClassroomHeaderImage } from '@/utils/classroomCovers';
 import { ClassroomCoursesSection } from '@/components/classes/ClassroomCoursesSection';
 import { AssignCourseToClassModal } from '@/components/classes/AssignCourseToClassModal';
 
@@ -144,6 +146,7 @@ export const ClassroomDetailPage: React.FC = () => {
   const [studentReportModalOpen, setStudentReportModalOpen] = useState(false);
   const [studentReportInitialTab, setStudentReportInitialTab] = useState<'results' | 'corrected' | 'progress' | 'achievements'>('results');
   const [editClassroomModalOpen, setEditClassroomModalOpen] = useState(false);
+  const [editModalInitialTab, setEditModalInitialTab] = useState<'details' | 'card' | 'header'>('details');
   const [assignCourseModalOpen, setAssignCourseModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -418,6 +421,22 @@ export const ClassroomDetailPage: React.FC = () => {
       console.error('Error loading classroom:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshLeaderboard = async () => {
+    if (!id) return;
+    try {
+      const [freshClassroom, freshLeaderboard] = await Promise.all([
+        classroomService.getClassroomById(id),
+        classroomPointsService.getClassroomLeaderboard(id)
+      ]);
+      if (freshClassroom) {
+        setClassroom(freshClassroom);
+      }
+      setLeaderboard(freshLeaderboard);
+    } catch (err) {
+      console.error('Error refreshing classroom leaderboard:', err);
     }
   };
 
@@ -758,13 +777,30 @@ export const ClassroomDetailPage: React.FC = () => {
         {/* ========================================================================= */}
         {/* SECTION 1 — PREMIUM COMPACT CLASSROOM HEADER (EdTechra Workspace UI)       */}
         {/* ========================================================================= */}
-        <section className="relative bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all">
-          
+        <section
+          data-testid="classroom-header-section"
+          className="relative rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all overflow-hidden text-slate-900 group/header"
+        >
+          {/* Full-bleed Classroom Header Cover Image with object-fit: cover, responsive positioning & readability overlay */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+            <img
+              src={getClassroomHeaderImage(classroom.classroom_header_image)}
+              alt="Classroom Header Background"
+              className="w-full h-full object-cover object-center sm:object-[center_35%] transition-transform duration-700 ease-out"
+              onError={(e) => {
+                e.currentTarget.src = DEFAULT_CLASSROOM_HEADER_IMAGE;
+              }}
+            />
+            {/* Multi-stop frosted gradient overlay for crystal-clear text readability */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/88 to-white/60 sm:from-white/95 sm:via-white/82 sm:to-white/20 backdrop-blur-[1px]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/40" />
+          </div>
+
           {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
           <div className="flex sm:hidden items-center justify-between gap-2 mb-3.5 relative z-20">
             <Link
               to="/classes"
-              className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/90 hover:bg-white px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
               <span>Classes</span>
@@ -855,6 +891,20 @@ export const ClassroomDetailPage: React.FC = () => {
                         <span>Invite Students</span>
                       </button>
 
+                      {/* Customize Header Cover */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOptionsMenuOpen(false);
+                          setEditModalInitialTab('header');
+                          setEditClassroomModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#0284c7] hover:bg-sky-50 rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4 text-sky-500" />
+                        <span>Customize Header Cover</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -874,19 +924,36 @@ export const ClassroomDetailPage: React.FC = () => {
             )}
           </div>
 
-          {/* Top Bar for Desktop (>= 640px): Back on Left, CLASSROOM Badge on Right */}
+          {/* Top Bar for Desktop (>= 640px): Back on Left, Actions on Right */}
           <div className="hidden sm:flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-10 flex-wrap">
             <Link
               to="/classes"
-              className="group inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-slate-50/80 hover:bg-slate-100 px-3.5 sm:px-4 py-2 rounded-full transition-all duration-200 border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-white/90 hover:bg-white px-3.5 sm:px-4 py-2 rounded-full transition-all duration-200 border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:scale-95 cursor-pointer backdrop-blur-xs"
             >
               <ArrowLeft className="w-4 h-4 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
               <span>Back to Classes</span>
             </Link>
 
-            <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs leading-none select-none">
-              <Sparkles className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
-              <span className="leading-none pt-[0.5px]">CLASSROOM</span>
+            <div className="flex items-center gap-2">
+              {isTeacher && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalInitialTab('header');
+                    setEditClassroomModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-900 text-xs font-bold border border-slate-200/90 shadow-2xs backdrop-blur-xs transition-all active:scale-95 cursor-pointer"
+                  title="Upload, change, or reset classroom header image"
+                >
+                  <Camera className="w-3.5 h-3.5 text-[#0284c7]" />
+                  <span>Customize Header</span>
+                </button>
+              )}
+
+              <div className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-50/90 border border-sky-200 text-[#0284c7] text-xs font-black uppercase tracking-wider shadow-2xs leading-none select-none backdrop-blur-xs">
+                <Sparkles className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                <span className="leading-none pt-[0.5px]">CLASSROOM</span>
+              </div>
             </div>
           </div>
 
@@ -925,10 +992,13 @@ export const ClassroomDetailPage: React.FC = () => {
                       {isTeacher && (
                         <button
                           type="button"
-                          onClick={() => setEditClassroomModalOpen(true)}
-                          className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-900 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
-                          title="Edit classroom"
-                          aria-label="Edit classroom"
+                          onClick={() => {
+                            setEditModalInitialTab('details');
+                            setEditClassroomModalOpen(true);
+                          }}
+                          className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-900 bg-white/90 hover:bg-white border border-slate-200/80 transition-all inline-flex items-center justify-center cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                          title="Edit classroom details"
+                          aria-label="Edit classroom details"
                         >
                           <Pencil className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.3]" />
                         </button>
@@ -1095,18 +1165,24 @@ export const ClassroomDetailPage: React.FC = () => {
 
             </div>
 
-            {/* RIGHT on Desktop / UNDER CTA on Mobile: Classroom Cover Image */}
-            <div className="lg:col-span-5 relative flex items-center justify-center lg:justify-end pt-2 lg:pt-0">
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] aspect-[4/3] rounded-2xl overflow-hidden shadow-xs border border-sky-100/80 bg-white">
-                <img
-                  src={classroom.banner_url || '/images/classroom/classroom-hero-student.jpg'}
-                  alt={classroom.title || "Classroom Cover"}
-                  className="w-full h-full object-cover transition-transform duration-300"
-                  onError={(e) => {
-                    e.currentTarget.src = '/images/classroom/classroom-hero-student.jpg';
-                  }}
-                />
-              </div>
+            {/* RIGHT on Desktop: Open scenic space framing the full-bleed header artwork with optional teacher edit pill */}
+            <div className="lg:col-span-5 relative flex flex-col items-center lg:items-end justify-center lg:justify-between h-full min-h-[140px] pt-4 lg:pt-0">
+              {isTeacher && (
+                <div className="hidden lg:flex items-center justify-end w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditModalInitialTab('header');
+                      setEditClassroomModalOpen(true);
+                    }}
+                    className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 hover:bg-white text-slate-800 text-xs font-bold border border-slate-200 shadow-sm backdrop-blur-md cursor-pointer active:scale-95"
+                    title="Change or reset classroom header cover"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-[#0284c7]" />
+                    <span>Change Header Cover</span>
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>
@@ -1441,8 +1517,9 @@ export const ClassroomDetailPage: React.FC = () => {
               }
             }}
             onOpenExam={(exam) => {
-              setSelectedExam(exam);
-              setExamModalOpen(true);
+              if (classroom) {
+                navigate(`/classes/${classroom.id}/exams/${exam.id}`);
+              }
             }}
             onOpenLiveQuiz={(session) => {
               const isHostUser = session?.teacher_id === user?.id || classroom?.teacher_id === user?.id || isTeacher;
@@ -1714,6 +1791,17 @@ export const ClassroomDetailPage: React.FC = () => {
               <ClassroomLeaderboard
                 entries={leaderboard}
                 currentUserId={user?.id}
+                classroomId={classroom?.id}
+                isTeacher={isTeacher}
+                resetFrequency={classroom?.leaderboard_reset_frequency || 'never'}
+                nextResetAt={classroom?.leaderboard_next_reset_at}
+                lastResetAt={classroom?.leaderboard_reset_at}
+                timeZone={classroom?.leaderboard_timezone}
+                onRefreshLeaderboard={refreshLeaderboard}
+                onShowToast={(msg) => {
+                  setToastMessage(msg);
+                  setTimeout(() => setToastMessage(null), 3500);
+                }}
               />
             </div>
 
@@ -2202,6 +2290,17 @@ export const ClassroomDetailPage: React.FC = () => {
               <ClassroomLeaderboard
                 entries={leaderboard}
                 currentUserId={user?.id}
+                classroomId={classroom?.id}
+                isTeacher={isTeacher}
+                resetFrequency={classroom?.leaderboard_reset_frequency || 'never'}
+                nextResetAt={classroom?.leaderboard_next_reset_at}
+                lastResetAt={classroom?.leaderboard_reset_at}
+                timeZone={classroom?.leaderboard_timezone}
+                onRefreshLeaderboard={refreshLeaderboard}
+                onShowToast={(msg) => {
+                  setToastMessage(msg);
+                  setTimeout(() => setToastMessage(null), 3500);
+                }}
               />
             )}
 
@@ -2534,6 +2633,7 @@ export const ClassroomDetailPage: React.FC = () => {
         <EditClassroomModal
           isOpen={editClassroomModalOpen}
           classroom={classroom}
+          initialTab={editModalInitialTab}
           onClose={() => setEditClassroomModalOpen(false)}
           onSuccess={(updated) => {
             setClassroom((prev) =>
@@ -2542,7 +2642,11 @@ export const ClassroomDetailPage: React.FC = () => {
                     ...prev,
                     title: updated.title,
                     theme: updated.theme,
-                    banner_url: updated.banner_url !== undefined ? updated.banner_url : prev.banner_url
+                    banner_url: updated.banner_url !== undefined ? updated.banner_url : prev.banner_url,
+                    classroom_header_image:
+                      updated.classroom_header_image !== undefined
+                        ? updated.classroom_header_image
+                        : prev.classroom_header_image
                   }
                 : null
             );

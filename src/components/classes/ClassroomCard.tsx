@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, BookOpen, ArrowRight } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
-import { getSubjectCover } from '@/utils/classroomCovers';
+import { getClassroomCardCover } from '@/utils/classroomCovers';
 
 interface ClassroomCardProps {
   classroom: Classroom;
@@ -10,13 +10,12 @@ interface ClassroomCardProps {
 }
 
 export const ClassroomCard: React.FC<ClassroomCardProps> = ({ classroom, viewMode = 'grid' }) => {
-  const coverInfo = getSubjectCover(classroom.subject);
-  const initialCover = classroom.banner_url || coverInfo.imageUrl;
-  const [imgSrc, setImgSrc] = useState<string>(initialCover);
+  const cardCover = getClassroomCardCover(classroom);
+  const [imgSrc, setImgSrc] = useState<string>(cardCover);
 
   useEffect(() => {
-    setImgSrc(classroom.banner_url || coverInfo.imageUrl);
-  }, [classroom.banner_url, coverInfo.imageUrl]);
+    setImgSrc(getClassroomCardCover(classroom));
+  }, [classroom.banner_url, classroom.subject]);
 
   // List View Rendering
   if (viewMode === 'list') {

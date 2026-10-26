@@ -11,9 +11,11 @@ import {
   MoreHorizontal,
   Link2,
   UserPlus,
-  GraduationCap
+  GraduationCap,
+  Camera
 } from 'lucide-react';
 import { Classroom, ClassroomInvite } from '@/types/classroom';
+import { DEFAULT_CLASSROOM_HEADER_IMAGE, getClassroomHeaderImage } from '@/utils/classroomCovers';
 
 interface ClassroomHeaderProps {
   classroom: Classroom;
@@ -91,12 +93,30 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
   };
 
   return (
-    <div className="relative bg-white rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all text-slate-900">
+    <div
+      data-testid="classroom-header-component"
+      className="relative rounded-2xl sm:rounded-3xl lg:rounded-[32px] p-4 sm:p-7 lg:p-8 border border-slate-200/80 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] z-20 transition-all overflow-hidden text-slate-900 group/header"
+    >
+      {/* Full-bleed Classroom Header Cover Image with object-fit: cover, responsive positioning & readability overlay */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+        <img
+          src={getClassroomHeaderImage(classroom.classroom_header_image)}
+          alt="Classroom Header Background"
+          className="w-full h-full object-cover object-center sm:object-[center_35%] transition-transform duration-700 ease-out"
+          onError={(e) => {
+            e.currentTarget.src = DEFAULT_CLASSROOM_HEADER_IMAGE;
+          }}
+        />
+        {/* Multi-stop frosted gradient overlay for crystal-clear text readability */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/88 to-white/60 sm:from-white/95 sm:via-white/82 sm:to-white/20 backdrop-blur-[1px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/40 via-transparent to-white/40" />
+      </div>
+
       {/* Top Bar for Mobile (< 640px): Back on Left, Options on Right */}
       <div className="flex sm:hidden items-center justify-between gap-2 mb-3.5 relative z-20">
         <Link
           to="/classes"
-          className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
+          className="group inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white/90 hover:bg-white px-3 py-1.5 rounded-full transition-all duration-200 border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer backdrop-blur-xs"
         >
           <ArrowLeft className="w-3.5 h-3.5 text-slate-600 group-hover:-translate-x-0.5 transition-transform" />
           <span>Classes</span>
@@ -228,6 +248,18 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
         </Link>
 
         <div className="flex items-center gap-2">
+          {effectiveIsTeacher && onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-900 text-xs font-bold border border-slate-200/90 shadow-2xs backdrop-blur-xs transition-all active:scale-95 cursor-pointer"
+              title="Upload, change, or reset classroom header image"
+            >
+              <Camera className="w-3.5 h-3.5 text-[#0284c7]" />
+              <span>Customize Header</span>
+            </button>
+          )}
+
           {onOpenAIFeedback && (
             <button
               onClick={onOpenAIFeedback}
@@ -416,18 +448,21 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right Classroom Cover Image */}
-        <div className="lg:col-span-5 relative flex items-center justify-center lg:justify-end pt-2 lg:pt-0">
-          <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] aspect-[4/3] rounded-2xl overflow-hidden shadow-xs border border-sky-100/80 bg-white">
-            <img
-              src={classroom.banner_url || '/images/classroom/classroom-hero-student.jpg'}
-              alt={classroom.title || 'Classroom Cover'}
-              className="w-full h-full object-cover transition-transform duration-300"
-              onError={(e) => {
-                e.currentTarget.src = '/images/classroom/classroom-hero-student.jpg';
-              }}
-            />
-          </div>
+        {/* RIGHT on Desktop: Open scenic space framing the full-bleed header artwork with optional teacher edit pill */}
+        <div className="lg:col-span-5 relative flex flex-col items-center lg:items-end justify-center lg:justify-between h-full min-h-[140px] pt-4 lg:pt-0">
+          {effectiveIsTeacher && onOpenSettings && (
+            <div className="hidden lg:flex items-center justify-end w-full">
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 hover:bg-white text-slate-800 text-xs font-bold border border-slate-200 shadow-sm backdrop-blur-md cursor-pointer active:scale-95"
+                title="Change or reset classroom header cover"
+              >
+                <Camera className="w-3.5 h-3.5 text-[#0284c7]" />
+                <span>Change Header Cover</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

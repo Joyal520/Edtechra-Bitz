@@ -245,6 +245,7 @@ class ClassroomService {
       theme: string;
       description: string;
       banner_url: string | null;
+      classroom_header_image: string | null;
     }>
   ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Supabase is not configured' };
@@ -358,6 +359,83 @@ class ClassroomService {
     } catch (err) {
       // Cleanup failure is non-fatal and should never interrupt user workflows
       console.warn('[ClassroomService] Non-fatal cover cleanup notice:', err);
+    }
+  }
+
+  /**
+   * Uploads a dedicated full-bleed classroom header image to Cloudflare R2
+   */
+  async uploadClassroomHeaderImage(
+    classroomId: string,
+    file: File
+  ): Promise<{ publicUrl?: string; storageKey?: string; error?: string }> {
+    try {
+      // 1. Optimize image for wide header aspect ratio (up to 2560x1080)
+      const optimized = await optimizeImageForUpload(file, {
+        maxWidth: 2560,
+        maxHeight: 1200,
+        quality: 0.88,
+        format: 'image/webp'
+      });
+
+      // 2. Request presigned upload URL from backend
+      const headers = await this.getAuthHeaders();
+      const presignRes = await fetch('/api/classes/presign-upload', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          classroomId: classroomId || 'general',
+          filename: `header_${optimized.file.name.replace(/\.[^/.]+$/, '')}.webp`,
+          contentType: optimized.mimeType,
+          size: optimized.optimizedSize
+        })
+      });
+
+      const presignJson = await presignRes.json();
+      if (!presignRes.ok || !presignJson.success) {
+        return { error: presignJson.error || 'Failed to prepare header upload credentials.' };
+      }
+
+      const { uploadUrl, publicUrl, objectKey } = presignJson.data;
+
+      // 3. Binary PUT directly to Cloudflare R2
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': optimized.mimeType
+        },
+        body: optimized.blob
+      });
+
+      if (!uploadRes.ok) {
+        return { error: `Direct storage upload failed with status ${uploadRes.status}` };
+      }
+
+      return { publicUrl, storageKey: objectKey };
+    } catch (err: any) {
+      console.error('[ClassroomService] uploadClassroomHeaderImage error:', err);
+      return { error: err.message || 'Header image could not be uploaded. Please try again.' };
+    }
+  }
+
+  /**
+   * Safely cleans up replaced or reset classroom header image from Cloudflare R2
+   */
+  async cleanupClassroomHeaderImage(headerUrl?: string | null): Promise<void> {
+    if (!headerUrl || typeof headerUrl !== 'string') return;
+    try {
+      const match = headerUrl.match(/(classrooms\/[^?#]+)/);
+      if (!match) return;
+      const objectKey = match[1];
+
+      const headers = await this.getAuthHeaders();
+      await fetch('/api/classes/cleanup-file', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ objectKey })
+      });
+    } catch (err) {
+      console.warn('[ClassroomService] Non-fatal header cleanup notice:', err);
     }
   }
 

@@ -18,9 +18,7 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  BookOpen,
   Sparkles,
-  Target,
   FileText,
   ArrowRight,
   RotateCcw,
@@ -28,7 +26,12 @@ import {
   X,
   Camera,
   Award,
-  ExternalLink
+  ExternalLink,
+  BookOpen,
+  Target,
+  Search,
+  Lightbulb,
+  HelpCircle
 } from 'lucide-react';
 import {
   Course,
@@ -278,6 +281,36 @@ export function extractGrammarFromBlocks(blocks: CourseBlock[]): ParsedGrammarCo
   return null;
 }
 
+export interface PlacedSentenceWord {
+  word: string;
+  bankIndex: number;
+}
+
+/**
+ * Extracts and normalizes ordering / sentence builder tokens from any question schema
+ */
+export function extractOrderingTokens(q: CourseQuestion): string[] {
+  const rawItems = (q as any).items || q.options || (q as any).words || (q as any).scrambled || (q as any).correct_order || (q as any).correctOrder;
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    return rawItems
+      .map((item: any) => {
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object' && item !== null) {
+          return String(item.text ?? item.label ?? item.value ?? item.word ?? '').trim();
+        }
+        return String(item ?? '').trim();
+      })
+      .filter(Boolean);
+  }
+  if (rawItems && typeof rawItems === 'object' && Array.isArray((rawItems as any).options)) {
+    return (rawItems as any).options.map(String).filter(Boolean);
+  }
+  if (typeof q.correct_answer === 'string' && q.correct_answer.trim()) {
+    return q.correct_answer.trim().split(/\s+/).filter(Boolean);
+  }
+  return [];
+}
+
 /**
  * Extracts YouTube video ID from a URL or ID string.
  */
@@ -426,9 +459,78 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   const [videoRetryKey, setVideoRetryKey] = useState(0);
   const [videoWatched, setVideoWatched] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [showFullVocabModal, setShowFullVocabModal] = useState(false);
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
   const htmlVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Level 2 On-Demand Learning Tools (Vocabulary Drawer, Study Tools Menu, Progress Popover, Notes & Help)
+  const [isVocabDrawerOpen, setIsVocabDrawerOpen] = useState(false);
+  const [vocabSearchQuery, setVocabSearchQuery] = useState('');
+  const [isStudyToolsMenuOpen, setIsStudyToolsMenuOpen] = useState(false);
+  const [isProgressPopoverOpen, setIsProgressPopoverOpen] = useState(false);
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const studyToolsRef = useRef<HTMLDivElement | null>(null);
+  const progressPopoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Today's Objectives (remembered collapsed/expanded state across sessions)
+  const [isObjectivesOpen, setIsObjectivesOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return localStorage.getItem('edtechra_obj_collapsed') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleObjectives = () => {
+    setIsObjectivesOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('edtechra_obj_collapsed', next ? 'false' : 'true');
+      } catch {}
+      return next;
+    });
+  };
+
+  const filteredVocabulary = useMemo(() => {
+    if (!vocabSearchQuery.trim()) return vocabularyList;
+    const q = vocabSearchQuery.toLowerCase().trim();
+    return vocabularyList.filter(
+      item => item.word.toLowerCase().includes(q) || item.meaning.toLowerCase().includes(q)
+    );
+  }, [vocabularyList, vocabSearchQuery]);
+
+  // Close study tools & progress popovers on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (studyToolsRef.current && !studyToolsRef.current.contains(target)) {
+        setIsStudyToolsMenuOpen(false);
+      }
+      if (progressPopoverRef.current && !progressPopoverRef.current.contains(target)) {
+        setIsProgressPopoverOpen(false);
+      }
+    };
+    if (isStudyToolsMenuOpen || isProgressPopoverOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      return () => document.removeEventListener('mousedown', handleOutsideClick);
+    }
+  }, [isStudyToolsMenuOpen, isProgressPopoverOpen]);
+
+  // Close modals & drawers on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsVocabDrawerOpen(false);
+        setIsStudyToolsMenuOpen(false);
+        setIsProgressPopoverOpen(false);
+        setIsNotesModalOpen(false);
+        setIsHelpModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Mobile collapsible section states (all open by default on desktop, collapsible on mobile)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -477,9 +579,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   const [evaluatedMap, setEvaluatedMap] = useState<
     Record<string, { isCorrect: boolean; pointsAwarded: number; feedback: string; submittedAnswer: string }>
   >({});
-  const [orderingSlotsMap, setOrderingSlotsMap] = useState<Record<string, string[]>>({});
-  const [orderingBankMap, setOrderingBankMap] = useState<Record<string, string[]>>({});
-  const [draggedItem, setDraggedItem] = useState<{ qId: string; word: string; source: 'bank' | 'slot'; index: number } | null>(null);
+  const [orderingSlotsMap, setOrderingSlotsMap] = useState<Record<string, PlacedSentenceWord[]>>({});
   const [validationError, setValidationError] = useState<string | null>(null);
   const [submittingAll, setSubmittingAll] = useState(false);
 
@@ -495,26 +595,33 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     setActiveBlankMap({});
 
     // Initialize ordering word banks for each ordering question
-    const initialSlots: Record<string, string[]> = {};
-    const initialBanks: Record<string, string[]> = {};
+    const initialSlots: Record<string, PlacedSentenceWord[]> = {};
 
     orderingQuestions.forEach(q => {
-      const rawOpts = Array.isArray(q.options)
-        ? q.options.map(o => (typeof o === 'string' ? o : o?.text || String(o)))
-        : [];
+      const tokens = extractOrderingTokens(q);
       const existingAtt = attemptsMap[q.id];
       if (existingAtt && existingAtt.student_answer) {
         const savedWords = String(existingAtt.student_answer).split(/\s+/).filter(Boolean);
-        initialSlots[q.id] = savedWords;
-        initialBanks[q.id] = [];
+        const usedBankIndices = new Set<number>();
+        const restored: PlacedSentenceWord[] = [];
+        savedWords.forEach(sw => {
+          const bIdx = tokens.findIndex(
+            (tw, idx) => tw.toLowerCase() === sw.toLowerCase() && !usedBankIndices.has(idx)
+          );
+          if (bIdx !== -1) {
+            usedBankIndices.add(bIdx);
+            restored.push({ word: tokens[bIdx], bankIndex: bIdx });
+          } else {
+            restored.push({ word: sw, bankIndex: -1 });
+          }
+        });
+        initialSlots[q.id] = restored;
       } else {
         initialSlots[q.id] = [];
-        initialBanks[q.id] = [...rawOpts];
       }
     });
 
     setOrderingSlotsMap(initialSlots);
-    setOrderingBankMap(initialBanks);
 
     // Seed draftAnswers and evaluatedMap from attemptsMap
     const nextDrafts: Record<string, string> = {};
@@ -617,12 +724,12 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
       const qt = String(q.question_type || '').toLowerCase();
       if (qt === 'sentence_builder' || qt === 'ordering' || qt === 'sentence_reordering' || qt === 'word_ordering') {
         const placed = orderingSlotsMap[q.id] || [];
-        const bank = orderingBankMap[q.id] || [];
-        return placed.length > 0 && bank.length === 0;
+        const rawTokens = extractOrderingTokens(q);
+        return rawTokens.length > 0 && placed.length === rawTokens.length;
       }
       return Boolean((draftAnswers[q.id] || '').trim());
     },
-    [evaluatedMap, orderingSlotsMap, orderingBankMap, draftAnswers]
+    [evaluatedMap, orderingSlotsMap, draftAnswers]
   );
 
   const answeredCount = useMemo(
@@ -657,7 +764,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
       answerOverride === undefined &&
       (qt === 'sentence_builder' || qt === 'ordering' || qt === 'sentence_reordering' || qt === 'word_ordering')
     ) {
-      rawAnswer = (orderingSlotsMap[q.id] || []).join(' ').trim();
+      rawAnswer = (orderingSlotsMap[q.id] || []).map(p => p.word).join(' ').trim();
     }
 
     if (!rawAnswer) return null;
@@ -858,18 +965,39 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     setVideoStatus('loading');
   };
 
-  // Section numbering (1 = Video, 2 = MCQs, 3 = True/False or Very Short, 4 = Short Answer, 5 = Ordering)
+  // Section numbering (1 = Watch the Story, 2 = MCQs, 3 = Very Short Questions, 4 = Short Answer, 5 = Put the Events in Order)
   let sectionCounter = 1; // 1 is Watch the Story
   const mcqSectionNum = mcqQuestions.length > 0 ? ++sectionCounter : 0;
   const tfSectionNum = tfQuestions.length > 0 ? ++sectionCounter : 0;
   const shortSectionNum = shortQuestions.length > 0 ? ++sectionCounter : 0;
   const orderingSectionNum = orderingQuestions.length > 0 ? ++sectionCounter : 0;
 
-  // Objectives completion status
+  // Today's Objectives Live Checklist
   const allMcqsDone = mcqQuestions.length > 0 && mcqQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allTfsDone = tfQuestions.length > 0 && tfQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allShortsDone = shortQuestions.length > 0 && shortQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allOrderingsDone = orderingQuestions.length > 0 && orderingQuestions.every(q => isQuestionReadyOrAnswered(q));
+
+  const objectivesList = useMemo(() => {
+    return [
+      { label: 'Watch and understand the video', done: videoWatched || Boolean(isCompleted) },
+      ...(mcqQuestions.length > 0
+        ? [{ label: `Answer ${mcqQuestions.length} MCQs`, done: allMcqsDone || Boolean(isCompleted) }]
+        : []),
+      ...(tfQuestions.length > 0
+        ? [{ label: `Answer ${tfQuestions.length} very short questions`, done: allTfsDone || Boolean(isCompleted) }]
+        : []),
+      ...(shortQuestions.length > 0
+        ? [{ label: `Answer ${shortQuestions.length} short-answer questions`, done: allShortsDone || Boolean(isCompleted) }]
+        : []),
+      ...(orderingQuestions.length > 0
+        ? [{ label: 'Put the events in correct order', done: allOrderingsDone || Boolean(isCompleted) }]
+        : [])
+    ];
+  }, [videoWatched, isCompleted, mcqQuestions, tfQuestions, shortQuestions, orderingQuestions, allMcqsDone, allTfsDone, allShortsDone, allOrderingsDone]);
+
+  const objectivesCompletedCount = useMemo(() => objectivesList.filter(o => o.done).length, [objectivesList]);
+  const totalObjectivesCount = objectivesList.length;
 
   // Scroll day strip left/right
   const scrollDayStrip = (dir: 'left' | 'right') => {
@@ -922,6 +1050,9 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-950/65 border border-emerald-400/40 text-emerald-200 text-[10px] sm:text-[11px] font-black backdrop-blur-md shadow-xs">
                   <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                   <span>{totalLessonXP} XP</span>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-950/65 border border-sky-400/35 text-sky-200 text-[10px] sm:text-[11px] font-black backdrop-blur-md shadow-xs">
+                  <span>{completedCount}/{totalCount} Completed ({progressPercent}%)</span>
                 </span>
               </div>
 
@@ -1078,48 +1209,283 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
         </nav>
 
         {/* ================================================================ */}
-        {/* 3. RESPONSIVE TWO-COLUMN DESKTOP / SINGLE-COLUMN MOBILE LAYOUT   */}
+        {/* 3. MAIN LESSON STREAM (SINGLE-COLUMN FOCUS)                      */}
+        {/* Hierarchy: COURSE HEADER -> DAY HEADER -> LESSON CONTENT ->      */}
+        {/*            ACTIVITIES -> SUBMIT DAY                              */}
         {/* ================================================================ */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
-          
-          {/* ============================================================== */}
-          {/* LEFT COLUMN: MAIN LEARNING & ASSESSMENT AREA (8 cols on lg)    */}
-          {/* ============================================================== */}
-          <div className="lg:col-span-8 space-y-5 min-w-0">
+        <div className="max-w-4xl mx-auto space-y-6">
             
-            {/* CURRENT DAY BANNER CARD */}
-            <div className="rounded-2xl bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border border-sky-400/25 p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-xs shrink-0">
-                    Day {dayNumber}
-                  </span>
-                  <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight break-words">
+            {/* LEVEL 1 / LEVEL 2 TOOLBAR: STUDY TOOLS & COMPACT PROGRESS STATUS */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+              {/* Left: Study Tools Dropdown & Direct Vocabulary Pill */}
+              <div className="flex items-center gap-2">
+                <div ref={studyToolsRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsStudyToolsMenuOpen(prev => !prev)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0a1c36] hover:bg-[#10274c] border border-sky-400/30 text-sky-200 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-md"
+                    title="Open study tools"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>Study Tools</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isStudyToolsMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Study Tools Popover Menu */}
+                  {isStudyToolsMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-60 rounded-2xl bg-[#0b1d38] border border-sky-400/35 shadow-2xl p-2 z-40 space-y-1 backdrop-blur-md animate-in fade-in duration-150">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsStudyToolsMenuOpen(false);
+                          setIsVocabDrawerOpen(true);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-sky-500/20 text-slate-100 text-xs font-bold text-left cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-amber-400" />
+                          <span>Key Vocabulary</span>
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-extrabold">
+                          {vocabularyList.length}
+                        </span>
+                      </button>
+
+                      {videoTranscript && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsStudyToolsMenuOpen(false);
+                            setShowTranscript(true);
+                            const el = document.getElementById('lesson-video-section');
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-sky-500/20 text-slate-100 text-xs font-bold text-left cursor-pointer transition-colors"
+                        >
+                          <FileText className="w-4 h-4 text-sky-400" />
+                          <span>Video Transcript</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsStudyToolsMenuOpen(false);
+                          setIsObjectivesOpen(true);
+                          const el = document.getElementById('day-objectives-section');
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-sky-500/20 text-slate-100 text-xs font-bold text-left cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Target className="w-4 h-4 text-rose-400" />
+                          <span>Today's Objectives</span>
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-extrabold">
+                          {objectivesCompletedCount}/{totalObjectivesCount}
+                        </span>
+                      </button>
+
+                      {grammarContent && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsStudyToolsMenuOpen(false);
+                            setIsNotesModalOpen(true);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-sky-500/20 text-slate-100 text-xs font-bold text-left cursor-pointer transition-colors"
+                        >
+                          <Lightbulb className="w-4 h-4 text-yellow-400" />
+                          <span>Lesson Notes (Grammar)</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsStudyToolsMenuOpen(false);
+                          setIsHelpModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-sky-500/20 text-slate-100 text-xs font-bold text-left cursor-pointer transition-colors"
+                      >
+                        <HelpCircle className="w-4 h-4 text-emerald-400" />
+                        <span>How to Learn</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Key Vocabulary Shortcut Pill */}
+                {vocabularyList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsVocabDrawerOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-300/40 text-amber-200 text-xs font-extrabold transition-all cursor-pointer shadow-sm"
+                    title="Open Key Vocabulary Drawer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Vocabulary ({vocabularyList.length})</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Compact Status Progress Indicator */}
+              <div ref={progressPopoverRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsProgressPopoverOpen(prev => !prev)}
+                  className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-[#0a1c36] hover:bg-[#10274c] border border-sky-400/30 text-xs font-bold transition-all cursor-pointer shadow-md group"
+                  title="Click to view full course roadmap progress"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sky-300 font-extrabold">Day {dayNumber} of {totalCount}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-slate-300 font-semibold">{answeredCount}/{allValidQuestions.length} activities</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-amber-300 font-black">
+                      {Math.round((answeredCount / Math.max(1, allValidQuestions.length)) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden shrink-0">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 via-sky-400 to-[#1d6ef2] transition-all duration-300"
+                      style={{ width: `${Math.round((answeredCount / Math.max(1, allValidQuestions.length)) * 100)}%` }}
+                    />
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-sky-400 transition-transform ${isProgressPopoverOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Course Progress Popover */}
+                {isProgressPopoverOpen && (
+                  <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-[#0b1d38] border border-sky-400/35 shadow-2xl p-4 z-40 space-y-3 backdrop-blur-md animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between border-b border-sky-400/20 pb-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-sky-300">
+                        Course Progress
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-300">
+                        {completedCount}/{totalCount} Days Completed
+                      </span>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                      {allEpisodes.map(item => {
+                        const isCurrent = item.episode.id === selectedEpisode.id;
+                        return (
+                          <button
+                            key={item.episode.id}
+                            type="button"
+                            onClick={() => {
+                              setIsProgressPopoverOpen(false);
+                              onSelectEpisode(item.episode, item.isLocked, item.unlockMessage);
+                            }}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer ${
+                              isCurrent
+                                ? 'bg-[#1d6ef2] text-white font-black shadow-xs'
+                                : item.isCompleted
+                                ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 font-bold'
+                                : item.isLocked
+                                ? 'bg-slate-900/60 text-slate-500 cursor-not-allowed'
+                                : 'bg-[#0f2444]/60 hover:bg-[#142e56] text-slate-200 font-semibold'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
+                                isCurrent ? 'bg-white text-[#1d6ef2]' : item.isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {item.isCompleted ? '✓' : item.dayNumber}
+                              </span>
+                              <span className="truncate">{item.cleanTitle}</span>
+                            </div>
+                            {isCurrent && <span className="text-[10px] font-black uppercase text-sky-100">Current</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* DAY INTRODUCTION & INLINE COLLAPSIBLE OBJECTIVES BANNER */}
+            <div className="rounded-2xl bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border border-sky-400/25 p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-xs">
+                      Day {dayNumber}
+                    </span>
+                    <span className="text-xs font-bold text-sky-300">
+                      {course.grade_level || 'A1–A2'} English
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight break-words">
                     {cleanLessonTitle}
                   </h2>
+                  <p className="text-xs sm:text-sm text-sky-200/80 font-medium">
+                    Watch the video and complete the activities.
+                  </p>
+                </div>
+
+                {/* XP Badge Card */}
+                <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 to-yellow-500/10 border border-amber-400/40 shadow-inner">
+                  <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-300/50 flex items-center justify-center shrink-0">
+                    <Star className="w-6 h-6 text-amber-400 fill-amber-400 drop-shadow" />
+                  </div>
+                  <div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-lg sm:text-xl font-black text-amber-300 leading-none">
+                        {totalLessonXP} XP
+                      </span>
+                      {earnedLessonXP > 0 && (
+                        <span className="text-xs font-extrabold text-emerald-300">
+                          ({earnedLessonXP} earned)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-amber-100/80 font-semibold">
+                      Earn on completing all activities
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* XP Badge Card */}
-              <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 to-yellow-500/10 border border-amber-400/40 shadow-inner">
-                <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-300/50 flex items-center justify-center shrink-0">
-                  <Star className="w-6 h-6 text-amber-400 fill-amber-400 drop-shadow" />
-                </div>
-                <div>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-lg sm:text-xl font-black text-amber-300 leading-none">
-                      {totalLessonXP} XP
-                    </span>
-                    {earnedLessonXP > 0 && (
-                      <span className="text-xs font-extrabold text-emerald-300">
-                        ({earnedLessonXP} earned)
-                      </span>
-                    )}
+              {/* INLINE COLLAPSIBLE TODAY'S OBJECTIVES */}
+              <div id="day-objectives-section" className="pt-3 border-t border-sky-400/20 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleToggleObjectives}
+                  className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-sky-300 hover:text-white transition-colors cursor-pointer group"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isObjectivesOpen ? 'rotate-180' : ''}`} />
+                  <span>Today's Objectives ({objectivesCompletedCount}/{totalObjectivesCount} completed)</span>
+                </button>
+
+                {isObjectivesOpen && (
+                  <div className="rounded-xl bg-[#081529]/90 border border-sky-400/20 p-3.5 sm:p-4 space-y-2 animate-in fade-in duration-150">
+                    {objectivesList.map((obj, idx) => (
+                      <div key={idx} className="flex items-center gap-2.5 text-xs sm:text-sm">
+                        <span
+                          className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                            obj.done
+                              ? 'bg-emerald-500 text-white'
+                              : 'border border-slate-500 text-transparent'
+                          }`}
+                        >
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                        <span
+                          className={`font-semibold transition-colors ${
+                            obj.done
+                              ? 'text-emerald-300 line-through decoration-emerald-500/50'
+                              : 'text-slate-200'
+                          }`}
+                        >
+                          {obj.label}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-[11px] text-amber-100/80 font-semibold">
-                    Earn on completing all activities
-                  </p>
-                </div>
+                )}
               </div>
             </div>
 
@@ -1372,47 +1738,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             </section>
 
             {/* ============================================================ */}
-            {/* GRAMMAR SPOTLIGHT CARD (PRESERVING LESSON GRAMMAR CONTENT)   */}
-            {/* ============================================================ */}
-            {grammarContent && (
-              <section
-                data-testid="lesson-grammar-section"
-                className="rounded-2xl bg-gradient-to-br from-[#0e2344] to-[#0a1930] border border-sky-400/25 p-4 sm:p-5 shadow-lg space-y-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/30 text-sky-300 text-xs font-black uppercase tracking-wider">
-                      Grammar Spotlight
-                    </span>
-                    <h3 className="text-sm sm:text-base font-black text-white">
-                      {grammarContent.title}
-                    </h3>
-                  </div>
-                </div>
-
-                {grammarContent.explanation && (
-                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-                    {grammarContent.explanation}
-                  </p>
-                )}
-
-                {grammarContent.examples.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                    {grammarContent.examples.map((ex, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl bg-[#071326]/80 border border-sky-400/15 px-3.5 py-2.5 text-xs sm:text-sm text-sky-100 font-medium flex items-start gap-2"
-                      >
-                        <span className="text-amber-400 font-black shrink-0">{i + 1}.</span>
-                        <span>{ex}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* ============================================================ */}
             {/* SECTION 2: MULTIPLE CHOICE QUESTIONS                         */}
             {/* ============================================================ */}
             {mcqQuestions.length > 0 && (
@@ -1490,63 +1815,70 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                             </div>
 
                             {/* Answer Choices — 2-col on tablet/desktop, 1-col on mobile */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              {options.map(opt => {
-                                const isSelected =
-                                  selectedVal === opt.id ||
-                                  isOptionMatchingStudentAnswer(opt, selectedVal);
-                                const isCorrectOpt =
-                                  resolvedCorrect?.id === opt.id;
+                            {options.length === 0 ? (
+                              <div className="p-4 text-center rounded-xl bg-slate-100 border border-slate-200 space-y-1">
+                                <p className="text-xs sm:text-sm font-bold text-slate-700">No activity content available.</p>
+                                <p className="text-xs text-slate-500">Please edit this activity in Course Studio.</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {options.map(opt => {
+                                  const isSelected =
+                                    selectedVal === opt.id ||
+                                    isOptionMatchingStudentAnswer(opt, selectedVal);
+                                  const isCorrectOpt =
+                                    resolvedCorrect?.id === opt.id;
 
-                                let btnStyle =
-                                  'bg-white hover:bg-sky-50/70 hover:border-sky-300 border-slate-200 text-slate-800 shadow-2xs';
-                                let badgeStyle =
-                                  'bg-sky-100 text-[#0c2d57] border-sky-200';
+                                  let btnStyle =
+                                    'bg-white hover:bg-sky-50/70 hover:border-sky-300 border-slate-200 text-slate-800 shadow-2xs';
+                                  let badgeStyle =
+                                    'bg-sky-100 text-[#0c2d57] border-sky-200';
 
-                                if (evaluated) {
-                                  if (isCorrectOpt) {
+                                  if (evaluated) {
+                                    if (isCorrectOpt) {
+                                      btnStyle =
+                                        'bg-emerald-600 border-emerald-600 text-white font-bold shadow-sm';
+                                      badgeStyle = 'bg-white/20 text-white border-white/30';
+                                    } else if (isSelected && !evaluated.isCorrect) {
+                                      btnStyle =
+                                        'bg-rose-600 border-rose-600 text-white font-bold shadow-sm';
+                                      badgeStyle = 'bg-white/20 text-white border-white/30';
+                                    }
+                                  } else if (isSelected) {
                                     btnStyle =
-                                      'bg-emerald-600 border-emerald-600 text-white font-bold shadow-sm';
-                                    badgeStyle = 'bg-white/20 text-white border-white/30';
-                                  } else if (isSelected && !evaluated.isCorrect) {
-                                    btnStyle =
-                                      'bg-rose-600 border-rose-600 text-white font-bold shadow-sm';
+                                      'bg-[#1d6ef2] border-[#1d6ef2] text-white font-bold shadow-md ring-2 ring-sky-300/60';
                                     badgeStyle = 'bg-white/20 text-white border-white/30';
                                   }
-                                } else if (isSelected) {
-                                  btnStyle =
-                                    'bg-[#1d6ef2] border-[#1d6ef2] text-white font-bold shadow-md ring-2 ring-sky-300/60';
-                                  badgeStyle = 'bg-white/20 text-white border-white/30';
-                                }
 
-                                return (
-                                  <button
-                                    key={opt.id}
-                                    type="button"
-                                    disabled={Boolean(evaluated)}
-                                    onClick={() => {
-                                      courseAudio.playClick();
-                                      setDraftAnswers(prev => ({ ...prev, [q.id]: opt.id }));
-                                      setValidationError(null);
-                                    }}
-                                    className={`w-full px-3.5 py-3 rounded-xl border-2 text-left text-xs sm:text-sm transition-all flex items-center gap-3 cursor-pointer active:scale-[0.99] disabled:cursor-default ${btnStyle}`}
-                                  >
-                                    <span
-                                      className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 border ${badgeStyle}`}
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      disabled={Boolean(evaluated)}
+                                      onClick={() => {
+                                        courseAudio.playClick();
+                                        setDraftAnswers(prev => ({ ...prev, [q.id]: opt.id }));
+                                        setValidationError(null);
+                                      }}
+                                      className={`w-full px-3.5 py-3 rounded-xl border-2 text-left text-xs sm:text-sm transition-all flex items-center gap-3 cursor-pointer active:scale-[0.99] disabled:cursor-default ${btnStyle}`}
                                     >
-                                      {opt.id}
-                                    </span>
-                                    <span className="flex-1 leading-snug font-semibold">{opt.text}</span>
-                                    {evaluated && isCorrectOpt && (
-                                      <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
-                                    )}
-                                    {evaluated && isSelected && !evaluated.isCorrect && (
-                                      <XCircle className="w-4 h-4 text-white shrink-0" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                                      <span
+                                        className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 border ${badgeStyle}`}
+                                      >
+                                        {opt.id}
+                                      </span>
+                                      <span className="flex-1 leading-snug font-semibold">{opt.text}</span>
+                                      {evaluated && isCorrectOpt && (
+                                        <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
+                                      )}
+                                      {evaluated && isSelected && !evaluated.isCorrect && (
+                                        <XCircle className="w-4 h-4 text-white shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
 
                           {/* Card Footer: Marks or Feedback */}
@@ -1585,7 +1917,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 3: TRUE / FALSE QUESTIONS (CUTE COLOURFUL BUTTONS)   */}
+            {/* SECTION 3: VERY SHORT QUESTIONS (TRUE OR FALSE)              */}
             {/* ============================================================ */}
             {tfQuestions.length > 0 && (
               <section
@@ -1604,7 +1936,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       </span>
                       <div className="min-w-0">
                         <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
-                          True or False Questions
+                          Very Short Questions (True or False)
                         </h3>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
                           Decide whether each statement from the story is True or False
@@ -1943,7 +2275,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 5: SENTENCE-MAKING / ORDERING (NEON-BLUE PILL CHIPS) */}
+            {/* SECTION 7: SENTENCE BUILDER — PUT THE WORDS IN ORDER         */}
             {/* ============================================================ */}
             {orderingQuestions.length > 0 && (
               <section
@@ -1965,7 +2297,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                           Sentence Builder — Put the Words in Order
                         </h3>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
-                          Tap or drag the glowing word chips in the right order to build the sentence
+                          Click the glowing neon-blue word chips to build your sentence
                         </p>
                       </div>
                     </div>
@@ -1984,64 +2316,63 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 {!collapsedSections['ordering'] && (
                   <div className="p-4 sm:p-6 space-y-6">
                     {orderingQuestions.map(q => {
-                      const rawOpts = Array.isArray(q.options)
-                        ? q.options.map(o => (typeof o === 'string' ? o : o?.text || String(o)))
-                        : [];
-                      const totalSlots = rawOpts.length || 5;
-                      const placed = orderingSlotsMap[q.id] || [];
-                      const bank = orderingBankMap[q.id] || [];
+                      const rawTokens = extractOrderingTokens(q);
+                      const totalSlots = rawTokens.length;
+
+                      if (totalSlots === 0) {
+                        return (
+                          <div key={q.id} className="p-6 text-center rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <p className="text-sm font-bold text-slate-700">No activity content available.</p>
+                            <p className="text-xs text-slate-500">Please edit this activity in Course Studio.</p>
+                          </div>
+                        );
+                      }
+
+                      const placed: PlacedSentenceWord[] = orderingSlotsMap[q.id] || [];
                       const evaluated = evaluatedMap[q.id];
 
                       const handlePlaceWord = (word: string, bankIdx: number) => {
-                        if (evaluated) return;
+                        if (evaluated || placed.length >= totalSlots) return;
                         courseAudio.playClick();
-                        setOrderingBankMap(prev => ({
-                          ...prev,
-                          [q.id]: (prev[q.id] || []).filter((_, idx) => idx !== bankIdx)
-                        }));
                         setOrderingSlotsMap(prev => ({
                           ...prev,
-                          [q.id]: [...(prev[q.id] || []), word]
+                          [q.id]: [...(prev[q.id] || []), { word, bankIndex: bankIdx }]
                         }));
                         setValidationError(null);
                       };
 
-                      const handleRemoveSlotWord = (word: string, slotIdx: number) => {
+                      const handleRemoveSlotWord = (slotIdx: number) => {
                         if (evaluated) return;
                         courseAudio.playClick();
                         setOrderingSlotsMap(prev => ({
                           ...prev,
                           [q.id]: (prev[q.id] || []).filter((_, idx) => idx !== slotIdx)
                         }));
-                        setOrderingBankMap(prev => ({
-                          ...prev,
-                          [q.id]: [...(prev[q.id] || []), word]
-                        }));
+                      };
+
+                      const handleBankChipClick = (word: string, bankIdx: number) => {
+                        if (evaluated) return;
+                        const placedIdx = placed.findIndex(p => p.bankIndex === bankIdx);
+                        if (placedIdx !== -1) {
+                          handleRemoveSlotWord(placedIdx);
+                        } else {
+                          handlePlaceWord(word, bankIdx);
+                        }
                       };
 
                       const handleUndoLastWord = () => {
                         if (evaluated || placed.length === 0) return;
-                        const lastIdx = placed.length - 1;
-                        const lastWord = placed[lastIdx];
-                        handleRemoveSlotWord(lastWord, lastIdx);
-                      };
-
-                      const handleSwapSlots = (fromIdx: number, toIdx: number) => {
-                        if (evaluated || toIdx < 0 || toIdx >= placed.length) return;
                         courseAudio.playClick();
-                        setOrderingSlotsMap(prev => {
-                          const list = [...(prev[q.id] || [])];
-                          const [moved] = list.splice(fromIdx, 1);
-                          list.splice(toIdx, 0, moved);
-                          return { ...prev, [q.id]: list };
-                        });
+                        setOrderingSlotsMap(prev => ({
+                          ...prev,
+                          [q.id]: (prev[q.id] || []).slice(0, -1)
+                        }));
                       };
 
                       const handleResetOrder = () => {
                         if (evaluated) return;
                         courseAudio.playClick();
                         setOrderingSlotsMap(prev => ({ ...prev, [q.id]: [] }));
-                        setOrderingBankMap(prev => ({ ...prev, [q.id]: [...rawOpts] }));
                       };
 
                       return (
@@ -2052,7 +2383,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm sm:text-base font-extrabold text-slate-900">
-                              {q.question_text}
+                              {q.question_text || 'Put the words in the correct order to make a sentence:'}
                             </p>
                             {!evaluated && placed.length > 0 && (
                               <div className="flex items-center gap-2">
@@ -2075,167 +2406,153 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                             )}
                           </div>
 
-                          {/* Sentence Construction Slots */}
-                          <div className="rounded-2xl bg-[#0b1d38] border-2 border-sky-400/35 p-3.5 sm:p-4 shadow-inner space-y-3">
-                            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-sky-300/80">
-                              <span>Your Sentence ({placed.length}/{totalSlots} placed)</span>
-                              {placed.length > 0 && !evaluated && (
-                                <span className="text-sky-200/75 normal-case font-semibold">
-                                  Tap any placed chip to remove it
-                                </span>
-                              )}
+                          {/* Available Words Bank (Cute Neon-Blue Word Chips) */}
+                          <div className="rounded-2xl bg-gradient-to-br from-[#07152b] via-[#0c2244] to-[#081730] border-2 border-sky-400/35 p-4 sm:p-5 shadow-lg space-y-3">
+                            <div className="flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wider text-sky-300">
+                              <span>Available Words</span>
+                              <span className="text-[11px] font-semibold text-sky-200/70 normal-case">
+                                Click a word to place it in the next slot
+                              </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
-                              {Array.from({ length: totalSlots }).map((_, slotIdx) => {
-                                const wordInSlot = placed[slotIdx];
-                                return (
-                                  <div
-                                    key={slotIdx}
-                                    onDragOver={e => e.preventDefault()}
-                                    onDrop={e => {
-                                      e.preventDefault();
-                                      if (!draggedItem || draggedItem.qId !== q.id || evaluated) return;
-                                      if (draggedItem.source === 'bank') {
-                                        handlePlaceWord(draggedItem.word, draggedItem.index);
-                                      } else if (draggedItem.source === 'slot' && draggedItem.index !== slotIdx && slotIdx < placed.length) {
-                                        handleSwapSlots(draggedItem.index, slotIdx);
-                                      }
-                                      setDraggedItem(null);
-                                    }}
-                                    className={`min-h-[52px] rounded-xl border-2 p-2 flex items-center justify-between gap-2 transition-all ${
-                                      wordInSlot
-                                        ? evaluated
-                                          ? evaluated.isCorrect
-                                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
-                                            : 'bg-rose-500/20 border-rose-400 text-rose-100'
-                                          : 'bg-gradient-to-r from-[#0284c7] to-[#1d6ef2] border-sky-300 text-white shadow-[0_0_16px_rgba(56,189,248,0.45)]'
-                                        : 'bg-[#081529]/80 border-dashed border-sky-400/30 text-sky-300/45'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <span
-                                        className={`w-6 h-6 rounded-full text-xs font-black flex items-center justify-center shrink-0 ${
-                                          wordInSlot
-                                            ? 'bg-white/20 text-white border border-white/30'
-                                            : 'bg-sky-950/90 text-sky-300/70 border border-sky-400/20'
-                                        }`}
-                                      >
-                                        {slotIdx + 1}
-                                      </span>
-                                      {wordInSlot ? (
-                                        <button
-                                          type="button"
-                                          draggable={!evaluated}
-                                          onDragStart={() =>
-                                            setDraggedItem({
-                                              qId: q.id,
-                                              word: wordInSlot,
-                                              source: 'slot',
-                                              index: slotIdx
-                                            })
-                                          }
-                                          onClick={() => handleRemoveSlotWord(wordInSlot, slotIdx)}
-                                          className="text-xs sm:text-sm font-black truncate text-left flex-1 cursor-pointer text-white"
-                                          title="Tap to remove"
-                                        >
-                                          {wordInSlot}
-                                        </button>
-                                      ) : (
-                                        <span className="text-xs italic select-none">
-                                          Slot {slotIdx + 1}
-                                        </span>
-                                      )}
-                                    </div>
+                            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
+                              {rawTokens.map((word, bIdx) => {
+                                const placedSlotIdx = placed.findIndex(p => p.bankIndex === bIdx);
+                                const isPlaced = placedSlotIdx !== -1;
 
-                                    {/* Touch-friendly reorder arrows when placed */}
-                                    {wordInSlot && !evaluated && (
-                                      <div className="flex items-center gap-0.5 shrink-0">
-                                        {slotIdx > 0 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSwapSlots(slotIdx, slotIdx - 1)}
-                                            className="p-1 rounded hover:bg-white/20 text-white/90 cursor-pointer"
-                                            title="Move earlier"
-                                          >
-                                            <ChevronLeft className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                        {slotIdx < placed.length - 1 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSwapSlots(slotIdx, slotIdx + 1)}
-                                            className="p-1 rounded hover:bg-white/20 text-white/90 cursor-pointer"
-                                            title="Move later"
-                                          >
-                                            <ChevronRight className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
+                                if (isPlaced) {
+                                  return (
+                                    <button
+                                      key={`${word}-${bIdx}`}
+                                      type="button"
+                                      disabled={Boolean(evaluated)}
+                                      onClick={() => handleBankChipClick(word, bIdx)}
+                                      className="group relative px-4 py-2.5 sm:px-5 sm:py-3 rounded-full bg-[#0a1c36]/75 border-2 border-sky-400/25 text-sky-200/50 text-sm sm:text-base font-extrabold opacity-60 scale-95 cursor-pointer hover:opacity-90 hover:border-sky-400/50 transition-all inline-flex items-center gap-2 select-none"
+                                      title="Click to remove from sentence"
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-sky-400/40 shrink-0" />
+                                      <span className="line-through decoration-sky-400/40">{word}</span>
+                                      <span className="text-[10px] font-black uppercase text-sky-300/70 ml-0.5 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-400/30">
+                                        Slot {placedSlotIdx + 1}
+                                      </span>
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    key={`${word}-${bIdx}`}
+                                    type="button"
+                                    disabled={Boolean(evaluated)}
+                                    onClick={() => handleBankChipClick(word, bIdx)}
+                                    className="group relative px-4 py-2.5 sm:px-5 sm:py-3 rounded-full bg-gradient-to-r from-[#0284c7] via-[#0ea5e9] to-[#38bdf8] border-2 border-[#bae6fd] text-white text-sm sm:text-base font-black shadow-[0_0_18px_rgba(56,189,248,0.55)] hover:shadow-[0_0_26px_rgba(56,189,248,0.95)] hover:-translate-y-0.5 active:scale-95 cursor-pointer transition-all inline-flex items-center gap-2 select-none"
+                                    title="Click to place word in next slot"
+                                  >
+                                    <span className="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#ffffff] shrink-0" />
+                                    <span className="drop-shadow-xs">{word}</span>
+                                  </button>
                                 );
                               })}
                             </div>
                           </div>
 
-                          {/* Cute Neon-Blue Interactive Pill Chips Bank */}
-                          <div className="rounded-2xl bg-gradient-to-br from-[#07152b] via-[#0c2244] to-[#081730] border-2 border-sky-400/35 p-4 shadow-lg">
-                            {bank.length === 0 ? (
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <span className="text-xs sm:text-sm font-bold text-sky-100">
-                                  Built sentence:{' '}
-                                  <strong className="text-sky-300 font-black">
-                                    “{placed.join(' ')}”
-                                  </strong>
+                          {/* Sentence Construction Slots */}
+                          <div className="rounded-2xl bg-[#0b1d38] border-2 border-sky-400/35 p-4 sm:p-5 shadow-inner space-y-3.5">
+                            <div className="flex items-center justify-between text-xs sm:text-sm font-bold uppercase tracking-wider text-sky-200">
+                              <span className="flex items-center gap-2">
+                                <span>YOUR SENTENCE</span>
+                                <span className="px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-black">
+                                  {placed.length}/{totalSlots}
                                 </span>
-                                {evaluated ? (
-                                  <span
-                                    className={`text-xs sm:text-sm font-extrabold ${
-                                      evaluated.isCorrect ? 'text-emerald-300' : 'text-rose-300'
-                                    }`}
+                              </span>
+                              {placed.length > 0 && !evaluated && (
+                                <span className="text-sky-300/80 normal-case font-semibold text-xs">
+                                  Tap any placed word to remove it
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Slots Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
+                              {Array.from({ length: totalSlots }).map((_, slotIdx) => {
+                                const placedWord = placed[slotIdx];
+
+                                if (placedWord) {
+                                  return (
+                                    <button
+                                      key={slotIdx}
+                                      type="button"
+                                      disabled={Boolean(evaluated)}
+                                      onClick={() => handleRemoveSlotWord(slotIdx)}
+                                      className={`group relative min-h-[50px] px-3.5 py-2 rounded-xl border-2 font-black text-sm sm:text-base transition-all flex items-center justify-between gap-2 cursor-pointer shadow-sm ${
+                                        evaluated
+                                          ? evaluated.isCorrect
+                                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.3)]'
+                                            : 'bg-rose-500/20 border-rose-400 text-rose-100'
+                                          : 'bg-gradient-to-r from-[#0284c7] via-[#0ea5e9] to-[#38bdf8] border-[#bae6fd] text-white shadow-[0_0_16px_rgba(56,189,248,0.5)] hover:shadow-[0_0_22px_rgba(56,189,248,0.85)] hover:scale-[1.02] active:scale-95'
+                                      }`}
+                                      title="Click to remove this word"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="w-5 h-5 rounded-full bg-black/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                                          {slotIdx + 1}
+                                        </span>
+                                        <span className="truncate">{placedWord.word}</span>
+                                      </div>
+                                      {!evaluated && (
+                                        <span className="text-white/80 group-hover:text-white group-hover:scale-125 transition-transform text-xs font-black shrink-0">
+                                          ✕
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                }
+
+                                return (
+                                  <div
+                                    key={slotIdx}
+                                    className="min-h-[50px] px-3.5 py-2 rounded-xl border-2 border-dashed border-sky-400/30 bg-[#081730]/60 text-sky-300/40 text-xs sm:text-sm font-bold flex items-center gap-2 select-none"
                                   >
-                                    {evaluated.isCorrect
-                                      ? `✓ Perfect Order! (+${evaluated.pointsAwarded} XP)`
-                                      : `✗ Correct order: "${q.correct_answer}"`}
+                                    <span className="w-5 h-5 rounded-full bg-sky-950/70 border border-sky-400/20 text-sky-300/50 text-[11px] font-black flex items-center justify-center shrink-0">
+                                      {slotIdx + 1}
+                                    </span>
+                                    <span className="italic">Slot {slotIdx + 1}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Built Sentence & Action Button */}
+                            {placed.length > 0 && (
+                              <div className="pt-3 border-t border-sky-400/20 flex flex-wrap items-center justify-between gap-3">
+                                <div className="text-xs sm:text-sm font-medium text-slate-200">
+                                  Built sentence:{' '}
+                                  <span className="text-sky-300 font-black text-sm sm:text-base">
+                                    “{placed.map(p => p.word).join(' ')}”
                                   </span>
-                                ) : (
+                                </div>
+
+                                {!evaluated && placed.length === totalSlots && (
                                   <button
                                     type="button"
                                     onClick={() => evaluateAndPersistQuestion(q)}
-                                    className="px-4 py-2 rounded-full bg-gradient-to-r from-[#0ea5e9] to-[#1d6ef2] hover:from-[#38bdf8] hover:to-[#0284c7] text-white text-xs sm:text-sm font-black shadow-[0_0_18px_rgba(56,189,248,0.45)] cursor-pointer transition-all"
+                                    className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#0ea5e9] to-[#0284c7] hover:from-[#38bdf8] hover:to-[#0ea5e9] text-white font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(56,189,248,0.6)] cursor-pointer transition-all active:scale-95"
                                   >
                                     Check Order →
                                   </button>
                                 )}
-                              </div>
-                            ) : (
-                              <div className="space-y-2.5">
-                                <div className="text-[11px] font-extrabold uppercase tracking-wider text-sky-300/85">
-                                  Tap a glowing word chip to place it next:
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2.5">
-                                  {bank.map((word, bIdx) => (
-                                    <button
-                                      key={`${word}-${bIdx}`}
-                                      type="button"
-                                      draggable={!evaluated}
-                                      onDragStart={() =>
-                                        setDraggedItem({
-                                          qId: q.id,
-                                          word,
-                                          source: 'bank',
-                                          index: bIdx
-                                        })
-                                      }
-                                      onClick={() => handlePlaceWord(word, bIdx)}
-                                      className="px-4 py-2.5 rounded-full bg-gradient-to-b from-[#0f3161] to-[#091f40] hover:from-[#0284c7] hover:to-[#1d6ef2] border-2 border-[#38bdf8]/85 hover:border-white text-sky-100 hover:text-white text-xs sm:text-sm font-extrabold shadow-[0_0_15px_rgba(56,189,248,0.32)] hover:shadow-[0_0_22px_rgba(56,189,248,0.65)] flex items-center gap-2 cursor-pointer transition-all hover:-translate-y-0.5 active:scale-95"
-                                    >
-                                      <span className="w-2 h-2 rounded-full bg-[#38bdf8] shadow-[0_0_8px_#38bdf8]" />
-                                      <span>{word}</span>
-                                    </button>
-                                  ))}
-                                </div>
+
+                                {evaluated && (
+                                  <div
+                                    className={`text-xs sm:text-sm font-black ${
+                                      evaluated.isCorrect ? 'text-emerald-400' : 'text-rose-400'
+                                    }`}
+                                  >
+                                    {evaluated.isCorrect
+                                      ? `✓ Correct! (+${evaluated.pointsAwarded} XP)`
+                                      : `✗ Correct order: "${q.correct_answer}"`}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -2270,335 +2587,437 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                 })}
               </div>
             )}
-          </div>
 
-          {/* ============================================================== */}
-          {/* RIGHT COLUMN: PROGRESS, OBJECTIVES, VOCABULARY & SUBMIT        */}
-          {/* ============================================================== */}
-          <aside className="lg:col-span-4 space-y-5 min-w-0 lg:sticky lg:top-16">
-            
-            {/* 1. COURSE PROGRESS CARD */}
-            <div
-              data-testid="sidebar-course-progress"
-              className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 p-5 shadow-xl space-y-4"
+            {/* ============================================================== */}
+            {/* SUBMIT DAY / COMPLETION ZONE (BOTTOM OF LESSON STREAM)         */}
+            {/* ============================================================== */}
+            <section
+              data-testid="section-submit-day"
+              className={`rounded-2xl border-2 p-5 sm:p-7 shadow-2xl space-y-4 transition-all ${
+                answeredCount >= allValidQuestions.length && allValidQuestions.length > 0
+                  ? 'bg-gradient-to-r from-[#0d2e29] via-[#0f3d36] to-[#0d2e29] border-emerald-400/40 shadow-[0_0_30px_rgba(16,185,129,0.15)]'
+                  : 'bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border-sky-400/30'
+              }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full border-2 border-[#1d6ef2] flex items-center justify-center text-[#1d6ef2] font-black text-xs">
-                    {progressPercent}%
-                  </div>
-                  <h3 className="text-base font-black text-slate-900 tracking-tight">
-                    Course Progress
-                  </h3>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-xs font-extrabold">
-                  {course.grade_level || 'A1–A2'}
-                </span>
-              </div>
-
-              {/* Day X of N Progress Bar */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-600">
-                  <span>
-                    Day <strong className="text-slate-900">{dayNumber}</strong> of {totalCount}
-                  </span>
-                  <span className="text-[#026fc3] font-extrabold">
-                    {completedCount}/{totalCount} Completed
-                  </span>
-                </div>
-                <div className="w-full h-2.5 rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 via-[#1d6ef2] to-sky-400 transition-all duration-500"
-                    style={{
-                      width: `${Math.max(8, progressPercent || Math.round((dayNumber / Math.max(1, totalCount)) * 100))}%`
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Interactive Day Bubbles Grid */}
-              <div className="grid grid-cols-6 gap-2 pt-1">
-                {allEpisodes.map(item => {
-                  const isCurrent = item.episode.id === selectedEpisode.id;
-                  return (
-                    <button
-                      key={item.episode.id}
-                      type="button"
-                      onClick={() => onSelectEpisode(item.episode, item.isLocked, item.unlockMessage)}
-                      title={`Day ${item.dayNumber}: ${item.cleanTitle}`}
-                      className={`flex flex-col items-center gap-1 p-1.5 rounded-xl border text-center transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-sky-50 border-[#1d6ef2] text-[#1d6ef2] shadow-2xs'
-                          : item.isCompleted
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <span
-                        className={`w-7 h-7 rounded-full text-xs font-black flex items-center justify-center ${
-                          isCurrent
-                            ? 'bg-[#1d6ef2] text-white'
-                            : item.isCompleted
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {item.isCompleted && !isCurrent ? (
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        ) : (
-                          item.dayNumber
-                        )}
-                      </span>
-                      <span className="text-[9px] font-bold leading-tight line-clamp-1 w-full">
-                        {item.cleanTitle}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 2. TODAY'S OBJECTIVES CARD */}
-            <div
-              data-testid="sidebar-todays-objectives"
-              className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 p-5 shadow-xl space-y-3.5"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
-                  <Target className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-black text-slate-900 tracking-tight">
-                  Today’s Objectives
-                </h3>
-              </div>
-
-              <ul className="space-y-2.5 text-xs sm:text-sm">
-                {[
-                  {
-                    label: 'Watch and understand the video',
-                    done: videoWatched || isCompleted
-                  },
-                  ...(mcqQuestions.length > 0
-                    ? [
-                        {
-                          label: `Answer ${mcqQuestions.length} MCQs`,
-                          done: allMcqsDone || isCompleted
-                        }
-                      ]
-                    : []),
-                  ...(tfQuestions.length > 0
-                    ? [
-                        {
-                          label: `Answer ${tfQuestions.length} very short questions`,
-                          done: allTfsDone || isCompleted
-                        }
-                      ]
-                    : []),
-                  ...(shortQuestions.length > 0
-                    ? [
-                        {
-                          label: `Answer ${shortQuestions.length} short answer questions`,
-                          done: allShortsDone || isCompleted
-                        }
-                      ]
-                    : []),
-                  ...(orderingQuestions.length > 0
-                    ? [
-                        {
-                          label: 'Put the events in correct order',
-                          done: allOrderingsDone || isCompleted
-                        }
-                      ]
-                    : [])
-                ].map((obj, idx) => (
-                  <li key={idx} className="flex items-center gap-2.5">
-                    <span
-                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                        obj.done
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-slate-100 border border-slate-300 text-transparent'
-                      }`}
-                    >
-                      <Check className="w-3 h-3 stroke-[3]" />
-                    </span>
-                    <span
-                      className={`font-semibold ${
-                        obj.done ? 'text-emerald-800 line-through decoration-emerald-500/50' : 'text-slate-700'
-                      }`}
-                    >
-                      {obj.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* 3. KEY VOCABULARY (PREVIEW) CARD */}
-            {vocabularyList.length > 0 && (
-              <div
-                data-testid="sidebar-vocabulary-preview"
-                className="rounded-2xl bg-gradient-to-br from-[#fde68a] via-[#fef3c7] to-[#fde68a] text-amber-950 border-2 border-amber-300/90 p-5 shadow-xl space-y-3.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-amber-800 shrink-0" />
-                    <h3 className="text-base font-black text-amber-950 tracking-tight">
-                      Key Vocabulary (Preview)
-                    </h3>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-900/10 text-amber-900 text-[10px] font-black">
-                    {vocabularyList.length} words
-                  </span>
-                </div>
-
-                <ul className="space-y-2 text-xs sm:text-sm">
-                  {vocabularyList.slice(0, 5).map((item, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-start justify-between gap-2 pb-1.5 border-b border-amber-900/10 last:border-none last:pb-0"
-                    >
-                      <div className="leading-snug">
-                        <strong className="font-black text-amber-950">{item.word}</strong>
-                        <span className="text-amber-900/85"> — {item.meaning}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  {answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-xs font-black uppercase tracking-wider">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Day {dayNumber} Activities</span>
+                        </span>
+                        <span className="text-xs font-black text-emerald-400">
+                          {allValidQuestions.length}/{allValidQuestions.length} Complete
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => speakText(`${item.word}. ${item.meaning}`)}
-                        className="p-1 rounded-lg hover:bg-amber-900/10 text-amber-900 shrink-0 cursor-pointer"
-                        title={`Pronounce ${item.word}`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                      <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                        Awesome job! All activities are complete.
+                      </h3>
+                      <p className="text-xs sm:text-sm text-emerald-200/80 font-medium">
+                        Submit Day {dayNumber} to claim your XP and update your course progress.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-200 text-xs font-black uppercase tracking-wider">
+                          Day {dayNumber} Progress
+                        </span>
+                        <span className="text-xs font-bold text-sky-300">
+                          {answeredCount}/{allValidQuestions.length} activities completed
+                        </span>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                        Complete all activities to finish Day {dayNumber}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-sky-200/80 font-medium">
+                        {allValidQuestions.length - answeredCount === 1
+                          ? '1 activity remaining above.'
+                          : `${allValidQuestions.length - answeredCount} activities remaining above.`}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="px-3.5 py-1.5 rounded-xl bg-slate-950/60 border border-sky-400/30 text-xs font-bold text-sky-200">
+                    Activities: <strong className="text-white font-black">{answeredCount}/{allValidQuestions.length}</strong>
+                  </div>
+                  <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/40 text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>{earnedLessonXP}/{totalLessonXP} XP</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Validation Error Alert Banner */}
+              {validationError && (
+                <div className="rounded-xl bg-rose-500/20 border border-rose-400/50 p-3.5 text-xs sm:text-sm font-bold text-rose-100 flex items-start gap-2.5 animate-in fade-in duration-150">
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+
+              {/* Submit Day Button (Two states: Complete vs Incomplete) */}
+              {answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setShowFullVocabModal(true)}
-                  className="w-full pt-1 text-xs font-black text-amber-950 hover:text-amber-800 flex items-center justify-end gap-1 cursor-pointer group"
+                  data-testid="submit-day-button"
+                  disabled={isCompleting || submittingAll}
+                  onClick={handleSubmitLesson}
+                  className={`w-full py-4 px-6 rounded-2xl font-black text-base sm:text-lg shadow-[0_10px_30px_rgba(16,185,129,0.35)] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60 active:scale-[0.99] ${
+                    isCompleted && evaluatedCount >= allValidQuestions.length
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white border border-emerald-300/50'
+                      : 'bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white border border-emerald-300/60'
+                  }`}
                 >
-                  <span>View full vocabulary list</span>
-                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                  {isCompleting || submittingAll ? (
+                    <>
+                      <Sparkles className="w-5 h-5 animate-spin" />
+                      <span>Submitting Day {dayNumber}...</span>
+                    </>
+                  ) : isCompleted && evaluatedCount >= allValidQuestions.length ? (
+                    <>
+                      <Award className="w-5 h-5" />
+                      <span>Day {dayNumber} Completed • Continue</span>
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Submit Day {dayNumber} →</span>
+                    </>
+                  )}
                 </button>
-              </div>
-            )}
-
-            {/* Validation Alert Banner */}
-            {validationError && (
-              <div className="rounded-2xl bg-rose-500/20 border border-rose-400/50 p-4 text-xs sm:text-sm font-bold text-rose-100 flex items-start gap-2.5 animate-in fade-in duration-150">
-                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                <span>{validationError}</span>
-              </div>
-            )}
-
-            {/* 4. STRONG SUBMIT BUTTON ("Submit Day X ->") */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                data-testid="submit-day-button"
-                disabled={isCompleting || submittingAll}
-                onClick={handleSubmitLesson}
-                className={`w-full py-4 px-6 rounded-2xl font-black text-base sm:text-lg shadow-[0_10px_30px_rgba(29,110,242,0.5)] transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60 ${
-                  isCompleted && evaluatedCount >= allValidQuestions.length
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white border border-emerald-300/50'
-                    : 'bg-gradient-to-r from-[#026fc3] via-[#1d6ef2] to-[#2563eb] hover:from-[#03589e] hover:to-[#1d4ed8] text-white border border-sky-300/50 active:scale-[0.99]'
-                }`}
-              >
-                {isCompleting || submittingAll ? (
-                  <>
-                    <Sparkles className="w-5 h-5 animate-spin" />
-                    <span>Submitting Day {dayNumber}...</span>
-                  </>
-                ) : isCompleted && evaluatedCount >= allValidQuestions.length ? (
-                  <>
-                    <Award className="w-5 h-5" />
-                    <span>Day {dayNumber} Completed • Continue</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                ) : (
-                  <>
-                    <span>Submit Day {dayNumber}</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="submit-day-button"
+                  disabled={true}
+                  className="w-full py-4 px-6 rounded-2xl font-black text-base sm:text-lg bg-slate-800/80 text-slate-400 border border-slate-700/60 cursor-not-allowed opacity-70 flex items-center justify-center gap-2"
+                >
+                  <Lock className="w-4 h-4 text-slate-500" />
+                  <span>Submit Day {dayNumber}</span>
+                </button>
+              )}
 
               <div className="flex items-center justify-between px-2 text-[11px] font-semibold text-sky-200/75">
                 <span>
-                  Activities ready: {answeredCount}/{allValidQuestions.length}
+                  {answeredCount >= allValidQuestions.length
+                    ? 'All activities ready for submission'
+                    : `${allValidQuestions.length - answeredCount} activities left to complete`}
                 </span>
                 <span>
                   XP Earned: {earnedLessonXP}/{totalLessonXP} XP
                 </span>
               </div>
-            </div>
-          </aside>
-        </div>
+            </section>
+          </div>
       </div>
 
       {/* ================================================================== */}
-      {/* FULL VOCABULARY MODAL                                              */}
+      {/* LEVEL 2: KEY VOCABULARY ON-DEMAND RIGHT DRAWER                     */}
       {/* ================================================================== */}
-      {showFullVocabModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white text-slate-900 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-amber-200 shadow-2xl overflow-hidden">
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-[#0a213c] to-[#13325c] text-white flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
-                  Day {dayNumber} • {cleanLessonTitle}
-                </span>
-                <h3 className="text-lg sm:text-xl font-black">
-                  Full Key Vocabulary ({vocabularyList.length} Words)
-                </h3>
+      {isVocabDrawerOpen && (
+        <div className="fixed inset-0 z-[1050] flex justify-end">
+          {/* Overlay Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
+            onClick={() => setIsVocabDrawerOpen(false)}
+          />
+
+          {/* Right Drawer Panel */}
+          <div
+            data-testid="lesson-vocabulary-section"
+            className="relative w-full sm:w-[440px] max-w-[90vw] h-full bg-[#09182f] border-l border-sky-400/30 shadow-2xl flex flex-col z-[1100] animate-in slide-in-from-right duration-250 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-[#0a213c] via-[#0d2a4d] to-[#0a213c] border-b border-sky-400/25 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-300/40 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-5 h-5 text-amber-300" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">
+                    Day {dayNumber} • Supporting Tools
+                  </span>
+                  <h3 className="text-base sm:text-lg font-black text-white truncate">
+                    Key Vocabulary
+                  </h3>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowFullVocabModal(false)}
-                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-xs font-black">
+                  {vocabularyList.length} words
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsVocabDrawerOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+                  title="Close vocabulary drawer (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-5 sm:p-6 overflow-y-auto space-y-3">
-              {vocabularyList.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-2xl bg-amber-50/70 border border-amber-200/80 p-4 flex items-start justify-between gap-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-amber-400/30 text-amber-950 text-xs font-black flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      <span className="text-base font-black text-slate-900">
-                        {item.word}
-                      </span>
+            {/* Search Bar */}
+            <div className="p-3.5 bg-[#071326]/70 border-b border-sky-400/20 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-400/70 pointer-events-none" />
+                <input
+                  type="text"
+                  value={vocabSearchQuery}
+                  onChange={e => setVocabSearchQuery(e.target.value)}
+                  placeholder="Search word or meaning..."
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#0b1d38] border border-sky-400/30 text-white placeholder-sky-200/40 text-xs sm:text-sm font-medium focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
+                />
+                {vocabSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setVocabSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sky-300/70 hover:text-white text-xs p-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Vocabulary Word List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              {filteredVocabulary.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-[#0b1d38]/60 border border-sky-400/20 space-y-2">
+                  <p className="text-sm font-bold text-slate-300">No words found</p>
+                  <p className="text-xs text-sky-200/60">
+                    No vocabulary matches “{vocabSearchQuery}”.
+                  </p>
+                </div>
+              ) : (
+                filteredVocabulary.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl bg-[#0c2244] hover:bg-[#102a54] border border-sky-400/20 p-4 space-y-2 transition-all shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-300 text-xs font-black flex items-center justify-center shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span className="text-base font-black text-white truncate">
+                          {item.word}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          speakText(
+                            `${item.word}. ${item.meaning}. ${item.example ? `Example: ${item.example}` : ''}`
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/30 text-sky-200 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+                        title={`Listen to pronunciation of ${item.word}`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5 text-sky-300" />
+                        <span>Listen</span>
+                      </button>
                     </div>
-                    <p className="text-xs sm:text-sm font-semibold text-slate-700">
+
+                    <p className="text-xs sm:text-sm text-slate-200 font-medium leading-relaxed pl-8">
                       {item.meaning}
                     </p>
+
                     {item.example && (
-                      <p className="text-xs italic text-slate-500 pt-0.5">
-                        Example: “{item.example}”
+                      <p className="text-xs italic text-sky-200/80 pl-8 pt-1 border-t border-sky-400/15">
+                        “{item.example}”
                       </p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      speakText(
-                        `${item.word}. ${item.meaning}. ${item.example ? `Example: ${item.example}` : ''}`
-                      )
-                    }
-                    className="px-3 py-1.5 rounded-xl bg-amber-200/70 hover:bg-amber-300/80 text-amber-950 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                    <span>Listen</span>
-                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-3 bg-[#071326] border-t border-sky-400/20 text-center shrink-0">
+              <span className="text-[11px] font-semibold text-sky-300/70">
+                Key Vocabulary • Use while working on activities
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* LEVEL 2: LESSON NOTES & GRAMMAR MODAL                              */}
+      {/* ================================================================== */}
+      {isNotesModalOpen && (
+        <div className="fixed inset-0 z-[1150] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-[#09182f] text-white rounded-3xl max-w-xl w-full border border-sky-400/30 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 sm:p-6 bg-gradient-to-r from-[#0a213c] via-[#0e2d53] to-[#0a213c] border-b border-sky-400/25 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0">
+                  <Lightbulb className="w-5 h-5 text-sky-300" />
                 </div>
-              ))}
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-sky-300 block">
+                    Day {dayNumber} • Grammar & Notes
+                  </span>
+                  <h3 className="text-lg font-black text-white">
+                    {grammarContent?.title || 'Lesson Notes'}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNotesModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+              {grammarContent?.explanation && (
+                <div className="rounded-2xl bg-[#0c2244] border border-sky-400/20 p-4 space-y-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-sky-300 block">
+                    Explanation
+                  </span>
+                  <p className="text-sm text-slate-200 leading-relaxed font-medium">
+                    {grammarContent.explanation}
+                  </p>
+                </div>
+              )}
+
+              {grammarContent && grammarContent.examples.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-sky-300 block">
+                    Story Examples
+                  </span>
+                  <div className="space-y-2">
+                    {grammarContent.examples.map((ex, i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl bg-[#071326] border border-sky-400/20 px-4 py-2.5 text-xs sm:text-sm text-sky-100 font-medium flex items-start gap-2.5"
+                      >
+                        <span className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-300 text-xs font-black flex items-center justify-center shrink-0">
+                          {i + 1}
+                        </span>
+                        <span>{ex}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-amber-500/10 border border-amber-400/30 p-3.5 text-xs text-amber-200/90 font-medium flex items-start gap-2.5">
+                <Lightbulb className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+                <span>
+                  Tip: Look for these grammar structures inside the story transcript and use them in your answers!
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#071326] border-t border-sky-400/20 text-right">
+              <button
+                type="button"
+                onClick={() => setIsNotesModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-[#1d6ef2] hover:bg-[#2563eb] text-white text-xs font-black cursor-pointer transition-colors"
+              >
+                Close Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* LEVEL 2: HOW TO LEARN / HELP MODAL                                 */}
+      {/* ================================================================== */}
+      {isHelpModalOpen && (
+        <div className="fixed inset-0 z-[1150] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-[#09182f] text-white rounded-3xl max-w-xl w-full border border-sky-400/30 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 sm:p-6 bg-gradient-to-r from-[#0a213c] via-[#0e2d53] to-[#0a213c] border-b border-sky-400/25 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                  <HelpCircle className="w-5 h-5 text-emerald-300" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-300 block">
+                    Learning Guide
+                  </span>
+                  <h3 className="text-lg font-black text-white">
+                    How to Learn with Creepy Legends
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHelpModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-3.5 text-xs sm:text-sm">
+              <div className="rounded-xl bg-[#0c2244] border border-sky-400/20 p-3.5 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-sky-500 text-white font-black text-xs flex items-center justify-center shrink-0">1</span>
+                <div>
+                  <strong className="text-white block font-black">1. Watch the Story</strong>
+                  <p className="text-slate-300 text-xs mt-0.5">Listen to the legend carefully. If you need help with words, toggle the Story Transcript right beneath the video.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-[#0c2244] border border-sky-400/20 p-3.5 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-[#13294b] text-white font-black text-xs flex items-center justify-center shrink-0">2</span>
+                <div>
+                  <strong className="text-white block font-black">2. Answer Multiple Choice Questions</strong>
+                  <p className="text-slate-300 text-xs mt-0.5">Select the best answer for each question to test your reading and listening comprehension.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-[#0c2244] border border-sky-400/20 p-3.5 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-[#13294b] text-white font-black text-xs flex items-center justify-center shrink-0">3</span>
+                <div>
+                  <strong className="text-white block font-black">3. Very Short Questions (True or False)</strong>
+                  <p className="text-slate-300 text-xs mt-0.5">Quickly determine whether each statement about the legend is True or False.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-[#0c2244] border border-sky-400/20 p-3.5 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-[#13294b] text-white font-black text-xs flex items-center justify-center shrink-0">4</span>
+                <div>
+                  <strong className="text-white block font-black">4. Short Answer Questions</strong>
+                  <p className="text-slate-300 text-xs mt-0.5">Tap the blank slot inside the sentence and type the missing word from the story.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-[#0c2244] border border-sky-400/20 p-3.5 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-[#13294b] text-white font-black text-xs flex items-center justify-center shrink-0">5</span>
+                <div>
+                  <strong className="text-white block font-black">5. Sentence Builder</strong>
+                  <p className="text-slate-300 text-xs mt-0.5">Click the glowing neon-blue word chips to build your sentence into the ordered slots.</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-amber-500/10 border border-amber-400/30 p-3.5 flex items-start gap-3">
+                <BookOpen className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-200 block font-black">On-Demand Key Vocabulary</strong>
+                  <p className="text-amber-100/80 text-xs mt-0.5">Open the Vocabulary drawer at any time from the top bar to review word meanings and listen to pronunciations without leaving your activity.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#071326] border-t border-sky-400/20 text-right">
+              <button
+                type="button"
+                onClick={() => setIsHelpModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer transition-colors"
+              >
+                Got it, let's learn!
+              </button>
             </div>
           </div>
         </div>

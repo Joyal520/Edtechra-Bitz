@@ -21,6 +21,11 @@ export interface Classroom {
   theme?: ClassroomTheme | string;
   description?: string;
   banner_url?: string | null;
+  classroom_header_image?: string | null;
+  leaderboard_reset_frequency?: LeaderboardResetFrequency;
+  leaderboard_reset_at?: string | null;
+  leaderboard_next_reset_at?: string | null;
+  leaderboard_timezone?: string;
   is_archived: boolean;
   archived_at?: string | null;
   created_at: string;
@@ -151,6 +156,15 @@ export interface ClassroomPoint {
   source_id?: string | null;
   awarded_by?: string | null;
   created_at: string;
+}
+
+export type LeaderboardResetFrequency = 'never' | 'daily' | 'weekly' | 'monthly';
+
+export interface LeaderboardSettings {
+  frequency: LeaderboardResetFrequency;
+  reset_at: string | null;
+  next_reset_at: string | null;
+  timezone?: string;
 }
 
 export interface ClassroomLeaderboardEntry {

@@ -84,3 +84,31 @@ export function getSubjectCover(subject?: string | null): SubjectCoverInfo {
 
   return SUBJECT_COVERS.general;
 }
+
+/**
+ * Default full-bleed classroom header image for EdTechra classrooms.
+ */
+export const DEFAULT_CLASSROOM_HEADER_IMAGE = '/images/classroom/edtechra-default-classroom-header.png';
+
+/**
+ * Resolves the full-bleed classroom header cover image.
+ * Independent from the classroom card thumbnail (banner_url).
+ * Falls back to DEFAULT_CLASSROOM_HEADER_IMAGE when headerImage is not provided.
+ */
+export function getClassroomHeaderImage(headerImage?: string | null): string {
+  if (headerImage && typeof headerImage === 'string' && headerImage.trim()) {
+    return headerImage.trim();
+  }
+  return DEFAULT_CLASSROOM_HEADER_IMAGE;
+}
+
+/**
+ * Resolves the classroom card thumbnail image.
+ * Uses banner_url if custom, or falls back to subject cover.
+ */
+export function getClassroomCardCover(classroom?: { banner_url?: string | null; subject?: string | null } | null): string {
+  if (classroom?.banner_url && typeof classroom.banner_url === 'string' && classroom.banner_url.trim()) {
+    return classroom.banner_url.trim();
+  }
+  return getSubjectCover(classroom?.subject).imageUrl;
+}

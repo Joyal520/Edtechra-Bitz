@@ -31,16 +31,60 @@ export const ThemeSelectorPopover: React.FC<Props> = ({
   showFontControls = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const desktopPopoverRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 360
+  });
 
-  // Close on outside click (desktop popover) and Escape key
+  const updatePosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const popoverWidth = Math.min(360, window.innerWidth - 24);
+    let left = rect.right - popoverWidth;
+    if (left < 12) left = 12;
+    if (left + popoverWidth > window.innerWidth - 12) {
+      left = window.innerWidth - popoverWidth - 12;
+    }
+
+    const estimatedHeight = 360;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    let top: number;
+    if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+      // Intelligently open upward if constrained below
+      top = Math.max(12, rect.top - estimatedHeight - 8);
+    } else {
+      // Open downward
+      top = rect.bottom + 8;
+    }
+
+    setPopoverPos({ top, left, width: popoverWidth });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    const handleScrollOrResize = () => updatePosition();
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [isOpen]);
+
+  // Close on outside click (desktop popover & mobile sheet) and Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
       if (
-        popoverRef.current &&
-        !popoverRef.current.contains(target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        (!desktopPopoverRef.current || !desktopPopoverRef.current.contains(target)) &&
         (!sheetRef.current || !sheetRef.current.contains(target))
       ) {
         setIsOpen(false);
@@ -137,9 +181,10 @@ export const ThemeSelectorPopover: React.FC<Props> = ({
   );
 
   return (
-    <div className="relative inline-block shrink-0" ref={popoverRef}>
+    <div className="relative inline-block shrink-0">
       {/* Trigger Button with Active Gradient Swatch */}
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
@@ -157,52 +202,59 @@ export const ThemeSelectorPopover: React.FC<Props> = ({
         </span>
       </button>
 
-      {/* DESKTOP POPOVER (sm and up) */}
-      {isOpen && (
-        <div
-          role="dialog"
-          aria-label="Reading Appearance"
-          className="hidden sm:block absolute right-0 top-full mt-2 w-[340px] md:w-[360px] p-4 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 box-border"
-          style={{
-            backgroundColor: '#0B2340',
-            borderColor: '#315579',
-            borderWidth: '1px',
-            borderStyle: 'solid',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
-          }}
-        >
+      {/* DESKTOP POPOVER (sm and up) RENDERED VIA PORTAL TO OVERCOME STACKING CONTEXTS */}
+      {isOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="flex items-center justify-between pb-3 mb-3"
-            style={{ borderBottom: '1px solid #315579' }}
+            ref={desktopPopoverRef}
+            role="dialog"
+            aria-label="Reading Appearance"
+            className="hidden sm:block fixed p-4 rounded-2xl shadow-2xl z-[1200] animate-in fade-in zoom-in-95 duration-150 box-border"
+            style={{
+              top: `${popoverPos.top}px`,
+              left: `${popoverPos.left}px`,
+              width: `${popoverPos.width}px`,
+              backgroundColor: '#0B2340',
+              borderColor: '#315579',
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+            }}
           >
-            <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-white">
-                Reading Appearance
-              </h4>
-              <p className="text-[11px] font-medium text-[#DCE8F5]">
-                Choose your reading theme
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg text-[#DCE8F5] hover:text-white hover:bg-[#174A75] transition-colors cursor-pointer"
-              title="Close Appearance Menu"
+            <div
+              className="flex items-center justify-between pb-3 mb-3"
+              style={{ borderBottom: '1px solid #315579' }}
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                  Reading Appearance
+                </h4>
+                <p className="text-[11px] font-medium text-[#DCE8F5]">
+                  Choose your reading theme
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="p-1 rounded-lg text-[#DCE8F5] hover:text-white hover:bg-[#174A75] transition-colors cursor-pointer"
+                title="Close Appearance Menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-          {renderThemeCards(false)}
-        </div>
-      )}
+            {renderThemeCards(false)}
+          </div>,
+          document.body
+        )}
 
       {/* MOBILE BOTTOM SHEET MODAL (< sm, rendered via Portal to avoid header clipping) */}
       {isOpen &&
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="sm:hidden fixed inset-0 z-[100] flex items-end justify-center"
+            className="sm:hidden fixed inset-0 z-[1200] flex items-end justify-center"
             role="dialog"
             aria-modal="true"
             aria-label="Reading Appearance"

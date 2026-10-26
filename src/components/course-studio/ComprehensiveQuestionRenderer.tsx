@@ -819,6 +819,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               </div>
             </div>
           </div>
+        ) : normalizedOptions.length === 0 ? (
+          <div className="p-4 text-center rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+            <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">No activity content available.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Please edit this activity in Course Studio.</p>
+          </div>
         ) : (
           <div className="space-y-2.5 pt-1">
             {normalizedOptions.map((opt, oIdx) => {
@@ -1130,6 +1135,11 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                   </span>
                 ))}
             </div>
+          </div>
+        ) : sentenceTokens.length === 0 && selectedTokens.length === 0 ? (
+          <div className="p-4 text-center rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+            <p className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">No activity content available.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Please edit this activity in Course Studio.</p>
           </div>
         ) : (
           <div className="space-y-4 pt-1">

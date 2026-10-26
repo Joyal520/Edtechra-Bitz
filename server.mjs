@@ -3070,6 +3070,257 @@ app.get('/api/classes/:id/analytics', async (req, res) => {
   }
 });
 
+// ============================================================================
+// Classroom Leaderboard Reset Engine & Scheduling
+// ============================================================================
+
+function calculateServerLeaderboardNextResetDate(frequency, fromDateInput = new Date(), timeZone = 'Asia/Colombo') {
+  if (frequency === 'never') return null;
+  const fromDate = new Date(fromDateInput);
+  if (isNaN(fromDate.getTime())) return null;
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short'
+    });
+    const parts = Object.fromEntries(formatter.formatToParts(fromDate).map(p => [p.type, p.value]));
+    const year = parseInt(parts.year, 10);
+    const month = parseInt(parts.month, 10) - 1;
+    const day = parseInt(parts.day, 10);
+    const weekday = parts.weekday;
+
+    const dayIndexMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const currentDayOfWeek = dayIndexMap[weekday] ?? 0;
+
+    let targetYear = year;
+    let targetMonth = month;
+    let targetDay = day;
+
+    if (frequency === 'daily') {
+      targetDay += 1;
+    } else if (frequency === 'weekly') {
+      const daysUntilMonday = (8 - currentDayOfWeek) % 7 || 7;
+      targetDay += daysUntilMonday;
+    } else if (frequency === 'monthly') {
+      targetDay = 1;
+      targetMonth += 1;
+    }
+
+    const localTargetUtc = Date.UTC(targetYear, targetMonth, targetDay, 0, 0, 0);
+    const tzFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric',
+      hourCycle: 'h23'
+    });
+    const tzParts = Object.fromEntries(tzFormatter.formatToParts(new Date(localTargetUtc)).map(p => [p.type, p.value]));
+    const tzAsUtc = Date.UTC(
+      parseInt(tzParts.year, 10),
+      parseInt(tzParts.month, 10) - 1,
+      parseInt(tzParts.day, 10),
+      parseInt(tzParts.hour, 10),
+      parseInt(tzParts.minute, 10),
+      parseInt(tzParts.second, 10)
+    );
+    const offset = tzAsUtc - localTargetUtc;
+    return new Date(localTargetUtc - offset);
+  } catch (_e) {
+    const fallback = new Date(fromDate);
+    fallback.setUTCHours(0, 0, 0, 0);
+    if (frequency === 'daily') fallback.setUTCDate(fallback.getUTCDate() + 1);
+    else if (frequency === 'weekly') fallback.setUTCDate(fallback.getUTCDate() + ((8 - fallback.getUTCDay()) % 7 || 7));
+    else if (frequency === 'monthly') {
+      fallback.setUTCMonth(fallback.getUTCMonth() + 1);
+      fallback.setUTCDate(1);
+    }
+    return fallback;
+  }
+}
+
+// Background scheduler for automatic leaderboard resets
+async function runScheduledLeaderboardResets() {
+  if (!serverSupabase) return;
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: dueClassrooms, error } = await serverSupabase
+      .from('classrooms')
+      .select('id, leaderboard_reset_frequency, leaderboard_next_reset_at, leaderboard_timezone')
+      .neq('leaderboard_reset_frequency', 'never')
+      .not('leaderboard_next_reset_at', 'is', null)
+      .lte('leaderboard_next_reset_at', nowIso);
+
+    if (error || !dueClassrooms || dueClassrooms.length === 0) return;
+
+    for (const c of dueClassrooms) {
+      const timeZone = c.leaderboard_timezone || 'Asia/Colombo';
+      const nextReset = calculateServerLeaderboardNextResetDate(c.leaderboard_reset_frequency, new Date(), timeZone);
+      await serverSupabase
+        .from('classrooms')
+        .update({
+          leaderboard_reset_at: c.leaderboard_next_reset_at || nowIso,
+          leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
+          updated_at: nowIso
+        })
+        .eq('id', c.id);
+      console.log(`[LeaderboardScheduler] Auto-reset completed for classroom ${c.id}. Frequency: ${c.leaderboard_reset_frequency}, Next: ${nextReset?.toISOString()}`);
+    }
+  } catch (err) {
+    console.error('[runScheduledLeaderboardResets error]:', err);
+  }
+}
+
+// Run leaderboard scheduler periodically
+setInterval(() => {
+  runScheduledLeaderboardResets().catch(() => {});
+}, 60 * 1000);
+setTimeout(() => {
+  runScheduledLeaderboardResets().catch(() => {});
+}, 10000);
+
+// GET /api/classes/:id/leaderboard/settings - Retrieve leaderboard reset settings
+app.get('/api/classes/:id/leaderboard/settings', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const { data, error } = await serverSupabase
+      .from('classrooms')
+      .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
+      .eq('id', classroomId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'Classroom not found.' });
+    }
+
+    res.json({
+      success: true,
+      settings: {
+        frequency: data.leaderboard_reset_frequency || 'never',
+        reset_at: data.leaderboard_reset_at || null,
+        next_reset_at: data.leaderboard_next_reset_at || null,
+        timezone: data.leaderboard_timezone || 'Asia/Colombo'
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/leaderboard/settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve leaderboard settings.' });
+  }
+});
+
+// POST /api/classes/:id/leaderboard/settings - Update leaderboard reset schedule (TEACHER ONLY)
+app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherClassroomAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Access denied: Only classroom teachers and admins can modify leaderboard settings.' });
+    }
+
+    const { frequency, timezone } = req.body || {};
+    const validFrequencies = ['never', 'daily', 'weekly', 'monthly'];
+    if (!validFrequencies.includes(frequency)) {
+      return res.status(400).json({ success: false, error: `Invalid frequency. Allowed options: ${validFrequencies.join(', ')}` });
+    }
+
+    const effectiveTz = timezone || 'Asia/Colombo';
+    const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), effectiveTz);
+    const nowIso = new Date().toISOString();
+
+    const updates = {
+      leaderboard_reset_frequency: frequency,
+      leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
+      leaderboard_timezone: effectiveTz,
+      updated_at: nowIso
+    };
+
+    const { data, error } = await serverSupabase
+      .from('classrooms')
+      .update(updates)
+      .eq('id', classroomId)
+      .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      message: `Leaderboard reset frequency updated to ${frequency}.`,
+      settings: {
+        frequency: data.leaderboard_reset_frequency,
+        reset_at: data.leaderboard_reset_at,
+        next_reset_at: data.leaderboard_next_reset_at,
+        timezone: data.leaderboard_timezone
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/leaderboard/settings:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update leaderboard settings.' });
+  }
+});
+
+// POST /api/classes/:id/leaderboard/reset - Manual reset of leaderboard scores to 0 XP (TEACHER ONLY)
+app.post('/api/classes/:id/leaderboard/reset', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const isTeacher = await verifyTeacherClassroomAccess(serverSupabase, classroomId, authData);
+    if (!isTeacher) {
+      return res.status(403).json({ success: false, error: 'Access denied: Only classroom teachers and admins can reset the leaderboard.' });
+    }
+
+    // Fetch existing frequency to recompute next reset
+    const { data: classroom } = await serverSupabase
+      .from('classrooms')
+      .select('leaderboard_reset_frequency, leaderboard_timezone')
+      .eq('id', classroomId)
+      .maybeSingle();
+
+    const frequency = classroom?.leaderboard_reset_frequency || 'never';
+    const timeZone = classroom?.leaderboard_timezone || 'Asia/Colombo';
+    const nowIso = new Date().toISOString();
+    const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), timeZone);
+
+    const { error } = await serverSupabase
+      .from('classrooms')
+      .update({
+        leaderboard_reset_at: nowIso,
+        leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
+        updated_at: nowIso
+      })
+      .eq('id', classroomId);
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      message: 'Leaderboard reset successfully. Everyone starts from 0 XP.',
+      reset_at: nowIso,
+      next_reset_at: nextReset ? nextReset.toISOString() : null
+    });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/leaderboard/reset:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to reset leaderboard.' });
+  }
+});
+
 // Helper to verify teacher authorization for Teaching Intelligence
 async function verifyTeacherClassroomAccess(supabaseClient, classroomId, authUser) {
   if (!supabaseClient) return true;

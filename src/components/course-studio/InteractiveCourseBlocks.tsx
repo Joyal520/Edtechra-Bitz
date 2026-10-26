@@ -1227,43 +1227,50 @@ export const InteractiveActivityBlock: React.FC<InteractiveBlockProps> = ({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {items.map((item, idx) => {
-          const isOpen = activeIndices.includes(idx);
-          return (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => toggleIndex(idx)}
-              className={`min-h-[56px] p-4 rounded-2xl text-left border-2 transition-all cursor-pointer flex flex-col gap-2 ${
-                isOpen
-                  ? 'bg-white dark:bg-slate-900 border-emerald-500 shadow-sm'
-                  : 'bg-white/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 w-full">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">{item.icon || '🧠'}</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-white">
-                    {item.label}
-                  </span>
+      {items.length === 0 ? (
+        <div className="p-4 rounded-2xl border border-dashed border-emerald-300 dark:border-emerald-700 bg-white/60 dark:bg-slate-900/40 text-center text-xs text-slate-600 dark:text-slate-300 font-semibold space-y-1">
+          <p>No activity content available.</p>
+          <p className="text-[11px] text-slate-400">Please edit this activity in Course Studio.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {items.map((item, idx) => {
+            const isOpen = activeIndices.includes(idx);
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => toggleIndex(idx)}
+                className={`min-h-[56px] p-4 rounded-2xl text-left border-2 transition-all cursor-pointer flex flex-col gap-2 ${
+                  isOpen
+                    ? 'bg-white dark:bg-slate-900 border-emerald-500 shadow-sm'
+                    : 'bg-white/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xl">{item.icon || '🧠'}</span>
+                    <span className="text-sm font-black text-slate-900 dark:text-white">
+                      {item.label}
+                    </span>
+                  </div>
+                  <CheckCircle2
+                    className={`w-5 h-5 shrink-0 transition-colors ${
+                      isOpen ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
+                    }`}
+                  />
                 </div>
-                <CheckCircle2
-                  className={`w-5 h-5 shrink-0 transition-colors ${
-                    isOpen ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
-                  }`}
-                />
-              </div>
 
-              {isOpen && (
-                <p className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200 pt-1 border-t border-emerald-100 dark:border-emerald-900/50 animate-in fade-in duration-150">
-                  {item.detail}
-                </p>
-              )}
-            </button>
-          );
-        })}
-      </div>
+                {isOpen && (
+                  <p className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200 pt-1 border-t border-emerald-100 dark:border-emerald-900/50 animate-in fade-in duration-150">
+                    {item.detail}
+                  </p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {activeIndices.length === items.length && items.length > 0 && (
         <div className="p-3.5 rounded-2xl bg-emerald-600 text-white text-xs sm:text-sm font-extrabold text-center animate-in fade-in duration-200">
