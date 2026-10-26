@@ -78,6 +78,13 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
   const [isResetting, setIsResetting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedFrequency(currentFrequency);
+      setErrorMessage(null);
+    }
+  }, [isOpen, currentFrequency]);
+
   if (!isOpen) return null;
 
   // Calculate live preview of next reset for the currently selected option

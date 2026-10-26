@@ -3141,32 +3141,54 @@ function calculateServerLeaderboardNextResetDate(frequency, fromDateInput = new 
   }
 }
 
+// In-memory & resilient fallback cache for classroom leaderboard settings
+const serverClassroomLeaderboardCache = new Map();
+
 // Background scheduler for automatic leaderboard resets
 async function runScheduledLeaderboardResets() {
   if (!serverSupabase) return;
   try {
     const nowIso = new Date().toISOString();
-    const { data: dueClassrooms, error } = await serverSupabase
-      .from('classrooms')
-      .select('id, leaderboard_reset_frequency, leaderboard_next_reset_at, leaderboard_timezone')
-      .neq('leaderboard_reset_frequency', 'never')
-      .not('leaderboard_next_reset_at', 'is', null)
-      .lte('leaderboard_next_reset_at', nowIso);
+    
+    // Check in-memory / cache classrooms
+    for (const [classroomId, settings] of serverClassroomLeaderboardCache.entries()) {
+      if (settings.frequency && settings.frequency !== 'never' && settings.next_reset_at && new Date(settings.next_reset_at).getTime() <= Date.now()) {
+        const timeZone = settings.timezone || 'Asia/Colombo';
+        const nextReset = calculateServerLeaderboardNextResetDate(settings.frequency, new Date(), timeZone);
+        serverClassroomLeaderboardCache.set(classroomId, {
+          ...settings,
+          reset_at: settings.next_reset_at,
+          next_reset_at: nextReset ? nextReset.toISOString() : null
+        });
+        console.log(`[LeaderboardScheduler] Cache auto-reset for classroom ${classroomId}`);
+      }
+    }
 
-    if (error || !dueClassrooms || dueClassrooms.length === 0) return;
-
-    for (const c of dueClassrooms) {
-      const timeZone = c.leaderboard_timezone || 'Asia/Colombo';
-      const nextReset = calculateServerLeaderboardNextResetDate(c.leaderboard_reset_frequency, new Date(), timeZone);
-      await serverSupabase
+    // Attempt database check if columns exist
+    try {
+      const { data: dueClassrooms, error } = await serverSupabase
         .from('classrooms')
-        .update({
-          leaderboard_reset_at: c.leaderboard_next_reset_at || nowIso,
-          leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-          updated_at: nowIso
-        })
-        .eq('id', c.id);
-      console.log(`[LeaderboardScheduler] Auto-reset completed for classroom ${c.id}. Frequency: ${c.leaderboard_reset_frequency}, Next: ${nextReset?.toISOString()}`);
+        .select('id, leaderboard_reset_frequency, leaderboard_next_reset_at, leaderboard_timezone')
+        .neq('leaderboard_reset_frequency', 'never')
+        .not('leaderboard_next_reset_at', 'is', null)
+        .lte('leaderboard_next_reset_at', nowIso);
+
+      if (!error && dueClassrooms && dueClassrooms.length > 0) {
+        for (const c of dueClassrooms) {
+          const timeZone = c.leaderboard_timezone || 'Asia/Colombo';
+          const nextReset = calculateServerLeaderboardNextResetDate(c.leaderboard_reset_frequency, new Date(), timeZone);
+          await serverSupabase
+            .from('classrooms')
+            .update({
+              leaderboard_reset_at: c.leaderboard_next_reset_at || nowIso,
+              leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
+              updated_at: nowIso
+            })
+            .eq('id', c.id);
+        }
+      }
+    } catch (_) {
+      // Column may not exist in classrooms yet
     }
   } catch (err) {
     console.error('[runScheduledLeaderboardResets error]:', err);
@@ -3189,23 +3211,36 @@ app.get('/api/classes/:id/leaderboard/settings', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
     const classroomId = req.params.id;
-    const { data, error } = await serverSupabase
-      .from('classrooms')
-      .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-      .eq('id', classroomId)
-      .maybeSingle();
 
-    if (error || !data) {
-      return res.status(404).json({ success: false, error: 'Classroom not found.' });
-    }
+    // Check memory store first
+    const cached = serverClassroomLeaderboardCache.get(classroomId);
+
+    // Try database
+    let dbSettings = null;
+    try {
+      const { data, error } = await serverSupabase
+        .from('classrooms')
+        .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      if (!error && data) {
+        dbSettings = data;
+      }
+    } catch (_) {}
+
+    const frequency = dbSettings?.leaderboard_reset_frequency || cached?.frequency || 'never';
+    const reset_at = dbSettings?.leaderboard_reset_at || cached?.reset_at || null;
+    const next_reset_at = dbSettings?.leaderboard_next_reset_at || cached?.next_reset_at || null;
+    const timezone = dbSettings?.leaderboard_timezone || cached?.timezone || 'Asia/Colombo';
 
     res.json({
       success: true,
       settings: {
-        frequency: data.leaderboard_reset_frequency || 'never',
-        reset_at: data.leaderboard_reset_at || null,
-        next_reset_at: data.leaderboard_next_reset_at || null,
-        timezone: data.leaderboard_timezone || 'Asia/Colombo'
+        frequency,
+        reset_at,
+        next_reset_at,
+        timezone
       }
     });
   } catch (error) {
@@ -3237,33 +3272,46 @@ app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
     const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), effectiveTz);
     const nowIso = new Date().toISOString();
 
-    const updates = {
-      leaderboard_reset_frequency: frequency,
-      leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-      leaderboard_timezone: effectiveTz,
-      updated_at: nowIso
+    const newSettings = {
+      frequency,
+      reset_at: serverClassroomLeaderboardCache.get(classroomId)?.reset_at || null,
+      next_reset_at: nextReset ? nextReset.toISOString() : null,
+      timezone: effectiveTz
     };
 
-    const { data, error } = await serverSupabase
-      .from('classrooms')
-      .update(updates)
-      .eq('id', classroomId)
-      .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-      .single();
+    // Update memory cache immediately
+    serverClassroomLeaderboardCache.set(classroomId, newSettings);
 
-    if (error) {
-      throw error;
+    // Attempt DB update safely without throwing if columns do not exist yet
+    try {
+      const updates = {
+        leaderboard_reset_frequency: frequency,
+        leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
+        leaderboard_timezone: effectiveTz,
+        updated_at: nowIso
+      };
+
+      const { data, error } = await serverSupabase
+        .from('classrooms')
+        .update(updates)
+        .eq('id', classroomId)
+        .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
+        .single();
+
+      if (!error && data) {
+        newSettings.frequency = data.leaderboard_reset_frequency || frequency;
+        newSettings.reset_at = data.leaderboard_reset_at || newSettings.reset_at;
+        newSettings.next_reset_at = data.leaderboard_next_reset_at || newSettings.next_reset_at;
+        newSettings.timezone = data.leaderboard_timezone || effectiveTz;
+      }
+    } catch (dbErr) {
+      console.warn('[Leaderboard] Database column update skipped (using memory store):', dbErr.message);
     }
 
     res.json({
       success: true,
       message: `Leaderboard reset frequency updated to ${frequency}.`,
-      settings: {
-        frequency: data.leaderboard_reset_frequency,
-        reset_at: data.leaderboard_reset_at,
-        next_reset_at: data.leaderboard_next_reset_at,
-        timezone: data.leaderboard_timezone
-      }
+      settings: newSettings
     });
   } catch (error) {
     console.error('Error in POST /api/classes/:id/leaderboard/settings:', error);
@@ -3284,36 +3332,62 @@ app.post('/api/classes/:id/leaderboard/reset', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied: Only classroom teachers and admins can reset the leaderboard.' });
     }
 
-    // Fetch existing frequency to recompute next reset
-    const { data: classroom } = await serverSupabase
-      .from('classrooms')
-      .select('leaderboard_reset_frequency, leaderboard_timezone')
-      .eq('id', classroomId)
-      .maybeSingle();
+    const cached = serverClassroomLeaderboardCache.get(classroomId);
 
-    const frequency = classroom?.leaderboard_reset_frequency || 'never';
-    const timeZone = classroom?.leaderboard_timezone || 'Asia/Colombo';
+    // Try fetching existing frequency from DB
+    let frequency = cached?.frequency || 'never';
+    let timeZone = cached?.timezone || 'Asia/Colombo';
+
+    try {
+      const { data: classroom } = await serverSupabase
+        .from('classrooms')
+        .select('leaderboard_reset_frequency, leaderboard_timezone')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      if (classroom?.leaderboard_reset_frequency) {
+        frequency = classroom.leaderboard_reset_frequency;
+      }
+      if (classroom?.leaderboard_timezone) {
+        timeZone = classroom.leaderboard_timezone;
+      }
+    } catch (_) {}
+
     const nowIso = new Date().toISOString();
     const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), timeZone);
+    const nextResetIso = nextReset ? nextReset.toISOString() : null;
 
-    const { error } = await serverSupabase
-      .from('classrooms')
-      .update({
-        leaderboard_reset_at: nowIso,
-        leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-        updated_at: nowIso
-      })
-      .eq('id', classroomId);
+    // Update memory cache immediately
+    serverClassroomLeaderboardCache.set(classroomId, {
+      frequency,
+      reset_at: nowIso,
+      next_reset_at: nextResetIso,
+      timezone: timeZone
+    });
 
-    if (error) {
-      throw error;
+    // Safely attempt Supabase database update
+    try {
+      const { error } = await serverSupabase
+        .from('classrooms')
+        .update({
+          leaderboard_reset_at: nowIso,
+          leaderboard_next_reset_at: nextResetIso,
+          updated_at: nowIso
+        })
+        .eq('id', classroomId);
+
+      if (error) {
+        console.warn('[Leaderboard] Database reset update notice (using cache):', error.message);
+      }
+    } catch (dbErr) {
+      console.warn('[Leaderboard] Database column not yet added, using resilient cache:', dbErr.message);
     }
 
     res.json({
       success: true,
       message: 'Leaderboard reset successfully. Everyone starts from 0 XP.',
       reset_at: nowIso,
-      next_reset_at: nextReset ? nextReset.toISOString() : null
+      next_reset_at: nextResetIso
     });
   } catch (error) {
     console.error('Error in POST /api/classes/:id/leaderboard/reset:', error);

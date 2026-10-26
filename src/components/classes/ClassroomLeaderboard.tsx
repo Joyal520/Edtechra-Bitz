@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { ClassroomLeaderboardEntry, LeaderboardResetFrequency } from '@/types/classroom';
 import { formatLeaderboardResetText, DEFAULT_LEADERBOARD_TIMEZONE } from '@/utils/leaderboardResetUtils';
+import { classroomPointsService } from '@/services/classroomPointsService';
 import { LeaderboardSettingsModal } from './LeaderboardSettingsModal';
 
 interface ClassroomLeaderboardProps {
@@ -60,10 +61,38 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
   // Check if all students currently have 0 XP (e.g. right after a leaderboard reset or at cycle start)
   const allZeroXP = entries.length > 0 && entries.every((e) => (e.points || 0) === 0);
 
+  // Check fallback settings if columns are not in classrooms table yet
+  const [effectiveSettings, setEffectiveSettings] = useState<{
+    frequency: LeaderboardResetFrequency;
+    nextResetAt: string | null;
+    lastResetAt: string | null;
+  }>({
+    frequency: resetFrequency,
+    nextResetAt: nextResetAt || null,
+    lastResetAt: lastResetAt || null
+  });
+
+  React.useEffect(() => {
+    if (classroomId) {
+      const s = classroomPointsService.getLocalLeaderboardSettings(classroomId);
+      setEffectiveSettings({
+        frequency: resetFrequency !== 'never' ? resetFrequency : (s?.frequency || 'never'),
+        nextResetAt: nextResetAt || s?.next_reset_at || null,
+        lastResetAt: lastResetAt || s?.reset_at || null
+      });
+    } else {
+      setEffectiveSettings({
+        frequency: resetFrequency,
+        nextResetAt: nextResetAt || null,
+        lastResetAt: lastResetAt || null
+      });
+    }
+  }, [resetFrequency, nextResetAt, lastResetAt, classroomId]);
+
   // Format schedule text for friendly reset indicator
   const { frequencyLabel, nextResetLabel } = formatLeaderboardResetText(
-    resetFrequency,
-    nextResetAt,
+    effectiveSettings.frequency,
+    effectiveSettings.nextResetAt,
     timeZone
   );
 
@@ -445,9 +474,9 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
           classroomId={classroomId}
-          currentFrequency={resetFrequency}
-          nextResetAt={nextResetAt}
-          lastResetAt={lastResetAt}
+          currentFrequency={effectiveSettings.frequency}
+          nextResetAt={effectiveSettings.nextResetAt}
+          lastResetAt={effectiveSettings.lastResetAt}
           timeZone={timeZone}
           onSettingsUpdated={async () => {
             await onRefreshLeaderboard?.();
