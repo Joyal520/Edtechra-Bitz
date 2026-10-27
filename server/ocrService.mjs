@@ -494,12 +494,8 @@ class OcrEvaluationQueue {
               console.warn('[OCR Engine] Notice: Could not sync student_corrected_work:', cwErr.message);
             }
 
-            // Invalidate Teaching Intelligence Insights Cache
-            if (job.classroomId) {
-              try {
-                await this.serverSupabase.from('ai_classroom_insights').delete().eq('classroom_id', job.classroomId);
-              } catch (_) {}
-            }
+            // Stage 2 Deadline Pipeline Rule: Do NOT delete saved ai_classroom_insights on individual student OCR completions.
+            // Classroom diagnostic AI analysis is triggered in batches after activity deadlines close.
           } catch (syncErr) {
             console.warn('[OCR Engine] Warning on task submission sync:', syncErr.message);
           }

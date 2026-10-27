@@ -20,22 +20,25 @@ import { computeClassroomAnalytics } from './classroomAnalyticsService.mjs';
 import { compileCrossClassroomAnalytics } from './courseStudioService.mjs';
 import { aiRouter } from './ai/aiRouter.mjs';
 import { AI_TASK_TYPES } from './ai/taskTypes.mjs';
+import {
+  closeExpiredActivities,
+  inspectClassroomBatchState,
+  executeBatchClassroomAnalysis,
+  runDeadlineBatchWorker as runDeadlineBatchWorkerCore
+} from './deadlineAnalysisPipeline.mjs';
+
+export { closeExpiredActivities, inspectClassroomBatchState };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const tempReportsDir = path.resolve(__dirname, '../temp_reports');
 
 export async function invalidateTeachingIntelligenceCache(serverSupabase, classroomId) {
-  try {
-    const { error } = await serverSupabase
-      .from('ai_classroom_insights')
-      .delete()
-      .eq('classroom_id', classroomId);
-    if (error) console.warn('[TI] Cache invalidation warning:', error.message);
-    else console.log('[TI] Cache invalidated for classroom:', classroomId);
-  } catch (err) {
-    console.warn('[TI] Cache invalidation failed:', err.message);
-  }
+  // IMPORTANT: Under the Deadline-Based Batch Architecture, saved classroom diagnoses
+  // must NEVER be deleted on individual student submissions or teacher actions.
+  // Instead, new closed activities are queued as `closed_pending_analysis` and processed
+  // in a deduplicated batch, preserving previous diagnosis versions in `ai_classroom_insights`.
+  console.log('[TI] Preserving saved classroom diagnosis for classroom (no destructive cache delete):', classroomId);
 }
 
 const CANDIDATE_GEMINI_MODELS = [
@@ -350,6 +353,8 @@ export async function computeClassroomMetrics(serverSupabase, classroomId) {
       diagnoses: analytics.diagnoses || analytics.learningGapPriority || [],
       primaryDiagnosis: analytics.primaryDiagnosis || analytics.recommendedTeachingFocus || null,
       learningGapPriority: analytics.diagnoses || analytics.learningGapPriority || [],
+      performanceDistribution: analytics.performanceDistribution || analytics.performance_distribution || null,
+      performance_distribution: analytics.performanceDistribution || analytics.performance_distribution || null,
       classStrengths: analytics.classStrengths || [],
       studentsNeedingSupport: analytics.studentsNeedingSupport || [],
       recommendedTeachingFocus: analytics.primaryDiagnosis || analytics.recommendedTeachingFocus || null,
@@ -973,111 +978,242 @@ export async function getClassroomTeachingIntelligence({
   classroomId,
   teacherId,
   forceRefresh = false,
+  confirmForceReanalysis = false,
   serverOpenAI
 }) {
-  // 1. Level 1: Deterministic Metrics (0 Tokens)
+  // 1. Reconcile any expired activity deadlines for this classroom first (fast deterministic DB check)
+  if (serverSupabase && classroomId) {
+    try {
+      await closeExpiredActivities(serverSupabase, classroomId);
+    } catch (closeErr) {
+      console.warn('[TeachingIntelligence] Deadline reconciliation notice:', closeErr?.message);
+    }
+  }
+
+  // 2. Compute Level 1 Deterministic Metrics (0 AI Tokens)
   const metricsSummary = await computeClassroomMetrics(serverSupabase, classroomId);
 
-  // 2. Level 3: Check DB Cache if not forcing refresh
+  // 3. Inspect Deadline Batch State & Saved Diagnosis
+  const batchState = await inspectClassroomBatchState(serverSupabase, classroomId, metricsSummary);
+  const savedInsight = batchState.latestSavedInsight;
+
+  // Attach batch status summary to metricsSummary for frontend status indicator
+  metricsSummary.analysis_batch_status = {
+    processing_status: batchState.processingStatus,
+    has_new_closed_evidence: batchState.hasNewClosedEvidence,
+    has_failed_batch_to_retry: batchState.hasFailedBatchToRetry,
+    open_activities_count: batchState.openActivitiesCount,
+    closed_activities_count: batchState.closedActivitiesCount,
+    eligible_evidence_count: batchState.eligibleEvidenceCount,
+    batch_key: batchState.batchKey,
+    last_analyzed_at: savedInsight?.updated_at || savedInsight?.created_at || null,
+    diagnosis_version: savedInsight?.diagnosis_version || savedInsight?.intelligence_json?.batch_metadata?.diagnosis_version || 1,
+    error_message: batchState.latestBatchRecord?.status === 'failed' ? batchState.latestBatchRecord.error_message : null
+  };
+
+  // CASE A: Normal Page Open / Reload (`forceRefresh === false`)
+  // Rule 2 & Stage 5: Opening or reloading Teaching Intelligence MUST retrieve the saved diagnosis
+  // rather than automatically calling the AI model on every page load.
+  // However, if a deadline just expired (`closed_pending_analysis`) and there is not yet an analysis
+  // for that newly closed batch, process the deadline batch once and persist it.
   if (!forceRefresh) {
-    if (serverSupabase) {
-      try {
-        // First check for exact data_hash match
-        let { data: cached } = await serverSupabase
-          .from('ai_classroom_insights')
-          .select('*')
-          .eq('classroom_id', classroomId)
-          .eq('data_hash', metricsSummary.data_hash)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        // If no exact match, fallback to the latest saved analysis for this classroom
-        if (!cached || !cached.intelligence_json) {
-          const { data: latestSaved } = await serverSupabase
-            .from('ai_classroom_insights')
-            .select('*')
-            .eq('classroom_id', classroomId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (latestSaved && latestSaved.intelligence_json) {
-            cached = latestSaved;
-          }
-        }
-
-        if (cached && cached.intelligence_json) {
-          return {
-            success: true,
-            cached: true,
-            has_analysis: true,
-            metrics: metricsSummary,
-            intelligence: cached.intelligence_json,
-            ai_provider: cached.ai_provider || 'cached',
-            updated_at: cached.updated_at
-          };
-        }
-      } catch (cacheErr) {
-        console.warn('[TeachingIntelligence] Cache check notice:', cacheErr.message);
-      }
+    if (savedInsight && savedInsight.intelligence_json && !batchState.hasNewClosedEvidence) {
+      return {
+        success: true,
+        cached: true,
+        up_to_date: true,
+        ai_called: false,
+        has_analysis: true,
+        processing_status: batchState.processingStatus,
+        batch_status: metricsSummary.analysis_batch_status,
+        metrics: metricsSummary,
+        intelligence: savedInsight.intelligence_json,
+        ai_provider: savedInsight.ai_provider || 'cached',
+        updated_at: savedInsight.updated_at || savedInsight.created_at
+      };
     }
 
-    // Explicit requirement: Do NOT automatically generate AI analysis on load/mount.
-    // If no analysis exists yet, return clean state with metrics so teacher explicitly triggers generation.
+    // If newly closed deadline evidence is pending analysis, process the closed batch once
+    if (
+      batchState.hasNewClosedEvidence &&
+      batchState.pendingClosedActivities &&
+      batchState.pendingClosedActivities.length > 0
+    ) {
+      const batchResult = await executeBatchClassroomAnalysis({
+        serverSupabase,
+        classroomId,
+        teacherId,
+        metricsSummary,
+        batchState,
+        generateTeachingIntelligenceFn: generateTeachingIntelligence,
+        synthesizeDeterministicIntelligenceFn: synthesizeDeterministicIntelligence,
+        serverOpenAI,
+        triggerReason: 'deadline_reached',
+        forceReanalysis: false
+      });
+
+      metricsSummary.analysis_batch_status.processing_status = batchResult.processingStatus;
+      metricsSummary.analysis_batch_status.has_new_closed_evidence = false;
+      metricsSummary.analysis_batch_status.last_analyzed_at = batchResult.updated_at;
+
+      return {
+        success: true,
+        cached: false,
+        up_to_date: true,
+        ai_called: batchResult.aiCalled,
+        has_analysis: Boolean(batchResult.intelligence),
+        processing_status: batchResult.processingStatus,
+        batch_status: metricsSummary.analysis_batch_status,
+        metrics: metricsSummary,
+        intelligence: batchResult.intelligence,
+        ai_provider: batchResult.ai_provider || 'gemini',
+        updated_at: batchResult.updated_at
+      };
+    }
+
+    // If a previous saved diagnosis exists (even if an open activity is currently accepting submissions),
+    // return the saved diagnosis without calling AI!
+    if (savedInsight && savedInsight.intelligence_json) {
+      return {
+        success: true,
+        cached: true,
+        up_to_date: !batchState.hasNewClosedEvidence,
+        ai_called: false,
+        has_analysis: true,
+        processing_status: batchState.processingStatus,
+        batch_status: metricsSummary.analysis_batch_status,
+        metrics: metricsSummary,
+        intelligence: savedInsight.intelligence_json,
+        ai_provider: savedInsight.ai_provider || 'cached',
+        updated_at: savedInsight.updated_at || savedInsight.created_at
+      };
+    }
+
+    // No saved analysis yet and no auto-triggered deadline batch: return deterministic metrics cleanly
     return {
       success: true,
       cached: false,
+      up_to_date: !batchState.hasNewClosedEvidence,
+      ai_called: false,
       has_analysis: false,
+      processing_status: batchState.processingStatus,
+      batch_status: metricsSummary.analysis_batch_status,
       metrics: metricsSummary,
       intelligence: null,
       updated_at: new Date().toISOString()
     };
   }
 
-  // 3. Level 2: Generate Fresh AI Intelligence via Gemini -> OpenAI fallback (only on explicit teacher trigger)
-  let intelligence;
-  try {
-    intelligence = await generateTeachingIntelligence({
-      metricsSummary,
-      serverOpenAI
-    });
-  } catch (genErr) {
-    console.warn('[TeachingIntelligence] AI generation error, falling back to deterministic synthesis:', genErr.message);
-    intelligence = {
-      ...synthesizeDeterministicIntelligence(metricsSummary),
-      ai_provider: 'deterministic_fallback',
-      model: 'local-analytics-engine'
+  // CASE B: Teacher Clicked `Refresh AI` (`forceRefresh === true`)
+  // Rule 3 & Section 7:
+  //   - When NO new completed/closed evidence exists (and no failed batch needs retry) and
+  //     `confirmForceReanalysis` is NOT true: DO NOT make an unnecessary AI call!
+  //     Return `up_to_date: true`, `ai_called: false`, and the exact required message.
+  const canReuseExistingDiagnosis =
+    savedInsight &&
+    savedInsight.intelligence_json &&
+    !batchState.hasNewClosedEvidence &&
+    !batchState.hasFailedBatchToRetry &&
+    !confirmForceReanalysis;
+
+  if (canReuseExistingDiagnosis) {
+    return {
+      success: true,
+      cached: true,
+      up_to_date: true,
+      refreshed: false,
+      ai_called: false,
+      has_analysis: true,
+      processing_status: 'completed',
+      batch_status: metricsSummary.analysis_batch_status,
+      message: 'No new completed evidence is available. Your classroom diagnosis is already up to date.',
+      metrics: metricsSummary,
+      intelligence: savedInsight.intelligence_json,
+      ai_provider: savedInsight.ai_provider || 'cached',
+      updated_at: savedInsight.updated_at || savedInsight.created_at
     };
   }
 
-  // 4. Store in Cache Table
-  if (serverSupabase && teacherId) {
-    try {
-      await serverSupabase
-        .from('ai_classroom_insights')
-        .insert({
-          classroom_id: classroomId,
-          teacher_id: teacherId,
-          data_hash: metricsSummary.data_hash,
-          metrics_summary: metricsSummary,
-          intelligence_json: intelligence,
-          ai_provider: intelligence.ai_provider || 'gemini',
-          updated_at: new Date().toISOString()
-        });
-    } catch (insertErr) {
-      console.warn('[TeachingIntelligence] Cache save notice:', insertErr.message);
-    }
+  // If there is zero completed evidence in the classroom and no saved diagnosis
+  if (batchState.eligibleEvidenceCount === 0 && (!metricsSummary.diagnoses || metricsSummary.diagnoses.length === 0)) {
+    const emptyIntel = synthesizeDeterministicIntelligence(metricsSummary);
+    return {
+      success: true,
+      cached: false,
+      up_to_date: true,
+      refreshed: false,
+      ai_called: false,
+      has_analysis: false,
+      processing_status: batchState.openActivitiesCount > 0 ? 'open' : 'completed',
+      batch_status: metricsSummary.analysis_batch_status,
+      message:
+        batchState.openActivitiesCount > 0
+          ? 'Activities are still open before their deadline. Classroom AI diagnosis will run automatically once the deadline passes.'
+          : 'No new completed evidence is available. Your classroom diagnosis is already up to date.',
+      metrics: metricsSummary,
+      intelligence: savedInsight?.intelligence_json || emptyIntel,
+      ai_provider: savedInsight?.ai_provider || 'deterministic_cache',
+      updated_at: savedInsight?.updated_at || new Date().toISOString()
+    };
   }
 
+  // Otherwise (new closed evidence exists, OR a failed batch is being retried, OR teacher confirmed Force Reanalysis):
+  const triggerReason = confirmForceReanalysis
+    ? 'teacher_forced_reanalysis'
+    : batchState.hasFailedBatchToRetry
+    ? 'teacher_retry_failed_batch'
+    : 'teacher_refresh_new_evidence';
+
+  const batchResult = await executeBatchClassroomAnalysis({
+    serverSupabase,
+    classroomId,
+    teacherId,
+    metricsSummary,
+    batchState,
+    generateTeachingIntelligenceFn: generateTeachingIntelligence,
+    synthesizeDeterministicIntelligenceFn: synthesizeDeterministicIntelligence,
+    serverOpenAI,
+    triggerReason,
+    forceReanalysis: Boolean(confirmForceReanalysis)
+  });
+
+  metricsSummary.analysis_batch_status.processing_status = batchResult.processingStatus;
+  metricsSummary.analysis_batch_status.has_new_closed_evidence = false;
+  metricsSummary.analysis_batch_status.has_failed_batch_to_retry = batchResult.processingStatus === 'failed';
+  metricsSummary.analysis_batch_status.last_analyzed_at = batchResult.updated_at;
+  metricsSummary.analysis_batch_status.diagnosis_version = batchResult.diagnosisVersion || 1;
+
   return {
-    success: true,
+    success: batchResult.success !== false,
     cached: false,
+    up_to_date: false,
+    refreshed: true,
+    ai_called: batchResult.aiCalled,
     has_analysis: true,
+    processing_status: batchResult.processingStatus,
+    batch_status: metricsSummary.analysis_batch_status,
+    message: confirmForceReanalysis
+      ? 'Classroom evidence re-analyzed and saved as a new diagnosis version.'
+      : 'Processed new completed classroom evidence and updated diagnosis.',
     metrics: metricsSummary,
-    intelligence,
-    ai_provider: intelligence.ai_provider,
-    updated_at: new Date().toISOString()
+    intelligence: batchResult.intelligence,
+    ai_provider: batchResult.ai_provider,
+    updated_at: batchResult.updated_at
   };
+}
+
+/**
+ * Scheduled background worker wrapper that closes expired activities across all classrooms
+ * and processes pending deadline analysis batches.
+ */
+export async function runScheduledDeadlineBatchWorker({ serverSupabase, serverOpenAI }) {
+  return runDeadlineBatchWorkerCore({
+    serverSupabase,
+    computeClassroomMetricsFn: computeClassroomMetrics,
+    generateTeachingIntelligenceFn: generateTeachingIntelligence,
+    synthesizeDeterministicIntelligenceFn: synthesizeDeterministicIntelligence,
+    serverOpenAI
+  });
 }
 
 export async function createThirtyDayReport({

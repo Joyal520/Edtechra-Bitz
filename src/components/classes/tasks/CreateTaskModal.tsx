@@ -50,7 +50,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   );
   const [hasTeacherEditedInstructions, setHasTeacherEditedInstructions] = useState(false);
   const [points, setPoints] = useState<number>(20);
-  const [dueDate, setDueDate] = useState('');
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    d.setHours(23, 59, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
   const [submissionMethod, setSubmissionMethod] = useState<'both' | 'text' | 'upload'>('both');
 
   // Student Assignment State
@@ -179,6 +184,22 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
     if (points <= 0 || isNaN(points)) {
       setError('Total Points must be a positive number.');
+      return;
+    }
+
+    if (!dueDate || !dueDate.trim()) {
+      setError('Submission Deadline is required before publishing a task.');
+      return;
+    }
+
+    const parsedDue = new Date(dueDate);
+    if (isNaN(parsedDue.getTime())) {
+      setError('Please enter a valid Submission Deadline.');
+      return;
+    }
+
+    if (parsedDue.getTime() <= Date.now() - 60 * 1000) {
+      setError('Submission Deadline must be in the future.');
       return;
     }
 
@@ -500,15 +521,22 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-black text-[#173B3F] flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-[#087477]" />
-                <span>Due Date <span className="text-[#36565A] font-normal">(Optional)</span></span>
+                <span>Submission Deadline <span className="text-rose-600 font-black">*</span></span>
+                <span className="text-[10px] text-[#36565A] font-semibold">
+                  ({Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'})
+                </span>
               </label>
               <input
-                type="date"
+                type="datetime-local"
+                required
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 style={{ color: '#172B2F', backgroundColor: '#FFFFFF' }}
-                className="w-full sm:w-64 px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all"
+                className="w-full sm:w-72 px-3.5 py-2 bg-white border-2 border-[#C9E5E2] rounded-xl text-xs font-black text-[#172B2F] focus:outline-none focus:border-[#159A9C] focus:ring-2 focus:ring-[#159A9C]/20 transition-all"
               />
+              <p className="text-[11px] text-[#36565A] font-semibold">
+                Classroom diagnostic AI analysis runs automatically once the activity deadline closes.
+              </p>
             </div>
 
             <div className="pt-2 border-t border-[#C9E5E2] space-y-2.5">

@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // EDTECHRA DIGITAL CLASSROOM: CLASSROOM ANALYTICS ENGINE TYPE DEFINITIONS
 // Phase 2 Type Specifications for Classroom, Student, Topic, and Trend Analytics.
 // ============================================================================
@@ -145,6 +145,35 @@ export interface ClassroomAnalyticsSummary {
   trends: TrendComparisonResult;
   dataConfidence: DataConfidenceLevel;
   calculatedAt: string;
+}
+
+export interface PerformanceDistributionBand {
+  label: 'Excellent' | 'Good' | 'Pretty' | 'Bad' | 'Unclassified';
+  min: number | null;
+  max: number | null;
+  count: number;
+  percentage: number;
+  students: Array<{
+    studentId: string;
+    fullName: string;
+    averagePercentage: number | null;
+  }>;
+}
+
+export interface PerformanceDistribution {
+  excellent: PerformanceDistributionBand;
+  good: PerformanceDistributionBand;
+  pretty: PerformanceDistributionBand;
+  bad: PerformanceDistributionBand;
+  unclassified: PerformanceDistributionBand;
+  totalStudents: number;
+  eligibleCount: number;
+  unclassifiedCount: number;
+  thresholds: {
+    EXCELLENT_MIN: number;
+    GOOD_MIN: number;
+    PRETTY_MIN: number;
+  };
 }
 
 export interface AnalyticsOptions {

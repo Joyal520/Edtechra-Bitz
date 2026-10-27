@@ -1,9 +1,14 @@
 import {
   CANONICAL_CONCEPTS,
+  CLASS_PERFORMANCE_THRESHOLDS,
+  classifyStudentPerformanceBand,
+  classifyQuestionAndAnswerToConcept,
   normalizeConcept as normalizeCanonicalConcept,
   extractStructuredErrorsFromEvent,
   sanitizeConceptInput
 } from './conceptNormalization.mjs';
+
+export { CLASS_PERFORMANCE_THRESHOLDS, classifyStudentPerformanceBand };
 
 export const ANALYTICS_CONFIG = {
   STRONG_SCORE_THRESHOLD: 75,
@@ -1155,6 +1160,816 @@ export function computeTrendAnalytics(events = [], totalStudents = 1, options = 
 }
 
 // ----------------------------------------------------------------------------
+// 7B. QUESTION-LEVEL OPPORTUNITY & SPECIFIC SKILL DIAGNOSTIC ENGINE
+// ----------------------------------------------------------------------------
+
+/**
+ * Computes the Class Performance Distribution across the four required bands:
+ *  - Excellent: 85% – 100%
+ *  - Good: 70% – 84.99%
+ *  - Pretty: 50% – 69.99%
+ *  - Bad: below 50%
+ *  - unclassified: students with < 1 completed scored assessment
+ *
+ * Counts unique individual students based on their normalized assessment average
+ * (excluding speed/streak gamification bonus points).
+ */
+export function computePerformanceDistribution(studentAnalytics = [], totalStudents = 0) {
+  const counts = {
+    excellent: 0,
+    good: 0,
+    pretty: 0,
+    bad: 0,
+    unclassified: 0
+  };
+
+  const studentsByBand = {
+    excellent: [],
+    good: [],
+    pretty: [],
+    bad: [],
+    unclassified: []
+  };
+
+  for (const st of studentAnalytics) {
+    const scoredCount = Array.isArray(st.assessmentHistory)
+      ? st.assessmentHistory.filter(h => h.percentage != null && !Number.isNaN(Number(h.percentage))).length
+      : st.totalEvents || 0;
+    const band = classifyStudentPerformanceBand(st.averagePercentage, scoredCount);
+    counts[band] = (counts[band] || 0) + 1;
+    studentsByBand[band].push({
+      studentId: st.studentId,
+      fullName: st.fullName,
+      averagePercentage: st.averagePercentage
+    });
+  }
+
+  // If totalStudents exceeds studentAnalytics length, treat remaining as unclassified
+  const accounted =
+    counts.excellent + counts.good + counts.pretty + counts.bad + counts.unclassified;
+  if (totalStudents > accounted) {
+    counts.unclassified += totalStudents - accounted;
+  }
+
+  const eligibleAssessedStudents = counts.excellent + counts.good + counts.pretty + counts.bad;
+  const pct = (count) =>
+    eligibleAssessedStudents > 0
+      ? Number(((count / eligibleAssessedStudents) * 100).toFixed(1))
+      : 0;
+
+  const totalEnrolledStudents = Math.max(totalStudents, accounted);
+
+  return {
+    excellent: counts.excellent,
+    good: counts.good,
+    pretty: counts.pretty,
+    bad: counts.bad,
+    unclassified: counts.unclassified,
+    eligibleAssessedStudents,
+    eligibleCount: eligibleAssessedStudents,
+    totalEnrolledStudents,
+    totalStudents: totalEnrolledStudents,
+    unclassifiedCount: counts.unclassified,
+    percentages: {
+      excellent: pct(counts.excellent),
+      good: pct(counts.good),
+      pretty: pct(counts.pretty),
+      bad: pct(counts.bad)
+    },
+    thresholds: CLASS_PERFORMANCE_THRESHOLDS,
+    bands: [
+      {
+        key: 'excellent',
+        label: 'Excellent',
+        rangeLabel: '85% – 100%',
+        count: counts.excellent,
+        percentage: pct(counts.excellent),
+        color: CLASS_PERFORMANCE_THRESHOLDS.excellent.color,
+        students: studentsByBand.excellent
+      },
+      {
+        key: 'good',
+        label: 'Good',
+        rangeLabel: '70% – 84.99%',
+        count: counts.good,
+        percentage: pct(counts.good),
+        color: CLASS_PERFORMANCE_THRESHOLDS.good.color,
+        students: studentsByBand.good
+      },
+      {
+        key: 'pretty',
+        label: 'Pretty',
+        rangeLabel: '50% – 69.99%',
+        count: counts.pretty,
+        percentage: pct(counts.pretty),
+        color: CLASS_PERFORMANCE_THRESHOLDS.pretty.color,
+        students: studentsByBand.pretty
+      },
+      {
+        key: 'bad',
+        label: 'Bad',
+        rangeLabel: 'Below 50%',
+        count: counts.bad,
+        percentage: pct(counts.bad),
+        color: CLASS_PERFORMANCE_THRESHOLDS.bad.color,
+        students: studentsByBand.bad
+      }
+    ]
+  };
+}
+
+/**
+ * Extracts question-level skill response opportunities from all 4 classroom sources
+ * (Tasks, Live Quizzes, Examinations, Competitions) + OCR worksheets, and builds
+ * specific, non-overlapping skill diagnoses with exact denominators:
+ *  - affectedStudentCount: unique students who made >= 1 error on that skill
+ *  - studentsAssessed: unique students who had >= 1 response opportunity on that skill
+ *  - affectedPercentage: round((affectedStudentCount / studentsAssessed) * 100)
+ *  - accuracyPercentage: round((correctOpportunities / totalOpportunities) * 100)
+ *  - errorOccurrenceCount: total wrong response opportunities / mistakes on that skill
+ *  - totalOpportunities: total response opportunities on that skill
+ */
+export function buildQuestionLevelSkillDiagnoses({
+  normalizedEvents = [],
+  examResults = [],
+  examsById: rawExamsById = new Map(),
+  classroomExams = [],
+  taskSubmissions = [],
+  assignmentSubmissions = [],
+  tasksById: rawTasksById = new Map(),
+  assignments = [],
+  liveQuizAnswers = [],
+  liveQuizQuestionsById: rawQuizQuestionsById = new Map(),
+  liveQuizQuestions = [],
+  liveQuizSessionsById: rawQuizSessionsById = new Map(),
+  liveQuizSessions = [],
+  challengeSubmissions = [],
+  challengesById: rawChallengesById = new Map(),
+  aiChallenges = [],
+  totalStudents = 0,
+  classroomSubject = ''
+} = {}) {
+  const examsById =
+    rawExamsById instanceof Map && rawExamsById.size > 0
+      ? rawExamsById
+      : new Map((classroomExams || []).map((e) => [e.id, e]));
+  const tasksById =
+    rawTasksById instanceof Map && rawTasksById.size > 0
+      ? rawTasksById
+      : new Map((assignments || []).map((t) => [t.id, t]));
+  const liveQuizQuestionsById =
+    rawQuizQuestionsById instanceof Map && rawQuizQuestionsById.size > 0
+      ? rawQuizQuestionsById
+      : new Map((liveQuizQuestions || []).map((q) => [q.id, q]));
+  const liveQuizSessionsById =
+    rawQuizSessionsById instanceof Map && rawQuizSessionsById.size > 0
+      ? rawQuizSessionsById
+      : new Map((liveQuizSessions || []).map((s) => [s.id, s]));
+  const challengesById =
+    rawChallengesById instanceof Map && rawChallengesById.size > 0
+      ? rawChallengesById
+      : new Map((aiChallenges || []).map((c) => [c.id, c]));
+  const effectiveTaskSubmissions =
+    taskSubmissions && taskSubmissions.length > 0 ? taskSubmissions : assignmentSubmissions;
+  const skillBuckets = new Map();
+  // Track all students who answered each specific question (or activity) so that when an error
+  // on a question maps to a specific misconception (e.g. SIMPLE_PAST_BASE_SUBSTITUTION),
+  // peers who answered that same question correctly are counted in `studentsAssessed` and `correctOpportunities`.
+  const questionCorrectStudentsMap = new Map(); // key: `${activityId}::${questionKey}` -> Set<studentId>
+  const activityRespondentsMap = new Map(); // key: `${activityId}` -> Set<studentId>
+
+  const registerActivityRespondent = (activityId, studentId) => {
+    if (!activityId || !studentId) return;
+    const key = String(activityId);
+    if (!activityRespondentsMap.has(key)) activityRespondentsMap.set(key, new Set());
+    activityRespondentsMap.get(key).add(String(studentId));
+  };
+
+  const registerQuestionCorrectStudent = (activityId, questionKey, studentId) => {
+    if (!activityId || questionKey === undefined || questionKey === null || !studentId) return;
+    const key = `${activityId}::${questionKey}`;
+    if (!questionCorrectStudentsMap.has(key)) questionCorrectStudentsMap.set(key, new Set());
+    questionCorrectStudentsMap.get(key).add(String(studentId));
+  };
+
+  const SOURCE_DISPLAY = {
+    task: 'Tasks',
+    assignment: 'Tasks',
+    ocr: 'Tasks',
+    live_quiz: 'Live Quiz',
+    quiz: 'Live Quiz',
+    exam: 'Examination',
+    assessment: 'Examination',
+    competition: 'Competition',
+    ai_challenge: 'Competition'
+  };
+
+  const ensureBucket = (canonical) => {
+    if (!canonical || !canonical.diagnosis_id) return null;
+    const key = canonical.diagnosis_id;
+    if (!skillBuckets.has(key)) {
+      skillBuckets.set(key, {
+        diagnosis_id: canonical.diagnosis_id,
+        category: canonical.category || 'Grammar',
+        topic: canonical.topic || 'Grammar',
+        skill: canonical.skill || 'grammar',
+        subskill: canonical.subskill || 'core_concept',
+        displayName: canonical.displayName || canonical.topic || 'Concept',
+        specific_problem: canonical.specific_problem || `Students show recurring errors in ${canonical.displayName}.`,
+        recommended_teaching:
+          canonical.recommended_teaching ||
+          canonical.teachAction ||
+          `Teach ${canonical.displayName} with explicit modeling and contrast examples.`,
+        follow_up_activity:
+          canonical.follow_up_activity ||
+          `Assign a 5-item guided practice check targeting ${canonical.displayName}.`,
+        reassessment_method:
+          canonical.reassessment_method ||
+          `Administer a short 5-question exit check on ${canonical.displayName}.`,
+        defaultExamples:
+          canonical.commonErrors || (canonical.commonError ? [canonical.commonError] : []),
+        assessedStudentIds: new Set(),
+        affectedStudentIds: new Set(),
+        totalOpportunities: 0,
+        correctOpportunities: 0,
+        errorOccurrenceCount: 0,
+        evidenceSources: new Set(),
+        rawSources: new Set(),
+        evidenceIds: new Set(),
+        activityIds: new Set(),
+        questionKeys: new Set(),
+        countedQuestionStudentPairs: new Set(),
+        errorExamplesMap: new Map()
+      });
+    }
+    return skillBuckets.get(key);
+  };
+
+  const recordOpportunity = ({
+    canonical,
+    studentId,
+    isCorrect,
+    sourceType,
+    evidenceId,
+    activityId,
+    questionKey = null,
+    studentError = '',
+    correctForm = '',
+    questionPrompt = ''
+  }) => {
+    if (!canonical || !studentId) return;
+    const bucket = ensureBucket(canonical);
+    if (!bucket) return;
+
+    if (activityId) registerActivityRespondent(activityId, studentId);
+    const qCompoundKey =
+      activityId && questionKey !== null && questionKey !== undefined
+        ? `${activityId}::${questionKey}`
+        : null;
+    if (qCompoundKey) {
+      bucket.questionKeys.add(qCompoundKey);
+      bucket.countedQuestionStudentPairs.add(`${qCompoundKey}::${studentId}`);
+    }
+
+    bucket.assessedStudentIds.add(String(studentId));
+    bucket.totalOpportunities += 1;
+    const friendlySource = SOURCE_DISPLAY[sourceType] || 'Tasks';
+    bucket.evidenceSources.add(friendlySource);
+    bucket.rawSources.add(sourceType);
+    if (evidenceId) bucket.evidenceIds.add(String(evidenceId));
+    if (activityId) bucket.activityIds.add(String(activityId));
+
+    if (isCorrect) {
+      bucket.correctOpportunities += 1;
+    } else {
+      bucket.affectedStudentIds.add(String(studentId));
+      bucket.errorOccurrenceCount += 1;
+      const errText = String(studentError || '').trim();
+      const corrText = String(correctForm || '').trim();
+      if (errText || corrText) {
+        const exKey = `${errText.toLowerCase()}->${corrText.toLowerCase()}`;
+        if (!bucket.errorExamplesMap.has(exKey)) {
+          bucket.errorExamplesMap.set(exKey, {
+            student_error: questionPrompt && errText.length < 12
+              ? `${questionPrompt} (Answered: "${errText}")`
+              : errText || questionPrompt,
+            correct_form: corrText,
+            correction: corrText,
+            occurrences: 0
+          });
+        }
+        bucket.errorExamplesMap.get(exKey).occurrences += 1;
+      }
+    }
+  };
+
+  // 1. Unpack Question-Level Exam Results (`classroom_exam_results` + `classroom_exams`)
+  for (const res of examResults) {
+    const studentId = res.student_id;
+    const exam = examsById.get(res.exam_id);
+    if (!studentId || !exam) continue;
+
+    const rawItems = Array.isArray(exam.questions)
+      ? exam.questions
+      : Array.isArray(exam.questions_json)
+      ? exam.questions_json
+      : Array.isArray(exam.sections)
+      ? exam.sections
+      : [];
+    const rawQuestions = rawItems.flatMap((item) => {
+      if (!item) return [];
+      const secQs = Array.isArray(item.questions) ? item.questions : [];
+      const actQs = Array.isArray(item.activities)
+        ? item.activities.flatMap((act) => (Array.isArray(act?.questions) ? act.questions : []))
+        : [];
+      if (secQs.length > 0 || actQs.length > 0) {
+        return [...secQs, ...actQs];
+      }
+      return [item];
+    });
+    const qMap = new Map();
+    rawQuestions.forEach((q, idx) => {
+      if (q) {
+        const key = String(q.id ?? q.questionId ?? idx);
+        qMap.set(key, q);
+      }
+    });
+
+    const answersObj = res.answers && typeof res.answers === 'object' ? res.answers : {};
+    const breakdownList = Array.isArray(res.breakdown_json)
+      ? res.breakdown_json
+      : Array.isArray(res.breakdown_json?.questions)
+      ? res.breakdown_json.questions
+      : [];
+
+    if (breakdownList.length > 0) {
+      for (const bItem of breakdownList) {
+        if (!bItem) continue;
+        const qKey = String(bItem.question_id ?? bItem.questionId ?? bItem.id);
+        const qObj = qMap.get(qKey) || {};
+        const qText = bItem.question_text || bItem.prompt || qObj.question || qObj.questionText || qObj.prompt || qObj.text || '';
+        const corrAns =
+          bItem.correct_answer ||
+          bItem.expected_answer ||
+          qObj.correct_answer ||
+          qObj.correctAnswer ||
+          qObj.answer ||
+          '';
+        const stuAns = bItem.student_answer ?? bItem.answer ?? answersObj[qObj.id ?? qObj.questionId ?? qKey] ?? '';
+        const topicHint = qObj.topic || qObj.skill || bItem.topic || exam.subject || exam.title || '';
+        const isCorrect =
+          bItem.is_correct != null
+            ? Boolean(bItem.is_correct)
+            : bItem.score != null && bItem.max_score != null
+            ? Number(bItem.score) >= Number(bItem.max_score)
+            : String(stuAns).trim().toLowerCase() === String(corrAns).trim().toLowerCase();
+
+        const canonical = classifyQuestionAndAnswerToConcept({
+          questionText: qText,
+          correctAnswer: String(corrAns),
+          studentAnswer: String(stuAns),
+          topicHint,
+          explanation: qObj.explanation || bItem.feedback || ''
+        });
+
+        if (isCorrect) {
+          registerQuestionCorrectStudent(res.exam_id, qKey, studentId);
+        }
+        if (canonical) {
+          recordOpportunity({
+            canonical,
+            studentId,
+            isCorrect,
+            sourceType: 'exam',
+            evidenceId: res.id,
+            activityId: res.exam_id,
+            questionKey: qKey,
+            studentError: isCorrect ? '' : String(stuAns),
+            correctForm: String(corrAns),
+            questionPrompt: qText
+          });
+        }
+      }
+    } else if (rawQuestions.length > 0 && Object.keys(answersObj).length > 0) {
+      rawQuestions.forEach((qObj, idx) => {
+        if (!qObj) return;
+        const qId = String(qObj.id ?? qObj.questionId ?? idx);
+        const rawStuAns = answersObj[qId] ?? answersObj[idx];
+        if (rawStuAns === undefined) return;
+        const qText = qObj.question || qObj.questionText || qObj.prompt || qObj.text || '';
+        let corrAns = qObj.correct_answer ?? qObj.correctAnswer ?? qObj.answer ?? '';
+        if (Array.isArray(corrAns) && corrAns.length === 1) {
+          corrAns = corrAns[0];
+        }
+        if (Array.isArray(qObj.options) && typeof corrAns === 'number') {
+          corrAns = qObj.options[corrAns] ?? corrAns;
+        }
+        let stuAns = rawStuAns;
+        if (Array.isArray(stuAns) && stuAns.length === 1) {
+          stuAns = stuAns[0];
+        }
+        if (Array.isArray(qObj.options) && typeof rawStuAns === 'number') {
+          stuAns = qObj.options[rawStuAns] ?? rawStuAns;
+        }
+        const isCorrect =
+          String(stuAns).trim().toLowerCase() === String(corrAns).trim().toLowerCase();
+        if (isCorrect) {
+          registerQuestionCorrectStudent(res.exam_id, qId, studentId);
+        }
+        const canonical = classifyQuestionAndAnswerToConcept({
+          questionText: qText,
+          correctAnswer: String(corrAns),
+          studentAnswer: String(stuAns),
+          topicHint: qObj.topic || qObj.skill || exam.subject || exam.title || '',
+          explanation: qObj.explanation || ''
+        });
+        if (canonical) {
+          recordOpportunity({
+            canonical,
+            studentId,
+            isCorrect,
+            sourceType: 'exam',
+            evidenceId: res.id,
+            activityId: res.exam_id,
+            questionKey: qId,
+            studentError: isCorrect ? '' : String(stuAns),
+            correctForm: String(corrAns),
+            questionPrompt: qText
+          });
+        }
+      });
+    }
+  }
+
+  // 2. Unpack Question-Level Task Submissions (`assignment_submissions` + `assignments`)
+  for (const sub of effectiveTaskSubmissions) {
+    const studentId = sub.student_id;
+    const task = tasksById.get(sub.assignment_id);
+    if (!studentId) continue;
+
+    const taskQuestions = Array.isArray(task?.questions) ? task.questions : [];
+    const tqMap = new Map();
+    taskQuestions.forEach((q, idx) => {
+      if (q) tqMap.set(String(q.id ?? idx), q);
+    });
+
+    const qaList = Array.isArray(sub.question_answers) ? sub.question_answers : [];
+    for (const qa of qaList) {
+      if (!qa || qa.question_id === 'writing_response' || qa.question_id === 'ocr_handwritten_response') {
+        continue;
+      }
+      const qObj = tqMap.get(String(qa.question_id ?? qa.id)) || {};
+      const qText = qa.question_text || qa.question || qObj.question || qObj.prompt || '';
+      const corrAns =
+        qa.correct_answer ?? qa.expected_answer ?? qObj.correct_answer ?? qObj.correctAnswer ?? '';
+      const stuAns = qa.student_answer ?? qa.answer ?? qa.selected_option ?? '';
+      if (!qText && !corrAns && !stuAns) continue;
+
+      const isCorrect =
+        qa.is_correct != null
+          ? Boolean(qa.is_correct)
+          : corrAns !== ''
+          ? String(stuAns).trim().toLowerCase() === String(corrAns).trim().toLowerCase()
+          : Number(sub.score ?? 100) >= 70;
+
+      const canonical = classifyQuestionAndAnswerToConcept({
+        questionText: qText,
+        correctAnswer: String(corrAns),
+        studentAnswer: String(stuAns),
+        topicHint: qa.topic || qObj.topic || task?.topic || task?.title || '',
+        explanation: qa.explanation || qObj.explanation || ''
+      });
+
+      if (canonical) {
+        recordOpportunity({
+          canonical,
+          studentId,
+          isCorrect,
+          sourceType: 'task',
+          evidenceId: sub.id,
+          activityId: sub.assignment_id,
+          studentError: isCorrect ? '' : String(stuAns),
+          correctForm: String(corrAns),
+          questionPrompt: qText
+        });
+      }
+    }
+  }
+
+  // 3. Unpack Question-Level Live Quiz Answers (`live_quiz_answers` + `live_quiz_questions`)
+  for (const ans of liveQuizAnswers) {
+    const studentId = ans.student_id;
+    const qObj = liveQuizQuestionsById.get(ans.question_id);
+    const session = liveQuizSessionsById.get(ans.session_id);
+    if (!studentId || !qObj) continue;
+
+    const qText = qObj.question_text || '';
+    const options = Array.isArray(qObj.options) ? qObj.options : [];
+    const corrOpt = options.find(
+      o => String(o?.id ?? o?.index ?? o) === String(qObj.correct_option)
+    );
+    const corrAns = corrOpt ? corrOpt.text || corrOpt.label || String(corrOpt) : String(qObj.correct_option || '');
+    const stuOpt = options.find(
+      o => String(o?.id ?? o?.index ?? o) === String(ans.selected_option)
+    );
+    const stuAns = stuOpt ? stuOpt.text || stuOpt.label || String(stuOpt) : String(ans.selected_option || '');
+    const isCorrect = Boolean(ans.is_correct);
+
+    const canonical = classifyQuestionAndAnswerToConcept({
+      questionText: qText,
+      correctAnswer: corrAns,
+      studentAnswer: stuAns,
+      topicHint: session?.topic || session?.title || '',
+      explanation: qObj.explanation || ''
+    });
+
+    if (canonical) {
+      recordOpportunity({
+        canonical,
+        studentId,
+        isCorrect,
+        sourceType: 'live_quiz',
+        evidenceId: ans.id || ans.session_id,
+        activityId: ans.session_id,
+        studentError: isCorrect ? '' : stuAns,
+        correctForm: corrAns,
+        questionPrompt: qText
+      });
+    }
+  }
+
+  // 4. Unpack Competition / AI Challenge Submissions (`ai_challenge_submissions` + `ai_challenges`)
+  for (const cSub of challengeSubmissions) {
+    const studentId = cSub.student_id;
+    const challenge = challengesById.get(cSub.challenge_id);
+    if (!studentId) continue;
+
+    const syntheticEv = {
+      id: cSub.id,
+      activity_id: cSub.challenge_id,
+      student_id: studentId,
+      topic: challenge?.topic || challenge?.title || '',
+      metadata: {
+        text_response: cSub.content_text || '',
+        feedback: cSub.ai_feedback || '',
+        breakdown_json: Array.isArray(cSub.criteria_json) ? cSub.criteria_json : []
+      }
+    };
+    const extracted = extractStructuredErrorsFromEvent(syntheticEv);
+    if (extracted.length > 0) {
+      for (const err of extracted) {
+        const canonical =
+          Object.values(CANONICAL_CONCEPTS).find(c => c && c.diagnosis_id === err.diagnosis_id) ||
+          normalizeCanonicalConcept(err.concept || err.specific_rule, err.category);
+        if (canonical) {
+          recordOpportunity({
+            canonical,
+            studentId,
+            isCorrect: false,
+            sourceType: 'competition',
+            evidenceId: cSub.id,
+            activityId: cSub.challenge_id,
+            studentError: err.student_error,
+            correctForm: err.correct_form
+          });
+        }
+      }
+    }
+  }
+
+  // 5. Unpack Structured Writing / OCR / Event-Level Errors & Opportunities from `normalizedEvents`
+  for (const ev of normalizedEvents) {
+    const studentId = ev.studentId || ev.student_id;
+    if (!studentId) continue;
+    if (!isEventRelevantToSubject(ev, classroomSubject)) continue;
+
+    const sourceType = ev.activityType || ev.activity_type || 'task';
+    const evId = ev.id;
+    const actId = ev.activityId || ev.activity_id || ev.id;
+
+    // 5a. Extract any explicit grammar/spelling/vocabulary errors on this event
+    const structuredErrors = extractStructuredErrorsFromEvent(ev);
+    if (structuredErrors.length > 0) {
+      for (const err of structuredErrors) {
+        let canonical =
+          Object.values(CANONICAL_CONCEPTS).find(c => c && c.diagnosis_id === err.diagnosis_id) ||
+          normalizeCanonicalConcept(err.concept || err.specific_rule, err.category);
+
+        if (!canonical && err.error_type === 'spelling' && err.target_word) {
+          const w = err.target_word.toLowerCase();
+          canonical = {
+            diagnosis_id: `diag_spelling_${w}`,
+            category: 'Spelling',
+            topic: 'Spelling',
+            skill: 'spelling',
+            subskill: `spelling_${w}`,
+            displayName: `Spelling — "${err.target_word}"`,
+            specific_problem: `Students misspell "${err.target_word}" as "${err.student_error}".`,
+            recommended_teaching: `Teach the spelling pattern in "${err.target_word}" using syllable chunking and retrieval practice.`,
+            follow_up_activity: `Write 4 sentences using "${err.target_word}" after a Look-Say-Cover-Write check.`,
+            reassessment_method: `5-word contextual spelling dictation including "${err.target_word}".`,
+            commonError: { student_error: err.student_error, correct_form: err.target_word },
+            commonErrors: [{ student_error: err.student_error, correct_form: err.target_word }]
+          };
+        }
+
+        if (canonical) {
+          recordOpportunity({
+            canonical,
+            studentId,
+            isCorrect: false,
+            sourceType,
+            evidenceId: evId,
+            activityId: actId,
+            studentError: err.student_error,
+            correctForm: err.correct_form
+          });
+        }
+      }
+    }
+
+    // 5b. Also register the overall activity concept opportunity so students who succeeded on that skill
+    // are accurately included in `studentsAssessed` and `correctOpportunities`!
+    const hierarchyConcept = normalizeCanonicalConcept(
+      `${ev.displayName || ''} ${ev.topic || ''} ${ev.activityTitle || ''}`,
+      ev.category || ''
+    );
+    if (hierarchyConcept && ev.percentage != null && !Number.isNaN(Number(ev.percentage))) {
+      const bucket = skillBuckets.get(hierarchyConcept.diagnosis_id);
+      const alreadyCountedForStudentAndActivity =
+        bucket &&
+        bucket.assessedStudentIds.has(String(studentId)) &&
+        bucket.activityIds.has(String(actId));
+
+      if (!alreadyCountedForStudentAndActivity) {
+        const isMastered = Number(ev.percentage) >= 70 && structuredErrors.length === 0;
+        recordOpportunity({
+          canonical: hierarchyConcept,
+          studentId,
+          isCorrect: isMastered,
+          sourceType,
+          evidenceId: evId,
+          activityId: actId
+        });
+      }
+    }
+  }
+
+  // 6. Convert skill buckets into ranked, specific diagnostic objects with all 14 required fields
+  const diagnoses = [];
+  for (const [, bucket] of skillBuckets.entries()) {
+    const affectedStudentCount = bucket.affectedStudentIds.size;
+    if (affectedStudentCount === 0) continue; // Only include skills where at least 1 student had difficulty
+
+    // Reconcile peers who answered the exact same questions correctly so `studentsAssessed`
+    // and `correctOpportunities` include all students assessed on those questions.
+    for (const qCompoundKey of bucket.questionKeys) {
+      const correctStudents = questionCorrectStudentsMap.get(qCompoundKey);
+      if (correctStudents) {
+        for (const sId of correctStudents) {
+          bucket.assessedStudentIds.add(sId);
+          const pairKey = `${qCompoundKey}::${sId}`;
+          if (!bucket.countedQuestionStudentPairs.has(pairKey)) {
+            bucket.countedQuestionStudentPairs.add(pairKey);
+            bucket.totalOpportunities += 1;
+            bucket.correctOpportunities += 1;
+          }
+        }
+      }
+    }
+    for (const actId of bucket.activityIds) {
+      const actStudents = activityRespondentsMap.get(String(actId));
+      if (actStudents) {
+        for (const sId of actStudents) {
+          bucket.assessedStudentIds.add(sId);
+        }
+      }
+    }
+
+    const studentsAssessed = Math.max(affectedStudentCount, bucket.assessedStudentIds.size);
+    const affectedPercentage =
+      studentsAssessed > 0
+        ? Math.min(100, Math.round((affectedStudentCount / studentsAssessed) * 100))
+        : 0;
+    const totalOpportunities = Math.max(bucket.totalOpportunities, bucket.errorOccurrenceCount);
+    const accuracyPercentage =
+      totalOpportunities > 0
+        ? Math.max(0, Math.min(100, Math.round((bucket.correctOpportunities / totalOpportunities) * 100)))
+        : 0;
+    const errorOccurrenceCount = Math.max(1, bucket.errorOccurrenceCount);
+    const evidenceSources = Array.from(bucket.evidenceSources);
+    const evidenceIds = Array.from(bucket.evidenceIds);
+    const activityIds = Array.from(bucket.activityIds);
+
+    const priorityScore = calculateDeterministicPriority({
+      affected_students: affectedStudentCount,
+      total_students: studentsAssessed,
+      accuracy: accuracyPercentage,
+      frequency: errorOccurrenceCount,
+      sourcesCount: evidenceSources.length,
+      ocrTasksCount: bucket.rawSources.has('task') || bucket.rawSources.has('ocr') ? 1 : 0,
+      examsCount: bucket.rawSources.has('exam') ? 1 : 0,
+      quizzesCount: bucket.rawSources.has('live_quiz') || bucket.rawSources.has('competition') ? 1 : 0
+    });
+
+    const severity =
+      affectedPercentage >= 50 || accuracyPercentage < 50
+        ? 'high'
+        : affectedPercentage >= 25 || accuracyPercentage < 70
+        ? 'medium'
+        : 'low';
+
+    const sortedExamples = Array.from(bucket.errorExamplesMap.values())
+      .sort((a, b) => b.occurrences - a.occurrences)
+      .slice(0, 3)
+      .map(e => ({
+        student_error: e.student_error,
+        correct_form: e.correct_form,
+        correction: e.correction
+      }));
+
+    const examples =
+      sortedExamples.length > 0
+        ? sortedExamples
+        : (bucket.defaultExamples || []).slice(0, 2);
+
+    // Build an explicit, evidence-grounded observedErrorPattern string
+    const basePattern = bucket.specific_problem.replace(/\.$/, '');
+    const observedErrorPattern = `${affectedStudentCount} of ${studentsAssessed} assessed student${
+      studentsAssessed === 1 ? '' : 's'
+    } (${affectedPercentage}%) struggled with ${bucket.displayName}: ${basePattern.charAt(0).toLowerCase()}${basePattern.slice(1)} (${errorOccurrenceCount} error occurrence${
+      errorOccurrenceCount === 1 ? '' : 's'
+    } across ${totalOpportunities} response opportunit${totalOpportunities === 1 ? 'y' : 'ies'}).`;
+
+    diagnoses.push({
+      // 14 Required Diagnostic Fields (camelCase + snake_case for full frontend/backend compatibility)
+      diagnosis_id: bucket.diagnosis_id,
+      category: bucket.category,
+      topic: bucket.topic,
+      skill: bucket.skill,
+      subskill: bucket.subskill,
+      displayName: bucket.displayName,
+      observedErrorPattern,
+      specific_problem: observedErrorPattern,
+      affectedStudentCount,
+      affected_students: affectedStudentCount,
+      affected_students_count: affectedStudentCount,
+      studentsAssessed,
+      students_assessed: studentsAssessed,
+      total_students: totalStudents || studentsAssessed,
+      affectedPercentage,
+      affected_percentage: affectedPercentage,
+      accuracyPercentage,
+      accuracy: accuracyPercentage,
+      errorOccurrenceCount,
+      frequency: errorOccurrenceCount,
+      totalOpportunities,
+      total_opportunities: totalOpportunities,
+      evidenceSources,
+      evidence_sources: evidenceSources,
+      evidenceIds,
+      evidence_ids: evidenceIds,
+      activityIds,
+      activity_ids: activityIds,
+      severity,
+      priority_score: priorityScore,
+      priority: priorityScore,
+      recommendedTeachingAction: bucket.recommended_teaching,
+      recommended_teaching: bucket.recommended_teaching,
+      teachAction: bucket.recommended_teaching,
+      recommended_action: bucket.recommended_teaching,
+      followUpActivity: bucket.follow_up_activity,
+      follow_up_activity: bucket.follow_up_activity,
+      reassessmentMethod: bucket.reassessment_method,
+      reassessment_method: bucket.reassessment_method,
+      confidence: evidenceSources.length >= 2 || affectedStudentCount >= 2 ? 'confirmed' : 'early_signal',
+      examples,
+      commonErrors: examples,
+      common_errors: examples,
+      affectedStudentIds: Array.from(bucket.affectedStudentIds),
+      assessedStudentIds: Array.from(bucket.assessedStudentIds),
+      // Legacy UI compatibility
+      studentCount: affectedStudentCount,
+      affectedStudentsCount: affectedStudentCount,
+      studentsAffected: affectedStudentCount,
+      studentsTotal: studentsAssessed,
+      sources: evidenceSources,
+      sourcesList: evidenceSources,
+      sourcesCount: evidenceSources.length,
+      why: observedErrorPattern
+    });
+  }
+
+  // Sort by affectedStudentCount DESC, then priority_score DESC, then accuracy ASC
+  return diagnoses.sort(
+    (a, b) =>
+      b.affectedStudentCount - a.affectedStudentCount ||
+      b.priority_score - a.priority_score ||
+      a.accuracyPercentage - b.accuracyPercentage
+  );
+}
+
+// ----------------------------------------------------------------------------
 // 8. UNIFIED CLASSROOM ANALYTICS COMPILATION SERVICE
 // ----------------------------------------------------------------------------
 
@@ -1255,14 +2070,35 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
   }
 
   // Enrich assignment / task events with detailed criteria breakdowns and writing evaluations
+  let cachedTaskSubmissions = [];
+  const tasksById = new Map();
+  const examsById = new Map();
+  let cachedExamResults = [];
+  const liveQuizSessionsById = new Map();
+  const liveQuizQuestionsById = new Map();
+  let cachedLiveQuizAnswers = [];
+  const challengesById = new Map();
+  let cachedChallengeSubmissions = [];
+
+  try {
+    const { data: taskRows } = await serverSupabase
+      .from('assignments')
+      .select('id, title, topic, questions, due_date, status, analysis_status')
+      .eq('classroom_id', classroomId);
+    (taskRows || []).forEach(t => tasksById.set(t.id, t));
+  } catch (e) {
+    // Non-fatal if columns vary
+  }
+
   try {
     const { data: subBreakdowns } = await serverSupabase
       .from('assignment_submissions')
-      .select('id, question_answers, text_response, file_urls, teacher_feedback, ocr_evaluation_id')
+      .select('id, assignment_id, student_id, score, question_answers, text_response, file_urls, teacher_feedback, ocr_evaluation_id, submitted_at, status')
       .eq('classroom_id', classroomId)
       .in('status', ['graded', 'submitted', 'completed']);
 
     if (subBreakdowns && subBreakdowns.length > 0) {
+      cachedTaskSubmissions = subBreakdowns;
       const subMap = new Map();
       subBreakdowns.forEach(sub => {
         let wEval = null;
@@ -1293,6 +2129,7 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
             ...(e.metadata || {}),
             breakdown_json: enriched.breakdown_json,
             writing_evaluation: enriched.wEval,
+            question_answers: enriched.sub.question_answers,
             text_response: enriched.sub.text_response,
             file_urls: enriched.sub.file_urls,
             teacher_feedback: enriched.feedback,
@@ -1313,6 +2150,75 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     }
   } catch (subErr) {
     console.warn('[Analytics] Assignment breakdown enrichment notice:', subErr?.message);
+  }
+
+  // Enrich Exams + Exam Results for Question-Level Skill Extraction
+  try {
+    const { data: examRows } = await serverSupabase
+      .from('classroom_exams')
+      .select('id, title, subject, questions, ends_at, status')
+      .eq('classroom_id', classroomId);
+    (examRows || []).forEach(ex => examsById.set(ex.id, ex));
+
+    const { data: exResRows } = await serverSupabase
+      .from('classroom_exam_results')
+      .select('id, exam_id, student_id, score, max_score, percentage, answers, breakdown_json, submitted_at')
+      .eq('classroom_id', classroomId);
+    if (Array.isArray(exResRows)) {
+      cachedExamResults = exResRows;
+    }
+  } catch (exErr) {
+    console.warn('[Analytics] Exam question enrichment notice:', exErr?.message);
+  }
+
+  // Enrich Live Quizzes + Live Quiz Question Answers for Question-Level Skill Extraction
+  try {
+    const { data: lqSessions } = await serverSupabase
+      .from('live_quiz_sessions')
+      .select('id, title, topic, status, ended_at')
+      .eq('classroom_id', classroomId);
+    const sessionIds = (lqSessions || []).map(s => {
+      liveQuizSessionsById.set(s.id, s);
+      return s.id;
+    });
+
+    if (sessionIds.length > 0) {
+      const [{ data: lqQuestions }, { data: lqAnswers }] = await Promise.all([
+        serverSupabase
+          .from('live_quiz_questions')
+          .select('id, session_id, question_text, options, correct_option, explanation')
+          .in('session_id', sessionIds),
+        serverSupabase
+          .from('live_quiz_answers')
+          .select('id, session_id, question_id, student_id, selected_option, is_correct, submitted_at')
+          .in('session_id', sessionIds)
+      ]);
+      (lqQuestions || []).forEach(q => liveQuizQuestionsById.set(q.id, q));
+      if (Array.isArray(lqAnswers)) {
+        cachedLiveQuizAnswers = lqAnswers;
+      }
+    }
+  } catch (lqErr) {
+    console.warn('[Analytics] Live Quiz question enrichment notice:', lqErr?.message);
+  }
+
+  // Enrich Competitions / AI Challenges
+  try {
+    const { data: chalRows } = await serverSupabase
+      .from('ai_challenges')
+      .select('id, title, topic, category, status, deadline_at')
+      .eq('classroom_id', classroomId);
+    (chalRows || []).forEach(c => challengesById.set(c.id, c));
+
+    const { data: chalSubs } = await serverSupabase
+      .from('ai_challenge_submissions')
+      .select('id, challenge_id, student_id, content_text, total_score, ai_feedback, criteria_json, submitted_at')
+      .eq('classroom_id', classroomId);
+    if (Array.isArray(chalSubs)) {
+      cachedChallengeSubmissions = chalSubs;
+    }
+  } catch (chErr) {
+    console.warn('[Analytics] Challenge enrichment notice:', chErr?.message);
   }
 
   // Enrich from student_corrected_work if available
@@ -1854,32 +2760,128 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     total: normalizedEvents.length
   };
 
-  // 11. BUILD DIAGNOSES (DEDUPLICATED, MAXIMUM 5, RANKED BY PRIORITY)
+  // 11. BUILD SPECIFIC QUESTION-LEVEL DIAGNOSES (DEDUPLICATED, UP TO 10 DISTINCT SKILLS, RANKED BY AFFECTED STUDENTS & PRIORITY)
+  const questionLevelDiagnoses = buildQuestionLevelSkillDiagnoses({
+    normalizedEvents,
+    examResults: cachedExamResults,
+    examsById,
+    taskSubmissions: cachedTaskSubmissions,
+    tasksById,
+    liveQuizAnswers: cachedLiveQuizAnswers,
+    liveQuizQuestionsById,
+    liveQuizSessionsById,
+    challengeSubmissions: cachedChallengeSubmissions,
+    challengesById,
+    totalStudents,
+    classroomSubject: classroom.subject
+  });
+
   const candidateDiagnosesMap = new Map();
 
-  // Add meaningful topic weaknesses to candidate diagnoses
+  // First add granular question-level / error-level diagnoses
+  questionLevelDiagnoses.forEach(d => {
+    const diagKey = d.diagnosis_id || d.displayName;
+    if (!candidateDiagnosesMap.has(diagKey)) {
+      candidateDiagnosesMap.set(diagKey, d);
+    }
+  });
+
+  // Add meaningful topic weaknesses that were not already captured by questionLevelDiagnoses
   meaningfulTopics
-    .filter(t => t.averagePercentage != null && (t.averagePercentage < 70 || t.affected_students >= 2 || t.affectedStudentsCount >= 2))
+    .filter(t => t.averagePercentage != null && (t.averagePercentage < 70 || t.affected_students >= 1 || t.affectedStudentsCount >= 1))
     .forEach(t => {
       const diagKey = t.diagnosis_id || t.displayName || t.topic;
       if (!candidateDiagnosesMap.has(diagKey)) {
-        candidateDiagnosesMap.set(diagKey, t);
+        const canonicalObj = normalizeCanonicalConcept(t.displayName) || normalizeCanonicalConcept(t.topic);
+        const studentsAssessed = Math.max(t.affected_students || 1, t.participatingStudentsCount || 1);
+        const affectedStudentCount = Math.min(studentsAssessed, t.affected_students || t.affectedStudentsCount || 1);
+        const affectedPercentage = Math.round((affectedStudentCount / Math.max(1, studentsAssessed)) * 100);
+        const accuracyPercentage = t.accuracy ?? Math.round(t.averagePercentage ?? 0);
+        const errorOccurrenceCount = Math.max(1, t.frequency || affectedStudentCount);
+        const totalOpportunities = Math.max(t.eventCount || 1, errorOccurrenceCount);
+        const evidenceSources = t.evidence_sources || t.sourcesList || ['Tasks'];
+
+        candidateDiagnosesMap.set(diagKey, {
+          ...t,
+          diagnosis_id: diagKey,
+          category: canonicalObj?.category || t.category || 'Grammar',
+          topic: canonicalObj?.topic || t.topic || 'Grammar',
+          skill: canonicalObj?.skill || t.skill || 'core_concept',
+          subskill: canonicalObj?.subskill || t.subskill || 'core_subskill',
+          displayName: canonicalObj?.displayName || t.displayName || t.topic,
+          observedErrorPattern: t.specific_problem || `${affectedStudentCount} of ${studentsAssessed} assessed students (${affectedPercentage}%) struggled with ${t.displayName || t.topic}.`,
+          specific_problem: t.specific_problem || `${affectedStudentCount} of ${studentsAssessed} assessed students (${affectedPercentage}%) struggled with ${t.displayName || t.topic}.`,
+          affectedStudentCount,
+          affected_students: affectedStudentCount,
+          affected_students_count: affectedStudentCount,
+          studentsAssessed,
+          students_assessed: studentsAssessed,
+          affectedPercentage,
+          affected_percentage: affectedPercentage,
+          accuracyPercentage,
+          accuracy: accuracyPercentage,
+          errorOccurrenceCount,
+          frequency: errorOccurrenceCount,
+          totalOpportunities,
+          total_opportunities: totalOpportunities,
+          evidenceSources,
+          evidence_sources: evidenceSources,
+          evidenceIds: t.evidenceIds || [],
+          evidence_ids: t.evidenceIds || [],
+          recommendedTeachingAction: t.recommended_teaching || canonicalObj?.recommended_teaching || t.teachAction,
+          recommended_teaching: t.recommended_teaching || canonicalObj?.recommended_teaching || t.teachAction,
+          followUpActivity: canonicalObj?.follow_up_activity || `Complete a 5-item guided practice check targeting ${t.displayName || t.topic}.`,
+          follow_up_activity: canonicalObj?.follow_up_activity || `Complete a 5-item guided practice check targeting ${t.displayName || t.topic}.`,
+          reassessmentMethod: canonicalObj?.reassessment_method || `Administer a short 5-question exit check on ${t.displayName || t.topic}.`,
+          reassessment_method: canonicalObj?.reassessment_method || `Administer a short 5-question exit check on ${t.displayName || t.topic}.`
+        });
       }
     });
 
   // Add specific spelling diagnoses (e.g. Spelling — "because")
   specificSpellingDiagnoses.forEach(spDiag => {
     if (!candidateDiagnosesMap.has(spDiag.diagnosis_id) && !candidateDiagnosesMap.has(spDiag.displayName)) {
-      candidateDiagnosesMap.set(spDiag.diagnosis_id, spDiag);
+      const studentsAssessed = Math.max(spDiag.affected_students || 1, activeStudents || totalStudents || 1);
+      const affectedStudentCount = spDiag.affected_students || 1;
+      const affectedPercentage = Math.round((affectedStudentCount / Math.max(1, studentsAssessed)) * 100);
+      candidateDiagnosesMap.set(spDiag.diagnosis_id, {
+        ...spDiag,
+        observedErrorPattern: spDiag.specific_problem,
+        affectedStudentCount,
+        affected_students_count: affectedStudentCount,
+        studentsAssessed,
+        students_assessed: studentsAssessed,
+        affectedPercentage,
+        affected_percentage: affectedPercentage,
+        accuracyPercentage: spDiag.accuracy,
+        errorOccurrenceCount: spDiag.frequency,
+        totalOpportunities: Math.max(spDiag.frequency, studentsAssessed),
+        evidenceSources: spDiag.evidence_sources || ['Tasks'],
+        evidenceIds: [],
+        recommendedTeachingAction: spDiag.recommended_teaching,
+        followUpActivity: `Write 4 complete sentences using the target word after a Look-Say-Cover-Write check.`,
+        follow_up_activity: `Write 4 complete sentences using the target word after a Look-Say-Cover-Write check.`,
+        reassessmentMethod: `Administer a 5-word contextual spelling dictation check.`,
+        reassessment_method: `Administer a 5-word contextual spelling dictation check.`
+      });
     }
   });
 
-  // Strictly deduplicate and cap at MAXIMUM 5 diagnoses
+  // Strictly deduplicate and retain up to 10 distinct skill diagnoses for the Horizontal Bar Chart & Diagnosis Cards
   const allDiagnoses = Array.from(candidateDiagnosesMap.values())
-    .sort((a, b) => (b.priority_score ?? b.priority ?? 0) - (a.priority_score ?? a.priority ?? 0))
-    .slice(0, 5);
+    .sort(
+      (a, b) =>
+        (b.affectedStudentCount ?? b.affected_students ?? 0) -
+          (a.affectedStudentCount ?? a.affected_students ?? 0) ||
+        (b.priority_score ?? b.priority ?? 0) - (a.priority_score ?? a.priority ?? 0) ||
+        (a.accuracyPercentage ?? a.accuracy ?? 100) - (b.accuracyPercentage ?? b.accuracy ?? 100)
+    )
+    .slice(0, 10);
 
   const learningGapPriority = allDiagnoses;
+
+  // 12. COMPUTE CLASS PERFORMANCE DISTRIBUTION (Excellent, Good, Pretty, Bad, unclassified)
+  const performanceDistribution = computePerformanceDistribution(studentAnalytics, totalStudents);
 
   // Deduplicated Class Strengths (accuracy >= 75%)
   const strengthMap = new Map();
@@ -2021,8 +3023,10 @@ export async function computeClassroomAnalytics(serverSupabase, classroomId, opt
     trends: trendAnalytics,
     dataConfidence,
     calculatedAt: new Date().toISOString(),
-    diagnoses: allDiagnoses, // Maximum 5 Diagnoses conforming to JSON Data Model
-    learningGapPriority: allDiagnoses, // Maximum 5 learning gaps (backwards compatible)
+    diagnoses: allDiagnoses, // Up to 10 Ranked Specific Skill Diagnoses
+    learningGapPriority: allDiagnoses,
+    performanceDistribution,
+    performance_distribution: performanceDistribution,
     classStrengths,
     studentsNeedingSupport,
     recommendedTeachingFocus,

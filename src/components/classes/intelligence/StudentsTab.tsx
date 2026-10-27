@@ -350,7 +350,7 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
         </div>
 
         {/* Student Progress Cards List */}
-        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[620px]">
+        <div className="flex-1 space-y-2.5 pr-1">
           {filteredRoster.length === 0 ? (
             <div className="py-12 text-center text-[#36565A] text-xs font-semibold">
               {effectiveStudentsList.length === 0

@@ -30,7 +30,12 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
   const [maxMarks, setMaxMarks] = useState<number>(100);
   const [allowText, setAllowText] = useState(true);
   const [allowFile, setAllowFile] = useState(true);
-  const [deadline, setDeadline] = useState('');
+  const [deadline, setDeadline] = useState(() => {
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    d.setHours(23, 59, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
 
   // Reference file state
   const [refFile, setRefFile] = useState<File | null>(null);
@@ -71,6 +76,15 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
     }
     if (maxMarks <= 0 || isNaN(maxMarks)) {
       setError('Maximum Marks must be a positive number.');
+      return;
+    }
+    if (!deadline || !deadline.trim()) {
+      setError('Submission Deadline is required before launching a competition.');
+      return;
+    }
+    const parsedDeadline = new Date(deadline);
+    if (isNaN(parsedDeadline.getTime()) || parsedDeadline.getTime() <= Date.now() - 60 * 1000) {
+      setError('Please enter a valid future Submission Deadline.');
       return;
     }
 
@@ -288,14 +302,21 @@ export const CreateChallengeModal: React.FC<CreateChallengeModalProps> = ({
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Submission Deadline (Optional)</span>
+              <span>Submission Deadline <span className="text-rose-600">*</span></span>
+              <span className="text-[10px] text-slate-500 font-semibold normal-case">
+                ({Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'})
+              </span>
             </label>
             <input
               type="datetime-local"
+              required
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
             />
+            <p className="text-[11px] text-slate-500 font-medium">
+              Classroom diagnostic AI analysis runs in batch once the competition deadline closes.
+            </p>
           </div>
 
           {/* Action Buttons */}

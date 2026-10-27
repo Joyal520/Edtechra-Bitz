@@ -43,7 +43,14 @@ export const PublishValidationModal: React.FC<PublishValidationModalProps> = ({
   onSaveDraft
 }) => {
   const [startsAt, setStartsAt] = useState<string>(assessment.exam.startsAt || '');
-  const [endsAt, setEndsAt] = useState<string>(assessment.exam.endsAt || '');
+  const [endsAt, setEndsAt] = useState<string>(() => {
+    if (assessment.exam.endsAt) return assessment.exam.endsAt;
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    d.setHours(23, 59, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isSurvey = assessment.assessmentType === 'survey';
@@ -162,11 +169,28 @@ export const PublishValidationModal: React.FC<PublishValidationModalProps> = ({
   );
 
   const handlePublish = async () => {
+    setDeadlineError(null);
+    if (!endsAt || !endsAt.trim()) {
+      setDeadlineError('A Due / Deadline timestamp is required before publishing.');
+      return;
+    }
+    const parsedEnd = new Date(endsAt);
+    if (isNaN(parsedEnd.getTime())) {
+      setDeadlineError('Please enter a valid Due / Deadline timestamp.');
+      return;
+    }
+    if (startsAt && startsAt.trim()) {
+      const parsedStart = new Date(startsAt);
+      if (!isNaN(parsedStart.getTime()) && parsedEnd.getTime() <= parsedStart.getTime()) {
+        setDeadlineError('Due / Deadline must be later than the Available From start time.');
+        return;
+      }
+    }
     setIsSubmitting(true);
     try {
       await onConfirmPublish({
-        startsAt: startsAt || undefined,
-        endsAt: endsAt || undefined
+        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+        endsAt: parsedEnd.toISOString()
       });
     } finally {
       setIsSubmitting(false);
@@ -319,28 +343,45 @@ export const PublishValidationModal: React.FC<PublishValidationModalProps> = ({
             <div className="space-y-3 pt-2 border-t border-slate-200">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Schedule & Deadlines (Optional)</span>
+                <span>Schedule & Required Deadline ({Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'})</span>
               </span>
+              {deadlineError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                  {deadlineError}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-700 font-bold uppercase tracking-wider">Available From</label>
+                  <label className="text-[11px] text-slate-700 font-bold uppercase tracking-wider">Available From (Optional)</label>
                   <input
                     type="datetime-local"
                     value={startsAt}
-                    onChange={(e) => setStartsAt(e.target.value)}
+                    onChange={(e) => {
+                      setStartsAt(e.target.value);
+                      setDeadlineError(null);
+                    }}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] text-slate-700 font-bold uppercase tracking-wider">Due / Deadline</label>
+                  <label className="text-[11px] text-slate-700 font-bold uppercase tracking-wider">
+                    Due / Deadline <span className="text-rose-600">*</span>
+                  </label>
                   <input
                     type="datetime-local"
+                    required
                     value={endsAt}
-                    onChange={(e) => setEndsAt(e.target.value)}
+                    onChange={(e) => {
+                      setEndsAt(e.target.value);
+                      setDeadlineError(null);
+                    }}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-2xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Teaching Intelligence batch analysis runs automatically after the examination deadline closes.
+              </p>
             </div>
           )}
         </div>

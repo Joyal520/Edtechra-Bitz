@@ -257,18 +257,21 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   const [isApproved, setIsApproved] = useState(false);
 
   // Stage 4: Publishing State
-  const [publishSettings, setPublishSettings] = useState({
-    startDate: '',
-    startTime: '',
-    endDate: '',
-    endTime: '',
-    maxAttempts: 1,
-    password: '',
-    randomizeQuestions: true,
-    randomizeOptions: true,
-    showMarksImmediately: true,
-    showAnswersAfterExam: true,
-    allowLateSubmission: false
+  const [publishSettings, setPublishSettings] = useState(() => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return {
+      startDate: '',
+      startTime: '',
+      endDate: tomorrow,
+      endTime: '23:59',
+      maxAttempts: 1,
+      password: '',
+      randomizeQuestions: true,
+      randomizeOptions: true,
+      showMarksImmediately: true,
+      showAnswersAfterExam: true,
+      allowLateSubmission: false
+    };
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -279,19 +282,22 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
   const [teacherClassrooms, setTeacherClassrooms] = useState<any[]>([]);
   const [selectedClassroomIds, setSelectedClassroomIds] = useState<string[]>([]);
   const [isRepublishing, setIsRepublishing] = useState(false);
-  const [republishSettings, setRepublishSettings] = useState({
-    startDate: '',
-    startTime: '',
-    endDate: '',
-    endTime: '',
-    duration: '60 Minutes',
-    maxAttempts: 1,
-    password: '',
-    randomizeQuestions: true,
-    randomizeOptions: true,
-    showMarksImmediately: true,
-    showAnswersAfterExam: true,
-    allowLateSubmission: false
+  const [republishSettings, setRepublishSettings] = useState(() => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return {
+      startDate: '',
+      startTime: '',
+      endDate: tomorrow,
+      endTime: '23:59',
+      duration: '60 Minutes',
+      maxAttempts: 1,
+      password: '',
+      randomizeQuestions: true,
+      randomizeOptions: true,
+      showMarksImmediately: true,
+      showAnswersAfterExam: true,
+      allowLateSubmission: false
+    };
   });
 
   // Stage 5: Results & Analytics State
@@ -555,6 +561,25 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
     if (!isApproved) {
       alert('Please review and check the teacher approval box before publishing.');
       return;
+    }
+
+    if (!publishSettings.endDate || !publishSettings.endTime) {
+      alert('End Date and End Time (Deadline) are required before publishing an examination.');
+      return;
+    }
+
+    const parsedEnd = new Date(`${publishSettings.endDate}T${publishSettings.endTime}:00`);
+    if (isNaN(parsedEnd.getTime())) {
+      alert('Please specify a valid End Date & Time deadline.');
+      return;
+    }
+
+    if (publishSettings.startDate) {
+      const parsedStart = new Date(`${publishSettings.startDate}T${publishSettings.startTime || '00:00'}:00`);
+      if (!isNaN(parsedStart.getTime()) && parsedEnd.getTime() <= parsedStart.getTime()) {
+        alert('End Date & Time (Deadline) must be later than Start Date & Time.');
+        return;
+      }
     }
 
     const actualExamTotal = (generatedExam.sections || []).reduce(
@@ -1566,16 +1591,20 @@ export const ClassroomExamModal: React.FC<ClassroomExamModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-extrabold text-white mb-1.5">End Date & Time (Optional)</label>
+                        <label className="block text-xs font-extrabold text-white mb-1.5">
+                          End Date & Time / Deadline <span className="text-rose-400">*</span>
+                        </label>
                         <div className="flex gap-2">
                           <input
                             type="date"
+                            required
                             value={publishSettings.endDate}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, endDate: e.target.value }))}
                             className="flex-1 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"
                           />
                           <input
                             type="time"
+                            required
                             value={publishSettings.endTime}
                             onChange={(e) => setPublishSettings(prev => ({ ...prev, endTime: e.target.value }))}
                             className="w-28 p-2.5 bg-[#0d1733] border border-blue-700/60 rounded-xl text-xs font-semibold text-white focus:border-indigo-400"

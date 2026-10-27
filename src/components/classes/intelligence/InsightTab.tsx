@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -15,12 +15,16 @@ import {
   Award,
   Zap,
   PenTool,
-  Stethoscope
+  Stethoscope,
+  Clock,
+  ClipboardCheck,
+  RefreshCw
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { CourseAnalyticsSummary } from '@/types/courseStudio';
 import { TeachingIntelligenceResponse } from '@/services/teachingIntelligenceService';
 import { InlineMarkdown } from '../StructuredAIReportRenderer';
+import { ClassPerformanceDonutChart } from '../charts/ClassPerformanceDonutChart';
 
 interface InsightTabProps {
   classroom?: Classroom;
@@ -30,7 +34,16 @@ interface InsightTabProps {
   metrics?: any;
   classroomId?: string;
   students?: any[];
-  onNavigateToTab?: (tab: string, context?: { topic?: string; studentId?: string }) => void;
+  onNavigateToTab?: (
+    tab: string,
+    context?: {
+      topic?: string;
+      studentId?: string;
+      diagnosisId?: string;
+      evidenceIds?: string[];
+      skillLabel?: string;
+    }
+  ) => void;
   onNavigateToTeaching?: (targetTopic?: string) => void;
   onNavigateToStudents?: () => void;
   onNavigateToEvidence?: () => void;
@@ -51,10 +64,22 @@ export const InsightTab: React.FC<InsightTabProps> = ({
   onNavigateToTeaching,
   onNavigateToStudents,
   onNavigateToEvidence,
-  onGenerateAnalysis: _onGenerateAnalysis,
-  refreshing: _refreshing
+  onGenerateAnalysis,
+  refreshing
 }) => {
-  const handleNavigation = (tab: string, context?: { topic?: string; studentId?: string }) => {
+  const [hoveredStruggleIdx, setHoveredStruggleIdx] = useState<number | null>(null);
+  const [showAllDiagnoses, setShowAllDiagnoses] = useState(false);
+
+  const handleNavigation = (
+    tab: string,
+    context?: {
+      topic?: string;
+      studentId?: string;
+      diagnosisId?: string;
+      evidenceIds?: string[];
+      skillLabel?: string;
+    }
+  ) => {
     if (onNavigateToTab) {
       onNavigateToTab(tab, context);
     } else {
@@ -66,6 +91,9 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
   const resolvedMetrics = metrics || data?.metrics || {};
   const activeCourseAnalytics: CourseAnalyticsSummary | null = courseAnalyticsProp || resolvedMetrics.course_analytics || null;
+  const batchStatus = data?.batch_status || resolvedMetrics.batch_status || null;
+  const processingStatus = data?.processing_status || batchStatus?.status || 'completed';
+  const lastAnalyzedAt = data?.last_analyzed_at || batchStatus?.lastAnalyzedAt || data?.updated_at || null;
 
   const classSummary = resolvedMetrics.class_summary || {};
   const classHealth = resolvedMetrics.class_health || {};
@@ -224,7 +252,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     };
   }, [activeCourseAnalytics, classroom?.id, totalStudents]);
 
-  // Section 2: DIAGNOSIS ENGINE — Maximum 5 clean, evidence-backed diagnostic cards
+  // Section 2: SPECIFIC SKILL-LEVEL DIAGNOSIS ENGINE (Up to 10 distinct skill-level diagnoses with all 14 required fields)
   const diagnosesList = useMemo(() => {
     const rawDiagnoses = (resolvedMetrics.diagnoses && resolvedMetrics.diagnoses.length > 0)
       ? resolvedMetrics.diagnoses
@@ -234,65 +262,134 @@ export const InsightTab: React.FC<InsightTabProps> = ({
     const valid = [];
 
     for (const d of rawDiagnoses) {
-      const name = d.displayName || d.specific_problem || d.skill || d.topic;
+      const name = d.displayName || d.subskill || d.skill || d.specific_problem || d.topic;
       if (!name || seen.has(name.toLowerCase())) continue;
       if (/session[-_]?id|final[-_]?rank|\{|\}/i.test(name)) continue;
       if (/^(?:grammar|spelling|writing|vocabulary|reading|general|other|task|assignment)$/i.test(name.trim())) continue;
 
       seen.add(name.toLowerCase());
 
-      const sources = Array.isArray(d.evidence_sources) && d.evidence_sources.length > 0
+      const sources = Array.isArray(d.evidenceSources) && d.evidenceSources.length > 0
+        ? d.evidenceSources
+        : Array.isArray(d.evidence_sources) && d.evidence_sources.length > 0
         ? d.evidence_sources
-        : (Array.isArray(d.sourcesList) && d.sourcesList.length > 0
-          ? d.sourcesList
-          : (Array.isArray(d.sources) ? d.sources : ['Worksheet (OCR)']));
-      
+        : Array.isArray(d.sourcesList) && d.sourcesList.length > 0
+        ? d.sourcesList
+        : Array.isArray(d.sources) && d.sources.length > 0
+        ? d.sources
+        : ['Tasks'];
+
+      const evidenceIds = Array.isArray(d.evidenceIds)
+        ? d.evidenceIds
+        : Array.isArray(d.evidence_ids)
+        ? d.evidence_ids
+        : [];
+
       const affectedStudents = Array.isArray(d.affected_students) ? d.affected_students : [];
-      const studentCount = d.affected_students_count ?? (affectedStudents.length > 0 ? affectedStudents.length : (d.affectedStudentsCount ?? d.studentCount ?? 1));
-      const total = d.total_students || d.totalStudents || totalStudents || 1;
-      const accuracy = d.accuracy != null ? Math.round(d.accuracy) : (d.averageAccuracy != null ? Math.round(d.averageAccuracy) : 0);
+      const affectedStudentCount =
+        d.affectedStudentCount ??
+        d.affected_students_count ??
+        (affectedStudents.length > 0 ? affectedStudents.length : (d.affectedStudentsCount ?? d.studentCount ?? 1));
+      const studentsAssessed =
+        d.studentsAssessed ??
+        d.students_assessed ??
+        d.total_students ??
+        d.totalStudents ??
+        Math.max(affectedStudentCount, totalStudents || 1);
+      const affectedPercentage =
+        d.affectedPercentage ??
+        d.affected_percentage ??
+        (studentsAssessed > 0 ? Math.round((affectedStudentCount / studentsAssessed) * 100) : 0);
+      const accuracy =
+        d.accuracyPercentage != null
+          ? Math.round(d.accuracyPercentage)
+          : d.accuracy != null
+          ? Math.round(d.accuracy)
+          : d.averageAccuracy != null
+          ? Math.round(d.averageAccuracy)
+          : 0;
       const category = d.category || 'Grammar';
-      const frequency = d.frequency ?? (d.occurrences ?? (d.commonErrors?.length || 1));
-      const severity = (d.severity || (accuracy < 50 ? 'high' : accuracy < 65 ? 'medium' : 'low')).toLowerCase();
-      const isMultiSource = sources.length >= 2 || studentCount >= 2;
-      const confidence = d.confidence === 'confirmed' || d.confidence === 'confirmed_gap'
-        ? 'Confirmed Gap'
-        : (d.confidence === 'early_signal' ? 'Early Signal' : (isMultiSource ? 'Confirmed Gap' : 'Early Signal'));
-      
+      const topic = d.topic || d.skill || name;
+      const subskill = d.subskill || d.skill || name;
+      const observedErrorPattern =
+        d.observedErrorPattern ||
+        d.specific_problem ||
+        `${affectedStudentCount} of ${studentsAssessed} assessed students demonstrated errors in ${name}.`;
+      const errorOccurrenceCount =
+        d.errorOccurrenceCount ?? d.frequency ?? d.occurrences ?? (d.commonErrors?.length || affectedStudentCount);
+      const totalOpportunities =
+        d.totalOpportunities ?? d.total_opportunities ?? Math.max(errorOccurrenceCount, studentsAssessed);
+      const severity = (d.severity || (accuracy < 50 ? 'high' : accuracy < 68 ? 'medium' : 'low')).toLowerCase();
+      const isMultiSource = sources.length >= 2 || affectedStudentCount >= 2;
+      const confidence =
+        d.confidence === 'confirmed' || d.confidence === 'confirmed_gap'
+          ? 'Confirmed Gap'
+          : d.confidence === 'early_signal'
+          ? 'Early Signal'
+          : isMultiSource
+          ? 'Confirmed Gap'
+          : 'Early Signal';
+
       const examples = Array.isArray(d.examples) && d.examples.length > 0
         ? d.examples
-        : (Array.isArray(d.commonErrors) && d.commonErrors.length > 0
-          ? d.commonErrors.map((e: any) => ({
-              student_error: e.student_error || e.error || e.student_answer || '',
-              correction: e.correction || e.correct_form || e.correct_answer || ''
-            }))
-          : []);
+        : Array.isArray(d.commonErrors) && d.commonErrors.length > 0
+        ? d.commonErrors.map((e: any) => ({
+            student_error: e.student_error || e.error || e.student_answer || '',
+            correction: e.correction || e.correct_form || e.correct_answer || '',
+            source: e.source || ''
+          }))
+        : [];
 
-      const recommendedTeaching = d.recommended_teaching || d.recommended_action || d.teachAction || `Review foundational rules of ${name} with guided contrast practice.`;
+      const recommendedTeaching =
+        d.recommendedTeachingAction ||
+        d.recommended_teaching ||
+        d.recommended_action ||
+        d.teachAction ||
+        `Run a focused mini-lesson contrasting correct and incorrect forms of ${name}.`;
+      const followUpActivity =
+        d.followUpActivity ||
+        d.follow_up_activity ||
+        `Assign a 6-item guided error-correction and sentence completion practice on ${name}.`;
+      const reassessmentMethod =
+        d.reassessmentMethod ||
+        d.reassessment_method ||
+        `Verify mastery with a 5-question exit quiz on ${name} targeting ≥80% accuracy.`;
 
       valid.push({
         id: d.diagnosis_id || d.topic_key || `diag_${valid.length + 1}`,
         rank: valid.length + 1,
         category,
+        topic,
         skill: d.skill || name,
-        subskill: d.subskill,
-        specific_problem: d.specific_problem || name,
+        subskill,
+        specific_problem: observedErrorPattern,
+        observedErrorPattern,
         displayName: name,
-        topic: d.topic || d.skill || name,
         accuracy,
-        frequency,
+        accuracyPercentage: accuracy,
+        frequency: errorOccurrenceCount,
+        errorOccurrenceCount,
+        totalOpportunities,
         severity,
-        studentCount,
-        totalStudents: total,
+        studentCount: affectedStudentCount,
+        affectedStudentCount,
+        studentsAssessed,
+        affectedPercentage,
+        totalStudents: studentsAssessed,
         affectedStudents,
         sources,
+        evidenceSources: sources,
+        evidenceIds,
         confidence,
         examples,
         recommendedTeaching,
+        recommendedTeachingAction: recommendedTeaching,
+        followUpActivity,
+        reassessmentMethod,
         priorityScore: d.priority_score ?? d.priority ?? 0
       });
 
-      if (valid.length >= 5) break; // Strict Maximum 5 Diagnoses
+      if (valid.length >= 10) break; // Up to 10 distinct skill-level problems for Chart 1 & Diagnosis list
     }
 
     return valid;
@@ -442,11 +539,40 @@ export const InsightTab: React.FC<InsightTabProps> = ({
           </div>
         </div>
 
-        {/* Evidence Sources Badges (50% OCR/Writing, 30% Exams, 20% Quizzes) */}
+        {/* Evidence Sources & Deadline Batch Processing Status Bar */}
         <div className="mt-3.5 bg-[#F8FCFB] rounded-xl border border-[#C9E5E2] p-3 flex items-center justify-between flex-wrap gap-2.5">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#173B3F]">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#173B3F] flex-wrap">
             <Layers className="w-3.5 h-3.5 text-[#087477]" />
             <span>Diagnostic Learning Evidence:</span>
+            {processingStatus && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                  processingStatus === 'completed'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : processingStatus === 'closed_pending_analysis' || processingStatus === 'processing'
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : processingStatus === 'failed'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                {processingStatus === 'completed'
+                  ? 'Batch Analysis Up to Date'
+                  : processingStatus === 'closed_pending_analysis'
+                  ? 'Pending Deadline Analysis'
+                  : processingStatus === 'processing'
+                  ? 'Processing Batch'
+                  : processingStatus === 'failed'
+                  ? 'Analysis Failed — Retry Available'
+                  : 'Waiting for Activity Deadlines'}
+              </span>
+            )}
+            {batchStatus?.openActivitiesCount ? (
+              <span className="text-[11px] text-[#36565A] font-semibold flex items-center gap-1">
+                <Clock className="w-3 h-3 text-[#087477]" />
+                {batchStatus.openActivitiesCount} open {batchStatus.openActivitiesCount === 1 ? 'activity' : 'activities'} awaiting deadline
+              </span>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -457,27 +583,23 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
             <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
               <BookOpen className="w-3 h-3 text-indigo-600" />
-              Typed Tasks: <strong className="font-black text-indigo-700">{evidenceCounts.tasks}</strong>
+              Tasks: <strong className="font-black text-indigo-700">{evidenceCounts.tasks}</strong>
             </span>
 
             <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
               <Award className="w-3 h-3 text-rose-500" />
-              Exams & Assessments: <strong className="font-black text-rose-600">{evidenceCounts.exams}</strong>
+              Examinations: <strong className="font-black text-rose-600">{evidenceCounts.exams}</strong>
             </span>
 
-            {evidenceCounts.competitions > 0 && (
-              <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
-                <Sparkles className="w-3 h-3 text-purple-500" />
-                Competitions: <strong className="font-black text-purple-600">{evidenceCounts.competitions}</strong>
-              </span>
-            )}
+            <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
+              <Zap className="w-3 h-3 text-amber-500" />
+              Live Quizzes: <strong className="font-black text-amber-600">{evidenceCounts.live_quizzes}</strong>
+            </span>
 
-            {evidenceCounts.live_quizzes > 0 && (
-              <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
-                <Zap className="w-3 h-3 text-amber-500" />
-                Live Quizzes: <strong className="font-black text-amber-600">{evidenceCounts.live_quizzes}</strong>
-              </span>
-            )}
+            <span className="px-2.5 py-0.5 rounded-md bg-white border border-[#C9E5E2] font-semibold text-[#173B3F] flex items-center gap-1 shadow-2xs">
+              <Sparkles className="w-3 h-3 text-purple-500" />
+              Competitions: <strong className="font-black text-purple-600">{evidenceCounts.competitions}</strong>
+            </span>
 
             <span className="px-2.5 py-0.5 rounded-md bg-[#087477] text-white font-bold text-xs shadow-2xs">
               Total Evidence: {evidenceCounts.total}
@@ -710,49 +832,210 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
       <hr className="border-[#C9E5E2]" />
 
-      {/* 3. DIAGNOSIS (MAXIMUM 5 GRANULAR, PEDAGOGICAL DIAGNOSES) */}
-      <section>
-        <div className="mb-3.5 flex items-center justify-between flex-wrap gap-2">
+      {/* 3. CLASSROOM DIAGNOSIS & REQUIRED VISUAL ANALYTICS (CHART 1 + CHART 2 + DIAGNOSIS CARDS) */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <div className="flex items-center gap-1.5">
               <Stethoscope className="w-4 h-4 text-[#087477]" />
               <h2 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
-                DIAGNOSIS
+                CLASSROOM DIAGNOSIS & SKILL ANALYTICS
               </h2>
             </div>
             <p className="text-xs text-[#36565A] mt-0.5">
-              Specific learning problems detected from student evidence and what to teach next.
+              Evidence-based skill-level learning difficulties, student performance distribution, and targeted teaching prescriptions.
             </p>
           </div>
-          {diagnosesList.length > 0 && (
-            <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-0.5 rounded-full border border-teal-200">
-              {diagnosesList.length} {diagnosesList.length === 1 ? 'Diagnosis' : 'Diagnoses'} Detected
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {lastAnalyzedAt && (
+              <span className="text-[11px] font-semibold text-[#36565A] flex items-center gap-1 bg-white px-2.5 py-1 rounded-full border border-[#C9E5E2]">
+                <Clock className="w-3 h-3 text-[#087477]" />
+                Last Analyzed: {new Date(lastAnalyzedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            {diagnosesList.length > 0 && (
+              <span className="text-xs font-bold text-[#087477] bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
+                {diagnosesList.length} Specific {diagnosesList.length === 1 ? 'Skill Gap' : 'Skill Gaps'} Identified
+              </span>
+            )}
+          </div>
         </div>
 
+        {/* TWO REQUIRED DIAGNOSTIC CHARTS:
+            Chart 1: Horizontal Bar Chart ("What Your Students Are Struggling With")
+            Chart 2: Performance Distribution Pie Chart ("Class Performance Distribution") */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          {/* CHART 1: Horizontal Bar Chart ("What Your Students Are Struggling With") */}
+          <div className="lg:col-span-7 bg-white rounded-2xl border border-[#C9E5E2] p-5 shadow-2xs flex flex-col justify-between space-y-4">
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#173B3F]">
+                  What Your Students Are Struggling With
+                </h3>
+                <p className="text-xs text-[#36565A] mt-0.5">
+                  Specific skill-level misconceptions ranked by affected students (click any bar to inspect evidence)
+                </p>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#E8F7F5] text-[#087477] border border-[#C9E5E2]">
+                {diagnosesList.length >= 5
+                  ? `Top ${Math.min(10, diagnosesList.length)} Skill Difficulties`
+                  : `${diagnosesList.length} Skill ${diagnosesList.length === 1 ? 'Difficulty' : 'Difficulties'} Found`}
+              </span>
+            </div>
+
+            {diagnosesList.length === 0 ? (
+              <div className="p-6 bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] text-center space-y-1.5 my-auto">
+                <BarChart3 className="w-7 h-7 text-[#159A9C] mx-auto opacity-50" />
+                <p className="text-xs font-bold text-[#173B3F]">
+                  {!hasEvidence
+                    ? 'No completed assessment evidence yet.'
+                    : 'No specific skill-level struggles detected yet.'}
+                </p>
+                <p className="text-[11px] text-[#36565A]">
+                  Once activity deadlines pass and student submissions are analyzed, specific skill difficulties will be charted here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {diagnosesList.slice(0, 10).map((diag, idx) => {
+                  const maxDenominator = Math.max(diag.studentsAssessed, totalStudents, diag.affectedStudentCount, 1);
+                  const barWidthPct = Math.min(
+                    100,
+                    Math.max(10, Math.round((diag.affectedStudentCount / maxDenominator) * 100))
+                  );
+                  const isHovered = hoveredStruggleIdx === idx;
+                  const barColor =
+                    diag.severity === 'high'
+                      ? '#ef4444'
+                      : diag.severity === 'medium'
+                      ? '#f59e0b'
+                      : '#0d9488';
+
+                  return (
+                    <div
+                      key={diag.id || idx}
+                      onMouseEnter={() => setHoveredStruggleIdx(idx)}
+                      onMouseLeave={() => setHoveredStruggleIdx((prev) => (prev === idx ? null : prev))}
+                      onClick={() =>
+                        handleNavigation('evidence-reports', {
+                          topic: diag.displayName || diag.topic,
+                          diagnosisId: diag.id,
+                          evidenceIds: diag.evidenceIds,
+                          skillLabel: diag.displayName
+                        })
+                      }
+                      className="p-2.5 rounded-xl border border-[#C9E5E2]/80 hover:border-[#087477] bg-[#F8FCFB]/60 hover:bg-[#E8F7F5]/40 transition-all cursor-pointer space-y-1.5"
+                    >
+                      <div className="flex items-start justify-between gap-2 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-[#173B3F] text-white shrink-0">
+                              #{diag.rank}
+                            </span>
+                            <span className="font-black text-[#173B3F] break-words">
+                              {diag.displayName}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#36565A] font-medium line-clamp-1 mt-0.5">
+                            {diag.observedErrorPattern}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-black text-[#173B3F] block">
+                            {diag.affectedStudentCount}{' '}
+                            {diag.affectedStudentCount === 1 ? 'student' : 'students'} ({diag.affectedPercentage}%)
+                          </span>
+                          <span className="text-[10px] font-bold text-[#36565A] block">
+                            {diag.affectedStudentCount} of {diag.studentsAssessed} assessed • {diag.accuracy}% acc
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Horizontal Bar */}
+                      <div className="w-full bg-slate-200/70 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${barWidthPct}%`, backgroundColor: barColor }}
+                        />
+                      </div>
+
+                      {/* Hover / Tap Details */}
+                      {isHovered && (
+                        <div className="pt-1.5 mt-1 border-t border-[#C9E5E2]/70 flex items-center justify-between flex-wrap gap-2 text-[11px] text-[#173B3F]">
+                          <span>
+                            <strong>Occurrences:</strong> {diag.errorOccurrenceCount}{' '}
+                            {diag.errorOccurrenceCount === 1 ? 'mistake' : 'mistakes'} across{' '}
+                            {diag.totalOpportunities} response opportunities
+                          </span>
+                          <span className="text-[#087477] font-bold">
+                            Sources: {(diag.evidenceSources || []).join(', ')} • Click to view evidence →
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {diagnosesList.length < 5 && (
+                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-[11px] text-amber-900 font-semibold flex items-center justify-between gap-2">
+                    <span>
+                      Showing all {diagnosesList.length} distinct skill-level{' '}
+                      {diagnosesList.length === 1 ? 'difficulty' : 'difficulties'} supported by current classroom evidence. Complete additional tasks, quizzes, or exams to expand diagnostic coverage (up to 10 skills).
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* CHART 2: Performance Distribution Pie Chart ("Class Performance Distribution") */}
+          <div className="lg:col-span-5">
+            <ClassPerformanceDonutChart
+              performanceDistribution={
+                resolvedMetrics.performance_distribution || resolvedMetrics.performanceDistribution || null
+              }
+              students={resolvedMetrics.students || []}
+              totalStudents={totalStudents}
+              onSelectStudent={(studentId) => handleNavigation('students', { studentId })}
+            />
+          </div>
+        </div>
+
+        {/* DETAILED SKILL-LEVEL LEARNING-GAP CARDS */}
         {!hasEvidence || diagnosesList.length === 0 ? (
           <div className="bg-[#F8FCFB] rounded-xl border border-dashed border-[#C9E5E2] p-8 text-center">
             <Target className="w-8 h-8 text-[#159A9C] mx-auto mb-2 opacity-50" />
             <p className="text-sm font-bold text-[#173B3F]">
-              {!hasEvidence ? "Not enough evidence yet." : "No learning problems diagnosed."}
+              {!hasEvidence ? "Not enough completed evidence yet." : "No learning problems diagnosed."}
             </p>
             <p className="text-xs text-[#36565A] mt-1">
               {!hasEvidence 
-                ? "Have students complete worksheets, tasks, or exams to unlock AI pedagogical diagnoses."
-                : "All assessed concepts meet or exceed the 70% curriculum benchmark."}
+                ? "Have students complete tasks, live quizzes, examinations, or competitions. Diagnoses are generated automatically once activity deadlines pass."
+                : "All assessed concepts meet or exceed the 70% curriculum mastery benchmark."}
             </p>
+            {onGenerateAnalysis && (
+              <button
+                type="button"
+                onClick={onGenerateAnalysis}
+                disabled={refreshing}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#087477] hover:bg-[#065e60] text-white text-xs font-black transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>{refreshing ? 'Checking Completed Activities...' : 'Check Deadlines & Refresh Diagnosis'}</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {diagnosesList.map((diag) => (
+            {(showAllDiagnoses ? diagnosesList : diagnosesList.slice(0, 5)).map((diag) => (
               <div 
                 key={diag.id || diag.rank} 
                 className={`bg-white rounded-xl border p-5 shadow-2xs hover:border-[#159A9C] transition-all space-y-3.5 ${
                   diag.rank === 1 ? 'border-l-4 border-l-[#087477] border-[#C9E5E2]' : 'border-[#C9E5E2]'
                 }`}
               >
-                {/* Header Row: Rank + Category + Specific Problem Title + Confidence + Severity */}
+                {/* Header Row: Rank + Category + Topic + Specific Subskill Title + Confidence + Severity */}
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
                   <div className="space-y-2 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -761,7 +1044,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       </span>
 
                       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${getCategoryBadgeColor(diag.category)}`}>
-                        {diag.category}
+                        {diag.category}{diag.topic && diag.topic !== diag.category ? ` • ${diag.topic}` : ''}
                       </span>
 
                       <h3 className="text-sm sm:text-base font-black text-[#173B3F] break-words">
@@ -783,7 +1066,12 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       )}
                     </div>
 
-                    {/* Metrics Row: Accuracy, Student Ratio, Frequency, Sources */}
+                    {/* Specific Observed Error Pattern Description */}
+                    <p className="text-xs font-semibold text-[#36565A] leading-relaxed">
+                      {diag.observedErrorPattern}
+                    </p>
+
+                    {/* Metrics Row: Accuracy, Unique Affected Students vs Assessed, Error Occurrences, Sources */}
                     <div className="flex items-center gap-2.5 text-xs font-semibold text-[#173B3F] flex-wrap">
                       <span 
                         className="px-2 py-0.5 rounded text-xs font-black"
@@ -795,14 +1083,19 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                       <span>•</span>
 
                       <span className="text-[#36565A]">
-                        <strong className="text-[#173B3F]">{diag.studentCount}</strong> of <strong className="text-[#173B3F]">{diag.totalStudents}</strong> students affected
+                        Affected students: <strong className="text-[#173B3F]">{diag.affectedStudentCount}</strong> of{' '}
+                        <strong className="text-[#173B3F]">{diag.studentsAssessed}</strong> assessed (
+                        <strong className="text-[#173B3F]">{diag.affectedPercentage}%</strong>)
                       </span>
 
-                      {diag.frequency > 0 && (
+                      {diag.errorOccurrenceCount > 0 && (
                         <>
                           <span>•</span>
                           <span className="text-[#36565A]">
-                            <strong className="text-[#173B3F]">{diag.frequency}</strong> {diag.frequency === 1 ? 'error occurrence' : 'error occurrences'}
+                            Error occurrences: <strong className="text-[#173B3F]">{diag.errorOccurrenceCount}</strong>{' '}
+                            {diag.errorOccurrenceCount === 1 ? 'mistake' : 'mistakes'} across{' '}
+                            <strong className="text-[#173B3F]">{diag.totalOpportunities}</strong>{' '}
+                            {diag.totalOpportunities === 1 ? 'attempt' : 'attempts'}
                           </span>
                         </>
                       )}
@@ -811,7 +1104,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
 
                       {/* Evidence in */}
                       <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[11px] text-[#36565A] font-medium">Evidence in:</span>
+                        <span className="text-[11px] text-[#36565A] font-medium">Evidence sources:</span>
                         {(diag.sources || []).map((source: string, idx: number) => (
                           <span key={idx} className="text-[10px] font-bold px-1.5 py-0.2 bg-[#F8FCFB] border border-[#C9E5E2] rounded text-[#173B3F]">
                             {source}
@@ -824,14 +1117,21 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   {/* Action Buttons */}
                   <div className="flex flex-row md:flex-col gap-2 shrink-0">
                     <button 
-                      onClick={() => handleNavigation('evidence-reports', { topic: diag.displayName || diag.topic })}
+                      onClick={() =>
+                        handleNavigation('evidence-reports', {
+                          topic: diag.displayName || diag.topic,
+                          diagnosisId: diag.id,
+                          evidenceIds: diag.evidenceIds,
+                          skillLabel: diag.displayName
+                        })
+                      }
                       className="px-3 py-1.5 bg-white border border-[#C9E5E2] text-[#173B3F] hover:bg-slate-50 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       <FileText className="w-3.5 h-3.5 text-[#087477]" />
                       View Evidence
                     </button>
                     <button 
-                      onClick={() => handleNavigation('teaching', { topic: diag.topic || diag.skill })}
+                      onClick={() => handleNavigation('teaching', { topic: diag.displayName || diag.topic || diag.skill })}
                       className="px-3 py-1.5 bg-[#087477] text-white hover:bg-[#065e60] rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       Teach This
@@ -845,7 +1145,7 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg p-3 text-xs space-y-1.5">
                     <div className="font-bold text-[#92400E] flex items-center gap-1.5 text-[11px]">
                       <AlertCircle className="w-3.5 h-3.5 text-[#D97706]" />
-                      <span>Observed student error pattern:</span>
+                      <span>Observed student error examples:</span>
                     </div>
                     <div className="space-y-1 pl-4">
                       {diag.examples.slice(0, 3).map((err: any, idx: number) => (
@@ -866,17 +1166,49 @@ export const InsightTab: React.FC<InsightTabProps> = ({
                   </div>
                 )}
 
-                {/* Pedagogical Teaching Prescription Box */}
-                <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2.5">
-                  <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
-                  <div className="flex-1 text-xs leading-relaxed">
-                    <span className="font-black text-[#087477]">Teach next: </span>
-                    <InlineMarkdown text={diag.recommendedTeaching} />
+                {/* Pedagogical Teaching Prescription, Follow-Up Activity & Reassessment Method */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="text-xs text-[#173B3F] bg-[#E8F7F5] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
+                    <Lightbulb className="w-4 h-4 text-[#087477] shrink-0 mt-0.5" />
+                    <div className="flex-1 text-xs leading-relaxed">
+                      <span className="font-black text-[#087477] block mb-0.5">Teach next:</span>
+                      <InlineMarkdown text={diag.recommendedTeaching} />
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-[#173B3F] bg-[#F8FCFB] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-xs leading-relaxed">
+                      <span className="font-black text-indigo-700 block mb-0.5">Follow-up activity:</span>
+                      <InlineMarkdown text={diag.followUpActivity} />
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-[#173B3F] bg-[#F8FCFB] p-3 rounded-lg border border-[#C9E5E2] flex items-start gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-xs leading-relaxed">
+                      <span className="font-black text-emerald-700 block mb-0.5">How to check improvement:</span>
+                      <InlineMarkdown text={diag.reassessmentMethod} />
+                    </div>
                   </div>
                 </div>
 
               </div>
             ))}
+
+            {diagnosesList.length > 5 && (
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAllDiagnoses((prev) => !prev)}
+                  className="px-4 py-2 rounded-xl bg-white border border-[#C9E5E2] hover:border-[#087477] text-xs font-black text-[#087477] cursor-pointer transition-all shadow-2xs"
+                >
+                  {showAllDiagnoses
+                    ? 'Show Top 5 Priority Diagnoses'
+                    : `Show All ${diagnosesList.length} Specific Skill Diagnoses`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

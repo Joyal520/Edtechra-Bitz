@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Sparkles,
@@ -8,7 +9,9 @@ import {
   FileText,
   MessageSquare,
   AlertCircle,
-  BookOpen
+  BookOpen,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { Classroom } from '@/types/classroom';
 import { CourseClassroomAssignment, CourseAnalyticsSummary } from '@/types/courseStudio';
@@ -25,10 +28,13 @@ import { TeachingTab } from './intelligence/TeachingTab';
 import { EvidenceReportsTab } from './intelligence/EvidenceReportsTab';
 import { AskAITeacherModal } from './intelligence/AskAITeacherModal';
 
-/** Cross-tab navigation context for passing topic/student filters between tabs */
+/** Cross-tab navigation context for passing topic/student/diagnosis filters between tabs */
 export interface TabNavigationContext {
   topic?: string;
   studentId?: string;
+  diagnosisId?: string;
+  evidenceIds?: string[];
+  skillLabel?: string;
 }
 
 export type ModalTab =
@@ -81,7 +87,12 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [refreshNotice, setRefreshNotice] = useState<{
+    type: 'up_to_date' | 'updated';
+    message: string;
+  } | null>(null);
   const [showAIUsageModal, setShowAIUsageModal] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   /** Context passed between tabs for cross-tab navigation (e.g., pre-filter Evidence by topic) */
   const [tabContext, setTabContext] = useState<TabNavigationContext>({});
@@ -91,7 +102,20 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     const mapped = mapInitialTab(tab as ModalTab);
     setTabContext(context || {});
     setActiveTab(mapped);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
+
+  // Lock background page scroll while Teaching Intelligence modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
 
   // Ask AI Teacher Copilot
   const [isChatOpen, setIsChatOpen] = useState(initialTab === 'chat');
@@ -182,13 +206,31 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (confirmForceReanalysis = false) => {
     if (!classroom?.id || refreshing) return;
     setRefreshing(true);
     setErrorMsg('');
+    setRefreshNotice(null);
     try {
-      const res = await teachingIntelligenceService.refreshTeachingIntelligence(classroom.id);
+      const res = await teachingIntelligenceService.refreshTeachingIntelligence(classroom.id, {
+        confirmForceReanalysis
+      });
       setData(res);
+      if (res.up_to_date && !res.ai_called) {
+        setRefreshNotice({
+          type: 'up_to_date',
+          message:
+            res.message ||
+            'No new completed evidence is available. Your classroom diagnosis is already up to date.'
+        });
+      } else {
+        setRefreshNotice({
+          type: 'updated',
+          message:
+            res.message ||
+            'Classroom diagnosis has been updated with the latest completed activity evidence.'
+        });
+      }
       if (selectedCourseId) {
         const freshCourseAnalytics = await courseStudioService.getCourseAnalytics(selectedCourseId).catch(() => null);
         if (freshCourseAnalytics) setCourseAnalytics(freshCourseAnalytics);
@@ -209,12 +251,18 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
   };
 
   const resolvedCourseAnalytics = courseAnalytics || ((data?.metrics as any)?.course_analytics as CourseAnalyticsSummary) || null;
+  const batchStatus = data?.batch_status || data?.metrics?.batch_status || null;
+  const processingStatus = data?.processing_status || batchStatus?.status || 'completed';
+  const lastAnalyzedAt = data?.last_analyzed_at || batchStatus?.lastAnalyzedAt || data?.updated_at || null;
 
   if (!isOpen || !classroom) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 w-screen h-screen bg-[#F8FCFB] flex flex-col overflow-hidden animate-in fade-in duration-150">
-      <div className="w-full h-full flex flex-col overflow-hidden">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9990] w-screen h-[100dvh] bg-[#F8FCFB] flex flex-col overflow-hidden animate-in fade-in duration-150"
+      style={{ isolation: 'isolate' }}
+    >
+      <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
         
         {/* TOP HEADER BAR (Sticky, always visible) */}
         <header className="px-4 sm:px-8 py-3.5 bg-[#071a1c] border-b border-[#0e3b40] flex items-center justify-between text-white shrink-0 gap-3">
@@ -253,9 +301,16 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                 ) : null}
                 <AIDebugBadge onClick={() => setShowAIUsageModal(true)} />
               </div>
-              <p className="text-xs text-teal-100/75 font-medium truncate">
-                {classroom.subject || 'All Subjects'} • {resolvedCourseAnalytics?.course ? `Course & Classroom Diagnostic Intelligence` : 'Evidence-driven diagnostic intelligence'}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-teal-100/75 font-medium truncate">
+                <span>
+                  {classroom.subject || 'All Subjects'} • {resolvedCourseAnalytics?.course ? 'Course & Classroom Diagnostic Intelligence' : 'Evidence-driven diagnostic intelligence'}
+                </span>
+                {lastAnalyzedAt && (
+                  <span className="hidden lg:inline-flex items-center gap-1 text-[11px] text-teal-200/80">
+                    • <Clock className="w-3 h-3" /> Last Analyzed: {new Date(lastAnalyzedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -276,13 +331,19 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
             {/* Refresh AI Button */}
             <button
               type="button"
-              onClick={handleRefresh}
+              onClick={() => handleRefresh(false)}
               disabled={refreshing || loading}
               className="p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-bold text-teal-200 hover:text-white bg-white/5 hover:bg-white/10 border border-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-              title="Re-run AI Analysis"
+              title="Check for newly closed activity evidence and update classroom diagnosis"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#159A9C]' : ''}`} />
-              <span className="hidden md:inline">Refresh AI</span>
+              <span className="hidden md:inline">
+                {refreshing
+                  ? 'Analyzing Batch...'
+                  : processingStatus === 'failed'
+                  ? 'Retry AI Analysis'
+                  : 'Refresh AI'}
+              </span>
             </button>
 
             {/* Close Button */}
@@ -300,7 +361,10 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
         <nav className="px-5 sm:px-7 bg-white border-b border-[#C9E5E2] flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
           <button
             type="button"
-            onClick={() => setActiveTab('insight')}
+            onClick={() => {
+              setActiveTab('insight');
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ top: 0 });
+            }}
             className={`py-3.5 px-4 font-black text-xs sm:text-sm tracking-wide border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'insight'
                 ? 'border-[#087477] text-[#087477]'
@@ -313,7 +377,10 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
           <button
             type="button"
-            onClick={() => setActiveTab('students')}
+            onClick={() => {
+              setActiveTab('students');
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ top: 0 });
+            }}
             className={`py-3.5 px-4 font-black text-xs sm:text-sm tracking-wide border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'students'
                 ? 'border-[#087477] text-[#087477]'
@@ -326,7 +393,10 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
           <button
             type="button"
-            onClick={() => setActiveTab('teaching')}
+            onClick={() => {
+              setActiveTab('teaching');
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ top: 0 });
+            }}
             className={`py-3.5 px-4 font-black text-xs sm:text-sm tracking-wide border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'teaching'
                 ? 'border-[#087477] text-[#087477]'
@@ -339,7 +409,10 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
 
           <button
             type="button"
-            onClick={() => setActiveTab('evidence-reports')}
+            onClick={() => {
+              setActiveTab('evidence-reports');
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ top: 0 });
+            }}
             className={`py-3.5 px-4 font-black text-xs sm:text-sm tracking-wide border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'evidence-reports'
                 ? 'border-[#087477] text-[#087477]'
@@ -351,35 +424,83 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
           </button>
         </nav>
 
+        {/* Refresh AI Status / Up-To-Date Banner */}
+        {refreshNotice && (
+          <div
+            className={`mx-4 sm:mx-8 mt-3 p-3.5 rounded-2xl border text-xs font-semibold flex items-center justify-between flex-wrap gap-3 shrink-0 ${
+              refreshNotice.type === 'up_to_date'
+                ? 'bg-[#E8F7F5] border-[#159A9C]/50 text-[#173B3F]'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[#087477] shrink-0" />
+              <span>{refreshNotice.message}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {refreshNotice.type === 'up_to_date' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'No new completed activity evidence was found since the last analysis. Do you want to force a fresh AI reanalysis of existing evidence anyway?'
+                      )
+                    ) {
+                      handleRefresh(true);
+                    }
+                  }}
+                  disabled={refreshing}
+                  className="px-3 py-1 bg-[#087477] hover:bg-[#065e60] text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                >
+                  Force Re-analyze
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setRefreshNotice(null)}
+                className="p-1 text-[#36565A] hover:text-[#173B3F] rounded-lg cursor-pointer"
+                aria-label="Dismiss notice"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Global Error Banner */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-semibold flex items-center justify-between shrink-0">
+          <div className="mx-4 sm:mx-8 mt-3 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-semibold flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
             </div>
             <button
-              onClick={handleRefresh}
-              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shrink-0"
+              onClick={() => handleRefresh(false)}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer"
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* TAB CONTENTS (Scrollable area) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-          <div className="max-w-6xl mx-auto w-full">
+        {/* TAB CONTENTS (Scrollable area — fixed min-h-0 + overscroll-contain + touch-pan-y for desktop & mobile scrolling) */}
+        <div
+          ref={scrollContainerRef}
+          style={{ WebkitOverflowScrolling: 'touch' }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y p-4 sm:p-6 md:p-8"
+        >
+          <div className="max-w-6xl mx-auto w-full pb-12">
             {loading && !data ? (
               <div className="py-24 text-center space-y-4">
                 <div className="w-12 h-12 rounded-2xl bg-[#E8F7F5] flex items-center justify-center mx-auto text-[#087477]">
                   <RefreshCw className="w-6 h-6 animate-spin text-[#159A9C]" />
                 </div>
                 <p className="text-sm font-bold text-[#173B3F]">
-                  Synthesizing classroom intelligence...
+                  Loading saved classroom diagnostic intelligence...
                 </p>
                 <p className="text-xs text-[#36565A]">
-                  Evaluating tasks, worksheets, assessments, and learning progression.
+                  Retrieving tasks, live quizzes, examinations, and competition evidence.
                 </p>
               </div>
             ) : (
@@ -393,6 +514,8 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                     onNavigateToTeaching={() => setActiveTab('teaching')}
                     onNavigateToStudents={() => setActiveTab('students')}
                     onNavigateToEvidence={() => setActiveTab('evidence-reports')}
+                    onGenerateAnalysis={() => handleRefresh(false)}
+                    refreshing={refreshing}
                   />
                 )}
 
@@ -419,7 +542,17 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
                     classroom={classroom}
                     data={data}
                     courseAnalytics={resolvedCourseAnalytics}
-                    initialFilter={tabContext.topic ? { topic: tabContext.topic } : tabContext.studentId ? { studentId: tabContext.studentId } : undefined}
+                    initialFilter={
+                      tabContext.topic || tabContext.studentId || tabContext.evidenceIds || tabContext.diagnosisId
+                        ? {
+                            topic: tabContext.topic,
+                            studentId: tabContext.studentId,
+                            diagnosisId: tabContext.diagnosisId,
+                            evidenceIds: tabContext.evidenceIds,
+                            skillLabel: tabContext.skillLabel
+                          }
+                        : undefined
+                    }
                   />
                 )}
               </>
@@ -444,6 +577,7 @@ export const AITeachingIntelligenceModal: React.FC<AITeachingIntelligenceModalPr
           onClose={() => setShowAIUsageModal(false)}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

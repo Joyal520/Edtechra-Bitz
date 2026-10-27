@@ -45,7 +45,14 @@ export const ExamPublishing: React.FC<ExamPublishingProps> = ({
   onBackToPreview
 }) => {
   const [startsAt, setStartsAt] = useState(exam.exam.startsAt || '');
-  const [endsAt, setEndsAt] = useState(exam.exam.endsAt || '');
+  const [endsAt, setEndsAt] = useState(() => {
+    if (exam.exam.endsAt) return exam.exam.endsAt;
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    d.setHours(23, 59, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
 
   const totalMarks = calculateExamTotalMarks(exam.sections);
   const totalQuestions = calculateTotalQuestionCount(exam.sections);
@@ -149,9 +156,26 @@ export const ExamPublishing: React.FC<ExamPublishingProps> = ({
 
   const handleConfirmPublish = () => {
     if (hasBlockingErrors || isPublishing) return;
+    setDeadlineError(null);
+    if (!endsAt || !endsAt.trim()) {
+      setDeadlineError('Closes At (Hard deadline) is required before publishing.');
+      return;
+    }
+    const parsedEnd = new Date(endsAt);
+    if (isNaN(parsedEnd.getTime())) {
+      setDeadlineError('Please enter a valid Closes At deadline.');
+      return;
+    }
+    if (startsAt && startsAt.trim()) {
+      const parsedStart = new Date(startsAt);
+      if (!isNaN(parsedStart.getTime()) && parsedEnd.getTime() <= parsedStart.getTime()) {
+        setDeadlineError('Closes At deadline must be later than the Opens At start time.');
+        return;
+      }
+    }
     onPublish({
-      startsAt: startsAt || undefined,
-      endsAt: endsAt || undefined
+      startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+      endsAt: parsedEnd.toISOString()
     });
   };
 
@@ -230,29 +254,41 @@ export const ExamPublishing: React.FC<ExamPublishingProps> = ({
       <div className="bg-[#0f1b3d] p-6 rounded-3xl border border-blue-800/80 space-y-4">
         <h4 className="text-xs font-black text-indigo-200 uppercase tracking-wider flex items-center gap-2">
           <Calendar className="w-4 h-4 text-indigo-400" />
-          Schedule Assessment Availability Window <span className="text-slate-400 font-normal lowercase">(optional)</span>
+          Schedule Assessment Window & Required Deadline <span className="text-rose-400">*</span>
         </h4>
         <p className="text-xs text-slate-400 leading-relaxed">
-          If specified, students can only start the exam within this time window. Once started, the {exam.exam.durationMinutes}-minute countdown timer begins.
+          Every examination requires a closing deadline. Once the deadline passes, the examination automatically closes and enters the Teaching Intelligence batch diagnostic queue.
         </p>
+        {deadlineError && (
+          <div className="p-3 rounded-2xl bg-rose-950/60 border border-rose-500/60 text-xs font-bold text-rose-200">
+            {deadlineError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-300">Opens At (Students can begin)</label>
+            <label className="text-[11px] font-bold text-slate-300">Opens At (Optional)</label>
             <input
               type="datetime-local"
               value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
+              onChange={(e) => {
+                setStartsAt(e.target.value);
+                setDeadlineError(null);
+              }}
               className="w-full px-4 py-2.5 bg-[#091124] border border-blue-800/70 rounded-xl text-xs font-semibold text-white focus:outline-hidden focus:border-indigo-400"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-300">Closes At (Hard deadline)</label>
+            <label className="text-[11px] font-bold text-slate-300">Closes At (Hard deadline) <span className="text-rose-400">*</span></label>
             <input
               type="datetime-local"
+              required
               value={endsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
+              onChange={(e) => {
+                setEndsAt(e.target.value);
+                setDeadlineError(null);
+              }}
               className="w-full px-4 py-2.5 bg-[#091124] border border-blue-800/70 rounded-xl text-xs font-semibold text-white focus:outline-hidden focus:border-indigo-400"
             />
           </div>

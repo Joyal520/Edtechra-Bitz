@@ -1754,17 +1754,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       });
     }
 
-    if (pointsAwarded > 0 || !wasAlreadyCompleted) {
-      // Invalidate Teaching Intelligence cache so new evidence & points are reflected
-      try {
-        await supabaseClient
-          .from('ai_classroom_insights')
-          .delete()
-          .eq('classroom_id', cleanClassroomId);
-      } catch (_tiErr) {
-        // Non-critical
-      }
-    }
+    // Stage 2 Deadline Pipeline Rule: Do NOT delete saved ai_classroom_insights on individual student episode completions.
 
     // 7. Query authoritative updated leaderboard total for this student in this classroom
     const { data: updatedPointsRows } = await supabaseClient

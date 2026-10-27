@@ -27,6 +27,9 @@ interface SimplePublishModalProps {
     mode: 'now' | 'schedule';
     scheduledDate?: string;
     startTime?: string;
+    deadlineDate?: string;
+    deadlineTime?: string;
+    endsAt?: string;
     availability: 'class' | 'selected' | 'course';
   }) => void;
 }
@@ -45,20 +48,49 @@ export const SimplePublishModal: React.FC<SimplePublishModalProps> = ({
     new Date().toISOString().split('T')[0]
   );
   const [startTime, setStartTime] = useState('09:00');
+  const [deadlineDate, setDeadlineDate] = useState(() => {
+    const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    return d.toISOString().split('T')[0];
+  });
+  const [deadlineTime, setDeadlineTime] = useState('23:59');
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [availability, setAvailability] = useState<'class' | 'selected' | 'course'>('class');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const isScheduleInvalid = publishMode === 'schedule' && (!scheduledDate || !startTime);
+  const isScheduleInvalid =
+    !deadlineDate ||
+    !deadlineTime ||
+    (publishMode === 'schedule' && (!scheduledDate || !startTime));
 
   const handlePublish = () => {
     if (isScheduleInvalid || totalQuestions === 0) return;
+    setDeadlineError(null);
+    const parsedEnd = new Date(`${deadlineDate}T${deadlineTime}:00`);
+    if (isNaN(parsedEnd.getTime())) {
+      setDeadlineError('Please enter a valid Submission Deadline date and time.');
+      return;
+    }
+    if (publishMode === 'schedule') {
+      const parsedStart = new Date(`${scheduledDate}T${startTime}:00`);
+      if (!isNaN(parsedStart.getTime()) && parsedEnd.getTime() <= parsedStart.getTime()) {
+        setDeadlineError('Submission Deadline must be later than the scheduled Start Time.');
+        return;
+      }
+    } else if (parsedEnd.getTime() <= Date.now() - 60 * 1000) {
+      setDeadlineError('Submission Deadline must be in the future.');
+      return;
+    }
+
     setIsSubmitting(true);
     onConfirmPublish({
       mode: publishMode,
       scheduledDate: publishMode === 'schedule' ? scheduledDate : undefined,
       startTime: publishMode === 'schedule' ? startTime : undefined,
+      deadlineDate,
+      deadlineTime,
+      endsAt: parsedEnd.toISOString(),
       availability
     });
   };
@@ -214,12 +246,61 @@ export const SimplePublishModal: React.FC<SimplePublishModalProps> = ({
                       Duration: {durationMinutes} minutes
                     </div>
                     <div className="text-[11px] text-slate-500 font-medium">
-                      The examination timer begins when students start taking the test. The exam authoritatively concludes based on this configured duration.
+                      The examination timer begins when students start taking the test. The exam authoritatively concludes based on this configured duration or the closing deadline below.
                     </div>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Required Submission Deadline */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/90 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Submission Deadline (Required) <span className="text-rose-600">*</span></span>
+                </label>
+                <span className="text-[11px] text-slate-500 font-semibold">
+                  Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local Time'}
+                </span>
+              </div>
+              {deadlineError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                  {deadlineError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Deadline Date</label>
+                  <input
+                    type="date"
+                    value={deadlineDate}
+                    onChange={(e) => {
+                      setDeadlineDate(e.target.value);
+                      setDeadlineError(null);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Deadline Time</label>
+                  <input
+                    type="time"
+                    value={deadlineTime}
+                    onChange={(e) => {
+                      setDeadlineTime(e.target.value);
+                      setDeadlineError(null);
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                When this deadline passes, the examination closes and student responses are queued for batch Classroom Diagnostic AI analysis.
+              </p>
+            </div>
           </div>
 
           {/* Availability Targeting */}

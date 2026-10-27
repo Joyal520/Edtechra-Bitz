@@ -47,6 +47,7 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
 
   const [scheduleDate, setScheduleDate] = useState(defaultDateTime.date);
   const [scheduleTime, setScheduleTime] = useState(defaultDateTime.time);
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(60);
 
   // Timezone representation
   const userTimezone = useMemo(() => {
@@ -321,16 +322,31 @@ export const LiveQuizLaunchDecisionModal: React.FC<LiveQuizLaunchDecisionModalPr
                 </div>
               </div>
 
-              {/* COUNTDOWN PREVIEW */}
-              <div className="mt-3 pt-3 border-t border-emerald-200/80 flex items-center justify-between text-xs">
-                <span className="text-slate-700 font-bold">Countdown Preview:</span>
-                <span
-                  className={`font-black ${
-                    isValidTime ? 'text-emerald-800' : 'text-rose-700'
-                  }`}
-                >
-                  {countdownText}
-                </span>
+              {/* COUNTDOWN PREVIEW & AUTO-CLOSE DEADLINE */}
+              <div className="mt-3 pt-3 border-t border-emerald-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-slate-700 font-bold">Auto-Close Window (Deadline):</label>
+                  <select
+                    value={sessionDurationMinutes}
+                    onChange={(e) => setSessionDurationMinutes(Number(e.target.value) || 60)}
+                    className="px-2.5 py-1 bg-white rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
+                  >
+                    <option value={30}>30 mins after start</option>
+                    <option value={60}>60 mins after start</option>
+                    <option value={120}>2 hours after start</option>
+                    <option value={1440}>24 hours after start</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-700 font-bold">Countdown Preview:</span>
+                  <span
+                    className={`font-black ${
+                      isValidTime ? 'text-emerald-800' : 'text-rose-700'
+                    }`}
+                  >
+                    {countdownText}
+                  </span>
+                </div>
               </div>
             </div>
 

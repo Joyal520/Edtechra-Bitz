@@ -223,26 +223,73 @@ export interface DiagnosisExample {
 export interface DiagnosisItem {
   diagnosis_id: string;
   category: 'grammar' | 'spelling' | 'vocabulary' | 'writing' | 'reading' | 'curriculum' | string;
+  topic?: string;
   skill: string;
   subskill?: string;
   specific_problem: string;
+  observedErrorPattern?: string;
   affected_students: string[];
   affected_students_count?: number;
+  affectedStudentCount?: number;
+  students_assessed?: number;
+  studentsAssessed?: number;
+  affected_percentage?: number;
+  affectedPercentage?: number;
   total_students: number;
   accuracy: number;
+  accuracyPercentage?: number;
   frequency: number;
+  errorOccurrenceCount?: number;
+  total_opportunities?: number;
+  totalOpportunities?: number;
   severity: 'high' | 'medium' | 'low';
   confidence: 'confirmed' | 'early_signal' | string;
   evidence_sources: string[];
+  evidenceSources?: string[];
+  evidence_ids?: string[];
+  evidenceIds?: string[];
   examples: DiagnosisExample[];
   recommended_teaching: string;
+  recommendedTeachingAction?: string;
+  follow_up_activity?: string;
+  followUpActivity?: string;
+  reassessment_method?: string;
+  reassessmentMethod?: string;
   priority_score: number;
   // Dual-compatibility alias fields:
-  topic?: string;
   displayName?: string;
   sources?: string[];
   affectedStudentsCount?: number;
   recommended_action?: string;
+}
+
+export interface PerformanceDistributionSummary {
+  excellent: { label: string; min: number; max: number; count: number; percentage: number; students?: any[] };
+  good: { label: string; min: number; max: number; count: number; percentage: number; students?: any[] };
+  pretty: { label: string; min: number; max: number; count: number; percentage: number; students?: any[] };
+  bad: { label: string; min: number; max: number; count: number; percentage: number; students?: any[] };
+  unclassified: { label: string; min: number | null; max: number | null; count: number; percentage: number; students?: any[] };
+  totalStudents: number;
+  eligibleCount: number;
+  unclassifiedCount: number;
+  thresholds?: {
+    EXCELLENT_MIN: number;
+    GOOD_MIN: number;
+    PRETTY_MIN: number;
+  };
+}
+
+export interface BatchAnalysisStatus {
+  status: 'open' | 'closed_pending_analysis' | 'processing' | 'completed' | 'failed' | string;
+  batchKey?: string | null;
+  hasNewEvidence?: boolean;
+  pendingActivitiesCount?: number;
+  openActivitiesCount?: number;
+  lastAnalyzedAt?: string | null;
+  lastBatchId?: string | null;
+  failedBatchId?: string | null;
+  errorMessage?: string | null;
+  retryCount?: number;
 }
 
 export interface EvidenceBreakdown {
@@ -346,6 +393,9 @@ export interface ClassroomMetricsSummary {
   spellingDiagnosis?: any;
   weak_area_visual_data?: WeakAreaVisualData | null;
   activity_breakdown?: any;
+  performance_distribution?: PerformanceDistributionSummary;
+  performanceDistribution?: PerformanceDistributionSummary;
+  batch_status?: BatchAnalysisStatus;
   data_hash: string;
   computed_at: string;
 }
@@ -354,6 +404,13 @@ export interface TeachingIntelligenceResponse {
   success: boolean;
   cached?: boolean;
   has_analysis?: boolean;
+  up_to_date?: boolean;
+  ai_called?: boolean;
+  message?: string;
+  processing_status?: string;
+  batch_status?: BatchAnalysisStatus;
+  last_analyzed_at?: string;
+  diagnosis_version?: number;
   metrics: ClassroomMetricsSummary;
   intelligence: TeachingIntelligenceData | null;
   ai_provider?: string;
@@ -423,13 +480,23 @@ class TeachingIntelligenceService {
   }
 
   /**
-   * Forces fresh AI analysis for classroom
+   * Triggers deadline-based batch AI analysis if new completed evidence is available,
+   * or forces reanalysis when explicitly confirmed by the teacher.
    */
-  async refreshTeachingIntelligence(classroomId: string): Promise<TeachingIntelligenceResponse> {
+  async refreshTeachingIntelligence(
+    classroomId: string,
+    options?: { confirmForceReanalysis?: boolean }
+  ): Promise<TeachingIntelligenceResponse> {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`/api/classes/${classroomId}/teaching-intelligence/refresh`, {
       method: 'POST',
-      headers
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      },
+      body: JSON.stringify({
+        confirmForceReanalysis: Boolean(options?.confirmForceReanalysis)
+      })
     });
 
     return await parseApiResponse<TeachingIntelligenceResponse>(res, 'Failed to refresh teaching intelligence.');

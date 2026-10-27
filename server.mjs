@@ -67,7 +67,10 @@ import {
   getExamDetailedAnalysis,
   getStudentTeachingIntelligence,
   handleTeacherChat,
-  invalidateTeachingIntelligenceCache
+  invalidateTeachingIntelligenceCache,
+  closeExpiredActivities,
+  inspectClassroomBatchState,
+  runScheduledDeadlineBatchWorker
 } from './server/teachingIntelligenceService.mjs';
 import {
   generateTeachingPlan,
@@ -277,6 +280,12 @@ if (serverSupabase && process.env.VERCEL !== '1') {
   setInterval(() => {
     syncScheduledExams().catch(() => {});
   }, 10000);
+
+  // Authoritative Deadline-Based Batch Classroom Analysis Worker (Zero Teacher Browser Required)
+  runScheduledDeadlineBatchWorker({ serverSupabase, serverOpenAI }).catch(() => {});
+  setInterval(() => {
+    runScheduledDeadlineBatchWorker({ serverSupabase, serverOpenAI }).catch(() => {});
+  }, 30000);
 }
 
 // ============================================================================
@@ -3481,11 +3490,16 @@ app.post(['/api/classes/:id/teaching-intelligence/refresh', '/api/classes/:id/in
       return res.status(403).json({ success: false, error: 'Teacher authorization required.' });
     }
 
+    const confirmForceReanalysis = Boolean(
+      req.body?.confirmForceReanalysis || req.body?.forceReanalysis || req.query?.force === 'true'
+    );
+
     const result = await getClassroomTeachingIntelligence({
       serverSupabase,
       classroomId,
       teacherId: authData.user.id,
       forceRefresh: true,
+      confirmForceReanalysis,
       serverOpenAI
     });
 
@@ -3493,6 +3507,32 @@ app.post(['/api/classes/:id/teaching-intelligence/refresh', '/api/classes/:id/in
   } catch (error) {
     console.error('Error in POST /api/classes/:id/teaching-intelligence/refresh:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to refresh intelligence' });
+  }
+});
+
+// POST /api/classes/:id/teaching-intelligence/process-deadlines - Trigger deadline closure & batch queue processing
+app.post('/api/classes/:id/teaching-intelligence/process-deadlines', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const closeResult = await closeExpiredActivities(serverSupabase, classroomId);
+    const result = await getClassroomTeachingIntelligence({
+      serverSupabase,
+      classroomId,
+      teacherId: authData.user.id,
+      forceRefresh: false,
+      serverOpenAI
+    });
+    res.json({
+      ...result,
+      closed_activities: closeResult.closedActivities
+    });
+  } catch (error) {
+    console.error('Error in POST /api/classes/:id/teaching-intelligence/process-deadlines:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to process activity deadlines' });
   }
 });
 
@@ -8265,6 +8305,21 @@ app.post('/api/classes/challenges', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Classroom ID, title, and instructions are required.' });
     }
 
+    if (!deadlineAt) {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid submission deadline is required before publishing a competition.'
+      });
+    }
+
+    const parsedChallengeDeadline = new Date(deadlineAt);
+    if (Number.isNaN(parsedChallengeDeadline.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid deadline timestamp format.'
+      });
+    }
+
     // Authoritative teacher authorization check
     const isAuthorized = await isTeacherAuthorized(authData, classroomId);
     if (!isAuthorized) {
@@ -8816,6 +8871,21 @@ app.post('/api/classes/tasks', async (req, res) => {
 
     if (!classroomId || !title?.trim()) {
       return res.status(400).json({ success: false, error: 'Classroom ID and Title are required.' });
+    }
+
+    if (!dueDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid deadline (dueDate) is required before publishing a classroom task.'
+      });
+    }
+
+    const parsedDueDate = new Date(dueDate);
+    if (Number.isNaN(parsedDueDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid deadline (dueDate) timestamp format.'
+      });
     }
 
     // Validate requiredWordLength if provided
@@ -9816,6 +9886,22 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Task not found.', code: 'TASK_NOT_FOUND' });
     }
 
+    // Stage 2 & 3 Deadline Check: Reject new submissions after the task deadline unless late submissions are allowed
+    const allowLateTask = Boolean(task.allow_late_submission || task.settings?.allow_late_submission);
+    if (task.due_date && !allowLateTask) {
+      const dueMs = new Date(task.due_date).getTime();
+      // If due_date was stored as a date-only string (YYYY-MM-DD), treat cutoff as end-of-day 23:59:59 UTC
+      const effectiveCutoffMs =
+        String(task.due_date).length <= 10 ? dueMs + 24 * 60 * 60 * 1000 - 1 : dueMs;
+      if (Number.isFinite(effectiveCutoffMs) && Date.now() > effectiveCutoffMs) {
+        return res.status(400).json({
+          success: false,
+          code: 'DEADLINE_PASSED',
+          error: 'The submission deadline for this task has passed.'
+        });
+      }
+    }
+
     // Validate minimum required word count for typed responses
     const requiredWords = Number(task.required_word_length || task.settings?.required_word_length || 0);
     if (!hasHandwrittenWork && (!fileUrls || fileUrls.length === 0) && (!studentAnswers || studentAnswers.length === 0) && requiredWords > 0) {
@@ -9953,12 +10039,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
         .eq('student_id', authData.user.id)
         .maybeSingle();
 
-      // Invalidate Teaching Intelligence cache
-      if (task.classroom_id) {
-        try {
-          await serverSupabase.from('ai_classroom_insights').delete().eq('classroom_id', task.classroom_id);
-        } catch (_) {}
-      }
+      // Stage 2 Deadline Pipeline Rule: Do NOT delete saved ai_classroom_insights on individual student task submissions.
+      // Classroom diagnostic AI analysis is triggered in batches after activity deadlines close.
 
       if (completedEval && (finalSub?.status === 'graded' || completedEval.status === 'completed' || finalSub?.final_score != null)) {
         console.log(`[TaskSubmit] Successfully evaluated handwritten task: ${taskId}, score: ${finalSub?.final_score ?? completedEval?.score}`);
@@ -10276,17 +10358,8 @@ app.post('/api/classes/tasks/:id/submit', async (req, res) => {
       }
     }
 
-    // Invalidate Teaching Intelligence cache so new evidence is picked up
-    if (isGraded && task.classroom_id) {
-      try {
-        await serverSupabase
-          .from('ai_classroom_insights')
-          .delete()
-          .eq('classroom_id', task.classroom_id);
-      } catch (_tiErr) {
-        // Non-critical: cache will regenerate on next teacher visit
-      }
-    }
+    // Stage 2 Deadline Pipeline Rule: Do NOT delete saved ai_classroom_insights on individual student task submissions.
+    // Classroom diagnostic AI analysis runs in a batch once the task's deadline passes.
 
     res.json({
       success: true,
@@ -19403,8 +19476,36 @@ app.all('/api/exam-engine', async (req, res) => {
       if (!payload.approved) {
         return res.status(403).json({ success: false, error: 'Teacher approval is required before publishing.' });
       }
+      const rawStartsAt = payload.starts_at || payload.startsAt || payload.publishSettings?.startsAt || payload.schedule?.startDate || null;
+      const rawEndsAt = payload.ends_at || payload.endsAt || payload.publishSettings?.endsAt || payload.schedule?.endDate || null;
+      if (!rawEndsAt) {
+        return res.status(400).json({
+          success: false,
+          error: 'A valid exam deadline (end date & time) is required before publishing.'
+        });
+      }
+      const parsedEnd = new Date(rawEndsAt);
+      if (Number.isNaN(parsedEnd.getTime())) {
+        return res.status(400).json({ success: false, error: 'Invalid exam deadline format.' });
+      }
+      if (rawStartsAt) {
+        const parsedStart = new Date(rawStartsAt);
+        if (Number.isNaN(parsedStart.getTime())) {
+          return res.status(400).json({ success: false, error: 'Invalid exam start time format.' });
+        }
+        if (parsedEnd.getTime() <= parsedStart.getTime()) {
+          return res.status(400).json({
+            success: false,
+            error: 'Exam deadline (end time) must be after the scheduled start time.'
+          });
+        }
+      }
       const teacherId = user?.id || '00000000-0000-0000-0000-000000000001';
-      const published = await saveExamToSupabase(serverSupabase, { ...payload, status: 'published' }, teacherId);
+      const published = await saveExamToSupabase(
+        serverSupabase,
+        { ...payload, starts_at: rawStartsAt, ends_at: parsedEnd.toISOString(), status: 'published' },
+        teacherId
+      );
       return res.json({ success: true, examId: published.id, status: 'published', publishedAt: published.published_at });
     }
 

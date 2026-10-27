@@ -1417,22 +1417,26 @@ export const AssessmentBuilder: React.FC<AssessmentBuilderProps> = ({
         onUpdateAssessment={(updated) => updateAssessment(() => updated)}
         onPublishExam={async (settings) => {
           let startsAt: string | null = null;
-          let endsAt: string | null = null;
+          let endsAt: string | null = (settings as any)?.endsAt || null;
           const duration = Number(assessment.exam.durationMinutes) || 60;
 
           if (settings?.mode === 'schedule' && settings.scheduledDate) {
             const startObj = new Date(`${settings.scheduledDate}T${settings.startTime || '09:00'}:00`);
             startsAt = startObj.toISOString();
-            endsAt = new Date(startObj.getTime() + duration * 60 * 1000).toISOString();
+            if (!endsAt) {
+              endsAt = new Date(startObj.getTime() + duration * 60 * 1000).toISOString();
+            }
+          } else if (!endsAt) {
+            const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            d.setHours(23, 59, 0, 0);
+            endsAt = d.toISOString();
           }
 
-          const updatedMeta = startsAt
-            ? {
-                ...assessment.exam,
-                startsAt,
-                endsAt
-              }
-            : assessment.exam;
+          const updatedMeta = {
+            ...assessment.exam,
+            startsAt: startsAt || assessment.exam.startsAt || null,
+            endsAt
+          };
           const assessmentToSave: CanonicalAssessmentV2 = {
             ...assessment,
             exam: updatedMeta

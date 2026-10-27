@@ -32,6 +32,9 @@ interface EvidenceReportsTabProps {
   initialFilter?: {
     topic?: string;
     studentId?: string;
+    diagnosisId?: string;
+    evidenceIds?: string[];
+    skillLabel?: string;
   };
   /** Legacy props from AITeachingIntelligenceModal */
   classroom?: Classroom | { id: string; [key: string]: any } | null;
@@ -64,6 +67,9 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
 
   const [studentFilter, setStudentFilter] = useState<string>(initialFilter?.studentId || 'all');
   const [topicFilter, setTopicFilter] = useState<string>(initialFilter?.topic || 'all');
+  const [evidenceIdsFilter, setEvidenceIdsFilter] = useState<string[] | null>(
+    initialFilter?.evidenceIds && initialFilter.evidenceIds.length > 0 ? initialFilter.evidenceIds : null
+  );
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceDetailItem | null>(null);
@@ -76,7 +82,12 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
     if (initialFilter?.studentId) {
       setStudentFilter(initialFilter.studentId);
     }
-  }, [initialFilter?.topic, initialFilter?.studentId]);
+    if (initialFilter?.evidenceIds && initialFilter.evidenceIds.length > 0) {
+      setEvidenceIdsFilter(initialFilter.evidenceIds);
+    } else {
+      setEvidenceIdsFilter(null);
+    }
+  }, [initialFilter?.topic, initialFilter?.studentId, initialFilter?.evidenceIds]);
 
   // Extract all individual evidence events from metrics.all_evidence or students.assessmentHistory
   const allEvidence = useMemo(() => {
@@ -127,6 +138,14 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
   const filteredEvidence = useMemo(() => {
     return allEvidence.filter((ev) => {
       if (studentFilter !== 'all' && ev.studentId !== studentFilter) return false;
+
+      if (evidenceIdsFilter && evidenceIdsFilter.length > 0) {
+        const evId = String(ev.id || ev.activityId || '');
+        const actId = String(ev.activityId || '');
+        if (evidenceIdsFilter.includes(evId) || (actId && evidenceIdsFilter.includes(actId))) {
+          return true;
+        }
+      }
       
       if (topicFilter !== 'all') {
         const filterLower = topicFilter.toLowerCase().trim();
@@ -266,12 +285,15 @@ export const EvidenceReportsTab: React.FC<EvidenceReportsTabProps> = ({
               </span>
               <h3 className="text-base font-black text-[#173B3F]">{focusStats.topic}</h3>
             </div>
-            <button
-              onClick={() => setTopicFilter('all')}
-              className="text-xs font-bold text-[#087477] hover:text-[#065e60] underline cursor-pointer"
-            >
-              Clear Focus (View All Topics)
-            </button>
+              <button
+                onClick={() => {
+                  setTopicFilter('all');
+                  setEvidenceIdsFilter(null);
+                }}
+                className="text-xs font-bold text-[#087477] hover:text-[#065e60] underline cursor-pointer"
+              >
+                Clear Focus (View All Topics)
+              </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-6 text-xs text-[#36565A]">
