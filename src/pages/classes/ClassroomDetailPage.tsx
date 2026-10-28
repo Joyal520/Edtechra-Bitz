@@ -429,7 +429,7 @@ export const ClassroomDetailPage: React.FC = () => {
     try {
       const [freshClassroom, freshLeaderboard] = await Promise.all([
         classroomService.getClassroomById(id),
-        classroomPointsService.getClassroomLeaderboard(id)
+        classroomPointsService.getClassroomLeaderboard(id, { throwOnError: true })
       ]);
       if (freshClassroom) {
         setClassroom(freshClassroom);
@@ -437,6 +437,7 @@ export const ClassroomDetailPage: React.FC = () => {
       setLeaderboard(freshLeaderboard);
     } catch (err) {
       console.error('Error refreshing classroom leaderboard:', err);
+      throw err;
     }
   };
 
@@ -622,6 +623,18 @@ export const ClassroomDetailPage: React.FC = () => {
             },
             () => {
               if (isMounted) loadAllClassroomData(true);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'classrooms',
+              filter: `id=eq.${id}`
+            },
+            () => {
+              if (isMounted) refreshLeaderboard().catch(() => {});
             }
           )
           .subscribe()

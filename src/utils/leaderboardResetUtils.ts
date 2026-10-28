@@ -2,9 +2,10 @@
 // EDTECHRA-BITZ: Classroom Leaderboard Reset Engine & Schedule Utilities
 // ============================================================================
 
-import { LeaderboardResetFrequency } from '@/types/classroom';
+import { ClassroomLeaderboardEntry, LeaderboardResetFrequency } from '@/types/classroom';
 
 export const DEFAULT_LEADERBOARD_TIMEZONE = 'Asia/Colombo';
+export const LEADERBOARD_SHARE_TITLE = 'EdTechra Classroom Leaderboard';
 
 /**
  * Returns the exact millisecond offset between target timeZone and UTC for a given timestamp.
@@ -191,4 +192,50 @@ export function formatLeaderboardResetText(
       nextResetLabel: resetDate.toISOString()
     };
   }
+}
+
+/**
+ * Sanitizes a student display name so email addresses, domain suffixes, or control characters
+ * are never exposed on the leaderboard or in shared leaderboard updates.
+ */
+export function sanitizeLeaderboardStudentName(rawName?: string | null): string {
+  const trimmed = String(rawName || '').trim();
+  if (!trimmed) return 'Student';
+  const withoutEmailDomain = trimmed.includes('@') ? trimmed.split('@')[0].trim() : trimmed;
+  return withoutEmailDomain || 'Student';
+}
+
+/**
+ * Formats clean, privacy-safe shareable leaderboard update text from current leaderboard entries.
+ * Never includes emails, UUIDs, internal database IDs, or private metadata.
+ */
+export function formatLeaderboardShareText(
+  entries: Pick<ClassroomLeaderboardEntry, 'name' | 'points'>[],
+  topN: number = 3
+): string {
+  const topEntries = (entries || []).slice(0, Math.max(1, topN));
+
+  if (topEntries.length === 0) {
+    return [
+      LEADERBOARD_SHARE_TITLE,
+      '',
+      'No leaderboard scores yet.',
+      '',
+      'Keep learning. Keep growing.'
+    ].join('\n');
+  }
+
+  const lines = topEntries.map((entry, idx) => {
+    const safeName = sanitizeLeaderboardStudentName(entry.name);
+    const safePoints = Math.max(0, Number(entry.points) || 0).toLocaleString();
+    return `${idx + 1}. ${safeName} — ${safePoints} XP`;
+  });
+
+  return [
+    LEADERBOARD_SHARE_TITLE,
+    '',
+    ...lines,
+    '',
+    'Keep learning. Keep growing.'
+  ].join('\n');
 }

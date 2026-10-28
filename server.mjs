@@ -3083,184 +3083,121 @@ app.get('/api/classes/:id/analytics', async (req, res) => {
 // Classroom Leaderboard Reset Engine & Scheduling
 // ============================================================================
 
-function calculateServerLeaderboardNextResetDate(frequency, fromDateInput = new Date(), timeZone = 'Asia/Colombo') {
-  if (frequency === 'never') return null;
-  const fromDate = new Date(fromDateInput);
-  if (isNaN(fromDate.getTime())) return null;
+// Per-classroom in-flight lock map to prevent concurrent duplicate reset requests
+const inFlightClassroomLeaderboardResets = new Map();
 
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      weekday: 'short'
-    });
-    const parts = Object.fromEntries(formatter.formatToParts(fromDate).map(p => [p.type, p.value]));
-    const year = parseInt(parts.year, 10);
-    const month = parseInt(parts.month, 10) - 1;
-    const day = parseInt(parts.day, 10);
-    const weekday = parts.weekday;
-
-    const dayIndexMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-    const currentDayOfWeek = dayIndexMap[weekday] ?? 0;
-
-    let targetYear = year;
-    let targetMonth = month;
-    let targetDay = day;
-
-    if (frequency === 'daily') {
-      targetDay += 1;
-    } else if (frequency === 'weekly') {
-      const daysUntilMonday = (8 - currentDayOfWeek) % 7 || 7;
-      targetDay += daysUntilMonday;
-    } else if (frequency === 'monthly') {
-      targetDay = 1;
-      targetMonth += 1;
-    }
-
-    const localTargetUtc = Date.UTC(targetYear, targetMonth, targetDay, 0, 0, 0);
-    const tzFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: 'numeric', minute: 'numeric', second: 'numeric',
-      hourCycle: 'h23'
-    });
-    const tzParts = Object.fromEntries(tzFormatter.formatToParts(new Date(localTargetUtc)).map(p => [p.type, p.value]));
-    const tzAsUtc = Date.UTC(
-      parseInt(tzParts.year, 10),
-      parseInt(tzParts.month, 10) - 1,
-      parseInt(tzParts.day, 10),
-      parseInt(tzParts.hour, 10),
-      parseInt(tzParts.minute, 10),
-      parseInt(tzParts.second, 10)
-    );
-    const offset = tzAsUtc - localTargetUtc;
-    return new Date(localTargetUtc - offset);
-  } catch (_e) {
-    const fallback = new Date(fromDate);
-    fallback.setUTCHours(0, 0, 0, 0);
-    if (frequency === 'daily') fallback.setUTCDate(fallback.getUTCDate() + 1);
-    else if (frequency === 'weekly') fallback.setUTCDate(fallback.getUTCDate() + ((8 - fallback.getUTCDay()) % 7 || 7));
-    else if (frequency === 'monthly') {
-      fallback.setUTCMonth(fallback.getUTCMonth() + 1);
-      fallback.setUTCDate(1);
-    }
-    return fallback;
+// Strict fail-closed teacher/admin authorization for classroom leaderboard mutations
+async function verifyClassroomLeaderboardTeacher(supabaseClient, classroomId, authUser) {
+  if (!supabaseClient) {
+    return { authorized: false, status: 503, error: 'Database service is unavailable.' };
   }
+  if (!authUser || !authUser.user || !authUser.user.id) {
+    return { authorized: false, status: 401, error: 'Authentication required.' };
+  }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!classroomId || !uuidRegex.test(classroomId)) {
+    return { authorized: false, status: 400, error: 'Valid classroom ID is required.' };
+  }
+
+  const { data: classroom, error: classErr } = await supabaseClient
+    .from('classrooms')
+    .select('id, teacher_id')
+    .eq('id', classroomId)
+    .maybeSingle();
+
+  if (classErr) {
+    console.error('[LeaderboardAuth] Classroom lookup failed:', { classroomId, code: classErr.code, message: classErr.message });
+    return { authorized: false, status: 500, error: 'Failed to verify classroom permissions.' };
+  }
+  if (!classroom) {
+    return { authorized: false, status: 404, error: 'Classroom not found.' };
+  }
+
+  const email = authUser.user.email?.toLowerCase().trim();
+  if (email === 'roshanjoyal520@gmail.com' || authUser.profile?.role === 'admin' || classroom.teacher_id === authUser.user.id) {
+    return { authorized: true, status: 200 };
+  }
+
+  const { data: membership, error: memErr } = await supabaseClient
+    .from('classroom_members')
+    .select('role, status')
+    .eq('classroom_id', classroomId)
+    .eq('profile_id', authUser.user.id)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (memErr) {
+    console.error('[LeaderboardAuth] Membership lookup failed:', { classroomId, code: memErr.code, message: memErr.message });
+    return { authorized: false, status: 500, error: 'Failed to verify classroom permissions.' };
+  }
+
+  if (membership?.role === 'teacher' || membership?.role === 'co-teacher') {
+    return { authorized: true, status: 200 };
+  }
+
+  return {
+    authorized: false,
+    status: 403,
+    error: 'Access denied: Only classroom teachers and admins can manage the leaderboard.'
+  };
 }
 
-// In-memory & resilient fallback cache for classroom leaderboard settings
-const serverClassroomLeaderboardCache = new Map();
-
-// Background scheduler for automatic leaderboard resets
+// Background scheduler for automatic leaderboard resets (uses same safe non-destructive DB RPC)
 async function runScheduledLeaderboardResets() {
   if (!serverSupabase) return;
   try {
-    const nowIso = new Date().toISOString();
-    
-    // Check in-memory / cache classrooms
-    for (const [classroomId, settings] of serverClassroomLeaderboardCache.entries()) {
-      if (settings.frequency && settings.frequency !== 'never' && settings.next_reset_at && new Date(settings.next_reset_at).getTime() <= Date.now()) {
-        const timeZone = settings.timezone || 'Asia/Colombo';
-        const nextReset = calculateServerLeaderboardNextResetDate(settings.frequency, new Date(), timeZone);
-        serverClassroomLeaderboardCache.set(classroomId, {
-          ...settings,
-          reset_at: settings.next_reset_at,
-          next_reset_at: nextReset ? nextReset.toISOString() : null
-        });
-        console.log(`[LeaderboardScheduler] Cache auto-reset for classroom ${classroomId}`);
-      }
+    // Include 60s clock-skew buffer; Postgres sync_classroom_leaderboard_schedule enforces exact clock_timestamp()
+    const checkCutoffIso = new Date(Date.now() + 60 * 1000).toISOString();
+
+    const { data: dueClassrooms, error } = await serverSupabase
+      .from('classrooms')
+      .select('id')
+      .neq('leaderboard_reset_frequency', 'never')
+      .not('leaderboard_next_reset_at', 'is', null)
+      .lte('leaderboard_next_reset_at', checkCutoffIso);
+
+    if (error) {
+      console.error('[LeaderboardScheduler] Failed to query due classrooms:', { code: error.code, message: error.message });
+      return;
     }
 
-    // Attempt database check if columns exist
-    try {
-      const { data: dueClassrooms, error } = await serverSupabase
-        .from('classrooms')
-        .select('id, leaderboard_reset_frequency, leaderboard_next_reset_at, leaderboard_timezone')
-        .neq('leaderboard_reset_frequency', 'never')
-        .not('leaderboard_next_reset_at', 'is', null)
-        .lte('leaderboard_next_reset_at', nowIso);
-
-      if (!error && dueClassrooms && dueClassrooms.length > 0) {
-        for (const c of dueClassrooms) {
-          const timeZone = c.leaderboard_timezone || 'Asia/Colombo';
-          const nextReset = calculateServerLeaderboardNextResetDate(c.leaderboard_reset_frequency, new Date(), timeZone);
-          await serverSupabase
-            .from('classrooms')
-            .update({
-              leaderboard_reset_at: c.leaderboard_next_reset_at || nowIso,
-              leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-              updated_at: nowIso
-            })
-            .eq('id', c.id);
+    if (Array.isArray(dueClassrooms) && dueClassrooms.length > 0) {
+      for (const c of dueClassrooms) {
+        const { data: syncRes, error: syncErr } = await serverSupabase.rpc(
+          'sync_classroom_leaderboard_schedule',
+          { p_classroom_id: c.id }
+        );
+        if (syncErr) {
+          console.error('[LeaderboardScheduler] Scheduled reset RPC failed:', { classroomId: c.id, code: syncErr.code, message: syncErr.message });
+        } else if (syncRes?.auto_reset_applied) {
+          console.log(`[LeaderboardScheduler] Applied scheduled non-destructive reset for classroom ${c.id}`);
         }
       }
-    } catch (_) {
-      // Column may not exist in classrooms yet
     }
   } catch (err) {
-    console.error('[runScheduledLeaderboardResets error]:', err);
+    console.error('[runScheduledLeaderboardResets error]:', err?.message || err);
   }
 }
 
-// Run leaderboard scheduler periodically
-setInterval(() => {
-  runScheduledLeaderboardResets().catch(() => {});
-}, 60 * 1000);
-setTimeout(() => {
-  runScheduledLeaderboardResets().catch(() => {});
-}, 10000);
+// Run leaderboard scheduler periodically in long-running server mode
+if (process.env.VERCEL !== '1') {
+  const lbInterval = setInterval(() => {
+    runScheduledLeaderboardResets().catch(() => {});
+  }, 60 * 1000);
+  lbInterval.unref?.();
 
-// GET /api/classes/:id/leaderboard/settings - Retrieve leaderboard reset settings
+  const lbInitialTimer = setTimeout(() => {
+    runScheduledLeaderboardResets().catch(() => {});
+  }, 10000);
+  lbInitialTimer.unref?.();
+}
+
+// GET /api/classes/:id/leaderboard/settings - Retrieve authoritative leaderboard reset settings
 app.get('/api/classes/:id/leaderboard/settings', async (req, res) => {
   try {
-    const authData = await verifyAuthUser(req);
-    if (!authData) {
-      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    if (!serverSupabase) {
+      return res.status(503).json({ success: false, error: 'Database service is unavailable.' });
     }
-    const classroomId = req.params.id;
-
-    // Check memory store first
-    const cached = serverClassroomLeaderboardCache.get(classroomId);
-
-    // Try database
-    let dbSettings = null;
-    try {
-      const { data, error } = await serverSupabase
-        .from('classrooms')
-        .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-        .eq('id', classroomId)
-        .maybeSingle();
-
-      if (!error && data) {
-        dbSettings = data;
-      }
-    } catch (_) {}
-
-    const frequency = dbSettings?.leaderboard_reset_frequency || cached?.frequency || 'never';
-    const reset_at = dbSettings?.leaderboard_reset_at || cached?.reset_at || null;
-    const next_reset_at = dbSettings?.leaderboard_next_reset_at || cached?.next_reset_at || null;
-    const timezone = dbSettings?.leaderboard_timezone || cached?.timezone || 'Asia/Colombo';
-
-    res.json({
-      success: true,
-      settings: {
-        frequency,
-        reset_at,
-        next_reset_at,
-        timezone
-      }
-    });
-  } catch (error) {
-    console.error('Error in GET /api/classes/:id/leaderboard/settings:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve leaderboard settings.' });
-  }
-});
-
-// POST /api/classes/:id/leaderboard/settings - Update leaderboard reset schedule (TEACHER ONLY)
-app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
-  try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
@@ -3268,7 +3205,59 @@ app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
     const classroomId = req.params.id;
     const isTeacher = await verifyTeacherClassroomAccess(serverSupabase, classroomId, authData);
     if (!isTeacher) {
-      return res.status(403).json({ success: false, error: 'Access denied: Only classroom teachers and admins can modify leaderboard settings.' });
+      const { data: mem } = await serverSupabase
+        .from('classroom_members')
+        .select('id')
+        .eq('classroom_id', classroomId)
+        .eq('profile_id', authData.user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (!mem) {
+        return res.status(403).json({ success: false, error: 'Access denied: Classroom membership required.' });
+      }
+    }
+
+    const { data: syncData, error: syncError } = await serverSupabase.rpc(
+      'sync_classroom_leaderboard_schedule',
+      { p_classroom_id: classroomId }
+    );
+
+    if (syncError || !syncData?.success) {
+      console.error('[LeaderboardSettings GET] RPC error:', { classroomId, code: syncError?.code, message: syncError?.message });
+      return res.status(500).json({ success: false, error: 'Failed to retrieve leaderboard settings.' });
+    }
+
+    res.json({
+      success: true,
+      settings: {
+        frequency: syncData.frequency || 'never',
+        reset_at: syncData.reset_at || null,
+        next_reset_at: syncData.next_reset_at || null,
+        timezone: syncData.timezone || 'Asia/Colombo'
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/classes/:id/leaderboard/settings:', error?.message || error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve leaderboard settings.' });
+  }
+});
+
+// POST /api/classes/:id/leaderboard/settings - Update leaderboard reset schedule (TEACHER/ADMIN ONLY)
+app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    const classroomId = req.params.id;
+    const perm = await verifyClassroomLeaderboardTeacher(serverSupabase, classroomId, authData);
+    if (!perm.authorized) {
+      return res.status(perm.status).json({
+        success: false,
+        error: perm.status === 403
+          ? 'Access denied: Only classroom teachers and admins can modify leaderboard settings.'
+          : perm.error
+      });
     }
 
     const { frequency, timezone } = req.body || {};
@@ -3277,130 +3266,105 @@ app.post('/api/classes/:id/leaderboard/settings', async (req, res) => {
       return res.status(400).json({ success: false, error: `Invalid frequency. Allowed options: ${validFrequencies.join(', ')}` });
     }
 
-    const effectiveTz = timezone || 'Asia/Colombo';
-    const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), effectiveTz);
-    const nowIso = new Date().toISOString();
+    const effectiveTz = typeof timezone === 'string' && timezone.trim() ? timezone.trim() : 'Asia/Colombo';
 
-    const newSettings = {
-      frequency,
-      reset_at: serverClassroomLeaderboardCache.get(classroomId)?.reset_at || null,
-      next_reset_at: nextReset ? nextReset.toISOString() : null,
-      timezone: effectiveTz
-    };
-
-    // Update memory cache immediately
-    serverClassroomLeaderboardCache.set(classroomId, newSettings);
-
-    // Attempt DB update safely without throwing if columns do not exist yet
-    try {
-      const updates = {
-        leaderboard_reset_frequency: frequency,
-        leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-        leaderboard_timezone: effectiveTz,
-        updated_at: nowIso
-      };
-
-      const { data, error } = await serverSupabase
-        .from('classrooms')
-        .update(updates)
-        .eq('id', classroomId)
-        .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-        .single();
-
-      if (!error && data) {
-        newSettings.frequency = data.leaderboard_reset_frequency || frequency;
-        newSettings.reset_at = data.leaderboard_reset_at || newSettings.reset_at;
-        newSettings.next_reset_at = data.leaderboard_next_reset_at || newSettings.next_reset_at;
-        newSettings.timezone = data.leaderboard_timezone || effectiveTz;
+    const { data: rpcData, error: rpcError } = await serverSupabase.rpc(
+      'update_classroom_leaderboard_settings',
+      {
+        p_classroom_id: classroomId,
+        p_frequency: frequency,
+        p_timezone: effectiveTz
       }
-    } catch (dbErr) {
-      console.warn('[Leaderboard] Database column update skipped (using memory store):', dbErr.message);
+    );
+
+    if (rpcError || !rpcData?.success || !rpcData?.settings) {
+      console.error('[LeaderboardSettings POST] Database update failed:', {
+        classroomId,
+        frequency,
+        code: rpcError?.code,
+        message: rpcError?.message
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update leaderboard reset frequency. Please try again.'
+      });
     }
 
     res.json({
       success: true,
       message: `Leaderboard reset frequency updated to ${frequency}.`,
-      settings: newSettings
+      settings: rpcData.settings
     });
   } catch (error) {
-    console.error('Error in POST /api/classes/:id/leaderboard/settings:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to update leaderboard settings.' });
+    console.error('Error in POST /api/classes/:id/leaderboard/settings:', error?.message || error);
+    res.status(500).json({ success: false, error: 'Failed to update leaderboard settings.' });
   }
 });
 
-// POST /api/classes/:id/leaderboard/reset - Manual reset of leaderboard scores to 0 XP (TEACHER ONLY)
+// POST /api/classes/:id/leaderboard/reset - Atomic manual reset of leaderboard scores to 0 XP (TEACHER/ADMIN ONLY)
 app.post('/api/classes/:id/leaderboard/reset', async (req, res) => {
+  const classroomId = req.params.id;
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) {
       return res.status(401).json({ success: false, error: 'Authentication required.' });
     }
-    const classroomId = req.params.id;
-    const isTeacher = await verifyTeacherClassroomAccess(serverSupabase, classroomId, authData);
-    if (!isTeacher) {
-      return res.status(403).json({ success: false, error: 'Access denied: Only classroom teachers and admins can reset the leaderboard.' });
+    const perm = await verifyClassroomLeaderboardTeacher(serverSupabase, classroomId, authData);
+    if (!perm.authorized) {
+      return res.status(perm.status).json({
+        success: false,
+        error: perm.status === 403
+          ? 'Access denied: Only classroom teachers and admins can reset the leaderboard.'
+          : perm.error
+      });
     }
 
-    const cached = serverClassroomLeaderboardCache.get(classroomId);
+    // Deduplicate simultaneous reset requests for the same classroom on this server instance
+    let resetPromise = inFlightClassroomLeaderboardResets.get(classroomId);
+    if (!resetPromise) {
+      resetPromise = (async () => {
+        const { data: rpcData, error: rpcError } = await serverSupabase.rpc(
+          'reset_classroom_leaderboard',
+          { p_classroom_id: classroomId }
+        );
+        if (rpcError || !rpcData?.success || !rpcData?.reset_at) {
+          const err = new Error('Leaderboard reset failed. No student learning data was changed. Please try again.');
+          err.dbCode = rpcError?.code;
+          err.dbMessage = rpcError?.message;
+          throw err;
+        }
+        return rpcData;
+      })();
+      inFlightClassroomLeaderboardResets.set(classroomId, resetPromise);
+    }
 
-    // Try fetching existing frequency from DB
-    let frequency = cached?.frequency || 'never';
-    let timeZone = cached?.timezone || 'Asia/Colombo';
-
+    let rpcData;
     try {
-      const { data: classroom } = await serverSupabase
-        .from('classrooms')
-        .select('leaderboard_reset_frequency, leaderboard_timezone')
-        .eq('id', classroomId)
-        .maybeSingle();
-
-      if (classroom?.leaderboard_reset_frequency) {
-        frequency = classroom.leaderboard_reset_frequency;
+      rpcData = await resetPromise;
+    } finally {
+      if (inFlightClassroomLeaderboardResets.get(classroomId) === resetPromise) {
+        inFlightClassroomLeaderboardResets.delete(classroomId);
       }
-      if (classroom?.leaderboard_timezone) {
-        timeZone = classroom.leaderboard_timezone;
-      }
-    } catch (_) {}
-
-    const nowIso = new Date().toISOString();
-    const nextReset = calculateServerLeaderboardNextResetDate(frequency, new Date(), timeZone);
-    const nextResetIso = nextReset ? nextReset.toISOString() : null;
-
-    // Update memory cache immediately
-    serverClassroomLeaderboardCache.set(classroomId, {
-      frequency,
-      reset_at: nowIso,
-      next_reset_at: nextResetIso,
-      timezone: timeZone
-    });
-
-    // Safely attempt Supabase database update
-    try {
-      const { error } = await serverSupabase
-        .from('classrooms')
-        .update({
-          leaderboard_reset_at: nowIso,
-          leaderboard_next_reset_at: nextResetIso,
-          updated_at: nowIso
-        })
-        .eq('id', classroomId);
-
-      if (error) {
-        console.warn('[Leaderboard] Database reset update notice (using cache):', error.message);
-      }
-    } catch (dbErr) {
-      console.warn('[Leaderboard] Database column not yet added, using resilient cache:', dbErr.message);
     }
 
     res.json({
       success: true,
-      message: 'Leaderboard reset successfully. Everyone starts from 0 XP.',
-      reset_at: nowIso,
-      next_reset_at: nextResetIso
+      message: 'Leaderboard reset successfully. Student learning records were preserved.',
+      reset_at: rpcData.reset_at,
+      next_reset_at: rpcData.next_reset_at ?? null,
+      frequency: rpcData.frequency || 'never',
+      timezone: rpcData.timezone || 'Asia/Colombo'
     });
   } catch (error) {
-    console.error('Error in POST /api/classes/:id/leaderboard/reset:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to reset leaderboard.' });
+    console.error('[LeaderboardReset POST] Operation failed:', {
+      classroomId,
+      code: error?.dbCode || error?.code,
+      message: error?.dbMessage || error?.message
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Leaderboard reset failed. No student learning data was changed. Please try again.'
+    });
   }
 });
 

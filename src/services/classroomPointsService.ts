@@ -4,9 +4,27 @@
 
 import { supabase } from '@/lib/supabase';
 import { ClassroomPoint, ClassroomLeaderboardEntry, LeaderboardResetFrequency, LeaderboardSettings } from '@/types/classroom';
-import { calculateNextResetDate, isResetDue, DEFAULT_LEADERBOARD_TIMEZONE } from '@/utils/leaderboardResetUtils';
+import { DEFAULT_LEADERBOARD_TIMEZONE, sanitizeLeaderboardStudentName } from '@/utils/leaderboardResetUtils';
+
+type ResetLeaderboardResponse = {
+  success: boolean;
+  error?: string;
+  message?: string;
+  reset_at?: string;
+  next_reset_at?: string | null;
+  frequency?: LeaderboardResetFrequency;
+  timezone?: string;
+};
+
+type UpdateLeaderboardSettingsResponse = {
+  success: boolean;
+  error?: string;
+  settings?: LeaderboardSettings;
+};
 
 class ClassroomPointsService {
+  private resetInFlight = new Map<string, Promise<ResetLeaderboardResponse>>();
+  private settingsInFlight = new Map<string, Promise<UpdateLeaderboardSettingsResponse>>();
   private async getUserId(): Promise<string | null> {
     if (!supabase) return null;
     const { data: { session } } = await supabase.auth.getSession();
@@ -88,93 +106,56 @@ class ClassroomPointsService {
     }
   }
 
-  public getLocalLeaderboardSettings(classroomId: string): LeaderboardSettings {
+  private clearLegacyLocalSettings(classroomId: string): void {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        const raw = window.localStorage.getItem(`edtechra_lb_settings_${classroomId}`);
-        if (raw) return JSON.parse(raw);
+        window.localStorage.removeItem(`edtechra_lb_settings_${classroomId}`);
       }
-    } catch (_) {}
-    return {
-      frequency: 'never',
-      reset_at: null,
-      next_reset_at: null,
-      timezone: DEFAULT_LEADERBOARD_TIMEZONE
-    };
-  }
-
-  public saveLocalLeaderboardSettings(classroomId: string, settings: LeaderboardSettings) {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(`edtechra_lb_settings_${classroomId}`, JSON.stringify(settings));
-      }
-    } catch (_) {}
+    } catch (_) {
+      // Ignore storage access restrictions
+    }
   }
 
   /**
-   * Calculates real-time classroom leaderboard rankings
+   * Calculates real-time classroom leaderboard rankings strictly from the database source of truth.
    */
-  async getClassroomLeaderboard(classroomId: string): Promise<ClassroomLeaderboardEntry[]> {
+  async getClassroomLeaderboard(
+    classroomId: string,
+    options?: { throwOnError?: boolean }
+  ): Promise<ClassroomLeaderboardEntry[]> {
     if (!supabase || !classroomId) return [];
 
+    this.clearLegacyLocalSettings(classroomId);
+
     try {
-      const localSettings = this.getLocalLeaderboardSettings(classroomId);
+      // 1. Fetch authoritative classroom ownership & leaderboard period state from database
+      const { data: classroom, error: classroomError } = await supabase
+        .from('classrooms')
+        .select('teacher_id, leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
+        .eq('id', classroomId)
+        .maybeSingle();
 
-      // 1. Fetch classroom safely (fallback to basic columns if migration not yet applied)
-      let classroom: any = null;
-      try {
-        const { data, error } = await supabase
-          .from('classrooms')
-          .select('teacher_id, leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-          .eq('id', classroomId)
-          .maybeSingle();
+      if (classroomError) throw classroomError;
+      if (!classroom) return [];
 
-        if (!error && data) {
-          classroom = data;
+      const ownerId = classroom.teacher_id;
+      const frequency = (classroom.leaderboard_reset_frequency as LeaderboardResetFrequency) || 'never';
+      let effectiveResetAt: string | null = classroom.leaderboard_reset_at || null;
+      const scheduledNextResetAt: string | null = classroom.leaderboard_next_reset_at || null;
+
+      // Authoritative scheduled auto-reset check (handles serverless & midnight rollover safely via DB RPC):
+      if (frequency !== 'never' && scheduledNextResetAt) {
+        const scheduledMs = new Date(scheduledNextResetAt).getTime();
+        // 60s buffer covers client/server clock skew; Postgres RPC verifies exact clock_timestamp() with row locking
+        if (!isNaN(scheduledMs) && scheduledMs <= Date.now() + 60_000) {
+          const { data: syncRes, error: syncErr } = await supabase.rpc(
+            'sync_classroom_leaderboard_schedule',
+            { p_classroom_id: classroomId }
+          );
+          if (!syncErr && syncRes?.success) {
+            effectiveResetAt = syncRes.reset_at || effectiveResetAt;
+          }
         }
-      } catch (_) {}
-
-      if (!classroom) {
-        const { data: coreClassroom } = await supabase
-          .from('classrooms')
-          .select('teacher_id')
-          .eq('id', classroomId)
-          .maybeSingle();
-        classroom = coreClassroom || {};
-      }
-
-      const ownerId = classroom?.teacher_id;
-      const frequency = (classroom?.leaderboard_reset_frequency as LeaderboardResetFrequency) || localSettings.frequency || 'never';
-      const timeZone = classroom?.leaderboard_timezone || localSettings.timezone || DEFAULT_LEADERBOARD_TIMEZONE;
-      let effectiveResetAt = classroom?.leaderboard_reset_at || localSettings.reset_at || null;
-      const scheduledNextResetAt = classroom?.leaderboard_next_reset_at || localSettings.next_reset_at || null;
-
-      // Self-healing automatic scheduled reset check:
-      if (frequency !== 'never' && scheduledNextResetAt && isResetDue(scheduledNextResetAt)) {
-        const passedResetTime = scheduledNextResetAt;
-        const nextReset = calculateNextResetDate(frequency, new Date(), timeZone);
-        effectiveResetAt = passedResetTime;
-
-        const updatedSettings: LeaderboardSettings = {
-          frequency,
-          reset_at: passedResetTime,
-          next_reset_at: nextReset ? nextReset.toISOString() : null,
-          timezone: timeZone
-        };
-        this.saveLocalLeaderboardSettings(classroomId, updatedSettings);
-
-        // Asynchronously update classroom reset state in Supabase if supported
-        try {
-          supabase
-            .from('classrooms')
-            .update({
-              leaderboard_reset_at: passedResetTime,
-              leaderboard_next_reset_at: nextReset ? nextReset.toISOString() : null,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', classroomId)
-            .then();
-        } catch (_) {}
       }
 
       // 2. Fetch active members
@@ -210,7 +191,8 @@ class ClassroomPointsService {
         pointsQuery = pointsQuery.gte('created_at', effectiveResetAt);
       }
 
-      const { data: pointsData } = await pointsQuery;
+      const { data: pointsData, error: pointsError } = await pointsQuery;
+      if (pointsError) throw pointsError;
 
       const pointsMap: Record<string, number> = {};
       (pointsData || []).forEach((p: any) => {
@@ -244,7 +226,7 @@ class ClassroomPointsService {
 
       if (studentList.length === 0) return [];
 
-      // 4. Count completed assignments (strictly for metadata)
+      // 4. Count completed assignments (strictly for metadata; historical submissions preserved)
       const { data: submissionsData } = await supabase
         .from('assignment_submissions')
         .select('student_id')
@@ -266,7 +248,15 @@ class ClassroomPointsService {
         const cleanMemberName = m.display_name && !m.display_name.includes('@')
           ? m.display_name.trim()
           : '';
-        const name = cleanProfileName || cleanMemberName || profile?.full_name?.trim() || m.display_name?.trim() || profile?.email?.split('@')[0] || 'Student';
+        const rawCandidateName =
+          cleanProfileName ||
+          cleanMemberName ||
+          profile?.full_name?.trim() ||
+          m.display_name?.trim() ||
+          profile?.email?.split('@')[0] ||
+          'Student';
+        const name = sanitizeLeaderboardStudentName(rawCandidateName);
+
         return {
           student_id: studentId,
           name,
@@ -285,18 +275,20 @@ class ClassroomPointsService {
       }));
     } catch (err) {
       console.error('[ClassroomPointsService] getClassroomLeaderboard error:', err);
+      if (options?.throwOnError) {
+        throw err;
+      }
       return [];
     }
   }
 
   /**
-   * Retrieves current leaderboard settings for a classroom
+   * Retrieves current leaderboard settings for a classroom directly from the database
    */
   async getLeaderboardSettings(classroomId: string): Promise<LeaderboardSettings | null> {
-    if (!classroomId) return null;
-    const localSettings = this.getLocalLeaderboardSettings(classroomId);
+    if (!classroomId || !supabase) return null;
+    this.clearLegacyLocalSettings(classroomId);
 
-    if (!supabase) return localSettings;
     try {
       const { data, error } = await supabase
         .from('classrooms')
@@ -304,171 +296,176 @@ class ClassroomPointsService {
         .eq('id', classroomId)
         .maybeSingle();
 
-      if (!error && data) {
-        return {
-          frequency: (data.leaderboard_reset_frequency as LeaderboardResetFrequency) || localSettings.frequency,
-          reset_at: data.leaderboard_reset_at || localSettings.reset_at,
-          next_reset_at: data.leaderboard_next_reset_at || localSettings.next_reset_at,
-          timezone: data.leaderboard_timezone || localSettings.timezone
-        };
-      }
-    } catch (_) {}
+      if (error || !data) return null;
 
-    return localSettings;
+      return {
+        frequency: (data.leaderboard_reset_frequency as LeaderboardResetFrequency) || 'never',
+        reset_at: data.leaderboard_reset_at || null,
+        next_reset_at: data.leaderboard_next_reset_at || null,
+        timezone: data.leaderboard_timezone || DEFAULT_LEADERBOARD_TIMEZONE
+      };
+    } catch (err) {
+      console.error('[ClassroomPointsService] getLeaderboardSettings error:', err);
+      return null;
+    }
   }
 
   /**
-   * Updates reset frequency and recomputes the next reset timestamp
+   * Updates reset frequency and recomputes the next reset timestamp on the backend/database.
    */
   async updateLeaderboardSettings(
     classroomId: string,
     frequency: LeaderboardResetFrequency,
     timeZone: string = DEFAULT_LEADERBOARD_TIMEZONE
-  ): Promise<{ success: boolean; error?: string; settings?: LeaderboardSettings }> {
-    if (!classroomId) return { success: false, error: 'Classroom ID required' };
+  ): Promise<UpdateLeaderboardSettingsResponse> {
+    if (!classroomId) return { success: false, error: 'Classroom ID required.' };
+    if (!supabase) return { success: false, error: 'Database service is not configured.' };
 
-    const nextReset = calculateNextResetDate(frequency, new Date(), timeZone);
-    const nextResetIso = nextReset ? nextReset.toISOString() : null;
+    const existing = this.settingsInFlight.get(classroomId);
+    if (existing) return existing;
 
-    const currentLocal = this.getLocalLeaderboardSettings(classroomId);
-    const newSettings: LeaderboardSettings = {
-      frequency,
-      reset_at: currentLocal.reset_at,
-      next_reset_at: nextResetIso,
-      timezone: timeZone
-    };
-    this.saveLocalLeaderboardSettings(classroomId, newSettings);
-
-    try {
-      // 1. Attempt backend API first for server-validated authorization
-      const session = await supabase?.auth.getSession();
-      const token = session?.data?.session?.access_token;
-      
-      const res = await fetch(`/api/classes/${classroomId}/leaderboard/settings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ frequency, timezone: timeZone })
-      });
-
-      if (res.ok) {
-        const body = await res.json();
-        if (body.success && body.settings) {
-          this.saveLocalLeaderboardSettings(classroomId, body.settings);
-          return { success: true, settings: body.settings };
-        }
-      }
-    } catch (_apiErr) {
-      // Continue to Supabase update
-    }
-
-    if (supabase) {
+    const requestPromise = (async (): Promise<UpdateLeaderboardSettingsResponse> => {
       try {
-        const updates = {
-          leaderboard_reset_frequency: frequency,
-          leaderboard_next_reset_at: nextResetIso,
-          leaderboard_timezone: timeZone,
-          updated_at: new Date().toISOString()
-        };
-
-        const { data, error } = await supabase
-          .from('classrooms')
-          .update(updates)
-          .eq('id', classroomId)
-          .select('leaderboard_reset_frequency, leaderboard_reset_at, leaderboard_next_reset_at, leaderboard_timezone')
-          .single();
-
-        if (!error && data) {
-          newSettings.frequency = data.leaderboard_reset_frequency;
-          newSettings.reset_at = data.leaderboard_reset_at;
-          newSettings.next_reset_at = data.leaderboard_next_reset_at;
-          newSettings.timezone = data.leaderboard_timezone;
-          this.saveLocalLeaderboardSettings(classroomId, newSettings);
+        this.clearLegacyLocalSettings(classroomId);
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) {
+          return { success: false, error: 'Authentication required. Please sign in again.' };
         }
-      } catch (_) {
-        // Resilient fallback: local and backend stores are already updated
+
+        const res = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/settings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ frequency, timezone: timeZone })
+        });
+
+        let body: any = null;
+        try {
+          body = await res.json();
+        } catch (_) {
+          body = null;
+        }
+
+        if (!res.ok || !body?.success || !body?.settings) {
+          const errMsg = body?.error || 'Failed to update leaderboard reset frequency. Please try again.';
+          console.error('[ClassroomPointsService] updateLeaderboardSettings failed:', {
+            classroomId,
+            status: res.status,
+            error: errMsg
+          });
+          return { success: false, error: errMsg };
+        }
+
+        return {
+          success: true,
+          settings: body.settings
+        };
+      } catch (err: any) {
+        console.error('[ClassroomPointsService] updateLeaderboardSettings network error:', {
+          classroomId,
+          message: err?.message
+        });
+        return {
+          success: false,
+          error: 'Failed to update leaderboard reset frequency. Please check your connection and try again.'
+        };
+      }
+    })();
+
+    this.settingsInFlight.set(classroomId, requestPromise);
+    try {
+      return await requestPromise;
+    } finally {
+      if (this.settingsInFlight.get(classroomId) === requestPromise) {
+        this.settingsInFlight.delete(classroomId);
       }
     }
-
-    return {
-      success: true,
-      settings: newSettings
-    };
   }
 
   /**
-   * Resets all student scores on the classroom leaderboard to 0 XP immediately.
+   * Resets all student scores on the classroom leaderboard to 0 XP atomically on the backend/database.
    * Completely preserves historical activities, grades, learning records, and student accounts.
    */
-  async resetLeaderboard(
-    classroomId: string
-  ): Promise<{ success: boolean; error?: string; message?: string; reset_at?: string; next_reset_at?: string | null }> {
-    if (!classroomId) return { success: false, error: 'Classroom ID required' };
+  async resetLeaderboard(classroomId: string): Promise<ResetLeaderboardResponse> {
+    if (!classroomId) return { success: false, error: 'Classroom ID required.' };
+    if (!supabase) return { success: false, error: 'Database service is not configured.' };
 
-    const localSettings = this.getLocalLeaderboardSettings(classroomId);
-    const nowIso = new Date().toISOString();
-    const frequency = localSettings.frequency || 'never';
-    const timeZone = localSettings.timezone || DEFAULT_LEADERBOARD_TIMEZONE;
-    const nextReset = calculateNextResetDate(frequency, new Date(), timeZone);
-    const nextResetIso = nextReset ? nextReset.toISOString() : null;
+    const existing = this.resetInFlight.get(classroomId);
+    if (existing) return existing;
 
-    const updatedSettings: LeaderboardSettings = {
-      frequency,
-      reset_at: nowIso,
-      next_reset_at: nextResetIso,
-      timezone: timeZone
-    };
-    this.saveLocalLeaderboardSettings(classroomId, updatedSettings);
-
-    try {
-      // 1. Attempt backend API first for server-validated authorization
-      const session = await supabase?.auth.getSession();
-      const token = session?.data?.session?.access_token;
-
-      const res = await fetch(`/api/classes/${classroomId}/leaderboard/reset`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      });
-
-      if (res.ok) {
-        const body = await res.json();
-        if (body.success) {
-          if (body.reset_at) updatedSettings.reset_at = body.reset_at;
-          if (body.next_reset_at) updatedSettings.next_reset_at = body.next_reset_at;
-          this.saveLocalLeaderboardSettings(classroomId, updatedSettings);
-          return body;
-        }
-      }
-    } catch (_apiErr) {
-      // Continue to direct Supabase update
-    }
-
-    if (supabase) {
+    const requestPromise = (async (): Promise<ResetLeaderboardResponse> => {
       try {
-        await supabase
-          .from('classrooms')
-          .update({
-            leaderboard_reset_at: nowIso,
-            leaderboard_next_reset_at: nextResetIso,
-            updated_at: nowIso
-          })
-          .eq('id', classroomId);
-      } catch (_) {
-        // Resilient fallback: local and backend stores are already updated
+        this.clearLegacyLocalSettings(classroomId);
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) {
+          return {
+            success: false,
+            error: 'Authentication required. No student learning data was changed.'
+          };
+        }
+
+        const res = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/reset`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        let body: any = null;
+        try {
+          body = await res.json();
+        } catch (_) {
+          body = null;
+        }
+
+        if (!res.ok || !body?.success || !body?.reset_at) {
+          const errMsg =
+            body?.error ||
+            'Leaderboard reset failed. No student learning data was changed. Please try again.';
+          console.error('[ClassroomPointsService] resetLeaderboard failed:', {
+            classroomId,
+            status: res.status,
+            error: errMsg
+          });
+          return {
+            success: false,
+            error: errMsg
+          };
+        }
+
+        return {
+          success: true,
+          message: body.message || 'Leaderboard reset successfully. Student learning records were preserved.',
+          reset_at: body.reset_at,
+          next_reset_at: body.next_reset_at ?? null,
+          frequency: body.frequency,
+          timezone: body.timezone
+        };
+      } catch (err: any) {
+        console.error('[ClassroomPointsService] resetLeaderboard network error:', {
+          classroomId,
+          message: err?.message
+        });
+        return {
+          success: false,
+          error: 'Leaderboard reset failed. No student learning data was changed. Please try again.'
+        };
+      }
+    })();
+
+    this.resetInFlight.set(classroomId, requestPromise);
+    try {
+      return await requestPromise;
+    } finally {
+      if (this.resetInFlight.get(classroomId) === requestPromise) {
+        this.resetInFlight.delete(classroomId);
       }
     }
-
-    return {
-      success: true,
-      message: 'Leaderboard reset successfully. Everyone starts from 0 XP.',
-      reset_at: nowIso,
-      next_reset_at: nextResetIso
-    };
   }
 }
 

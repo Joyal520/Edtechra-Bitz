@@ -7,12 +7,13 @@ import {
   Settings,
   Clock,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Share2
 } from 'lucide-react';
 import { ClassroomLeaderboardEntry, LeaderboardResetFrequency } from '@/types/classroom';
 import { formatLeaderboardResetText, DEFAULT_LEADERBOARD_TIMEZONE } from '@/utils/leaderboardResetUtils';
-import { classroomPointsService } from '@/services/classroomPointsService';
 import { LeaderboardSettingsModal } from './LeaderboardSettingsModal';
+import { ShareLeaderboardModal } from './ShareLeaderboardModal';
 
 interface ClassroomLeaderboardProps {
   entries: ClassroomLeaderboardEntry[];
@@ -43,6 +44,7 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
 }) => {
   const [showAllModal, setShowAllModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [localToast, setLocalToast] = useState<string | null>(null);
 
   const showNotification = (msg: string) => {
@@ -61,38 +63,10 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
   // Check if all students currently have 0 XP (e.g. right after a leaderboard reset or at cycle start)
   const allZeroXP = entries.length > 0 && entries.every((e) => (e.points || 0) === 0);
 
-  // Check fallback settings if columns are not in classrooms table yet
-  const [effectiveSettings, setEffectiveSettings] = useState<{
-    frequency: LeaderboardResetFrequency;
-    nextResetAt: string | null;
-    lastResetAt: string | null;
-  }>({
-    frequency: resetFrequency,
-    nextResetAt: nextResetAt || null,
-    lastResetAt: lastResetAt || null
-  });
-
-  React.useEffect(() => {
-    if (classroomId) {
-      const s = classroomPointsService.getLocalLeaderboardSettings(classroomId);
-      setEffectiveSettings({
-        frequency: resetFrequency !== 'never' ? resetFrequency : (s?.frequency || 'never'),
-        nextResetAt: nextResetAt || s?.next_reset_at || null,
-        lastResetAt: lastResetAt || s?.reset_at || null
-      });
-    } else {
-      setEffectiveSettings({
-        frequency: resetFrequency,
-        nextResetAt: nextResetAt || null,
-        lastResetAt: lastResetAt || null
-      });
-    }
-  }, [resetFrequency, nextResetAt, lastResetAt, classroomId]);
-
   // Format schedule text for friendly reset indicator
   const { frequencyLabel, nextResetLabel } = formatLeaderboardResetText(
-    effectiveSettings.frequency,
-    effectiveSettings.nextResetAt,
+    resetFrequency,
+    nextResetAt,
     timeZone
   );
 
@@ -123,18 +97,33 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           </div>
         </div>
 
-        {/* Right: Teacher-only Leaderboard Settings Button (Strictly restricted to teachers) */}
-        {isTeacher && classroomId && (
-          <button
-            type="button"
-            onClick={() => setShowSettingsModal(true)}
-            className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-stone-200 text-xs font-bold text-slate-700 shadow-2xs hover:border-[#026fc3]/60 hover:text-[#026fc3] active:scale-95 transition-all cursor-pointer"
-            title="Classroom Leaderboard Scoring & Reset Schedule (Teacher Only)"
-          >
-            <Settings className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#026fc3] group-hover:rotate-45 transition-all duration-300" />
-            <span>Leaderboard Settings</span>
-          </button>
-        )}
+        {/* Right: Controls - Teacher-only Settings & Share Leaderboard Update */}
+        <div className="flex items-center gap-2">
+          {isTeacher && classroomId && (
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-stone-200 text-xs font-bold text-slate-700 shadow-2xs hover:border-[#026fc3]/60 hover:text-[#026fc3] active:scale-95 transition-all cursor-pointer"
+              title="Classroom Leaderboard Scoring & Reset Schedule (Teacher Only)"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#026fc3] group-hover:rotate-45 transition-all duration-300" />
+              <span>Leaderboard Settings</span>
+            </button>
+          )}
+
+          {classroomId && (
+            <button
+              type="button"
+              onClick={() => setShowShareModal(true)}
+              className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-stone-50 border border-stone-200 text-xs font-bold text-slate-700 shadow-2xs hover:border-amber-400/80 hover:text-amber-600 active:scale-95 transition-all cursor-pointer"
+              title="Share Leaderboard Update"
+              aria-label="Share Leaderboard Update"
+            >
+              <Share2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-500 transition-colors" />
+              <span>Share</span>
+            </button>
+          )}
+        </div>
 
       </div>
 
@@ -474,9 +463,9 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
           classroomId={classroomId}
-          currentFrequency={effectiveSettings.frequency}
-          nextResetAt={effectiveSettings.nextResetAt}
-          lastResetAt={effectiveSettings.lastResetAt}
+          currentFrequency={resetFrequency}
+          nextResetAt={nextResetAt}
+          lastResetAt={lastResetAt}
           timeZone={timeZone}
           onSettingsUpdated={async () => {
             await onRefreshLeaderboard?.();
@@ -484,6 +473,20 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
           onLeaderboardReset={async () => {
             await onRefreshLeaderboard?.();
           }}
+          onShowToast={showNotification}
+        />
+      )}
+
+      {/* ======================================================================= */}
+      {/* SHARE LEADERBOARD MODAL                                                 */}
+      {/* ======================================================================= */}
+      {classroomId && (
+        <ShareLeaderboardModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          classroomId={classroomId}
+          initialEntries={entries}
+          onRefreshParentLeaderboard={onRefreshLeaderboard}
           onShowToast={showNotification}
         />
       )}

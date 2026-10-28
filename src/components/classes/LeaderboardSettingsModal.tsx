@@ -23,8 +23,8 @@ interface LeaderboardSettingsModalProps {
   nextResetAt?: string | null;
   lastResetAt?: string | null;
   timeZone?: string;
-  onSettingsUpdated?: (newSettings: LeaderboardSettings) => void;
-  onLeaderboardReset?: () => void;
+  onSettingsUpdated?: (newSettings: LeaderboardSettings) => Promise<void> | void;
+  onLeaderboardReset?: () => Promise<void> | void;
   onShowToast?: (message: string) => void;
 }
 
@@ -77,6 +77,7 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
   const [showConfirmResetModal, setShowConfirmResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const actionLockRef = React.useRef(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -99,6 +100,8 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
   const activeFormatted = formatLeaderboardResetText(currentFrequency, nextResetAt, timeZone);
 
   const handleSaveFrequency = async () => {
+    if (actionLockRef.current || isSavingFrequency || isResetting) return;
+    actionLockRef.current = true;
     setIsSavingFrequency(true);
     setErrorMessage(null);
     try {
@@ -113,7 +116,7 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
       }
 
       if (res.settings && onSettingsUpdated) {
-        onSettingsUpdated(res.settings);
+        await onSettingsUpdated(res.settings);
       }
 
       const successMsg = selectedFrequency === 'never'
@@ -126,27 +129,34 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
       setErrorMessage(err.message || 'Failed to save settings.');
     } finally {
       setIsSavingFrequency(false);
+      actionLockRef.current = false;
     }
   };
 
   const handleConfirmManualReset = async () => {
+    if (actionLockRef.current || isResetting || isSavingFrequency) return;
+    actionLockRef.current = true;
     setIsResetting(true);
     setErrorMessage(null);
     try {
       const res = await classroomPointsService.resetLeaderboard(classroomId);
 
       if (!res.success) {
-        throw new Error(res.error || 'Failed to reset leaderboard');
+        throw new Error(res.error || 'Leaderboard reset failed. No student learning data was changed. Please try again.');
+      }
+
+      if (onLeaderboardReset) {
+        await onLeaderboardReset();
       }
 
       setShowConfirmResetModal(false);
-      onLeaderboardReset?.();
-      onShowToast?.('Leaderboard reset successfully. Everyone starts from 0 XP.');
+      onShowToast?.('Leaderboard reset successfully. Student learning records were preserved.');
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to reset leaderboard.');
+      setErrorMessage(err.message || 'Leaderboard reset failed. No student learning data was changed. Please try again.');
     } finally {
       setIsResetting(false);
+      actionLockRef.current = false;
     }
   };
 
@@ -179,8 +189,12 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
 
             <button
               type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-stone-100 transition-all cursor-pointer"
+              onClick={() => {
+                if (isResetting || isSavingFrequency) return;
+                onClose();
+              }}
+              disabled={isResetting || isSavingFrequency}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-stone-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <X className="w-4 h-4" />
             </button>
@@ -331,8 +345,12 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
               <div className="pt-2 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowConfirmResetModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setShowConfirmResetModal(true);
+                  }}
+                  disabled={isResetting || isSavingFrequency}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset Leaderboard Now</span>
@@ -354,8 +372,12 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
           <div className="pt-3 border-t border-stone-100 flex justify-end shrink-0">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-stone-100 transition-all cursor-pointer"
+              onClick={() => {
+                if (isResetting || isSavingFrequency) return;
+                onClose();
+              }}
+              disabled={isResetting || isSavingFrequency}
+              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
               Close
             </button>
@@ -377,18 +399,23 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
                 <AlertTriangle className="w-5 h-5 text-rose-600" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Reset leaderboard?</h3>
+                <h3 className="text-base font-black text-slate-900">Reset the leaderboard for all students?</h3>
                 <p className="text-xs text-slate-400 font-semibold">Immediate classroom scoring action</p>
               </div>
             </div>
 
+            {/* Error inside confirmation modal if reset failed */}
+            {errorMessage && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             {/* Explanatory Body */}
             <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 text-xs text-slate-700 space-y-2.5 leading-relaxed font-medium">
               <p>
-                This will set the current leaderboard score of every student in this classroom to <strong className="text-slate-950 font-black">0 XP</strong>.
-              </p>
-              <p className="text-slate-500">
-                Student learning records, grades, course progress and other educational data will not be deleted.
+                This will set the current leaderboard scores to <strong className="text-slate-950 font-black">0 XP</strong>. Student accounts, grades, certificates, completed activities, quiz submissions, exam attempts, and learning records will NOT be deleted.
               </p>
             </div>
 
@@ -396,9 +423,12 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setShowConfirmResetModal(false)}
+                onClick={() => {
+                  if (isResetting) return;
+                  setShowConfirmResetModal(false);
+                }}
                 disabled={isResetting}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-stone-100 border border-stone-200 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-stone-100 border border-stone-200 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -406,7 +436,7 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
                 type="button"
                 onClick={handleConfirmManualReset}
                 disabled={isResetting}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-black shadow-xs active:scale-95 transition-all cursor-pointer"
               >
                 {isResetting ? (
                   <>
