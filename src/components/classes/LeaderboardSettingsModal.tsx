@@ -390,7 +390,14 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
       {/* CONFIRMATION MODAL FOR MANUAL RESET                                     */}
       {/* ======================================================================= */}
       {showConfirmResetModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">
+        // NOTE: Tailwind 3 has no `z-60` utility (defaults stop at z-50). Using the arbitrary value
+        // `z-[60]` so this confirmation renders ABOVE the z-50 settings modal instead of hidden behind it.
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="leaderboard-reset-confirm-title"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in"
+        >
           <div className="bg-white rounded-3xl max-w-md w-full p-6 border border-stone-200 shadow-2xl space-y-5 animate-in zoom-in-95">
             
             {/* Warning Icon & Title */}
@@ -399,7 +406,7 @@ export const LeaderboardSettingsModal: React.FC<LeaderboardSettingsModalProps> =
                 <AlertTriangle className="w-5 h-5 text-rose-600" />
               </div>
               <div>
-                <h3 className="text-base font-black text-slate-900">Reset the leaderboard for all students?</h3>
+                <h3 id="leaderboard-reset-confirm-title" className="text-base font-black text-slate-900">Reset the leaderboard for all students?</h3>
                 <p className="text-xs text-slate-400 font-semibold">Immediate classroom scoring action</p>
               </div>
             </div>

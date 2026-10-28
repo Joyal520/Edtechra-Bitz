@@ -137,7 +137,7 @@ BEGIN
     v_caller_id := auth.uid();
     v_jwt_role := COALESCE(auth.role(), '');
 
-    IF v_jwt_role <> 'service_role' AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF v_jwt_role <> 'service_role' AND session_user NOT IN ('postgres', 'supabase_admin') THEN
         IF v_caller_id IS NULL THEN
             RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
         END IF;
@@ -265,7 +265,7 @@ BEGIN
     v_caller_id := auth.uid();
     v_jwt_role := COALESCE(auth.role(), '');
 
-    IF v_jwt_role <> 'service_role' AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF v_jwt_role <> 'service_role' AND session_user NOT IN ('postgres', 'supabase_admin') THEN
         IF v_caller_id IS NULL THEN
             RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
         END IF;
@@ -351,6 +351,7 @@ DECLARE
     v_classroom RECORD;
     v_clock TIMESTAMPTZ;
     v_tz TEXT;
+    v_max_point_created TIMESTAMPTZ;
     v_effective_reset TIMESTAMPTZ;
     v_candidate_next TIMESTAMPTZ;
     v_guard INTEGER := 0;
@@ -362,7 +363,7 @@ BEGIN
     v_caller_id := auth.uid();
     v_jwt_role := COALESCE(auth.role(), '');
 
-    IF v_jwt_role <> 'service_role' AND current_user NOT IN ('postgres', 'supabase_admin') THEN
+    IF v_jwt_role <> 'service_role' AND session_user NOT IN ('postgres', 'supabase_admin') THEN
         IF v_caller_id IS NULL OR NOT public.check_is_classroom_member(p_classroom_id, v_caller_id) THEN
             RAISE EXCEPTION 'Access denied: Classroom membership required.'
                 USING ERRCODE = '42501';
@@ -408,7 +409,16 @@ BEGIN
            AND v_classroom.leaderboard_next_reset_at IS NOT NULL
            AND v_classroom.leaderboard_next_reset_at <= v_clock
         THEN
-            v_effective_reset := v_classroom.leaderboard_next_reset_at;
+            SELECT MAX(created_at)
+            INTO v_max_point_created
+            FROM public.classroom_points
+            WHERE classroom_id = p_classroom_id;
+
+            v_effective_reset := GREATEST(
+                v_classroom.leaderboard_next_reset_at,
+                v_clock,
+                COALESCE(v_max_point_created + interval '1 microsecond', v_clock)
+            );
             v_candidate_next := public.calculate_next_leaderboard_reset(
                 v_classroom.leaderboard_reset_frequency,
                 v_effective_reset,

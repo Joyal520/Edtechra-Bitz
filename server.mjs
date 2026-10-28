@@ -3347,6 +3347,22 @@ app.post('/api/classes/:id/leaderboard/reset', async (req, res) => {
       }
     }
 
+    // Post-reset verification: re-read the database and confirm the new period boundary is persisted.
+    // (The RPC places reset_at after the newest existing classroom_points row, so all prior XP is excluded.)
+    const { data: verifyRow, error: verifyErr } = await serverSupabase
+      .from('classrooms')
+      .select('leaderboard_reset_at')
+      .eq('id', classroomId)
+      .maybeSingle();
+    const persistedMs = verifyRow?.leaderboard_reset_at ? new Date(verifyRow.leaderboard_reset_at).getTime() : NaN;
+    const expectedMs = new Date(rpcData.reset_at).getTime();
+    if (verifyErr || isNaN(persistedMs) || persistedMs < expectedMs) {
+      const err = new Error('Leaderboard reset could not be verified in the database.');
+      err.dbCode = verifyErr?.code || 'VERIFY_FAILED';
+      err.dbMessage = verifyErr?.message || 'leaderboard_reset_at was not persisted';
+      throw err;
+    }
+
     res.json({
       success: true,
       message: 'Leaderboard reset successfully. Student learning records were preserved.',

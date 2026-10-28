@@ -493,7 +493,7 @@ export const ClassroomLeaderboard: React.FC<ClassroomLeaderboardProps> = ({
 
       {/* Local Toast Fallback if parent does not provide one */}
       {localToast && (
-        <div className="fixed bottom-6 right-6 z-60 flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700/80 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700/80 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{localToast}</span>
         </div>
