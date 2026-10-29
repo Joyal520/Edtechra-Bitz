@@ -623,7 +623,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     {textContent.title}
                   </h3>
                 )}
-                <FormattedLessonText text={bodyText} textScale={textScale} />
+                <div className={!activeTheme.isDark ? "w-full rounded-2xl p-4 sm:p-6 bg-white border border-sky-100/90 shadow-xs text-[#0f172a]" : ""}>
+                  <FormattedLessonText text={bodyText} textScale={textScale} />
+                </div>
               </section>
             );
           }
@@ -670,11 +672,11 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
             const renderImageFigure = (extraClasses = '') => (
               <figure className={`w-full my-3 sm:my-5 ${extraClasses}`}>
-                <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs border border-sky-100 dark:border-slate-700">
+                <div className="w-full flex justify-center">
                   <img
                     src={img.url}
                     alt={img.alt || img.caption || 'Story illustration'}
-                    className="w-full h-auto object-cover max-h-[480px] block"
+                    className="max-w-full h-auto object-contain max-h-[520px] rounded-2xl block mx-auto shadow-sm"
                     loading="lazy"
                   />
                 </div>
@@ -694,7 +696,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   </h3>
                 )}
                 {renderImageFigure('max-w-[800px] mx-auto')}
-                <FormattedLessonText text={bodyText} textScale={textScale} />
+                <div className={!activeTheme.isDark ? "w-full rounded-2xl p-4 sm:p-6 bg-white border border-sky-100/90 shadow-xs text-[#0f172a]" : ""}>
+                  <FormattedLessonText text={bodyText} textScale={textScale} />
+                </div>
               </section>
             );
           }
@@ -963,11 +967,11 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
             return (
               <figure key={block.id || idx} className="w-full my-6 sm:my-8 overflow-hidden text-center">
-                <div className="w-full rounded-2xl overflow-hidden bg-sky-50/40 dark:bg-slate-800 shadow-2xs max-w-2xl mx-auto border border-sky-100 dark:border-slate-700">
+                <div className="w-full flex justify-center max-w-2xl mx-auto">
                   <img
                     src={imgContent.url}
                     alt={imgContent.alt || imgContent.caption || 'Course visual material'}
-                    className="w-full h-auto object-contain max-h-[500px] block mx-auto"
+                    className="max-w-full h-auto object-contain max-h-[520px] rounded-2xl block mx-auto shadow-sm"
                     loading="lazy"
                   />
                 </div>

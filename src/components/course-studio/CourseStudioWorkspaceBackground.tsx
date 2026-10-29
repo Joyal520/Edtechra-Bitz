@@ -12,11 +12,13 @@ import React from 'react';
 interface Props {
   className?: string;
   isDark?: boolean;
+  hideWatermarks?: boolean;
 }
 
 export const CourseStudioWorkspaceBackground: React.FC<Props> = ({
   className = '',
-  isDark = false
+  isDark = false,
+  hideWatermarks = false
 }) => {
   return (
     <div
@@ -29,75 +31,84 @@ export const CourseStudioWorkspaceBackground: React.FC<Props> = ({
         className={`absolute inset-0 transition-colors duration-300 ${
           isDark
             ? 'bg-gradient-to-br from-slate-950/60 via-slate-900/40 to-indigo-950/50'
+            : hideWatermarks
+            ? 'bg-[#f8fafc]'
             : 'bg-gradient-to-br from-[#e6f4fe]/85 via-[#f5f9ff]/90 to-[#efeaff]/75'
         }`}
       />
 
       {/* 2. SOFT ATMOSPHERIC AMBIENT GLOWS (BLUE, CYAN & SUBTLE PURPLE ACCENTS) */}
-      <div
-        className={`absolute -top-28 -left-24 w-96 sm:w-[540px] h-96 sm:h-[540px] rounded-full blur-3xl ${
-          isDark ? 'bg-sky-500/14' : 'bg-sky-400/25'
-        }`}
-      />
-      <div
-        className={`absolute top-12 -right-24 w-80 sm:w-[480px] h-80 sm:h-[480px] rounded-full blur-3xl ${
-          isDark ? 'bg-cyan-500/12' : 'bg-cyan-300/25'
-        }`}
-      />
-      <div
-        className={`absolute top-1/2 right-1/4 w-72 sm:w-[420px] h-72 sm:h-[420px] rounded-full blur-3xl ${
-          isDark ? 'bg-purple-600/12' : 'bg-purple-400/16'
-        }`}
-      />
-      <div
-        className={`absolute -bottom-28 left-1/4 w-96 sm:w-[580px] h-96 sm:h-[580px] rounded-full blur-3xl ${
-          isDark ? 'bg-indigo-600/14' : 'bg-blue-400/20'
-        }`}
-      />
+      {!hideWatermarks && (
+        <>
+          <div
+            className={`absolute -top-28 -left-24 w-96 sm:w-[540px] h-96 sm:h-[540px] rounded-full blur-3xl ${
+              isDark ? 'bg-sky-500/14' : 'bg-sky-400/25'
+            }`}
+          />
+          <div
+            className={`absolute top-12 -right-24 w-80 sm:w-[480px] h-80 sm:h-[480px] rounded-full blur-3xl ${
+              isDark ? 'bg-cyan-500/12' : 'bg-cyan-300/25'
+            }`}
+          />
+          <div
+            className={`absolute top-1/2 right-1/4 w-72 sm:w-[420px] h-72 sm:h-[420px] rounded-full blur-3xl ${
+              isDark ? 'bg-purple-600/12' : 'bg-purple-400/16'
+            }`}
+          />
+          <div
+            className={`absolute -bottom-28 left-1/4 w-96 sm:w-[580px] h-96 sm:h-[580px] rounded-full blur-3xl ${
+              isDark ? 'bg-indigo-600/14' : 'bg-blue-400/20'
+            }`}
+          />
+        </>
+      )}
 
-      {/* 3. DELICATE NOTEBOOK DOT-GRID & SUBTLE GRAPH PAPER PATTERN */}
-      <svg
-        className={`absolute inset-0 w-full h-full ${
-          isDark ? 'text-sky-300 opacity-[0.12]' : 'text-[#026fc3] opacity-[0.20]'
-        }`}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <defs>
-          <pattern
-            id="edtechra-studio-dot-grid"
-            width="28"
-            height="28"
-            patternUnits="userSpaceOnUse"
-          >
-            <circle cx="2" cy="2" r="1.35" fill="currentColor" />
-          </pattern>
-          <pattern
-            id="edtechra-studio-major-grid"
-            width="140"
-            height="140"
-            patternUnits="userSpaceOnUse"
-          >
-            <rect width="140" height="140" fill="url(#edtechra-studio-dot-grid)" />
-            <path
-              d="M 140 0 L 0 0 0 140"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="0.6"
-              strokeOpacity="0.28"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#edtechra-studio-major-grid)" />
-      </svg>
+      {/* 3. DELICATE NOTEBOOK DOT-GRID & SUBTLE GRAPH PAPER PATTERN (Omitted when hideWatermarks is true) */}
+      {!hideWatermarks && (
+        <svg
+          className={`absolute inset-0 w-full h-full ${
+            isDark ? 'text-sky-300 opacity-[0.12]' : 'text-[#026fc3] opacity-[0.20]'
+          }`}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <pattern
+              id="edtechra-studio-dot-grid"
+              width="28"
+              height="28"
+              patternUnits="userSpaceOnUse"
+            >
+              <circle cx="2" cy="2" r="1.35" fill="currentColor" />
+            </pattern>
+            <pattern
+              id="edtechra-studio-major-grid"
+              width="140"
+              height="140"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="140" height="140" fill="url(#edtechra-studio-dot-grid)" />
+              <path
+                d="M 140 0 L 0 0 0 140"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="0.6"
+                strokeOpacity="0.28"
+              />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#edtechra-studio-major-grid)" />
+        </svg>
+      )}
 
-      {/* 4. SOFT FLOWING WAVES, ABSTRACT LEARNING SHAPES & EDUCATIONAL MOTIFS */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 1440 1024"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="xMidYMid slice"
-      >
+      {/* 4. SOFT FLOWING WAVES, ABSTRACT LEARNING SHAPES & EDUCATIONAL MOTIFS (Omitted when hideWatermarks is true) */}
+      {!hideWatermarks && (
+        <svg
+          className="absolute inset-0 w-full h-full"
+          viewBox="0 0 1440 1024"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          preserveAspectRatio="xMidYMid slice"
+        >
         <defs>
           <linearGradient id="edtechra-wave-cyan-blue" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#0ea5e9" stopOpacity={isDark ? '0.12' : '0.16'} />
@@ -253,6 +264,7 @@ export const CourseStudioWorkspaceBackground: React.FC<Props> = ({
           <polygon points="360,560 386,515 412,560" stroke="#06b6d4" strokeWidth="1.6" />
         </g>
       </svg>
+      )}
     </div>
   );
 };

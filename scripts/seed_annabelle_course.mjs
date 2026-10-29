@@ -25,7 +25,8 @@ const ASSETS = {
   coverKey: 'courses/annabelle/covers/annabelle-cover.png',
   storyCollage: 'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/annabelle/images/annabelle-story-collage.png',
   missingNoteCollage: 'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/annabelle/images/annabelle-missing-note-collage.png',
-  museumVisit: 'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/annabelle/images/annabelle-museum-visit.png'
+  museumVisit: 'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/annabelle/images/annabelle-museum-visit.png',
+  day7PictureDescription: 'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/annabelle/images/annabelle-day7-picture-description.jpg'
 };
 
 const DAYS_DATA = [
@@ -1368,9 +1369,9 @@ By the end of this lesson, you should be able to:
         content: {
           title: '1. Look at the Picture',
           image: {
-            url: ASSETS.museumVisit,
-            alt: 'Anna and Tom standing in front of Annabelle inside a glass museum case under dim atmospheric lighting',
-            caption: 'A Strange Visit: Anna and Tom exploring the museum, standing in front of the Annabelle doll inside the glass display case.',
+            url: ASSETS.day7PictureDescription,
+            alt: 'Anna and Tom look frightened as they see the Annabelle doll in an open glass case, with a HELP ME note on the floor.',
+            caption: 'A Strange Visit: Anna and Tom notice the Annabelle doll inside the open glass case, with a note reading "HELP ME" on the floor.',
             position: 'above'
           },
           text: `### Picture Information

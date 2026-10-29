@@ -490,7 +490,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 }
               }}
               placeholder="one word"
-              className="w-28 sm:w-36 px-2.5 py-1 text-sm sm:text-base font-bold input-theme border-2 border-[var(--theme-accent)] rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-[#38BDF8]"
+              className="w-28 sm:w-36 px-2.5 py-1 text-sm sm:text-base font-bold bg-white text-slate-900 input-theme-light border-2 border-[var(--theme-accent)] rounded-lg shadow-inner focus:outline-none focus:ring-2 focus:ring-[#38BDF8] caret-sky-600"
+              style={{ color: '#0f172a' }}
             />
             <button
               type="button"
@@ -1067,7 +1068,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
                 value={fillInput}
                 onChange={e => setFillInput(e.target.value)}
                 placeholder="Type your answer here..."
-                className="flex-1 p-3.5 liquid-input text-sm font-bold placeholder:text-slate-400 placeholder:font-normal"
+                className="flex-1 p-3.5 liquid-input bg-white text-slate-900 input-theme-light text-sm font-bold placeholder:text-slate-400 placeholder:font-normal caret-sky-600"
+                style={{ color: '#0f172a' }}
               />
               {!isAnswered && (
                 <LiquidButton
@@ -1369,7 +1371,8 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
               value={fillInput}
               onChange={e => setFillInput(e.target.value)}
               placeholder="Type your complete answer here..."
-              className="w-full p-3.5 liquid-textarea text-sm font-medium leading-relaxed placeholder:text-slate-400"
+              className="w-full p-3.5 liquid-textarea bg-white text-slate-900 input-theme-light text-sm font-medium leading-relaxed placeholder:text-slate-400 caret-sky-600"
+              style={{ color: '#0f172a' }}
             />
 
             {aiError && (

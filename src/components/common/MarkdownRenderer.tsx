@@ -370,11 +370,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       elements.push(
         <div
           key={`table-${elements.length}`}
-          className="w-full overflow-x-auto my-5 sm:my-7 rounded-xl border border-stone-200 dark:border-slate-700/80 shadow-2xs bg-white/40 dark:bg-slate-900/40"
+          className="w-full overflow-x-auto my-5 sm:my-7 rounded-2xl border border-sky-200/90 dark:border-sky-500/30 shadow-xs bg-white dark:bg-[#07152b]"
         >
           <table className={`w-full min-w-[340px] text-left border-collapse ${scale.table}`}>
             <thead>
-              <tr className="bg-sky-50/60 dark:bg-slate-800/80 border-b border-stone-200 dark:border-slate-700">
+              <tr className="bg-[#026fc3] dark:bg-[#0c2850] text-white border-b border-sky-300/40 dark:border-sky-500/40">
                 {headers.map((h, hIdx) => {
                   const align = alignments[hIdx] || 'left';
                   const alignClass =
@@ -382,7 +382,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   return (
                     <th
                       key={hIdx}
-                      className={`px-3.5 sm:px-4 py-2.5 font-bold tracking-tight text-inherit ${alignClass} border-r last:border-r-0 border-stone-200/60 dark:border-slate-700/60`}
+                      className={`px-4 py-3 font-black tracking-wide text-white ${alignClass} border-r last:border-r-0 border-white/20 dark:border-sky-400/25`}
                     >
                       {parseInlineMarkdown(h)}
                     </th>
@@ -390,11 +390,15 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-sky-100/80 dark:divide-sky-900/40">
               {rows.map((row, rIdx) => (
                 <tr
                   key={rIdx}
-                  className="hover:bg-sky-50/30 dark:hover:bg-slate-800/30 transition-colors"
+                  className={`transition-colors hover:bg-sky-50 dark:hover:bg-sky-900/30 ${
+                    rIdx % 2 === 0
+                      ? 'bg-white dark:bg-[#091830] text-[#0f172a] dark:text-slate-100'
+                      : 'bg-[#f4f9ff] dark:bg-[#0d2244] text-[#0f172a] dark:text-slate-100'
+                  }`}
                 >
                   {headers.map((_, cIdx) => {
                     const cellVal = row[cIdx] || '';
@@ -404,7 +408,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                     return (
                       <td
                         key={cIdx}
-                        className={`px-3.5 sm:px-4 py-2 text-inherit ${alignClass} border-r last:border-r-0 border-stone-100 dark:border-slate-800/60`}
+                        className={`px-4 py-2.5 text-inherit ${alignClass} border-r last:border-r-0 border-sky-100/80 dark:border-sky-500/20 font-medium align-middle`}
                       >
                         {parseInlineMarkdown(cellVal)}
                       </td>

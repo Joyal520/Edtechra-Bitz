@@ -35,6 +35,7 @@ import { ThemeSelectorPopover } from '@/components/course-studio/ThemeSelectorPo
 import { computeCourseRoadmap } from '@/utils/dailyReleaseEngine';
 import { LiquidButton } from '@/components/course-studio/liquid';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
+import { AnnabelleCinematicHeader } from '@/components/course-studio/AnnabelleCinematicHeader';
 import {
   CreepyLegendsStudentView,
   EpisodeNavItem
@@ -825,18 +826,41 @@ export const StudentCoursePlayerPage: React.FC = () => {
             onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
           />
         ) : (
-          <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 pb-8 box-border min-w-0">
-            {/* PREMIUM COURSE OPENING HERO BANNER */}
-            <CourseHeroBanner
-              course={course}
-              completedLessonsCount={roadmapData?.completedLessons || 0}
-              totalLessonsCount={roadmapData?.totalLessons || 1}
-              defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
-              onStartOrContinue={() => {
-                const el = document.getElementById('student-lesson-header');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            />
+          <div className={`w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0`}>
+            {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
+            {isAnnabelleCourse ? (
+              <AnnabelleCinematicHeader
+                course={course}
+                selectedEpisode={selectedEpisode}
+                allEpisodes={episodeNavItems}
+                completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+                totalCount={roadmapData?.totalLessons || allEpisodes.length || 7}
+                progressPercent={roadmapData?.progressPercent || 0}
+                onSelectEpisode={(ep, locked, unlockMsg) => {
+                  if (locked && !isTeacherPreview) {
+                    setToastMessage(unlockMsg || 'This lesson is currently locked.');
+                    setTimeout(() => setToastMessage(null), 3500);
+                    return;
+                  }
+                  setSelectedEpisode(ep);
+                  mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
+              />
+            ) : (
+              <CourseHeroBanner
+                course={course}
+                completedLessonsCount={roadmapData?.completedLessons || 0}
+                totalLessonsCount={roadmapData?.totalLessons || 1}
+                defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
+                onStartOrContinue={() => {
+                  const el = document.getElementById('student-lesson-header');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+            )}
+
+            <article className={`w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`}>
 
             {/* EDITORIAL LESSON HEADER */}
             <header id="student-lesson-header" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left">
@@ -1019,6 +1043,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         )}
 
           </article>
+          </div>
         )}
       </main>
 

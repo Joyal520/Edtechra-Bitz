@@ -57,6 +57,7 @@ import { AddQuestionsModal } from '@/components/course-studio/AddQuestionsModal'
 import { QuestionPlanModal } from '@/components/course-studio/QuestionPlanModal';
 import { CourseHeroBanner } from '@/components/course-studio/CourseHeroBanner';
 import { CourseQualityAuditModal } from '@/components/course-studio/CourseQualityAuditModal';
+import { AnnabelleCinematicHeader } from '@/components/course-studio/AnnabelleCinematicHeader';
 import {
   CreepyLegendsStudentView,
   EpisodeNavItem
@@ -1400,10 +1401,10 @@ export const CoursePreviewPage: React.FC = () => {
       {/* 3. TWO-COLUMN LAYOUT: COURSE OUTLINE SIDEBAR (DESKTOP) + MAIN VIEWPORT */}
       <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
         {/* Course Studio Workspace Background Visual */}
-        <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} />
+        <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} hideWatermarks={isAnnabelleCourse} />
 
-        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy student mode) */}
-        {(isEditMode || !isCreepyLegendsOrVideoCourse || viewMode === 'roadmap') && (
+        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy/non-Annabelle student mode) */}
+        {(isEditMode || (!isCreepyLegendsOrVideoCourse && !isAnnabelleCourse) || viewMode === 'roadmap') && (
           <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
             {renderCourseOutline(false)}
           </aside>
@@ -1476,18 +1477,44 @@ export const CoursePreviewPage: React.FC = () => {
               onOpenCoverModal={() => setCoverModalOpen(true)}
             />
           ) : (
-            <article className="w-full max-w-[760px] mx-auto space-y-6 sm:space-y-10 box-border min-w-0">
-              {/* PREMIUM COURSE OPENING HERO BANNER */}
-              <CourseHeroBanner
-                course={course}
-                completedLessonsCount={roadmapData?.completedLessons || 0}
-                totalLessonsCount={roadmapData?.totalLessons || 1}
-                defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
-                onStartOrContinue={() => {
-                  const el = document.getElementById('lesson-content-anchor');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              />
+            <div className={`w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`}>
+              {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
+              {isAnnabelleCourse && selectedEpisode ? (
+                <AnnabelleCinematicHeader
+                  course={course}
+                  selectedEpisode={{
+                    ...selectedEpisode,
+                    title: currentEpisodeTitle || selectedEpisode.title,
+                    estimated_minutes: currentEpisodeMins || selectedEpisode.estimated_minutes
+                  }}
+                  allEpisodes={episodeNavItems}
+                  completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
+                  totalCount={roadmapData?.totalLessons || allEpisodes.length || 7}
+                  progressPercent={roadmapData?.progressPercent || 0}
+                  onSelectEpisode={(ep, locked, unlockMsg) => {
+                    if (locked) {
+                      showToast(unlockMsg || 'This lesson is locked.');
+                      return;
+                    }
+                    setSelectedEpisode(ep);
+                    mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onOpenCoverModal={() => setCoverModalOpen(true)}
+                />
+              ) : (
+                <CourseHeroBanner
+                  course={course}
+                  completedLessonsCount={roadmapData?.completedLessons || 0}
+                  totalLessonsCount={roadmapData?.totalLessons || 1}
+                  defaultCollapsed={(selectedEpisode.position || currentInfo?.epIndex || 1) > 1}
+                  onStartOrContinue={() => {
+                    const el = document.getElementById('lesson-content-anchor');
+                    el?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                />
+              )}
+
+              <article className={`w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`}>
 
               {/* EDITORIAL LESSON HEADER */}
               <header id="lesson-content-anchor" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
@@ -1666,6 +1693,7 @@ export const CoursePreviewPage: React.FC = () => {
                 </div>
               </footer>
             </article>
+            </div>
           )}
         </main>
       </div>
