@@ -5,7 +5,7 @@
 // and Encouraging Lesson Completion Celebration Modal.
 // ============================================================================
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -550,18 +550,16 @@ export const StudentCoursePlayerPage: React.FC = () => {
       course.title?.toLowerCase().includes('annabelle')
   );
 
-  const effectiveThemeId = useMemo(() => {
-    if (isAnnabelleCourse && selectedEpisode) {
-      const day = selectedEpisode.position || 1;
-      // Days 1, 3, 5: Light educational workbook layout with dark, readable text
-      if (day === 1 || day === 3 || day === 5) {
-        return 'morning-mist';
-      }
+  // NOTE: Plain computation (not a hook) — this runs after the early returns above,
+  // so calling useMemo here would change the hook count between renders (React #310).
+  const annabelleDay = selectedEpisode.position || 1;
+  const effectiveThemeId = isAnnabelleCourse
+    ? // Days 1, 3, 5: Light educational workbook layout with dark, readable text
       // Course cover, Days 2, 4, 6, 7: Premium dark creepy horror
-      return 'midnight-navy';
-    }
-    return themeId;
-  }, [isAnnabelleCourse, selectedEpisode, themeId]);
+      annabelleDay === 1 || annabelleDay === 3 || annabelleDay === 5
+      ? 'morning-mist'
+      : 'midnight-navy'
+    : themeId;
 
   const activeTheme = getThemePreset(effectiveThemeId);
   const isEpisodeCompleted = completedEpisodeIds.has(selectedEpisode.id);
