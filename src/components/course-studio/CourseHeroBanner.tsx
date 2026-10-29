@@ -39,32 +39,51 @@ export const CourseHeroBanner: React.FC<CourseHeroBannerProps> = ({
     course.title.toLowerCase().includes('amazing brain') ||
     course.title.toLowerCase().includes('brain');
 
+  const isAnnabelleCourse =
+    course.title.toLowerCase().includes('annabelle');
+
   const progressPercent =
     totalLessonsCount > 0
       ? Math.min(100, Math.round((completedLessonsCount / totalLessonsCount) * 100))
       : 0;
 
-  const subtitle = isBrainCourse
+  const subtitle = isAnnabelleCourse
+    ? '7 Days of Simple Past Grammar, Mystery & Storytelling'
+    : isBrainCourse
     ? 'Discover the amazing machine inside your head.'
     : course.subject || 'Interactive Digital Course';
 
-  const introText =
-    course.short_description ||
+  const introText = isAnnabelleCourse
+    ? 'Master the Simple Past Tense through the legend of Annabelle. Learn regular and irregular verbs, negatives with didn’t, Yes/No and WH- questions, explore video and listening museum accounts, and write your own original 50-word mystery story.'
+    : course.short_description ||
     (isBrainCourse
       ? 'Learn how your brain helps you think, remember, move, and feel through visual stories and interactive activities.'
       : 'Explore interactive lessons, visual guides, and practice activities.');
 
-  const durationLabel = isBrainCourse
+  const durationLabel = isAnnabelleCourse
+    ? '7 Days (100 Marks / 400 Pts)'
+    : isBrainCourse
     ? '1 Day (~45 mins)'
     : course.estimated_hours
     ? `${course.estimated_hours} hrs`
     : '1 Day';
 
-  const levelLabel = isBrainCourse
+  const levelLabel = isAnnabelleCourse
+    ? 'A1–A2 English'
+    : isBrainCourse
     ? 'Beginner (A1–A2)'
     : course.grade_level || 'All Levels';
 
-  const outcomes = isBrainCourse
+  const outcomes = isAnnabelleCourse
+    ? [
+        'Explain when to use the Simple Past Tense',
+        'Identify regular (-ed) and irregular verbs',
+        'Make negative sentences with didn\'t + base verb',
+        'Form Yes/No and WH- questions with did',
+        'Understand stories via video, reading & listening',
+        'Write a 45–55-word story using past-tense verbs'
+      ]
+    : isBrainCourse
     ? [
         'What your brain is & what it does',
         '3 main parts: Cerebrum, Cerebellum & Brain Stem',
@@ -82,7 +101,7 @@ export const CourseHeroBanner: React.FC<CourseHeroBannerProps> = ({
       {/* Compact bar when collapsed */}
       <div className="px-5 py-3.5 bg-white/5 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-xl">{isBrainCourse ? '🧠' : '🎓'}</span>
+          <span className="text-xl">{isAnnabelleCourse ? '🕯️' : isBrainCourse ? '🧠' : '🎓'}</span>
           <span className="text-xs sm:text-sm font-black tracking-tight truncate">
             {course.title}
           </span>

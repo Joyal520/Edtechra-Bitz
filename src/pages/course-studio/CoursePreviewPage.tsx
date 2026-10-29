@@ -778,20 +778,40 @@ export const CoursePreviewPage: React.FC = () => {
     );
   }
 
-  const activeTheme = getThemePreset(themeId);
+  const isAnnabelleCourse = Boolean(
+    course.id === 'e10c7ee9-0007-4000-8000-000000000007' ||
+      course.title?.toLowerCase().includes('annabelle')
+  );
+
+  const effectiveThemeId = useMemo(() => {
+    if (isAnnabelleCourse && selectedEpisode) {
+      const day = selectedEpisode.position || 1;
+      // Days 1, 3, 5: Light educational workbook layout with dark, readable text
+      if (day === 1 || day === 3 || day === 5) {
+        return 'morning-mist';
+      }
+      // Course cover, Days 2, 4, 6, 7: Premium dark creepy horror
+      return 'midnight-navy';
+    }
+    return themeId;
+  }, [isAnnabelleCourse, selectedEpisode, themeId]);
+
+  const activeTheme = getThemePreset(effectiveThemeId);
   const isEpisodeCompleted = selectedEpisode ? completedEpisodeIds.has(selectedEpisode.id) : false;
 
   const isCreepyLegendsOrVideoCourse = Boolean(
-    course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
-      course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
-      course.title?.toLowerCase().includes('creepy legends') ||
-      currentBlocks.some(
-        b =>
-          b.block_type === 'video' ||
-          b.block_type === 'youtube_video' ||
-          b.block_type === 'text_video' ||
-          Boolean((b.content as any)?.video?.url)
-      )
+    !isAnnabelleCourse && (
+      course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
+        course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
+        course.title?.toLowerCase().includes('creepy legends') ||
+        currentBlocks.some(
+          b =>
+            b.block_type === 'video' ||
+            b.block_type === 'youtube_video' ||
+            b.block_type === 'text_video' ||
+            Boolean((b.content as any)?.video?.url)
+        )
+    )
   );
 
   const episodeNavItems: EpisodeNavItem[] = allEpisodes.map((item, idx) => {
@@ -1047,7 +1067,7 @@ export const CoursePreviewPage: React.FC = () => {
   return (
     <div
       data-scale={textScale}
-      data-theme={themeId}
+      data-theme={effectiveThemeId}
       data-theme-mode={activeTheme.isDark ? 'dark' : 'light'}
       className={`reader-scale-container course-reader-shell ${activeTheme.isDark ? 'dark' : ''} w-full flex flex-col ${activeTheme.bgGradient} text-theme-primary font-sans antialiased overflow-hidden transition-colors duration-300`}
     >
@@ -1320,7 +1340,7 @@ export const CoursePreviewPage: React.FC = () => {
 
           {/* Theme Presets Popover */}
           <ThemeSelectorPopover
-            activeThemeId={themeId}
+            activeThemeId={effectiveThemeId}
             onSelectTheme={handleThemeChange}
             textScale={textScale}
             onScaleDown={handleScaleDown}
@@ -1544,7 +1564,7 @@ export const CoursePreviewPage: React.FC = () => {
                 onChangeQuestions={handleQuestionsChange}
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
                 onOpenAddQuestions={() => setAddQuestionsModalOpen(true)}
-                themeId={themeId}
+                themeId={effectiveThemeId}
               />
 
               {/* ============================================================== */}
