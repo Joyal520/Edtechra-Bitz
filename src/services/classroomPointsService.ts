@@ -200,30 +200,8 @@ class ClassroomPointsService {
         pointsMap[p.student_id] = (pointsMap[p.student_id] || 0) + Number(p.points || 0);
       });
 
-      // Ensure any student who earned points in this classroom (e.g. via Course Studio) is included
-      const existingMemberIds = new Set(studentList.map((m: any) => m.profile_id));
-      const missingStudentIds = Object.keys(pointsMap).filter(
-        sid => !existingMemberIds.has(sid) && sid !== ownerId
-      );
-
-      if (missingStudentIds.length > 0) {
-        const { data: extraProfiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, avatar_url, role')
-          .in('id', missingStudentIds);
-
-        (extraProfiles || []).forEach((prof: any) => {
-          if (prof.role === 'teacher' || prof.role === 'admin') return;
-          if (prof.email?.toLowerCase().trim() === 'roshanjoyal520@gmail.com') return;
-          studentList.push({
-            profile_id: prof.id,
-            display_name: prof.full_name || null,
-            role: 'student',
-            profile: prof
-          });
-        });
-      }
-
+      // Only active enrolled classroom members should appear on the leaderboard.
+      // Historical learning/points records are preserved, but removed non-members are excluded.
       if (studentList.length === 0) return [];
 
       // 4. Count completed assignments (strictly for metadata; historical submissions preserved)

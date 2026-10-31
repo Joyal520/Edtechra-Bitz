@@ -478,7 +478,7 @@ class ClassroomService {
   /**
    * Retrieves enrolled students for a classroom
    */
-  async getClassroomMembers(classroomId: string): Promise<ClassroomMember[]> {
+  async getClassroomMembers(classroomId: string, options?: { throwOnError?: boolean }): Promise<ClassroomMember[]> {
     if (!supabase || !classroomId) return [];
 
     try {
@@ -511,7 +511,142 @@ class ClassroomService {
       }));
     } catch (err) {
       console.error('[ClassroomService] getClassroomMembers error:', err);
+      if (options?.throwOnError) throw err;
       return [];
+    }
+  }
+
+  /**
+   * Removes multiple members from the classroom atomically and verifies permanent deletion from database.
+   * Student accounts, grades, certificates, completed activities, and quiz submissions are preserved.
+   */
+  async removeMembers(
+    classroomId: string,
+    memberProfileIds: string[]
+  ): Promise<{ success: boolean; removedCount: number; removedProfileIds: string[]; error?: string }> {
+    if (!supabase) return { success: false, removedCount: 0, removedProfileIds: [], error: 'Supabase is not configured' };
+    if (!classroomId) return { success: false, removedCount: 0, removedProfileIds: [], error: 'Classroom ID is required' };
+
+    const targetIds = Array.from(new Set((memberProfileIds || []).filter(Boolean)));
+    if (targetIds.length === 0) {
+      return { success: false, removedCount: 0, removedProfileIds: [], error: 'No student profiles selected' };
+    }
+
+    try {
+      // 1. Try calling the backend endpoint first (handles auth check, RPC, and verification atomically)
+      try {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/members/remove`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ profileIds: targetIds })
+        });
+
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.success) {
+            return {
+              success: true,
+              removedCount: Number(resJson.removed_count || targetIds.length),
+              removedProfileIds: Array.isArray(resJson.removed_profile_ids) ? resJson.removed_profile_ids : targetIds
+            };
+          } else if (resJson.error) {
+            return {
+              success: false,
+              removedCount: 0,
+              removedProfileIds: [],
+              error: resJson.error
+            };
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[ClassroomService] /api/classes/:id/members/remove fetch notice:', fetchErr);
+      }
+
+      // 2. Direct Supabase remove_classroom_members RPC fallback
+      const { data: rpcData, error: rpcError } = await supabase.rpc('remove_classroom_members', {
+        p_classroom_id: classroomId,
+        p_profile_ids: targetIds
+      });
+
+      if (!rpcError && rpcData?.success) {
+        return {
+          success: true,
+          removedCount: Number(rpcData.removed_count || targetIds.length),
+          removedProfileIds: Array.isArray(rpcData.removed_profile_ids) ? rpcData.removed_profile_ids : targetIds
+        };
+      }
+
+      if (rpcError && rpcError.code === '42501') {
+        return {
+          success: false,
+          removedCount: 0,
+          removedProfileIds: [],
+          error: 'Access denied: Only classroom teachers and admins can remove students.'
+        };
+      }
+
+      // 3. Fallback direct DELETE with .select() verification
+      const { data: deletedRows, error: delError } = await supabase
+        .from('classroom_members')
+        .delete()
+        .eq('classroom_id', classroomId)
+        .in('profile_id', targetIds)
+        .eq('role', 'student')
+        .select('id, profile_id');
+
+      if (delError) {
+        console.error('[ClassroomService] Direct delete failed:', delError);
+        return {
+          success: false,
+          removedCount: 0,
+          removedProfileIds: [],
+          error: delError.message || 'Failed to remove students from the database.'
+        };
+      }
+
+      // 4. Verification query: ensure zero matching student rows exist in the DB
+      const { data: remaining, error: verifyError } = await supabase
+        .from('classroom_members')
+        .select('id, profile_id')
+        .eq('classroom_id', classroomId)
+        .in('profile_id', targetIds)
+        .eq('role', 'student');
+
+      if (verifyError) {
+        console.warn('[ClassroomService] Member verification check warning:', verifyError);
+      } else if (remaining && remaining.length > 0) {
+        return {
+          success: false,
+          removedCount: 0,
+          removedProfileIds: [],
+          error: 'Failed to permanently remove students. Please check teacher permissions.'
+        };
+      }
+
+      const deletedCount = (deletedRows || []).length;
+      if (deletedCount === 0 && targetIds.length > 0) {
+        return {
+          success: false,
+          removedCount: 0,
+          removedProfileIds: [],
+          error: 'No matching student enrollments were found to remove.'
+        };
+      }
+
+      return {
+        success: true,
+        removedCount: deletedCount,
+        removedProfileIds: (deletedRows || []).map((r: any) => r.profile_id)
+      };
+    } catch (err: any) {
+      console.error('[ClassroomService] removeMembers unexpected error:', err);
+      return {
+        success: false,
+        removedCount: 0,
+        removedProfileIds: [],
+        error: err?.message || 'An unexpected error occurred while removing students.'
+      };
     }
   }
 
@@ -519,19 +654,11 @@ class ClassroomService {
    * Removes a member from the classroom
    */
   async removeMember(classroomId: string, memberProfileId: string): Promise<{ error?: string }> {
-    if (!supabase) return { error: 'Supabase is not configured' };
-    try {
-      const { error } = await supabase
-        .from('classroom_members')
-        .delete()
-        .eq('classroom_id', classroomId)
-        .eq('profile_id', memberProfileId);
-
-      if (error) throw error;
-      return {};
-    } catch (err: any) {
-      return { error: err.message || 'Failed to remove student.' };
+    const res = await this.removeMembers(classroomId, [memberProfileId]);
+    if (!res.success) {
+      return { error: res.error || 'Failed to remove student.' };
     }
+    return {};
   }
 
   /**

@@ -65,7 +65,7 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
     setLoadingStudents(true);
     setRemoveErrorMessage(null);
     try {
-      const allMembers = await classroomService.getClassroomMembers(classroom.id);
+      const allMembers = await classroomService.getClassroomMembers(classroom.id, { throwOnError: true });
       // Filter out classroom owner/teachers, only show student members
       const studentsOnly = allMembers.filter(
         (m) => m.role === 'student' && m.profile_id !== classroom.teacher_id
@@ -73,11 +73,13 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
       setEnrolledStudents(studentsOnly);
     } catch (err: any) {
       console.error('[ClassroomDangerZone] Error loading students:', err);
-      // Fallback to initial members if available
-      if (initialMembers) {
+      // Fallback to initial members if available but show warning
+      if (initialMembers && initialMembers.length > 0) {
         setEnrolledStudents(
           initialMembers.filter((m) => m.role === 'student' && m.profile_id !== classroom.teacher_id)
         );
+      } else {
+        setRemoveErrorMessage('Failed to load enrolled students from the database. Please check your connection.');
       }
     } finally {
       setLoadingStudents(false);
@@ -126,41 +128,55 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
 
     setIsRemoving(true);
     setRemoveErrorMessage(null);
+    setRemoveSuccessMessage(null);
 
-    let failedCount = 0;
     try {
-      // Safely remove each student enrollment from classroom_members table
-      // IMPORTANT: Does NOT delete the user profile or global account
-      for (const profileId of selectedStudentIds) {
-        const res = await classroomService.removeMember(classroom.id, profileId);
-        if (res.error) {
-          failedCount++;
-          console.error(`Failed to remove student ${profileId}:`, res.error);
-        }
-      }
-
-      if (failedCount === selectedStudentIds.length && selectedStudentIds.length > 0) {
-        setRemoveErrorMessage("We couldn't remove the selected students. No changes were made.");
+      // Safely remove student enrollments from classroom_members table atomically
+      // IMPORTANT: Does NOT delete the user profiles, certificates, or grades
+      const res = await classroomService.removeMembers(classroom.id, selectedStudentIds);
+      if (!res.success) {
+        setRemoveErrorMessage(res.error || "We couldn't remove the selected students. No changes were made.");
         setIsRemoving(false);
         setIsConfirmRemoveOpen(false);
         return;
       }
 
-      const countRemoved = selectedStudentIds.length - failedCount;
-      setRemoveSuccessMessage(
-        `Successfully removed ${countRemoved} student${countRemoved === 1 ? '' : 's'} from this classroom.`
+      // Fresh database verification query to guarantee zero target students remain
+      const freshMembers = await classroomService.getClassroomMembers(classroom.id, { throwOnError: true });
+      const remainingSelected = freshMembers.filter((m) =>
+        selectedStudentIds.includes(m.profile_id)
       );
-      
-      // Update local state and trigger parent refresh
+
+      if (remainingSelected.length > 0) {
+        console.error('[ClassroomDangerZone] Removal verification failed - students still present:', remainingSelected);
+        setRemoveErrorMessage('Student removal could not be verified in the database. Please try again.');
+        setIsRemoving(false);
+        setIsConfirmRemoveOpen(false);
+        await loadStudents();
+        return;
+      }
+
+      const studentsOnly = freshMembers.filter(
+        (m) => m.role === 'student' && m.profile_id !== classroom.teacher_id
+      );
+      setEnrolledStudents(studentsOnly);
+
+      const countRemoved = res.removedCount;
+      setRemoveSuccessMessage(
+        `Successfully removed ${countRemoved} student${countRemoved === 1 ? '' : 's'} from this classroom. Historical learning records were preserved.`
+      );
+
+      // Reset selection and close confirmation
       setSelectedStudentIds([]);
       setIsConfirmRemoveOpen(false);
-      await loadStudents();
+
+      // Trigger parent refresh for classroom count, stats, and roster
       onMembersUpdated?.();
-      
-      setTimeout(() => setRemoveSuccessMessage(null), 4000);
+
+      setTimeout(() => setRemoveSuccessMessage(null), 5000);
     } catch (err: any) {
       console.error('[ClassroomDangerZone] Error removing students:', err);
-      setRemoveErrorMessage("We couldn't remove the selected students. No changes were made.");
+      setRemoveErrorMessage(err?.message || "We couldn't remove the selected students. No changes were made.");
     } finally {
       setIsRemoving(false);
     }
@@ -396,9 +412,13 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
                           <div className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
                             {name}
                           </div>
-                          {email && (
-                            <div className="text-[11px] text-slate-400 font-mono truncate">{email}</div>
-                          )}
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono truncate">
+                            {email && <span className="truncate">{email}</span>}
+                            {email && <span>•</span>}
+                            <span className="text-[10px] text-slate-500 font-sans">
+                              {typeof member.points === 'number' ? `${member.points} XP` : '0 XP'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -448,7 +468,7 @@ export const ClassroomDangerZone: React.FC<ClassroomDangerZoneProps> = ({
       {/* REMOVE STUDENT CONFIRMATION DIALOG                                    */}
       {/* ===================================================================== */}
       {isConfirmRemoveOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 text-slate-900 animate-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
               <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">

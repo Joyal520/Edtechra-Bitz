@@ -53,10 +53,14 @@ export const StudentRoster: React.FC<StudentRosterProps> = ({
     }
     setRemovingId(memberProfileId);
     try {
-      await classroomService.removeMember(classroomId, memberProfileId);
+      const res = await classroomService.removeMember(classroomId, memberProfileId);
+      if (res.error) {
+        alert(res.error || 'Failed to remove student');
+        return;
+      }
       onMemberRemoved();
-    } catch (err) {
-      alert('Failed to remove student');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to remove student');
     } finally {
       setRemovingId(null);
     }

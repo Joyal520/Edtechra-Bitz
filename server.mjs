@@ -3384,6 +3384,147 @@ app.post('/api/classes/:id/leaderboard/reset', async (req, res) => {
   }
 });
 
+// POST /api/classes/:id/members/remove - Atomic, verified student enrollment removal (TEACHER/ADMIN ONLY)
+app.post('/api/classes/:id/members/remove', async (req, res) => {
+  const classroomId = req.params.id;
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const perm = await verifyClassroomLeaderboardTeacher(serverSupabase, classroomId, authData);
+    if (!perm.authorized) {
+      return res.status(perm.status).json({
+        success: false,
+        error: perm.status === 403
+          ? 'Access denied: Only classroom teachers and admins can remove students from this classroom.'
+          : perm.error
+      });
+    }
+
+    const rawProfileIds = Array.isArray(req.body?.profileIds)
+      ? req.body.profileIds
+      : req.body?.profileId
+        ? [req.body.profileId]
+        : [];
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const profileIds = Array.from(
+      new Set(
+        rawProfileIds
+          .filter((id) => typeof id === 'string' && uuidRegex.test(id.trim()))
+          .map((id) => id.trim())
+      )
+    );
+
+    if (profileIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one valid student profile ID is required.'
+      });
+    }
+
+    // 1. Execute atomic student removal via remove_classroom_members RPC
+    const { data: rpcData, error: rpcError } = await serverSupabase.rpc(
+      'remove_classroom_members',
+      {
+        p_classroom_id: classroomId,
+        p_profile_ids: profileIds
+      }
+    );
+
+    let removedCount = Number(rpcData?.removed_count || 0);
+    let removedProfileIds = Array.isArray(rpcData?.removed_profile_ids) ? rpcData.removed_profile_ids : [];
+
+    // Fallback to direct service-role DELETE with RETURNING if the RPC is unavailable
+    if (rpcError) {
+      console.warn('[ClassroomMembersRemove POST] RPC fallback notice:', {
+        classroomId,
+        code: rpcError.code,
+        message: rpcError.message
+      });
+
+      const { data: classroomRow } = await serverSupabase
+        .from('classrooms')
+        .select('teacher_id')
+        .eq('id', classroomId)
+        .maybeSingle();
+
+      const safeTargetIds = profileIds.filter((pid) => pid !== classroomRow?.teacher_id);
+      if (safeTargetIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cannot remove the classroom owner from the classroom.'
+        });
+      }
+
+      const { data: deletedRows, error: delError } = await serverSupabase
+        .from('classroom_members')
+        .delete()
+        .eq('classroom_id', classroomId)
+        .in('profile_id', safeTargetIds)
+        .eq('role', 'student')
+        .select('id, profile_id');
+
+      if (delError) {
+        throw delError;
+      }
+
+      removedProfileIds = Array.from(new Set((deletedRows || []).map((r) => r.profile_id)));
+      removedCount = (deletedRows || []).length;
+    }
+
+    // 2. Fresh database verification query: confirm zero student enrollment rows remain for target IDs
+    const { data: remainingRows, error: verifyError } = await serverSupabase
+      .from('classroom_members')
+      .select('id, profile_id, role, status')
+      .eq('classroom_id', classroomId)
+      .in('profile_id', profileIds)
+      .eq('role', 'student');
+
+    if (verifyError) {
+      throw verifyError;
+    }
+
+    if (Array.isArray(remainingRows) && remainingRows.length > 0) {
+      console.error('[ClassroomMembersRemove POST] Verification failed - rows still exist:', {
+        classroomId,
+        remainingRows
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Student removal could not be verified in the database. Please try again.'
+      });
+    }
+
+    if (removedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: rpcData?.error || 'No matching student enrollment records were found in this classroom.'
+      });
+    }
+
+    res.json({
+      success: true,
+      classroom_id: classroomId,
+      removed_count: removedCount,
+      removed_profile_ids: removedProfileIds,
+      remaining_count: 0
+    });
+  } catch (error) {
+    console.error('[ClassroomMembersRemove POST] Operation failed:', {
+      classroomId,
+      code: error?.code,
+      message: error?.message
+    });
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to remove selected students from the classroom.'
+    });
+  }
+});
+
 // Helper to verify teacher authorization for Teaching Intelligence
 async function verifyTeacherClassroomAccess(supabaseClient, classroomId, authUser) {
   if (!supabaseClient) return true;
