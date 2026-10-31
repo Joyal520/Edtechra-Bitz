@@ -4,6 +4,7 @@
 
 import { LeaderboardPeriod, LeaderboardResponse } from '@/types/leaderboard';
 import { supabase } from '@/lib/supabase';
+import { getValidAuthToken, authenticatedFetch } from '@/lib/apiAuth';
 
 class LeaderboardService {
   /**
@@ -11,17 +12,7 @@ class LeaderboardService {
    */
   async getValidAuthToken(explicitToken?: string | null): Promise<string | null> {
     if (explicitToken) return explicitToken;
-    if (supabase) {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (!error && session?.access_token) {
-          return session.access_token;
-        }
-      } catch (err) {
-        console.warn('[LeaderboardService] Error getting session:', err);
-      }
-    }
-    return null;
+    return getValidAuthToken();
   }
 
   private async getAuthHeaders(explicitToken?: string | null): Promise<Record<string, string>> {
@@ -38,11 +29,10 @@ class LeaderboardService {
   /**
    * Fetches top 10 learners and current user rank for a given period with automatic Supabase fallback
    */
-  async getLeaderboard(period: LeaderboardPeriod = 'week', token?: string | null): Promise<LeaderboardResponse> {
+  async getLeaderboard(period: LeaderboardPeriod = 'week', _token?: string | null): Promise<LeaderboardResponse> {
     // 1. Primary: Server API
     try {
-      const headers = await this.getAuthHeaders(token);
-      const res = await fetch(`/api/leaderboard?period=${encodeURIComponent(period)}`, { headers });
+      const res = await authenticatedFetch(`/api/leaderboard?period=${encodeURIComponent(period)}`);
 
       if (res.ok) {
         const json = await res.json();

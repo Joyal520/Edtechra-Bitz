@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import {
   ClassroomTask,
   TaskCategory,
@@ -9,22 +10,6 @@ import {
 } from '@/types/classroomTask';
 
 class ClassroomTaskClientService {
-  private async getAuthHeaders(): Promise<HeadersInit> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
-  }
-
   /**
    * Teacher creates a new task
    */
@@ -45,10 +30,11 @@ class ClassroomTaskClientService {
     settings?: Partial<TaskSettings>;
   }): Promise<{ data?: ClassroomTask; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch('/api/classes/tasks', {
+      const res = await authenticatedFetch('/api/classes/tasks', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
@@ -68,12 +54,11 @@ class ClassroomTaskClientService {
    */
   async getTasks(classroomId: string, category?: TaskCategory | 'all'): Promise<ClassroomTask[]> {
     try {
-      const headers = await this.getAuthHeaders();
       const url = category && category !== 'all'
         ? `/api/classes/${classroomId}/tasks?category=${category}`
         : `/api/classes/${classroomId}/tasks`;
 
-      const res = await fetch(url, { headers });
+      const res = await authenticatedFetch(url);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || [];
@@ -90,8 +75,7 @@ class ClassroomTaskClientService {
    */
   async getTask(taskId: string): Promise<ClassroomTask | null> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/tasks/${taskId}`, { headers });
+      const res = await authenticatedFetch(`/api/classes/tasks/${taskId}`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || null;
@@ -116,10 +100,11 @@ class ClassroomTaskClientService {
     }
   ): Promise<{ data?: TaskSubmission; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/tasks/${taskId}/submit`, {
+      const res = await authenticatedFetch(`/api/classes/tasks/${taskId}/submit`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
@@ -150,10 +135,11 @@ class ClassroomTaskClientService {
     }
   ): Promise<{ data?: any; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch('/api/classes/ocr-jobs', {
+      const res = await authenticatedFetch('/api/classes/ocr-jobs', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           taskId,
           classroomId: payload.classroomId,
@@ -205,8 +191,7 @@ class ClassroomTaskClientService {
    */
   async getSubmissions(taskId: string): Promise<TaskSubmission[]> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/tasks/${taskId}/submissions`, { headers });
+      const res = await authenticatedFetch(`/api/classes/tasks/${taskId}/submissions`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || [];
@@ -227,10 +212,11 @@ class ClassroomTaskClientService {
     teacherFeedback?: string
   ): Promise<{ data?: TaskSubmission; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/tasks/submissions/${submissionId}/override`, {
+      const res = await authenticatedFetch(`/api/classes/tasks/submissions/${submissionId}/override`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ finalScore, reason, teacherFeedback })
       });
 

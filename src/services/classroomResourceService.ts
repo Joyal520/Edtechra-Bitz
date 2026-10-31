@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import {
   ContentBucket,
   BucketItem,
@@ -16,22 +17,6 @@ class ClassroomResourceService {
     if (!supabase) return null;
     const { data: { session } } = await supabase.auth.getSession();
     return session?.user?.id || null;
-  }
-
-  private async getAuthHeaders(): Promise<HeadersInit> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
   }
 
   /**
@@ -194,12 +179,11 @@ class ClassroomResourceService {
    */
   async getTeacherCloudMaterials(classroomId?: string): Promise<TeacherCloudMaterial[]> {
     try {
-      const headers = await this.getAuthHeaders();
       const url = classroomId
         ? `/api/teacher/materials?classroomId=${encodeURIComponent(classroomId)}`
         : '/api/teacher/materials';
 
-      const res = await fetch(url, { headers });
+      const res = await authenticatedFetch(url);
       const json = await res.json();
 
       if (res.ok && json.success) {
@@ -260,8 +244,7 @@ class ClassroomResourceService {
    */
   async getTeacherStorageUsage(): Promise<TeacherStorageUsage> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch('/api/teacher/storage-usage', { headers });
+      const res = await authenticatedFetch('/api/teacher/storage-usage');
       const json = await res.json();
 
       if (res.ok && json.success && json.data) {
@@ -330,12 +313,12 @@ class ClassroomResourceService {
     onProgress?: (percent: number) => void;
   }): Promise<{ data?: TeacherCloudMaterial; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-
       // 1. Quota check & Presign R2 Upload
-      const presignRes = await fetch('/api/teacher/materials/presign-upload', {
+      const presignRes = await authenticatedFetch('/api/teacher/materials/presign-upload', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           filename: payload.file.name,
           contentType: payload.file.type || 'application/pdf',
@@ -379,9 +362,11 @@ class ClassroomResourceService {
       });
 
       // 3. Register master material record in database
-      const saveRes = await fetch('/api/teacher/materials', {
+      const saveRes = await authenticatedFetch('/api/teacher/materials', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           title: payload.title.trim(),
           description: (payload.description || '').trim(),
@@ -422,10 +407,11 @@ class ClassroomResourceService {
     }
 
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/${payload.classroomId}/assign-materials`, {
+      const res = await authenticatedFetch(`/api/classes/${payload.classroomId}/assign-materials`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           resourceIds: payload.resourceIds,
           bucketId: payload.bucketId
@@ -449,8 +435,7 @@ class ClassroomResourceService {
    */
   async getMaterialPreview(resourceId: string): Promise<{ data?: { id: string; title: string; fileUrl: string; originalFilename: string }; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/teacher/materials/${resourceId}/preview`, { headers });
+      const res = await authenticatedFetch(`/api/teacher/materials/${resourceId}/preview`);
       const json = await res.json();
 
       if (!res.ok || !json.success) {
@@ -468,10 +453,8 @@ class ClassroomResourceService {
    */
   async deleteTeacherMaterial(resourceId: string): Promise<{ error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/teacher/materials/${resourceId}`, {
-        method: 'DELETE',
-        headers
+      const res = await authenticatedFetch(`/api/teacher/materials/${resourceId}`, {
+        method: 'DELETE'
       });
 
       const json = await res.json();

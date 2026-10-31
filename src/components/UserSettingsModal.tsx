@@ -17,6 +17,7 @@ import {
   Moon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import { useBitzTheme, BitzTextSize } from '@/context/BitzThemeContext';
 import { DEFAULT_AVATARS, AvatarPreset, AVATAR_CATEGORY_TABS, AvatarCategory } from '@/utils/avatarConstants';
 import { ImageSquareCropper } from '@/components/PostFeed/ImageSquareCropper';
@@ -31,7 +32,7 @@ interface UserSettingsModalProps {
 }
 
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, onClose }) => {
-  const { user, profile, isAdmin, updateUserProfile, session } = useAuth();
+  const { user, profile, isAdmin, updateUserProfile } = useAuth();
   const { isDark, setTheme, readingSettings, setTextSize } = useBitzTheme();
 
   const [displayName, setDisplayName] = useState<string>('');
@@ -123,8 +124,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
     setSaveSuccess(false);
 
     try {
-      const token = session?.access_token || null;
-
+      
       // Convert optimized blob to base64 DataURL
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -145,11 +145,10 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({ isOpen, on
 
       // Upload via server-side endpoint (bypasses browser CORS to R2 and persists to DB)
       try {
-        const uploadRes = await fetch('/api/profile/upload-avatar', {
+        const uploadRes = await authenticatedFetch('/api/profile/upload-avatar', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             imageBase64: dataUrl,

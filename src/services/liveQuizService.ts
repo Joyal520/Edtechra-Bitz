@@ -4,6 +4,7 @@
 
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import {
   LiveQuiz,
   LiveQuizSession,
@@ -1221,16 +1222,10 @@ class LiveQuizService {
 
     // 2. Also invoke backend authoritative reconciliation endpoint with auth token
     try {
-      const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
-      const token = authSessionData.session?.access_token;
       const cleanClassroomId = classroomId && classroomId !== 'undefined' && classroomId !== 'null' ? classroomId : 'all';
-
-      const response = await fetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+      const response = await authenticatedFetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'start_now' })
       });
 
@@ -1254,17 +1249,11 @@ class LiveQuizService {
     if (!sessionId) return null;
 
     try {
-      const { data: authSessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
-      const token = authSessionData.session?.access_token;
       const cleanClassroomId = classroomId && classroomId !== 'undefined' && classroomId !== 'null' ? classroomId : 'all';
-
       // First try backend authoritative reconciliation endpoint with Bearer auth token
-      const response = await fetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
+      const response = await authenticatedFetch(`/api/classes/${cleanClassroomId}/live-quiz/sessions/${sessionId}/reconcile-scheduled`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
 
       if (response.ok) {
@@ -1915,7 +1904,7 @@ class LiveQuizService {
 
       if (session.classroom_id) {
         try {
-          await fetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${sessionId}/complete`, {
+          await authenticatedFetch(`/api/classes/${session.classroom_id}/live-quiz/sessions/${sessionId}/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });

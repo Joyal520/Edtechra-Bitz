@@ -4,7 +4,7 @@
 // R2 Visual Compression Uploads, Classroom Assignments, and Learning Telemetry.
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getAuthHeaders, authenticatedFetch } from '@/lib/apiAuth';
 import {
   Course,
   CourseUnit,
@@ -28,28 +28,9 @@ import { optimizeImageForUpload } from '@/utils/imageOptimization';
 
 const API_BASE = '/api/course-studio';
 
-// Short-lived auth token cache to avoid redundant supabase.auth.getSession() calls during parallel fetches
-let _cachedAuthToken = '';
-let _cachedAuthTokenExpiresAt = 0;
-
+// Centralized auth header resolution via @/lib/apiAuth
 async function getAuthHeader(): Promise<Record<string, string>> {
-  const now = Date.now();
-  let token = _cachedAuthToken && _cachedAuthTokenExpiresAt > now ? _cachedAuthToken : '';
-  if (!token && supabase) {
-    const { data: sessionData } = await supabase.auth.getSession();
-    token = sessionData?.session?.access_token || '';
-    if (token) {
-      _cachedAuthToken = token;
-      _cachedAuthTokenExpiresAt = now + 15000; // 15s cache
-    }
-  }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
+  return await getAuthHeaders();
 }
 
 // Fast in-memory + sessionStorage cache for course details
@@ -148,16 +129,7 @@ export const courseStudioService = {
 
     const fetchPromise = (async () => {
       try {
-        let headers = await getAuthHeader();
-        let res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
-        if (res.status === 401 && supabase) {
-          // Session may still be hydrating or refreshing on mobile/PWA; refresh and retry once
-          _cachedAuthToken = '';
-          _cachedAuthTokenExpiresAt = 0;
-          await supabase.auth.refreshSession().catch(() => {});
-          headers = await getAuthHeader();
-          res = await fetch(`${API_BASE}/courses/${courseId}`, { headers });
-        }
+        const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}`);
         const json = await res.json();
         if (!res.ok || !json.success) {
           throw new Error(json.error || 'Failed to fetch course details.');
@@ -518,11 +490,10 @@ export const courseStudioService = {
       format: 'image/webp'
     });
 
-    // 2. Request presigned URL from backend
-    const headers = await getAuthHeader();
-    const presignRes = await fetch(`${API_BASE}/presign-upload`, {
+    // 2. Request presigned URL from backend with auto-refreshing authenticatedFetch
+    const presignRes = await authenticatedFetch(`${API_BASE}/presign-upload`, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         courseId,
         filename: optimized.file.name,
@@ -629,8 +600,7 @@ export const courseStudioService = {
   // --------------------------------------------------------------------------
 
   async getClassroomCourses(classroomId: string): Promise<CourseClassroomAssignment[]> {
-    const headers = await getAuthHeader();
-    const res = await fetch(`/api/classes/${classroomId}/courses`, { headers });
+    const res = await authenticatedFetch(`/api/classes/${classroomId}/courses`);
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to fetch classroom courses.');
     return json.courses || [];

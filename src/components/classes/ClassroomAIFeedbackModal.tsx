@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
 import { Classroom, ClassroomStats } from '@/types/classroom';
-import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 
 interface ClassroomAIFeedbackModalProps {
   isOpen: boolean;
@@ -25,14 +25,10 @@ export const ClassroomAIFeedbackModal: React.FC<ClassroomAIFeedbackModalProps> =
   const handleGenerate = async () => {
     setLoading(true);
     try {
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
-      const token = session?.access_token;
-
-      const res = await fetch('/api/classes/ai-feedback', {
+      const res = await authenticatedFetch('/api/classes/ai-feedback', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           classroomId: classroom.id,

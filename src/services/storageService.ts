@@ -2,7 +2,7 @@
 // EDTECHRA-BITZ: Cloudflare R2 Storage Management Service (Client-Side)
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getValidAuthToken } from '@/lib/apiAuth';
 
 export interface StorageStatusData {
   isConfigured: boolean;
@@ -43,17 +43,7 @@ export interface MigrationResult {
 class StorageService {
   private async getValidAuthToken(explicitToken?: string | null): Promise<string | null> {
     if (explicitToken) return explicitToken;
-    if (supabase) {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (!error && session?.access_token) {
-          return session.access_token;
-        }
-      } catch (err) {
-        console.warn('[StorageService] Failed to retrieve session:', err);
-      }
-    }
-    return null;
+    return getValidAuthToken();
   }
 
   private async getAuthHeaders(explicitToken?: string | null): Promise<Record<string, string>> {

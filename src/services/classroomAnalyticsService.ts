@@ -3,17 +3,15 @@
 // Client service for fetching deterministic classroom and student analytics.
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getAuthHeaders } from '@/lib/apiAuth';
 import {
   ClassroomAnalyticsSummary,
   AnalyticsOptions
 } from '@/types/classroomAnalytics';
 
 export class ClassroomAnalyticsService {
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    if (!supabase) return {};
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  private async getAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+    return (await getAuthHeaders(extraHeaders)) as Record<string, string>;
   }
 
   /**

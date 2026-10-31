@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import { classroomExamService } from '@/services/classroomExamService';
 import { examPlatformService } from '@/services/examPlatformService';
 import { CanonicalExamV1 } from '@/components/exam/shared/ExamSchema';
@@ -66,10 +67,7 @@ export const StudentExamPage: React.FC = () => {
 
       // Layer 1: Resilient server API call for authoritative server time & scheduled status
       try {
-        const headers: Record<string, string> = {};
-        const token = localStorage.getItem('auth_token') || localStorage.getItem('token') || (user as any)?.access_token;
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const apiRes = await fetch(`/api/exam-engine?action=get-student-exam&examId=${effectiveExamId}&classroomId=${classroomId || ''}`, { headers });
+        const apiRes = await authenticatedFetch(`/api/exam-engine?action=get-student-exam&examId=${effectiveExamId}&classroomId=${classroomId || ''}`);
         if (apiRes.ok) {
           const resJson = await apiRes.json();
           if (resJson.success && resJson.exam) {

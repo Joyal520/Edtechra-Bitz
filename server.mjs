@@ -186,7 +186,15 @@ function cleanEnv(value) {
 // Initialize server-side Supabase client
 const supabaseUrl = cleanEnv(process.env.VITE_SUPABASE_URL) || cleanEnv(process.env.SUPABASE_URL) || cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
 const supabaseKey = cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY) || cleanEnv(process.env.SUPABASE_SERVICE_KEY) || cleanEnv(process.env.VITE_SUPABASE_ANON_KEY) || cleanEnv(process.env.SUPABASE_ANON_KEY);
-const serverSupabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+const serverSupabase = (supabaseUrl && supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    })
+  : null;
 
 // Initialize server-side OpenAI client
 const openaiApiKey = cleanEnv(process.env.OPENAI_API_KEY);
@@ -778,7 +786,52 @@ const _authTokenCache = new Map();
 const _authTokenInFlight = new Map();
 const AUTH_CACHE_TTL_MS = 60 * 1000;
 
-// Helper: Verify Supabase User Token from Request Authorization Header
+// Helper: Extract JWT access token from Authorization header, custom headers, or cookies
+function extractTokenFromRequest(req) {
+  // 1. Authorization header (case-insensitive Bearer check)
+  const authHeader = req.headers.authorization || req.headers.Authorization || '';
+  if (typeof authHeader === 'string' && authHeader.trim()) {
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (bearerMatch && bearerMatch[1]) {
+      return bearerMatch[1].replace(/^["']|["']$/g, '').trim();
+    }
+  }
+
+  // 2. Custom header (x-access-token or x-supabase-auth)
+  const customHeader = req.headers['x-access-token'] || req.headers['x-supabase-auth'];
+  if (typeof customHeader === 'string' && customHeader.trim()) {
+    return customHeader.replace(/^["']|["']$/g, '').trim();
+  }
+
+  // 3. Cookie fallback (sb-access-token or sb-<project>-auth-token)
+  const cookieHeader = req.headers.cookie;
+  if (typeof cookieHeader === 'string' && cookieHeader.trim()) {
+    try {
+      const cookies = cookieHeader.split(';').map(c => c.trim());
+      for (const c of cookies) {
+        const [k, ...vParts] = c.split('=');
+        const v = vParts.join('=');
+        if (!k || !v) continue;
+        const key = k.trim().toLowerCase();
+        if (key === 'sb-access-token' || key.includes('auth-token')) {
+          const raw = decodeURIComponent(v);
+          if (raw.startsWith('{')) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.access_token) return String(parsed.access_token).replace(/^["']|["']$/g, '').trim();
+          } else if (raw.length > 20 && raw.split('.').length === 3) {
+            return raw.replace(/^["']|["']$/g, '').trim();
+          }
+        }
+      }
+    } catch {
+      // Ignore cookie parsing error
+    }
+  }
+
+  return null;
+}
+
+// Helper: Verify Supabase User Token from Request
 async function verifyAuthUser(req) {
   // Allow development / test mock admin header in non-production environments
   if (process.env.NODE_ENV !== 'production' && req.headers['x-mock-admin'] === 'true') {
@@ -788,13 +841,14 @@ async function verifyAuthUser(req) {
     };
   }
 
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+  const token = extractTokenFromRequest(req);
   if (!token) {
-    console.warn('[verifyAuthUser] No Bearer token in Authorization header');
+    req.authError = 'token_missing';
+    console.warn(`[verifyAuthUser] No Bearer token in Authorization header or cookies for ${req.method} ${req.originalUrl || req.url}`);
     return null;
   }
   if (!serverSupabase) {
+    req.authError = 'server_supabase_uninitialized';
     console.error('[verifyAuthUser] serverSupabase client is NOT initialized — check env vars VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
     return null;
   }
@@ -813,7 +867,8 @@ async function verifyAuthUser(req) {
     try {
       const { data: { user }, error } = await serverSupabase.auth.getUser(token);
       if (error || !user) {
-        console.warn('[verifyAuthUser] Supabase getUser rejected token:', error?.message || 'Invalid or expired session');
+        req.authError = error?.message || 'token_rejected';
+        console.warn(`[verifyAuthUser] Supabase getUser rejected token for ${req.method} ${req.originalUrl || req.url}:`, error?.message || 'Invalid or expired session');
         return null;
       }
 
@@ -841,6 +896,7 @@ async function verifyAuthUser(req) {
       _authTokenCache.set(token, { data: authResult, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
       return authResult;
     } catch (err) {
+      req.authError = err?.message || 'internal_auth_error';
       console.error('[verifyAuthUser error]:', err);
       return null;
     } finally {

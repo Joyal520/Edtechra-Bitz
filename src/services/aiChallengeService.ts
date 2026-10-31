@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import {
   AiChallenge,
   AiChallengeSubmission,
@@ -6,25 +6,6 @@ import {
 } from '@/types/aiChallenge';
 
 class AiChallengeClientService {
-  /**
-   * Helper to get active user's access token
-   */
-  private async getAuthHeaders(): Promise<HeadersInit> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
-  }
-
   /**
    * Uploads reference file or student submission file to R2 via presigned URL
    */
@@ -34,10 +15,11 @@ class AiChallengeClientService {
     type: 'reference' | 'submission' = 'submission'
   ): Promise<{ fileKey?: string; error?: string; submissionId?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch('/api/classes/challenges/presign-upload', {
+      const res = await authenticatedFetch('/api/classes/challenges/presign-upload', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           filename: file.name,
           contentType: file.type || 'application/octet-stream',
@@ -89,10 +71,11 @@ class AiChallengeClientService {
     deadlineAt?: string | null;
   }): Promise<{ data?: AiChallenge; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch('/api/classes/challenges', {
+      const res = await authenticatedFetch('/api/classes/challenges', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
@@ -112,10 +95,7 @@ class AiChallengeClientService {
    */
   async getChallenges(classroomId: string): Promise<AiChallenge[]> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/${classroomId}/challenges`, {
-        headers
-      });
+      const res = await authenticatedFetch(`/api/classes/${classroomId}/challenges`);
 
       const json = await res.json();
       if (res.ok && json.success) {
@@ -133,11 +113,7 @@ class AiChallengeClientService {
    */
   async getChallenge(challengeId: string): Promise<AiChallenge | null> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/${challengeId}`, {
-        headers
-      });
-
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || null;
@@ -164,10 +140,11 @@ class AiChallengeClientService {
     }
   ): Promise<{ data?: any; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/${challengeId}/submit`, {
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}/submit`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 
@@ -187,11 +164,7 @@ class AiChallengeClientService {
    */
   async getMySubmission(challengeId: string): Promise<AiChallengeSubmission | null> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/${challengeId}/my-submission`, {
-        headers
-      });
-
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}/my-submission`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || null;
@@ -207,11 +180,7 @@ class AiChallengeClientService {
    */
   async getSubmissions(challengeId: string): Promise<AiChallengeSubmission[]> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/${challengeId}/submissions`, {
-        headers
-      });
-
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}/submissions`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || [];
@@ -231,10 +200,11 @@ class AiChallengeClientService {
     reason?: string
   ): Promise<{ data?: AiChallengeSubmission; error?: string }> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/submissions/${submissionId}/override-score`, {
+      const res = await authenticatedFetch(`/api/classes/challenges/submissions/${submissionId}/override-score`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ finalScore, reason })
       });
 
@@ -254,11 +224,7 @@ class AiChallengeClientService {
    */
   async getLeaderboard(challengeId: string): Promise<AiChallengeLeaderboardEntry[]> {
     try {
-      const headers = await this.getAuthHeaders();
-      const res = await fetch(`/api/classes/challenges/${challengeId}/leaderboard`, {
-        headers
-      });
-
+      const res = await authenticatedFetch(`/api/classes/challenges/${challengeId}/leaderboard`);
       const json = await res.json();
       if (res.ok && json.success) {
         return json.data || [];

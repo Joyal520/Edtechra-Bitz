@@ -2,7 +2,7 @@
 // EDTECHRA DIGITAL CLASSROOM: AI TEACHING PLANNER CLIENT SERVICE (PHASE 2A)
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 export interface LessonActivity {
   name: string;
@@ -115,13 +115,8 @@ async function parseApiResponse<T = any>(res: Response, fallbackErrorMessage: st
 }
 
 class TeachingPlannerService {
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    if (!supabase) return { 'Content-Type': 'application/json' };
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Content-Type': 'application/json',
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
-    };
+  private async getAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+    return (await getAuthHeaders({ 'Content-Type': 'application/json', ...extraHeaders })) as Record<string, string>;
   }
 
   /**

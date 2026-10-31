@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, CheckCircle2, Paperclip, Trash2 } from 'lucide-react';
 import { Assignment, AssignmentAttachment } from '@/types/classroom';
 import { assignmentService } from '@/services/assignmentService';
-import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import { countWords } from '@/utils/writingInstructionGenerator';
 
 interface StudentSubmitModalProps {
@@ -68,16 +68,11 @@ export const StudentSubmitModal: React.FC<StudentSubmitModalProps> = ({
     setErrorMessage(null);
 
     try {
-      // 1. Get valid Supabase auth token
-      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
-      const token = session?.access_token;
-
-      // 2. Request presigned upload URL from backend
-      const presignRes = await fetch('/api/classes/presign-upload', {
+      // 1. Request presigned upload URL from backend via authenticatedFetch
+      const presignRes = await authenticatedFetch('/api/classes/presign-upload', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           classroomId,

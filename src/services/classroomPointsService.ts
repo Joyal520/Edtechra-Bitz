@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import { ClassroomPoint, ClassroomLeaderboardEntry, LeaderboardResetFrequency, LeaderboardSettings } from '@/types/classroom';
 import { DEFAULT_LEADERBOARD_TIMEZONE, sanitizeLeaderboardStudentName } from '@/utils/leaderboardResetUtils';
 
@@ -305,17 +306,11 @@ class ClassroomPointsService {
     const requestPromise = (async (): Promise<UpdateLeaderboardSettingsResponse> => {
       try {
         this.clearLegacyLocalSettings(classroomId);
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) {
-          return { success: false, error: 'Authentication required. Please sign in again.' };
-        }
 
-        const res = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/settings`, {
+        const res = await authenticatedFetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/settings`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ frequency, timezone: timeZone })
         });
@@ -377,20 +372,11 @@ class ClassroomPointsService {
     const requestPromise = (async (): Promise<ResetLeaderboardResponse> => {
       try {
         this.clearLegacyLocalSettings(classroomId);
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token;
-        if (!token) {
-          return {
-            success: false,
-            error: 'Authentication required. No student learning data was changed.'
-          };
-        }
 
-        const res = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/reset`, {
+        const res = await authenticatedFetch(`/api/classes/${encodeURIComponent(classroomId)}/leaderboard/reset`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
+            'Content-Type': 'application/json'
           }
         });
 

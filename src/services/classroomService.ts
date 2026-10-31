@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch, getAuthHeaders } from '@/lib/apiAuth';
 import {
   Classroom,
   ClassroomMember,
@@ -270,17 +271,7 @@ class ClassroomService {
    * Helper to retrieve authorization header with current Supabase JWT session
    */
   private async getAuthHeaders(): Promise<HeadersInit> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-    return headers;
+    return await getAuthHeaders();
   }
 
   /**
@@ -299,11 +290,10 @@ class ClassroomService {
         format: 'image/webp'
       });
 
-      // 2. Request presigned upload URL from backend
-      const headers = await this.getAuthHeaders();
-      const presignRes = await fetch('/api/classes/presign-upload', {
+      // 2. Request presigned upload URL from backend with auto-refreshing authenticatedFetch
+      const presignRes = await authenticatedFetch('/api/classes/presign-upload', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           classroomId: classroomId || 'general',
           filename: optimized.file.name.replace(/\.[^/.]+$/, "") + '.webp',
@@ -535,10 +525,9 @@ class ClassroomService {
     try {
       // 1. Try calling the backend endpoint first (handles auth check, RPC, and verification atomically)
       try {
-        const headers = await this.getAuthHeaders();
-        const response = await fetch(`/api/classes/${encodeURIComponent(classroomId)}/members/remove`, {
+        const response = await authenticatedFetch(`/api/classes/${encodeURIComponent(classroomId)}/members/remove`, {
           method: 'POST',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ profileIds: targetIds })
         });
 

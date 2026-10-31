@@ -3,7 +3,7 @@
 // Personal student results, performance, corrected work, progress & achievements
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 export interface StudentTaskResult {
   id: string;
@@ -169,20 +169,8 @@ export interface StudentLearningResponse {
 }
 
 class StudentLearningService {
-  private async getAuthHeaders(): Promise<HeadersInit> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-    }
-
-    return headers;
+  private async getAuthHeaders(extraHeaders: HeadersInit = {}): Promise<HeadersInit> {
+    return getAuthHeaders({ 'Content-Type': 'application/json', ...extraHeaders });
   }
 
   /**

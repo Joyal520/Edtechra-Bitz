@@ -11,6 +11,7 @@ import {
 import { CanonicalAssessmentV2 } from '@/components/exam/shared/ExamSchema';
 import { classroomPointsService } from './classroomPointsService';
 import { sanitizeAnswersForPayload, sanitizeExamForPayload } from '@/utils/examPayloadSanitizer';
+import { getAuthHeaders } from '@/lib/apiAuth';
 
 class ClassroomExamService {
   private async getUserId(): Promise<string | null> {
@@ -917,10 +918,8 @@ class ClassroomExamService {
     }
   }
 
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    if (!supabase) return {};
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  private async getAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+    return (await getAuthHeaders(extraHeaders)) as Record<string, string>;
   }
 }
 

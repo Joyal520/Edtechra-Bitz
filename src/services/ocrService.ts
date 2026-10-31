@@ -2,14 +2,12 @@
 // EDTECHRA-BITZ: AI OCR Worksheet Grader Client Service
 // ============================================================================
 
-import { supabase } from '@/lib/supabase';
+import { getValidAuthToken } from '@/lib/apiAuth';
 import { OCREvaluation, OCREvaluationCategory } from '@/types/classroom';
 
 class OcrService {
   private async getAuthToken(): Promise<string | null> {
-    if (!supabase) return null;
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token || null;
+    return getValidAuthToken();
   }
 
   /**

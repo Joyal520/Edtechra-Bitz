@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/apiAuth';
 import { ClassroomMessage } from '@/types/classroom';
 
 export interface ActiveAnnouncementItem {
@@ -159,20 +160,13 @@ class ClassroomMessageService {
 
     // 2. Server-side persistence (announcement_reads table + user_metadata fallback)
     try {
-      const { data: sessionData } = (await supabase?.auth.getSession()) || { data: { session: null } };
-      const token = sessionData.session?.access_token;
-      if (token) {
-        const res = await fetch(`/api/classes/${classroomId}/announcements/read`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ announcementId: cleanId })
-        });
-        if (res.ok) {
-          return { success: true };
-        }
+      const res = await authenticatedFetch(`/api/classes/${classroomId}/announcements/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ announcementId: cleanId })
+      });
+      if (res.ok) {
+        return { success: true };
       }
     } catch {
       // Continue to direct Supabase fallback
@@ -221,15 +215,7 @@ class ClassroomMessageService {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return { announcements: [], fromServer: false };
-
-      const res = await fetch(`/api/classes/${classroomId}/announcements?_t=${Date.now()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const res = await authenticatedFetch(`/api/classes/${classroomId}/announcements?_t=${Date.now()}`);
 
       if (!res.ok) {
         return { announcements: [], fromServer: false };
@@ -346,28 +332,23 @@ class ClassroomMessageService {
 
     // 1. Try authoritative backend endpoint first
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (token) {
-        const res = await fetch(`/api/classes/${payload.classroom_id}/announcements`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            message: cleanMessage,
-            isPinned: Boolean(payload.is_pinned),
-            deadline: payload.deadline ? expiresAtIso : null
-          })
-        });
-        const json = await res.json().catch(() => ({}));
-        if (res.ok && json.success && json.data) {
-          return { data: json.data };
-        }
-        if (!res.ok && json.error && res.status === 400) {
-          return { error: json.error };
-        }
+      const res = await authenticatedFetch(`/api/classes/${payload.classroom_id}/announcements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: cleanMessage,
+          isPinned: Boolean(payload.is_pinned),
+          deadline: payload.deadline ? expiresAtIso : null
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success && json.data) {
+        return { data: json.data };
+      }
+      if (!res.ok && json.error && res.status === 400) {
+        return { error: json.error };
       }
     } catch {
       // Fallback to direct Supabase insert below

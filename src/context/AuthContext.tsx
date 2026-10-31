@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, AuthModalMode, AuthIntent, AuthState } from '@/types';
 import { saveCurrentAccount } from '@/utils/accountSwitcher';
+import { authenticatedFetch } from '@/lib/apiAuth';
 
 interface AuthContextType {
   authState: AuthState;
@@ -364,17 +365,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 2. Authoritative backend profile endpoint call
       try {
-        const token = session?.access_token || (await supabase.auth.getSession()).data.session?.access_token;
-        if (token) {
-          await fetch('/api/profile', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
-          });
-        }
+        await authenticatedFetch('/api/profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
       } catch (apiErr) {
         console.warn('[AuthContext] /api/profile endpoint notice:', apiErr);
       }
