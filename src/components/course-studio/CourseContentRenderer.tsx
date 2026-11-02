@@ -53,6 +53,7 @@ import {
   KeyTakeawayBlock,
   CourseCompletionBlock
 } from '@/components/course-studio/InteractiveCourseBlocks';
+import { AnnabelleCourseReaderBlock } from '@/components/course-studio/AnnabelleCourseReaderBlocks';
 
 interface Props {
   blocks: CourseBlock[];
@@ -77,6 +78,7 @@ interface Props {
   onOpenAiAssistant?: () => void;
   onOpenAddQuestions?: () => void;
   themeId?: string;
+  isCourseReader?: boolean;
 }
 
 export function getValidLessonQuestions(questions?: CourseQuestion[]): CourseQuestion[] {
@@ -109,7 +111,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
   onChangeQuestions,
   onOpenAiAssistant,
   onOpenAddQuestions,
-  themeId = 'midnight-navy'
+  themeId = 'midnight-navy',
+  isCourseReader = false
 }) => {
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
@@ -521,7 +524,11 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const isAllAnswered = totalQuestions > 0 && answeredTotal >= totalQuestions;
 
   return (
-    <div className="w-full max-w-[760px] mx-auto space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border min-w-0">
+    <div
+      className={`w-full ${
+        isCourseReader && !isEditMode ? 'course-reader__body' : 'max-w-[760px] mx-auto'
+      } space-y-8 sm:space-y-12 py-2 antialiased font-sans text-inherit box-border min-w-0`}
+    >
       
       {/* ===================================================================== */}
       {/* 1. LESSON CONTENT STREAM                                              */}
@@ -532,6 +539,23 @@ export const CourseContentRenderer: React.FC<Props> = ({
             return null;
           }
           const { block_type, content } = block;
+
+          if (
+            !isEditMode &&
+            isCourseReader &&
+            (block_type === 'text' || block_type === 'text_image') &&
+            !(content as any)?.video?.url
+          ) {
+            return (
+              <AnnabelleCourseReaderBlock
+                key={block.id || idx}
+                block={block}
+                index={idx}
+                textScale={textScale}
+                isDarkTheme={Boolean(activeTheme.isDark)}
+              />
+            );
+          }
 
           // Block Toolbar wrapper for Edit Mode
           const renderBlockWrapper = (children: React.ReactNode) => {

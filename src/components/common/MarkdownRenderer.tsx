@@ -370,11 +370,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       elements.push(
         <div
           key={`table-${elements.length}`}
-          className="w-full overflow-x-auto my-5 sm:my-7 rounded-2xl border border-sky-200/90 dark:border-sky-500/30 shadow-xs bg-white dark:bg-[#07152b]"
+          className="table-responsive course-reader__table-wrapper w-full overflow-x-auto my-5 sm:my-7 rounded-2xl border border-sky-200/90 dark:border-sky-500/30 shadow-xs bg-[#ffffff] dark:bg-[#07152b]"
         >
-          <table className={`w-full min-w-[340px] text-left border-collapse ${scale.table}`}>
+          <table className={`course-reader__table w-full min-w-[340px] text-left border-collapse ${scale.table}`}>
             <thead>
-              <tr className="bg-[#026fc3] dark:bg-[#0c2850] text-white border-b border-sky-300/40 dark:border-sky-500/40">
+              <tr className="bg-[#0f2547] dark:bg-[#0c2850] text-white border-b border-sky-300/40 dark:border-sky-500/40">
                 {headers.map((h, hIdx) => {
                   const align = alignments[hIdx] || 'left';
                   const alignClass =
@@ -396,8 +396,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   key={rIdx}
                   className={`transition-colors hover:bg-sky-50 dark:hover:bg-sky-900/30 ${
                     rIdx % 2 === 0
-                      ? 'bg-white dark:bg-[#091830] text-[#0f172a] dark:text-slate-100'
-                      : 'bg-[#f4f9ff] dark:bg-[#0d2244] text-[#0f172a] dark:text-slate-100'
+                      ? 'bg-[#ffffff] text-[#0f172a]'
+                      : 'bg-[#f2f7fd] text-[#0f172a]'
                   }`}
                 >
                   {headers.map((_, cIdx) => {
@@ -408,7 +408,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                     return (
                       <td
                         key={cIdx}
-                        className={`px-4 py-2.5 text-inherit ${alignClass} border-r last:border-r-0 border-sky-100/80 dark:border-sky-500/20 font-medium align-middle`}
+                        className={`px-4 py-2.5 text-[#0f172a] ${alignClass} border-r last:border-r-0 border-sky-100/80 dark:border-sky-500/20 font-medium align-middle`}
                       >
                         {parseInlineMarkdown(cellVal)}
                       </td>
@@ -627,7 +627,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       elements.push(
         <p
           key={`p-${elements.length}`}
-          className={`${scale.body} reader-body font-normal text-current antialiased my-4 sm:my-5 first:mt-0 last:mb-0 text-left selection:bg-sky-100 selection:text-slate-950`}
+          className={`${scale.body} reader-body course-reader__prose font-normal text-current antialiased my-4 sm:my-5 first:mt-0 last:mb-0 text-left selection:bg-sky-100 selection:text-slate-950`}
         >
           {parseInlineMarkdown(fullParagraph)}
         </p>

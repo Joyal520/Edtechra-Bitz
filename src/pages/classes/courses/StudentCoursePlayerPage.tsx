@@ -783,6 +783,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
         className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden scroll-smooth box-border ${
           viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked
             ? 'bg-[#071326] p-0'
+            : viewMode === 'lesson' && isAnnabelleCourse
+            ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
             : 'px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]'
         }`}
       >
@@ -826,7 +828,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
             onOpenCoverModal={isTeacherPreview ? () => setCoverModalOpen(true) : undefined}
           />
         ) : (
-          <div className={`w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0`}>
+          <div
+            className={
+              isAnnabelleCourse
+                ? 'container-fluid course-reader px-0 pb-8'
+                : 'w-full max-w-[760px] mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0'
+            }
+          >
+            <div className={isAnnabelleCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
             {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
             {isAnnabelleCourse ? (
               <AnnabelleCinematicHeader
@@ -860,17 +869,36 @@ export const StudentCoursePlayerPage: React.FC = () => {
               />
             )}
 
-            <article className={`w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`}>
+            <article
+              className={
+                isAnnabelleCourse
+                  ? 'course-reader__lesson w-full space-y-6 sm:space-y-8 box-border min-w-0'
+                  : 'w-full mx-auto space-y-6 sm:space-y-10 box-border min-w-0'
+              }
+            >
 
             {/* EDITORIAL LESSON HEADER */}
-            <header id="student-lesson-header" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left">
-              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-theme-accent reader-meta">
+            <header
+              id="student-lesson-header"
+              className={
+                isAnnabelleCourse
+                  ? 'course-reader__header w-full text-left'
+                  : 'w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left'
+              }
+            >
+              <div
+                className={
+                  isAnnabelleCourse
+                    ? 'course-reader__meta flex flex-wrap items-center gap-2'
+                    : 'flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-theme-accent reader-meta'
+                }
+              >
                 <span>LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}</span>
                 <span className="opacity-40">•</span>
-                <span className="opacity-80 text-theme-secondary">{currentInfo?.unitTitle || 'Unit 1'}</span>
+                <span className="opacity-85 text-theme-secondary">{currentInfo?.unitTitle || 'Unit 1'}</span>
                 <span className="opacity-40">•</span>
-                <span className="opacity-80 text-theme-secondary flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-theme-accent" />
+                <span className="opacity-85 text-theme-secondary flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-theme-accent" />
                   {selectedEpisode.estimated_minutes || 15} min read
                 </span>
                 {isEpisodeCompleted && (
@@ -884,13 +912,25 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 )}
               </div>
 
-              <h1 className="font-extrabold tracking-tight text-theme-primary leading-[1.15] text-left reader-title">
+              <h1
+                className={
+                  isAnnabelleCourse
+                    ? 'course-reader__title text-left'
+                    : 'font-extrabold tracking-tight text-theme-primary leading-[1.15] text-left reader-title'
+                }
+              >
                 {selectedEpisode.title}
               </h1>
 
               {course.short_description && (
-                <p className="text-base sm:text-lg text-theme-secondary font-serif italic text-left max-w-xl reader-quote">
-                  “{course.short_description}”
+                <p
+                  className={
+                    isAnnabelleCourse
+                      ? 'course-reader__intro text-left mb-0'
+                      : 'text-base sm:text-lg text-theme-secondary font-serif italic text-left max-w-xl reader-quote'
+                  }
+                >
+                  {isAnnabelleCourse ? course.short_description : `“${course.short_description}”`}
                 </p>
               )}
             </header>
@@ -932,6 +972,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   onQuestionAnswer={handleQuestionAnswer}
                   onCompleteLesson={handleCompleteEpisode}
                   onProgressChange={handleProgressChange}
+                  isCourseReader={isAnnabelleCourse}
                 />
 
             {/* ============================================================== */}
@@ -1043,6 +1084,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         )}
 
           </article>
+            </div>
           </div>
         )}
       </main>

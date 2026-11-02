@@ -1417,6 +1417,8 @@ export const CoursePreviewPage: React.FC = () => {
           className={`course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden scroll-smooth box-border relative z-1 ${
             !isEditMode && viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && selectedEpisode
               ? 'bg-[#071326] p-0'
+              : !isEditMode && viewMode === 'lesson' && isAnnabelleCourse && selectedEpisode
+              ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
               : 'px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]'
           }`}
         >
@@ -1477,7 +1479,14 @@ export const CoursePreviewPage: React.FC = () => {
               onOpenCoverModal={() => setCoverModalOpen(true)}
             />
           ) : (
-            <div className={`w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`}>
+            <div
+              className={
+                !isEditMode && isAnnabelleCourse
+                  ? 'container-fluid course-reader px-0'
+                  : `w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`
+              }
+            >
+              <div className={!isEditMode && isAnnabelleCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
               {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
               {isAnnabelleCourse && selectedEpisode ? (
                 <AnnabelleCinematicHeader
@@ -1514,19 +1523,38 @@ export const CoursePreviewPage: React.FC = () => {
                 />
               )}
 
-              <article className={`w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`}>
+              <article
+                className={
+                  !isEditMode && isAnnabelleCourse
+                    ? 'course-reader__lesson w-full space-y-6 sm:space-y-8 box-border min-w-0'
+                    : `w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`
+                }
+              >
 
               {/* EDITORIAL LESSON HEADER */}
-              <header id="lesson-content-anchor" className="w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta">
+              <header
+                id="lesson-content-anchor"
+                className={
+                  !isEditMode && isAnnabelleCourse
+                    ? 'course-reader__header w-full text-left'
+                    : 'w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left'
+                }
+              >
+                <div
+                  className={
+                    !isEditMode && isAnnabelleCourse
+                      ? 'course-reader__meta flex flex-wrap items-center gap-2'
+                      : 'flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta'
+                  }
+                >
                   <span>
                     LESSON {String(selectedEpisode.position || currentInfo?.epIndex || 1).padStart(2, '0')}
                   </span>
                   <span className="opacity-40">•</span>
-                  <span className="opacity-80 text-current">{currentInfo?.unitTitle || 'Unit 1'}</span>
+                  <span className="opacity-85 text-current">{currentInfo?.unitTitle || 'Unit 1'}</span>
                   <span className="opacity-40">•</span>
-                  <span className="opacity-80 text-current flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[#026fc3]" />
+                  <span className="opacity-85 text-current flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#026fc3]" />
                     {isEditMode ? (
                       <span className="flex items-center gap-1">
                         <input
@@ -1564,14 +1592,26 @@ export const CoursePreviewPage: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  <h1 className="font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title">
+                  <h1
+                    className={
+                      !isEditMode && isAnnabelleCourse
+                        ? 'course-reader__title text-left'
+                        : 'font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title'
+                    }
+                  >
                     {selectedEpisode.title}
                   </h1>
                 )}
 
                 {course.short_description && (
-                  <p className="text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl reader-quote">
-                    “{course.short_description}”
+                  <p
+                    className={
+                      !isEditMode && isAnnabelleCourse
+                        ? 'course-reader__intro text-left mb-0'
+                        : 'text-base sm:text-lg opacity-75 font-serif italic text-left max-w-xl reader-quote'
+                    }
+                  >
+                    {!isEditMode && isAnnabelleCourse ? course.short_description : `“${course.short_description}”`}
                   </p>
                 )}
               </header>
@@ -1591,6 +1631,7 @@ export const CoursePreviewPage: React.FC = () => {
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
                 onOpenAddQuestions={() => setAddQuestionsModalOpen(true)}
                 themeId={effectiveThemeId}
+                isCourseReader={!isEditMode && isAnnabelleCourse}
               />
 
               {/* ============================================================== */}
@@ -1692,7 +1733,8 @@ export const CoursePreviewPage: React.FC = () => {
                   </div>
                 </div>
               </footer>
-            </article>
+              </article>
+              </div>
             </div>
           )}
         </main>

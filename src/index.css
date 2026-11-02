@@ -2630,5 +2630,815 @@ textarea.classroom-announcement-textarea::selection,
   animation: lqFloatSlow 3.5s ease-in-out infinite;
 }
 
+/* ========================================================================== */
+/* EDTECHRA STUDENT COURSE READER DESIGN SYSTEM (STRICTLY SCOPED)             */
+/* Premium digital textbook layout, responsive fluid containers, justified    */
+/* educational prose, pedagogical callouts, and WCAG-guaranteed tables.       */
+/* ========================================================================== */
+
+.course-reader {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* Mobile-first responsive content container:
+   - Mobile (< 768px): 18px horizontal padding (within 16–20px requirement)
+   - Tablet (768px–991px): 28px horizontal padding
+   - Large Tablet / Small Laptop (992px–1199px): ~90% of available content area
+   - Desktop (1200px+): ~89% of available content area (within 85–92% requirement) */
+.course-reader .course-reader__content {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: auto;
+  padding-inline: 18px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__content {
+    padding-inline: 28px;
+  }
+}
+
+@media (min-width: 992px) {
+  .course-reader .course-reader__content {
+    width: 90%;
+    max-width: 92%;
+    padding-inline: 0;
+  }
+}
+
+@media (min-width: 1200px) {
+  .course-reader .course-reader__content {
+    width: 89%;
+    max-width: 92%;
+    padding-inline: 0;
+  }
+}
+
+.course-reader .course-reader__lesson,
+.course-reader .course-reader__body {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 1. DAY HEADER & TYPOGRAPHY HIERARCHY                                       */
+/* -------------------------------------------------------------------------- */
+
+.course-reader .course-reader__header {
+  width: 100%;
+  padding: 1.35rem 1.5rem;
+  border-radius: 1.25rem;
+  background-color: var(--theme-surface-card, #ffffff);
+  border: 1px solid var(--theme-border-primary, #cbd5e1);
+  box-shadow: var(--theme-shadow-card, 0 4px 20px -4px rgba(15, 23, 42, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__header {
+    padding: 1.85rem 2.25rem;
+    gap: 0.75rem;
+  }
+}
+
+.course-reader .course-reader__meta {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--theme-accent, #026fc3);
+  text-align: left;
+  line-height: 1.4;
+}
+
+.course-reader .course-reader__title {
+  font-size: clamp(1.65rem, 1.25rem + 1.65vw, 2.6rem) !important;
+  font-weight: 800;
+  line-height: 1.18 !important;
+  letter-spacing: -0.02em;
+  color: var(--theme-text-primary, #0f172a);
+  text-align: left !important;
+  margin: 0;
+}
+
+.course-reader .course-reader__intro {
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.65;
+  color: var(--theme-text-secondary, #334155);
+  max-width: 100%;
+  text-align: left !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. SECTION CARDS & JUSTIFIED EDUCATIONAL PROSE                             */
+/* -------------------------------------------------------------------------- */
+
+.course-reader .course-reader__section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__section-stack {
+    gap: 2rem;
+  }
+}
+
+.course-reader .course-reader__section {
+  width: 100%;
+  padding: 1.35rem 1.25rem;
+  border-radius: 1.25rem;
+  background-color: var(--theme-surface-card, #ffffff);
+  border: 1px solid var(--theme-border-primary, #cbd5e1);
+  box-shadow: var(--theme-shadow-card, 0 4px 20px -4px rgba(15, 23, 42, 0.06));
+  color: var(--theme-text-primary, #0f172a);
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__section {
+    padding: 2rem 2.25rem;
+  }
+}
+
+.course-reader .course-reader__section--summary {
+  background: linear-gradient(180deg, var(--theme-surface-card, #ffffff) 0%, var(--theme-surface-subtle, #f1f5f9) 100%);
+  border-left: 4px solid var(--theme-accent, #026fc3);
+}
+
+.course-reader .course-reader__section-title {
+  font-size: clamp(1.25rem, 1.1rem + 0.65vw, 1.6rem);
+  font-weight: 800;
+  line-height: 1.28;
+  letter-spacing: -0.015em;
+  color: var(--theme-text-primary, #0f172a);
+  text-align: left !important;
+  margin-top: 0;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--theme-border-subtle, #e2e8f0);
+}
+
+.course-reader .course-reader__subsection-title {
+  font-size: clamp(1.05rem, 1rem + 0.35vw, 1.25rem);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--theme-text-primary, #0f172a);
+  text-align: left !important;
+}
+
+/* Justify ONLY long-form educational reading paragraphs */
+.course-reader .course-reader__prose,
+.course-reader .course-reader__markdown-body p.course-reader__prose {
+  text-align: justify !important;
+  text-justify: inter-word;
+  font-size: clamp(1rem, 0.96rem + 0.22vw, 1.125rem) !important;
+  line-height: 1.8 !important;
+  color: var(--theme-text-primary, #0f172a);
+  margin-bottom: 1rem;
+  hyphens: none;
+}
+
+/* Strictly keep headings, lists, tables, labels, buttons left-aligned */
+.course-reader h1,
+.course-reader h2,
+.course-reader h3,
+.course-reader h4,
+.course-reader h5,
+.course-reader h6,
+.course-reader ul,
+.course-reader ol,
+.course-reader li,
+.course-reader table,
+.course-reader th,
+.course-reader td,
+.course-reader button,
+.course-reader nav {
+  text-align: left;
+}
+
+.course-reader .course-reader__eyebrow-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: var(--theme-accent-badge-bg, #e0f2fe);
+  color: var(--theme-accent-badge-text, #026fc3);
+  border: 1px solid rgba(2, 111, 195, 0.2);
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. LEARNING OBJECTIVES CHECKLIST CARD                                      */
+/* -------------------------------------------------------------------------- */
+
+.course-reader .course-reader__objectives-card {
+  background-color: var(--theme-surface-subtle, #f8fafc);
+  border: 1px solid var(--theme-border-primary, #cbd5e1);
+  border-left: 4px solid #026fc3;
+  border-radius: 1rem;
+  padding: 1.15rem 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__objectives-card {
+    padding: 1.35rem 1.65rem;
+  }
+}
+
+.course-reader .course-reader__objectives-lead {
+  font-size: clamp(0.95rem, 0.92rem + 0.2vw, 1.05rem);
+  font-weight: 700;
+  color: var(--theme-text-primary, #0f172a);
+  margin-bottom: 0.85rem;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__objectives-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+@media (min-width: 992px) {
+  .course-reader .course-reader__objectives-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1.25rem;
+  }
+}
+
+.course-reader .course-reader__objectives-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.75rem;
+  background-color: var(--theme-surface-card, #ffffff);
+  border: 1px solid var(--theme-border-subtle, #e2e8f0);
+  text-align: left !important;
+}
+
+.course-reader .course-reader__objectives-check {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 9999px;
+  background-color: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.course-reader .course-reader__objectives-text {
+  font-size: clamp(0.9375rem, 0.9rem + 0.18vw, 1.02rem);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--theme-text-primary, #0f172a);
+  text-align: left !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 4. VISUAL HIGHLIGHTING SYSTEM: DEFINITION, FORMULA, EXAMPLE, REMEMBER, VERB */
+/* -------------------------------------------------------------------------- */
+
+/* A. DEFINITION CALLOUT (Subtle Highlighted Card) */
+.course-reader .course-reader__definition {
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fbff 100%);
+  border: 1px solid #bfdbfe;
+  border-left: 5px solid #026fc3;
+  border-radius: 1rem;
+  padding: 1.25rem 1.35rem;
+  color: #0f172a;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__definition {
+    padding: 1.5rem 1.75rem;
+  }
+}
+
+.course-reader .course-reader__callout-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #026fc3;
+  margin-bottom: 0.4rem;
+}
+
+.course-reader .course-reader__definition-headline {
+  font-size: clamp(1.05rem, 1rem + 0.35vw, 1.3rem);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #0c2340;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__definition-body {
+  font-size: clamp(1rem, 0.96rem + 0.25vw, 1.15rem);
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.55;
+  text-align: left !important;
+}
+
+/* B. GRAMMAR FORMULA (Stronger Highlighted Formula Card) */
+.course-reader .course-reader__formula {
+  background: linear-gradient(180deg, #f8fafc 0%, #f0f7ff 100%);
+  border: 2px solid #7dd3fc;
+  border-radius: 1.1rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 6px 18px -4px rgba(2, 111, 195, 0.1);
+  color: #0f172a;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__formula {
+    padding: 1.6rem 1.85rem;
+  }
+}
+
+.course-reader .course-reader__formula .course-reader__subsection-title {
+  color: #0c2340 !important;
+}
+
+.course-reader .course-reader__formula-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background-color: #0c2340;
+  color: #ffffff;
+}
+
+.course-reader .course-reader__formula-summary {
+  font-size: clamp(1.05rem, 0.98rem + 0.35vw, 1.25rem);
+  font-weight: 800;
+  color: #026fc3;
+  padding: 0.75rem 1rem;
+  background-color: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 0.75rem;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__formula-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__formula-diagram {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+}
+
+.course-reader .course-reader__formula-part {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.85rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+}
+
+.course-reader .course-reader__formula-part--verb {
+  background-color: #eff6ff;
+  border-color: #026fc3;
+  box-shadow: 0 2px 8px rgba(2, 111, 195, 0.12);
+}
+
+.course-reader .course-reader__formula-part-label {
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #475569;
+}
+
+.course-reader .course-reader__formula-part--verb .course-reader__formula-part-label {
+  color: #026fc3;
+}
+
+.course-reader .course-reader__formula-part-sample {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.course-reader .course-reader__formula-operator {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #026fc3;
+  text-align: center;
+  line-height: 1;
+  user-select: none;
+}
+
+.course-reader .course-reader__formula-example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #bae6fd;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.course-reader .course-reader__formula-example-tag {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569;
+}
+
+.course-reader .course-reader__formula-example-sentence {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* C. EXAMPLE CARDS & KEY VERB ACCENT HIGHLIGHT */
+.course-reader .course-reader__hint-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--theme-text-muted, #64748b);
+}
+
+.course-reader .course-reader__example {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #0ea5e9;
+  border-radius: 0.9rem;
+  padding: 0.95rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  color: #0f172a;
+}
+
+.course-reader .course-reader__example-sentence {
+  font-size: clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.45;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__example-meta {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.course-reader .course-reader__key-verb {
+  display: inline-block;
+  padding: 0.08rem 0.48rem;
+  margin-inline: 0.08rem;
+  border-radius: 0.4rem;
+  background-color: #dbeafe !important;
+  color: #034c8c !important;
+  border: 1px solid #93c5fd;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+}
+
+/* D. TWO TYPES OF PAST VERBS CARDS */
+.course-reader .course-reader__verb-type-card {
+  border-radius: 1rem;
+  padding: 1.25rem 1.35rem;
+  border: 1.5px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  text-align: left;
+}
+
+.course-reader .course-reader__verb-type-card--regular {
+  background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+  border-color: #7dd3fc;
+  border-top: 4px solid #026fc3;
+}
+
+.course-reader .course-reader__verb-type-card--irregular {
+  background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%);
+  border-color: #c4b5fd;
+  border-top: 4px solid #6d28d9;
+}
+
+.course-reader .course-reader__verb-type-index {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.course-reader .course-reader__verb-type-heading {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #0f172a;
+}
+
+.course-reader .course-reader__verb-type-card--regular .course-reader__verb-type-heading {
+  color: #035397;
+}
+
+.course-reader .course-reader__verb-type-card--irregular .course-reader__verb-type-heading {
+  color: #5b21b6;
+}
+
+.course-reader .course-reader__verb-type-desc {
+  font-size: 0.98rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: #1e293b;
+  margin-bottom: 0.35rem;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__verb-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: auto;
+  padding-top: 0.4rem;
+}
+
+.course-reader .course-reader__mini-pill {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.22rem 0.6rem;
+  border-radius: 9999px;
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+/* E. REMEMBER CALLOUT */
+.course-reader .course-reader__remember {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 0.95rem;
+  padding: 1rem 1.25rem;
+  color: #1e293b;
+  margin-top: 1rem;
+}
+
+.course-reader .course-reader__remember-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b45309;
+  margin-bottom: 0.5rem;
+}
+
+.course-reader .course-reader__remember-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.course-reader .course-reader__remember-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.55rem;
+  background-color: #ffffff;
+  border: 1px solid #fcd34d;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.course-reader .course-reader__remember-arrow {
+  color: #d97706;
+  font-weight: 800;
+}
+
+.course-reader .course-reader__remember-text {
+  font-size: 0.96rem;
+  line-height: 1.6;
+  color: #1e293b;
+  text-align: left !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 5. WCAG-GUARANTEED TABLES (DARK NAVY HEADER + ALTERNATING LIGHT ROWS)      */
+/* -------------------------------------------------------------------------- */
+
+.course-reader .course-reader__table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0.95rem;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff !important;
+  box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.05);
+}
+
+.course-reader .course-reader__table {
+  width: 100%;
+  min-width: 340px;
+  border-collapse: collapse;
+  margin-bottom: 0 !important;
+  font-size: clamp(0.92rem, 0.88rem + 0.18vw, 1.02rem);
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Header: Dark Navy Background + Crisp White Text */
+.course-reader .course-reader__table thead,
+.course-reader .course-reader__table thead tr,
+.course-reader .course-reader__table thead th {
+  background-color: #0f2547 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.85rem 1.1rem !important;
+  border-bottom: 2px solid #091830 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.16) !important;
+  text-align: left !important;
+  vertical-align: middle;
+}
+
+.course-reader .course-reader__table thead th:last-child {
+  border-right: none !important;
+}
+
+.course-reader .course-reader__table thead th * {
+  color: #ffffff !important;
+}
+
+/* Body Row 1, 3, 5 (Odd 1-based): Pure White Background + Dark Navy Text */
+.course-reader .course-reader__table tbody tr:nth-child(odd),
+.course-reader .course-reader__table tbody tr:nth-child(odd) > td {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Body Row 2, 4, 6 (Even 1-based): Very Light Blue/Gray Background + Dark Navy Text */
+.course-reader .course-reader__table tbody tr:nth-child(even),
+.course-reader .course-reader__table tbody tr:nth-child(even) > td {
+  background-color: #f1f7fe !important;
+  color: #0f172a !important;
+}
+
+/* Optional explicit Dark Body Row if ever used: Dark Navy Background + White Text */
+.course-reader .course-reader__table tbody tr.course-reader__row--dark,
+.course-reader .course-reader__table tbody tr.course-reader__row--dark > td {
+  background-color: #102a4c !important;
+  color: #ffffff !important;
+}
+
+.course-reader .course-reader__table tbody td {
+  padding: 0.8rem 1.1rem !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-right: 1px solid #e2e8f0 !important;
+  vertical-align: middle;
+  line-height: 1.5;
+  text-align: left !important;
+}
+
+.course-reader .course-reader__table tbody td:last-child {
+  border-right: none !important;
+}
+
+.course-reader .course-reader__table tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* Guarantee child text elements inside light rows inherit dark navy text */
+.course-reader .course-reader__table tbody tr:not(.course-reader__row--dark) td strong,
+.course-reader .course-reader__table tbody tr:not(.course-reader__row--dark) td b,
+.course-reader .course-reader__table tbody tr:not(.course-reader__row--dark) td em,
+.course-reader .course-reader__table tbody tr:not(.course-reader__row--dark) td span:not(.course-reader__key-verb) {
+  color: #0f172a !important;
+}
+
+.course-reader .course-reader__table-base {
+  font-weight: 800;
+  color: #0f172a !important;
+  white-space: nowrap;
+}
+
+.course-reader .course-reader__table-past {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 6. STORY PASSAGE & ILLUSTRATION FIGURES                                    */
+/* -------------------------------------------------------------------------- */
+
+.course-reader .course-reader__figure {
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+
+.course-reader .course-reader__figure-frame {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  background-color: var(--theme-surface-subtle, #f8fafc);
+  border: 1px solid var(--theme-border-subtle, #e2e8f0);
+  border-radius: 1rem;
+  padding: 0.75rem;
+  overflow: hidden;
+}
+
+.course-reader .course-reader__figure-img {
+  max-width: 100%;
+  max-height: 520px;
+  height: auto;
+  object-fit: contain;
+  border-radius: 0.75rem;
+  display: block;
+  margin-inline: auto;
+}
+
+.course-reader .course-reader__figure-caption {
+  font-size: 0.84rem;
+  font-style: italic;
+  color: var(--theme-text-muted, #64748b);
+  margin-top: 0.55rem;
+  text-align: center !important;
+}
+
+.course-reader .course-reader__story-passage {
+  padding: 1.25rem 1.35rem;
+  border-radius: 1rem;
+  background-color: var(--theme-surface-subtle, #f8fafc);
+  border: 1px solid var(--theme-border-primary, #cbd5e1);
+  border-left: 4px solid #026fc3;
+}
+
+@media (min-width: 768px) {
+  .course-reader .course-reader__story-passage {
+    padding: 1.5rem 1.85rem;
+  }
+}
+
+
 
 
