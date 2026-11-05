@@ -122,15 +122,26 @@ export const CourseStudioDashboardPage: React.FC = () => {
   const loadCourses = async () => {
     setLoading(true);
     setLoadError(null);
-    try {
-      const data = await courseStudioService.getCourses();
-      setCourses(data);
-    } catch (err: any) {
-      console.error('Failed to load studio courses:', err);
-      setLoadError(err?.message || 'Unable to load courses from Course Studio.');
-    } finally {
-      setLoading(false);
+    // Session hydration can lag behind INITIAL_SESSION on first mount; retry
+    // authentication failures with a short backoff before surfacing an error.
+    const delays = [0, 600, 1500];
+    let lastErr: any = null;
+    for (const delay of delays) {
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const data = await courseStudioService.getCourses();
+        setCourses(data);
+        setLoading(false);
+        return;
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || '');
+        if (!/auth|401|session/i.test(msg)) break;
+      }
     }
+    console.error('Failed to load studio courses:', lastErr);
+    setLoadError(lastErr?.message || 'Unable to load courses from Course Studio.');
+    setLoading(false);
   };
 
   const handleCreateSuccess = (course: Course) => {

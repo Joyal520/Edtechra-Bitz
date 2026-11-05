@@ -101,7 +101,7 @@ export const courseStudioService = {
 
   async getCourses(): Promise<Course[]> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses`, { headers });
+    const res = await authenticatedFetch(`${API_BASE}/courses`, { headers });
     let json: any = null;
     try {
       json = await res.json();
@@ -162,7 +162,7 @@ export const courseStudioService = {
     course_type?: 'full' | 'quick';
   }): Promise<Course> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -191,7 +191,7 @@ export const courseStudioService = {
     }>
   ): Promise<Course> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(updates)
@@ -206,7 +206,7 @@ export const courseStudioService = {
 
   async deleteCourse(courseId: string): Promise<void> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}`, {
       method: 'DELETE',
       headers
     });
@@ -219,7 +219,7 @@ export const courseStudioService = {
 
   async duplicateCourse(courseId: string): Promise<Course> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/duplicate`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/duplicate`, {
       method: 'POST',
       headers
     });
@@ -236,7 +236,7 @@ export const courseStudioService = {
 
   async createUnit(courseId: string, payload: { title: string; description?: string; order_index?: number }): Promise<CourseUnit> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/units`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/units`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -249,7 +249,7 @@ export const courseStudioService = {
 
   async updateUnit(courseId: string, unitId: string, updates: Partial<{ title: string; description: string; order_index: number }>): Promise<CourseUnit> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/units/${unitId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/units/${unitId}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(updates)
@@ -262,7 +262,7 @@ export const courseStudioService = {
 
   async deleteUnit(courseId: string, unitId: string): Promise<void> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/units/${unitId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/units/${unitId}`, {
       method: 'DELETE',
       headers
     });
@@ -276,7 +276,7 @@ export const courseStudioService = {
     payload: { unit_id: string; title: string; episode_type?: string; order_index?: number; estimated_minutes?: number }
   ): Promise<CourseEpisode> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -302,7 +302,7 @@ export const courseStudioService = {
     }>
   ): Promise<CourseEpisode> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(updates)
@@ -315,7 +315,7 @@ export const courseStudioService = {
 
   async reorderEpisodes(courseId: string, unitId: string, episodeIds: string[]): Promise<void> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/reorder`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes/reorder`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ unit_id: unitId, episode_ids: episodeIds })
@@ -327,7 +327,7 @@ export const courseStudioService = {
 
   async manuallyUnlockEpisode(courseId: string, episodeId: string): Promise<CourseEpisode> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}/unlock`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}/unlock`, {
       method: 'POST',
       headers
     });
@@ -339,7 +339,7 @@ export const courseStudioService = {
 
   async deleteEpisode(courseId: string, episodeId: string): Promise<void> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}`, {
       method: 'DELETE',
       headers
     });
@@ -354,7 +354,7 @@ export const courseStudioService = {
 
   async saveEpisodeBlocks(courseId: string, episodeId: string, blocks: Partial<CourseBlock>[]): Promise<CourseBlock[]> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}/blocks`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/episodes/${episodeId}/blocks`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ blocks })
@@ -367,7 +367,7 @@ export const courseStudioService = {
 
   async saveEpisodeQuestions(courseId: string, episodeId: string, questions: Partial<CourseQuestion>[]): Promise<CourseQuestion[]> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/questions`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/questions`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ episode_id: episodeId, questions })
@@ -393,7 +393,7 @@ export const courseStudioService = {
     }
   ): Promise<{ course: Course; assigned_count: number; assignments: CourseClassroomAssignment[] }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/publish-and-assign`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/publish-and-assign`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -406,7 +406,7 @@ export const courseStudioService = {
 
   async unpublishCourse(courseId: string): Promise<Course> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/unpublish`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/unpublish`, {
       method: 'POST',
       headers
     });
@@ -418,7 +418,7 @@ export const courseStudioService = {
 
   async pauseCourse(courseId: string, classroomId?: string): Promise<{ success: boolean; status: string; message: string }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/pause`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/pause`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ classroom_id: classroomId })
@@ -431,7 +431,7 @@ export const courseStudioService = {
 
   async resumeCourse(courseId: string, classroomId?: string): Promise<{ success: boolean; status: string; message: string }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/resume`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/resume`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ classroom_id: classroomId })
@@ -457,7 +457,7 @@ export const courseStudioService = {
   }> {
     const headers = await getAuthHeader();
     const params = new URLSearchParams({ course_id: courseId, classroom_id: classroomId });
-    const res = await fetch(`${API_BASE}/student/progress?${params.toString()}`, { headers });
+    const res = await authenticatedFetch(`${API_BASE}/student/progress?${params.toString()}`, { headers });
     const json = await res.json();
     if (!res.ok || !json.success) {
       return { enrollment: null, completedEpisodeIds: [], progress_percent: 0 };
@@ -467,7 +467,7 @@ export const courseStudioService = {
 
   async getCourseAnalytics(courseId: string): Promise<CourseAnalyticsSummary> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/analytics`, { headers });
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/analytics`, { headers });
     const json = await res.json();
     if (!res.ok || !json.success) throw new Error(json.error || 'Failed to fetch course analytics.');
     return json.analytics;
@@ -537,7 +537,7 @@ export const courseStudioService = {
 
   async buildLessonWithAI(payload: AILessonGenerationPayload): Promise<AILessonGenerationResponse> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/build-lesson`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/build-lesson`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -549,7 +549,7 @@ export const courseStudioService = {
 
   async generateQuestionsWithAI(payload: AIQuestionGenerationPayload): Promise<AIQuestionGenerationResponse> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/generate-questions`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/generate-questions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -561,7 +561,7 @@ export const courseStudioService = {
 
   async improveContentWithAI(text: string, instruction?: string): Promise<{ improved_text: string; summary_of_changes?: string }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/improve-content`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/improve-content`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ text, instruction })
@@ -573,7 +573,7 @@ export const courseStudioService = {
 
   async generateCoursePlanWithAI(payload: AICoursePlanPayload): Promise<AICoursePlanResponse> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/generate-course-plan`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/generate-course-plan`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -585,7 +585,7 @@ export const courseStudioService = {
 
   async generateStructuredLessonWithAI(payload: AIStructuredLessonPayload): Promise<AIStructuredLessonResponse> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/generate-structured-lesson`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/generate-structured-lesson`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -615,7 +615,7 @@ export const courseStudioService = {
     time_spent_seconds?: number;
   }) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/student/progress`, {
+    const res = await authenticatedFetch(`${API_BASE}/student/progress`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -650,7 +650,7 @@ export const courseStudioService = {
     flagged_for_review?: boolean;
   }) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/student/attempt`, {
+    const res = await authenticatedFetch(`${API_BASE}/student/attempt`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -672,7 +672,7 @@ export const courseStudioService = {
     if (classroomId) params.append('classroom_id', classroomId);
     if (episodeId) params.append('episode_id', episodeId);
 
-    const res = await fetch(`${API_BASE}/student/attempts?${params.toString()}`, {
+    const res = await authenticatedFetch(`${API_BASE}/student/attempts?${params.toString()}`, {
       headers
     });
     const json = await res.json();
@@ -693,7 +693,7 @@ export const courseStudioService = {
     is_completed?: boolean;
   }) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/student/video-progress`, {
+    const res = await authenticatedFetch(`${API_BASE}/student/video-progress`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -710,7 +710,7 @@ export const courseStudioService = {
     const params = new URLSearchParams({ course_id: courseId });
     if (episodeId) params.append('episode_id', episodeId);
 
-    const res = await fetch(`${API_BASE}/student/video-progress?${params.toString()}`, {
+    const res = await authenticatedFetch(`${API_BASE}/student/video-progress?${params.toString()}`, {
       headers
     });
     const json = await res.json();
@@ -734,7 +734,7 @@ export const courseStudioService = {
     ai_threshold?: number;
   }): Promise<EssayEvaluationResult> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/essay-evaluate`, {
+    const res = await authenticatedFetch(`${API_BASE}/essay-evaluate`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
@@ -752,7 +752,7 @@ export const courseStudioService = {
 
   async getFlaggedWritingSubmissions(courseId: string) {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/courses/${courseId}/flagged-submissions`, {
+    const res = await authenticatedFetch(`${API_BASE}/courses/${courseId}/flagged-submissions`, {
       headers
     });
     const json = await res.json();
@@ -770,7 +770,7 @@ export const courseStudioService = {
     }
   ) {
     const headers = await getAuthHeader();
-    const res = await fetch(
+    const res = await authenticatedFetch(
       `${API_BASE}/courses/${courseId}/flagged-submissions/${submissionId}/review`,
       {
         method: 'POST',
@@ -803,7 +803,7 @@ export const courseStudioService = {
     languageFeedback?: string | null;
   }> {
     const headers = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/ai/evaluate-answer`, {
+    const res = await authenticatedFetch(`${API_BASE}/ai/evaluate-answer`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload)
