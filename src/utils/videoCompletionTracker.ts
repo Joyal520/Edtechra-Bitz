@@ -161,14 +161,48 @@ export function createInitialVideoProgressState(params: {
  * - Credits only genuine sequential playback intervals
  * - Marks video completed once >= 90% unique duration is watched
  */
-export function processVideoPlaybackTick(
+/**
+ * Re-bases a progress state onto a (new) duration and recomputes watched seconds,
+ * percent and completion. Used when the real player duration becomes known and
+ * replaces a placeholder/estimated duration (e.g. 180s estimate vs 92s real video).
+ */
+export function rebaseVideoProgressDuration(
   state: VideoProgressState,
+  durationSeconds: number
+): VideoProgressState {
+  const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+  if (!duration || Math.abs(duration - (state.durationSeconds || 0)) < 0.01) {
+    return state;
+  }
+  const segments = mergeWatchedSegments(state.watchedSegments || [], duration);
+  const watchedSeconds = computeUniqueWatchedSeconds(segments, duration);
+  const watchedPercent = computeWatchedPercent(watchedSeconds, duration);
+  const isCompleted = Boolean(state.isCompleted || watchedPercent >= VIDEO_COMPLETION_THRESHOLD_PERCENT);
+  return {
+    ...state,
+    durationSeconds: duration,
+    watchedSegments: segments,
+    watchedSeconds: Math.round(watchedSeconds),
+    watchedPercent,
+    maxAllowedPosition: Math.min(duration, Math.max(state.maxAllowedPosition || 0, getMaxWatchedPosition(segments))),
+    isCompleted,
+    completedAt: state.completedAt || (isCompleted ? new Date().toISOString() : null)
+  };
+}
+
+export function processVideoPlaybackTick(
+  originalState: VideoProgressState,
   tick: VideoTickInput
 ): VideoTickResult {
-  const duration = Math.max(
-    state.durationSeconds || 0,
-    Number.isFinite(tick.durationSeconds) && tick.durationSeconds > 0 ? tick.durationSeconds : 0
-  );
+  // The reported player duration is authoritative. Previously Math.max() kept a larger
+  // placeholder estimate forever (e.g. 180s for a 92s video), capping progress at ~50%.
+  const reportedDuration =
+    Number.isFinite(tick.durationSeconds) && tick.durationSeconds > 0 ? tick.durationSeconds : 0;
+  const state = reportedDuration
+    ? rebaseVideoProgressDuration(originalState, reportedDuration)
+    : originalState;
+  const duration = reportedDuration || state.durationSeconds || 0;
+  const wasCompletedBeforeTick = Boolean(originalState.isCompleted);
 
   const currentTime = Math.max(0, Number(tick.currentTime) || 0);
   const previousTime = Math.max(0, Number(tick.previousTime) || 0);
@@ -213,7 +247,7 @@ export function processVideoPlaybackTick(
       seekBlocked: false,
       snapBackTime: allowedFrontier,
       pausedByVisibility: false,
-      justCompleted: false
+      justCompleted: !wasCompletedBeforeTick && Boolean(state.isCompleted)
     };
   }
 
@@ -255,7 +289,7 @@ export function processVideoPlaybackTick(
   const meetsThreshold =
     duration > 0 && watchedPercent >= VIDEO_COMPLETION_THRESHOLD_PERCENT;
   const isCompleted = Boolean(state.isCompleted || meetsThreshold);
-  const justCompleted = !state.isCompleted && isCompleted;
+  const justCompleted = !wasCompletedBeforeTick && isCompleted;
   const nowIso = new Date().toISOString();
 
   const nextState: VideoProgressState = {

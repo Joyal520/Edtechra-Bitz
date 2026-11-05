@@ -503,6 +503,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
   const htmlVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastVideoTimeRef = useRef<number>(0);
+  const lastRealYtTickAtRef = useRef<number>(0);
   const lastSyncedVideoPctRef = useRef<number>(0);
 
   // Level 2 On-Demand Learning Tools (Vocabulary Drawer, Study Tools Menu, Progress Popover, Notes & Help)
@@ -1058,7 +1059,14 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
         if (data.event === 'onReady') {
           setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
           triggerYouTubePlayCommand();
-        } else if (data.event === 'onStateChange' || data.event === 'infoDelivery') {
+        } else if (
+          data.event === 'onStateChange' ||
+          data.event === 'infoDelivery' ||
+          data.event === 'initialDelivery'
+        ) {
+          if (data.event !== 'onStateChange') {
+            lastRealYtTickAtRef.current = Date.now();
+          }
           const playerState =
             typeof data.info === 'number'
               ? data.info
@@ -1135,6 +1143,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     if (!videoPlaying || videoStatus !== 'playing' || isTabHidden || !videoId) return;
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
+      if (Date.now() - lastRealYtTickAtRef.current < 3000) return; // real YouTube ticks are flowing
       const prevTime = lastVideoTimeRef.current;
       const nextTime = prevTime + 1;
       setVideoProgressState(prev => {

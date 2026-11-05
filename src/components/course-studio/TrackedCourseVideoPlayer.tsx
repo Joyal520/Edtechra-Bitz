@@ -15,6 +15,7 @@ import {
   VideoProgressState,
   createInitialVideoProgressState,
   processVideoPlaybackTick,
+  rebaseVideoProgressDuration,
   loadLocalVideoProgress,
   saveLocalVideoProgress,
   extractYouTubeId,
@@ -104,6 +105,8 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRealTickAtRef = useRef<number>(0);
+  const realDurationRef = useRef<number>(0);
 
   // Re-initialize state if episodeId or videoKey changes
   useEffect(() => {
@@ -287,6 +290,26 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
     ]
   );
 
+  // When the player reports "ended" after sequential viewing, credit the short tail
+  // between the last tick and the true end so a fully-watched video reads 100%.
+  const creditPlaybackToEnd = useCallback(() => {
+    const dur = realDurationRef.current || stateRef.current.durationSeconds;
+    if (!dur) return;
+    const prev = lastTimeRef.current;
+    const frontier = Math.max(stateRef.current.maxAllowedPosition || 0, prev);
+    // Only credit if the student actually reached (near) the end sequentially
+    if (dur - frontier > 4) return;
+    applyPlaybackTick({
+      currentTime: dur,
+      previousTime: Math.min(prev, dur),
+      durationSeconds: dur,
+      isPlaying: true,
+      isTabVisible: !document.hidden
+    });
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+  }, [applyPlaybackTick]);
+
   // 1. Visibility change & window blur enforcement (pause tracking & video when tab hidden)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -360,11 +383,34 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
         const data = JSON.parse(event.data);
         if (!data) return;
 
-        if (data.event === 'infoDelivery' && data.info) {
+        // YouTube sends the full player snapshot (incl. real duration) in `initialDelivery`
+        // and incremental updates in `infoDelivery`. Both must be processed.
+        if ((data.event === 'infoDelivery' || data.event === 'initialDelivery') && data.info) {
           const info = data.info;
+          lastRealTickAtRef.current = Date.now();
 
+          if (typeof info.duration === 'number' && info.duration > 0) {
+            realDurationRef.current = info.duration;
+            // Immediately re-base any stale/estimated duration (e.g. 180s placeholder)
+            const rebased = rebaseVideoProgressDuration(stateRef.current, info.duration);
+            if (rebased !== stateRef.current) {
+              const wasCompleted = stateRef.current.isCompleted;
+              stateRef.current = rebased;
+              setProgressState(rebased);
+              onProgressUpdate?.(rebased);
+              if (!wasCompleted && rebased.isCompleted) {
+                onVideoCompleted?.(rebased);
+                syncToServer(rebased, true);
+              } else {
+                syncToServer(rebased, false);
+              }
+            }
+          }
+
+          let endedNow = false;
           if (typeof info.playerState === 'number') {
             const playingNow = info.playerState === 1;
+            endedNow = info.playerState === 0;
             isPlayingRef.current = playingNow;
             setIsPlaying(playingNow);
             if (playingNow && !document.hidden) {
@@ -377,17 +423,19 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
           }
 
           const reportedDuration =
-            typeof info.duration === 'number' && info.duration > 0
-              ? info.duration
-              : stateRef.current.durationSeconds || estimatedDurationSeconds;
+            realDurationRef.current || stateRef.current.durationSeconds || estimatedDurationSeconds;
 
           if (typeof info.currentTime === 'number') {
             applyPlaybackTick({
               currentTime: info.currentTime,
               durationSeconds: reportedDuration,
-              isPlaying: isPlayingRef.current,
+              isPlaying: isPlayingRef.current || endedNow,
               isTabVisible: !document.hidden
             });
+          }
+
+          if (endedNow) {
+            creditPlaybackToEnd();
           }
         } else if (data.event === 'onStateChange' && typeof data.info === 'number') {
           const playingNow = data.info === 1;
@@ -395,6 +443,9 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
           setIsPlaying(playingNow);
           if (playingNow && document.hidden) {
             pauseActivePlayer();
+          }
+          if (data.info === 0) {
+            creditPlaybackToEnd();
           }
         }
       } catch {
@@ -409,15 +460,27 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
       window.removeEventListener('message', handleYouTubeMessage);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [youtubeId, effectiveVideoKey, estimatedDurationSeconds, applyPlaybackTick, pauseActivePlayer]);
+  }, [
+    youtubeId,
+    effectiveVideoKey,
+    estimatedDurationSeconds,
+    applyPlaybackTick,
+    pauseActivePlayer,
+    creditPlaybackToEnd,
+    onProgressUpdate,
+    onVideoCompleted,
+    syncToServer
+  ]);
 
-  // 3. Fallback timer for YouTube embed when playing (in case browser blocks third-party infoDelivery ticks)
+  // 3. Fallback timer for YouTube embed when playing — only used when the browser blocks
+  //    the iframe's real-time infoDelivery messages (no real tick received recently).
   useEffect(() => {
     if (!youtubeId || !isPlaying || !isTabVisible) return;
     const interval = setInterval(() => {
       if (!isPlayingRef.current || document.hidden) return;
+      if (Date.now() - lastRealTickAtRef.current < 3000) return; // real ticks are flowing
       const nextTime = lastTimeRef.current + 1;
-      const dur = stateRef.current.durationSeconds || estimatedDurationSeconds;
+      const dur = realDurationRef.current || stateRef.current.durationSeconds || estimatedDurationSeconds;
       if (nextTime <= dur) {
         applyPlaybackTick({
           currentTime: nextTime,
@@ -538,14 +601,15 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
             onLoadedMetadata={e => {
               const v = e.currentTarget;
               if (v.duration && Number.isFinite(v.duration) && v.duration > 0) {
-                const updated: VideoProgressState = {
-                  ...stateRef.current,
-                  durationSeconds: Math.round(v.duration)
-                };
+                realDurationRef.current = v.duration;
+                const updated = rebaseVideoProgressDuration(stateRef.current, v.duration);
                 stateRef.current = updated;
                 setProgressState(updated);
+                onProgressUpdate?.(updated);
+                if (updated.isCompleted) onVideoCompleted?.(updated);
               }
             }}
+            onEnded={() => creditPlaybackToEnd()}
             onPlay={() => {
               if (document.hidden) {
                 pauseActivePlayer();
