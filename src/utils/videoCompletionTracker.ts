@@ -357,13 +357,19 @@ export function saveLocalVideoProgress(
 }
 
 /**
- * Extracts YouTube video ID from any standard YouTube URL.
+ * Extracts YouTube video ID from any standard YouTube URL or 11-character video ID.
  */
 export function extractYouTubeId(url: string): string | null {
   if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(
+    /(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/|u\/\w\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i
+  );
+  if (match && match[1]) return match[1];
   const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
+  const fallbackMatch = trimmed.match(regExp);
+  return fallbackMatch && fallbackMatch[2].length === 11 ? fallbackMatch[2] : null;
 }
 
 /**
@@ -384,11 +390,13 @@ export function extractEpisodeRequiredVideos(
       b.block_type === 'youtube_video' ||
       b.block_type === 'youtube_short' ||
       b.block_type === 'text_video' ||
-      Boolean(c?.video?.url);
+      Boolean(c?.video?.url || c?.video_url || c?.video_id);
 
     if (!isVideoBlock) return;
 
-    const rawUrl = String(c?.video?.url || c?.url || '').trim();
+    const rawUrl = String(
+      c?.video?.url || c?.video?.video_url || c?.url || c?.video_url || c?.video_id || c?.video?.video_id || ''
+    ).trim();
     if (!rawUrl) return;
 
     const ytId = extractYouTubeId(rawUrl);

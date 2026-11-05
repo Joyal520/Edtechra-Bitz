@@ -38,6 +38,7 @@ import { ComprehensiveQuestionRenderer } from '@/components/course-studio/Compre
 import { TrackedCourseVideoPlayer } from '@/components/course-studio/TrackedCourseVideoPlayer';
 import {
   extractEpisodeRequiredVideos,
+  extractYouTubeId,
   loadLocalVideoProgress,
   VideoProgressState
 } from '@/utils/videoCompletionTracker';
@@ -114,6 +115,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
   questions = [],
   mode = 'student',
   textScale = 'md',
+  courseId,
+  episodeId,
   onQuestionAnswer,
   onCompleteLesson: _onCompleteLesson,
   onProgressChange,
@@ -131,19 +134,29 @@ export const CourseContentRenderer: React.FC<Props> = ({
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
 
+  const effectiveCourseId = courseId || blocks[0]?.course_id || questions[0]?.course_id || 'course';
+  const effectiveEpisodeId = episodeId || blocks[0]?.episode_id || questions[0]?.episode_id || 'episode';
+
   // Required lesson videos for engine-level 90% completion enforcement
   const requiredVideos = React.useMemo(() => extractEpisodeRequiredVideos(blocks), [blocks]);
 
   const [videoProgressMap, setVideoProgressMap] = useState<Record<string, VideoProgressState>>(() => {
     const map: Record<string, VideoProgressState> = {};
-    const cId = blocks[0]?.course_id || questions[0]?.course_id || 'course';
-    const eId = blocks[0]?.episode_id || questions[0]?.episode_id || 'episode';
     extractEpisodeRequiredVideos(blocks).forEach(v => {
-      const saved = loadLocalVideoProgress(cId, eId, v.videoKey);
+      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey);
       if (saved) map[v.videoKey] = saved;
     });
     return map;
   });
+
+  useEffect(() => {
+    const map: Record<string, VideoProgressState> = {};
+    extractEpisodeRequiredVideos(blocks).forEach(v => {
+      const saved = loadLocalVideoProgress(effectiveCourseId, effectiveEpisodeId, v.videoKey);
+      if (saved) map[v.videoKey] = saved;
+    });
+    setVideoProgressMap(map);
+  }, [effectiveCourseId, effectiveEpisodeId, blocks]);
 
   const allRequiredVideosCompleted = React.useMemo(() => {
     if (isEditMode || requiredVideos.length === 0) return true;
@@ -1003,9 +1016,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
                   <TrackedCourseVideoPlayer
                     url={vidUrl}
                     title={vidTitle}
-                    courseId={block.course_id || questions[0]?.course_id || 'course'}
-                    episodeId={block.episode_id || questions[0]?.episode_id || 'episode'}
-                    videoKey={block.id || `video_${idx}`}
+                    courseId={effectiveCourseId}
+                    episodeId={effectiveEpisodeId}
+                    videoKey={extractYouTubeId(vidUrl) || block.id || `video_${idx}`}
                     isDark={activeTheme.isDark}
                     onProgressUpdate={state => {
                       setVideoProgressMap(prev => ({

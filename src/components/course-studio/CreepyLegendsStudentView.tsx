@@ -1130,6 +1130,31 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     return () => window.removeEventListener('message', handleYouTubeMessage);
   }, [videoPlaying, videoId, triggerYouTubePlayCommand, syncVideoProgressToServer]);
 
+  // Fallback timer for YouTube embed when playing (in case browser blocks third-party infoDelivery ticks)
+  useEffect(() => {
+    if (!videoPlaying || videoStatus !== 'playing' || isTabHidden || !videoId) return;
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const prevTime = lastVideoTimeRef.current;
+      const nextTime = prevTime + 1;
+      setVideoProgressState(prev => {
+        const dur = prev.durationSeconds || 265;
+        if (nextTime > dur) return prev;
+        const tick = processVideoPlaybackTick(prev, {
+          currentTime: nextTime,
+          previousTime: prevTime,
+          durationSeconds: dur,
+          isPlaying: true,
+          isTabVisible: true
+        });
+        lastVideoTimeRef.current = nextTime;
+        syncVideoProgressToServer(tick.nextState);
+        return tick.nextState;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [videoPlaying, videoStatus, isTabHidden, videoId, syncVideoProgressToServer]);
+
   const handleStartVideoPlayback = () => {
     if (!hasPlayableVideoSource) {
       setVideoPlaying(true);
@@ -1748,7 +1773,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         </button>
                         {videoId && (
                           <a
-                            href={`https://www.youtube.com/watch?v=${videoId}`}
+                            href={`https://youtu.be/${videoId}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-sky-200 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-all"
@@ -1773,7 +1798,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       <iframe
                         key={`${videoId}-${videoRetryKey}`}
                         ref={ytIframeRef}
-                        src={`https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=${
+                        src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=${
                           typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''
                         }`}
                         title={cleanLessonTitle}
@@ -2020,7 +2045,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                   </div>
                   {videoId && (
                     <a
-                      href={`https://www.youtube.com/watch?v=${videoId}`}
+                      href={`https://youtu.be/${videoId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-sky-300 hover:text-white font-bold underline-offset-2 hover:underline shrink-0"

@@ -91,6 +91,8 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
   );
   const [seekWarning, setSeekWarning] = useState<string | null>(null);
   const [visibilityNotice, setVisibilityNotice] = useState<boolean>(false);
+  const [embedHost, setEmbedHost] = useState<'www.youtube-nocookie.com' | 'youtube.com'>('www.youtube-nocookie.com');
+  const [embedRetryKey, setEmbedRetryKey] = useState<number>(0);
 
   const stateRef = useRef<VideoProgressState>(progressState);
   stateRef.current = progressState;
@@ -314,7 +316,7 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
       if (!ytIframeRef.current?.contentWindow) return;
       try {
         ytIframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: 'listening', id: `yt_${effectiveVideoKey}` }),
+          JSON.stringify({ event: 'listening', id: `yt_${effectiveVideoKey}`, channel: 'widget' }),
           '*'
         );
         ytIframeRef.current.contentWindow.postMessage(
@@ -331,6 +333,22 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
     };
 
     const handshakeInterval = setInterval(sendListeningHandshake, 1500);
+
+    // Detect when student clicks inside the YouTube iframe to play the video
+    const handleWindowBlur = () => {
+      if (
+        !document.hidden &&
+        ytIframeRef.current &&
+        document.activeElement === ytIframeRef.current
+      ) {
+        sendListeningHandshake();
+        if (!isPlayingRef.current) {
+          isPlayingRef.current = true;
+          setIsPlaying(true);
+          setVisibilityNotice(false);
+        }
+      }
+    };
 
     const handleYouTubeMessage = (event: MessageEvent) => {
       if (typeof event.data !== 'string') return;
@@ -385,9 +403,11 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
     };
 
     window.addEventListener('message', handleYouTubeMessage);
+    window.addEventListener('blur', handleWindowBlur);
     return () => {
       clearInterval(handshakeInterval);
       window.removeEventListener('message', handleYouTubeMessage);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, [youtubeId, effectiveVideoKey, estimatedDurationSeconds, applyPlaybackTick, pauseActivePlayer]);
 
@@ -472,31 +492,38 @@ export const TrackedCourseVideoPlayer: React.FC<TrackedCourseVideoPlayerProps> =
     >
       {/* VIDEO VIEWPORT */}
       <div
-        className={`relative w-full ${aspectClassName} bg-slate-950 rounded-2xl overflow-hidden border ${
+        className={`video-container course-video-bleed relative w-full ${aspectClassName} bg-slate-950 rounded-2xl overflow-hidden border ${
           isDark ? 'border-slate-700/80' : 'border-stone-200/90'
         } shadow-md`}
       >
         {youtubeId ? (
           <iframe
+            key={`${youtubeId}-${embedHost}-${embedRetryKey}`}
             ref={ytIframeRef}
             id={`yt_player_${effectiveVideoKey}`}
-            src={`https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${
+            src={`https://${embedHost}/embed/${youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${
               youtubeOrigin ? `&origin=${youtubeOrigin}` : ''
             }`}
             title={title}
             className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
             onLoad={() => {
               if (ytIframeRef.current?.contentWindow) {
                 try {
                   ytIframeRef.current.contentWindow.postMessage(
-                    JSON.stringify({ event: 'listening', id: `yt_${effectiveVideoKey}` }),
+                    JSON.stringify({ event: 'listening', id: `yt_${effectiveVideoKey}`, channel: 'widget' }),
                     '*'
                   );
                 } catch {
                   // Ignore
                 }
+              }
+            }}
+            onError={() => {
+              if (embedHost === 'www.youtube-nocookie.com') {
+                setEmbedHost('youtube.com');
+                setEmbedRetryKey(prev => prev + 1);
               }
             }}
           />
