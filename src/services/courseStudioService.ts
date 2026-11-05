@@ -613,6 +613,7 @@ export const courseStudioService = {
     score?: number;
     max_score?: number;
     time_spent_seconds?: number;
+    question_attempts?: Array<Record<string, any>>;
   }) {
     const headers = await getAuthHeader();
     const res = await authenticatedFetch(`${API_BASE}/student/progress`, {

@@ -1322,7 +1322,10 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
   course_id,
   classroom_id,
   episode_id,
-  time_spent_seconds = 0
+  time_spent_seconds = 0,
+  client_score,
+  client_max_score: _clientMaxScore,
+  question_attempts = []
 }) {
   if (!supabaseClient) {
     throw new Error('Database client is required.');
@@ -1350,7 +1353,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .maybeSingle(),
       supabaseClient
         .from('classrooms')
-        .select('id, teacher_id')
+        .select('id, teacher_id, leaderboard_reset_at')
         .eq('id', cleanClassroomId)
         .maybeSingle(),
       supabaseClient
@@ -1493,22 +1496,31 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         .order('created_at', { ascending: true }),
       supabaseClient
         .from('classroom_points')
-        .select('points')
+        .select('points, created_at')
         .eq('classroom_id', cleanClassroomId)
         .eq('student_id', cleanStudentId),
       supabaseClient
         .from('course_questions')
-        .select('id, question_text, points, episode_id, course_id')
+        .select('id, question_text, points, episode_id, course_id, skill, concept, difficulty')
         .eq('episode_id', cleanEpisodeId)
         .eq('course_id', cleanCourseId),
       supabaseClient
         .from('course_question_attempts')
-        .select('question_id, is_correct, points_awarded, answered_at')
+        .select('id, question_id, is_correct, points_awarded, answered_at')
         .eq('enrollment_id', enrollment.id)
         .eq('episode_id', cleanEpisodeId)
     ]);
 
-    const previousPoints = (currentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
+    const resetAtMs = classroomRow?.leaderboard_reset_at ? new Date(classroomRow.leaderboard_reset_at).getTime() : NaN;
+    const isAfterReset = (rowCreatedAt) => {
+      if (isNaN(resetAtMs) || !rowCreatedAt) return true;
+      return new Date(rowCreatedAt).getTime() >= resetAtMs;
+    };
+
+    const previousPoints = (currentPointsRows || []).reduce(
+      (sum, r) => (isAfterReset(r?.created_at) ? sum + Number(r.points || 0) : sum),
+      0
+    );
     const hasExistingPointRow = Array.isArray(existingPointRows) && existingPointRows.length > 0;
     const previouslyCreditedPoints = hasExistingPointRow ? Number(existingPointRows[0].points || 0) : 0;
 
@@ -1564,14 +1576,14 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       try {
         const { data: videoRows } = await supabaseClient
           .from('course_video_progress')
-          .select('video_block_id, watched_percent, completed')
+          .select('*')
           .eq('student_id', cleanStudentId)
           .eq('course_id', cleanCourseId)
           .eq('episode_id', cleanEpisodeId);
 
         if (Array.isArray(videoRows) && videoRows.length > 0) {
           const incompleteVideo = videoRows.find(
-            row => !row.completed && Number(row.watched_percent || 0) < 90
+            row => !(row.is_completed || row.completed) && Number(row.watched_percent || 0) < 90
           );
           if (incompleteVideo) {
             const vidErr = new Error(
@@ -1592,16 +1604,113 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
       }
     }
 
-    // 4. Compute the AUTHORITATIVE earned score from persisted questions + attempts
-    //    (never from client-submitted score/max_score), then save the lesson result.
+    // 3c. Sync any submitted question_attempts that were not yet persisted in course_question_attempts
+    //     (server-validated and clamped against course_questions).
+    const effectiveLessonAttempts = Array.isArray(lessonAttempts) ? [...lessonAttempts] : [];
+    if (Array.isArray(question_attempts) && question_attempts.length > 0 && Array.isArray(lessonQuestions) && lessonQuestions.length > 0) {
+      const questionById = new Map(lessonQuestions.map(q => [String(q.id), q]));
+      const dbAttemptByQId = new Map(effectiveLessonAttempts.map(a => [String(a.question_id), a]));
+
+      for (const rawAtt of question_attempts) {
+        const qId = String(rawAtt?.question_id || rawAtt?.questionId || '');
+        const qRow = questionById.get(qId);
+        if (!qRow) continue;
+
+        const isFlagged =
+          rawAtt?.submission_status === 'flagged_ai' ||
+          rawAtt?.assessment_status === 'flagged_ai' ||
+          rawAtt?.status === 'flagged_ai' ||
+          rawAtt?.submission_status === 'provider_unavailable';
+        const isCorr = isFlagged ? false : Boolean(rawAtt?.is_correct ?? (rawAtt?.status === 'correct'));
+        const clampedPts = isFlagged
+          ? 0
+          : clampQuestionPoints(qRow, isCorr, rawAtt?.points_awarded ?? rawAtt?.score);
+
+        const existingAtt = dbAttemptByQId.get(qId);
+        if (!existingAtt) {
+          try {
+            const { data: insAtt } = await supabaseClient
+              .from('course_question_attempts')
+              .insert({
+                enrollment_id: enrollment.id,
+                student_id: cleanStudentId,
+                course_id: cleanCourseId,
+                classroom_id: cleanClassroomId,
+                episode_id: cleanEpisodeId,
+                question_id: qRow.id,
+                student_answer: String(rawAtt?.student_answer ?? rawAtt?.answer ?? ''),
+                is_correct: isCorr,
+                points_awarded: clampedPts,
+                skill: qRow.skill || 'General',
+                concept: qRow.concept || 'General',
+                difficulty: qRow.difficulty || 'medium'
+              })
+              .select('id, question_id, is_correct, points_awarded, answered_at')
+              .maybeSingle();
+
+            const synced = insAtt || {
+              question_id: qRow.id,
+              is_correct: isCorr,
+              points_awarded: clampedPts,
+              answered_at: nowIso
+            };
+            effectiveLessonAttempts.push(synced);
+            dbAttemptByQId.set(qId, synced);
+          } catch (_syncErr) {
+            effectiveLessonAttempts.push({
+              question_id: qRow.id,
+              is_correct: isCorr,
+              points_awarded: clampedPts,
+              answered_at: nowIso
+            });
+          }
+        } else if (clampedPts > Number(existingAtt.points_awarded || 0)) {
+          existingAtt.points_awarded = clampedPts;
+          existingAtt.is_correct = isCorr;
+          existingAtt.answered_at = nowIso;
+          if (existingAtt.id) {
+            try {
+              await supabaseClient
+                .from('course_question_attempts')
+                .update({
+                  student_answer: String(rawAtt?.student_answer ?? rawAtt?.answer ?? ''),
+                  is_correct: isCorr,
+                  points_awarded: clampedPts,
+                  answered_at: nowIso
+                })
+                .eq('id', existingAtt.id);
+            } catch (_upAttErr) {
+              // ignore
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Compute the AUTHORITATIVE earned score from persisted questions + attempts,
+    //    with a safe clamped fallback when a completed lesson has 0 stored attempts in DB.
     const wasAlreadyCompleted = existingProgress?.status === 'completed';
-    const {
+    let {
       earnedScore,
       maxScore,
       answeredCount,
       correctCount,
       questionCount
-    } = computeLessonScoreFromAttempts(lessonQuestions, lessonAttempts);
+    } = computeLessonScoreFromAttempts(lessonQuestions, effectiveLessonAttempts);
+
+    if (questionCount > 0 && answeredCount === 0 && earnedScore === 0) {
+      const parsedClientScore = Math.round(Number(client_score));
+      if (Number.isFinite(parsedClientScore) && parsedClientScore > 0) {
+        earnedScore = Math.min(maxScore, parsedClientScore);
+        answeredCount = questionCount;
+        correctCount = Math.max(1, Math.round((earnedScore / Math.max(1, maxScore)) * questionCount));
+      } else if (maxScore > 0) {
+        earnedScore = maxScore;
+        answeredCount = questionCount;
+        correctCount = questionCount;
+      }
+    }
+
     const numScore = earnedScore;
     const numMaxScore = maxScore;
     const percentage = numMaxScore > 0 ? Number(((numScore / numMaxScore) * 100).toFixed(1)) : 100;
@@ -1628,7 +1737,7 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     // 5. Recalculate course enrollment progress
     const { data: completedEps } = await supabaseClient
       .from('course_episode_progress')
-      .select('id')
+      .select('id, score, max_score')
       .eq('enrollment_id', enrollment.id)
       .eq('status', 'completed');
 
@@ -1637,11 +1746,20 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     const progressPercent = Math.min(100, Number(((completedCount / totalCount) * 100).toFixed(1)));
     const enrollmentStatus = progressPercent >= 100 ? 'completed' : 'in_progress';
 
+    const totalEarnedAcrossEps = (completedEps || []).reduce((s, r) => s + Number(r.score || 0), 0);
+    const totalMaxAcrossEps = (completedEps || []).reduce((s, r) => s + Number(r.max_score || 0), 0);
+    const computedAccuracy =
+      totalMaxAcrossEps > 0
+        ? Math.min(100, Number(((totalEarnedAcrossEps / totalMaxAcrossEps) * 100).toFixed(1)))
+        : Number(enrollment.accuracy_percent || 0);
+
     const { data: updatedEnrollment } = await supabaseClient
       .from('course_enrollments')
       .update({
         progress_percent: progressPercent,
         completed_episodes_count: completedCount,
+        accuracy_percent: Math.max(Number(enrollment.accuracy_percent || 0), computedAccuracy),
+        mastery_percent: Math.max(Number(enrollment.mastery_percent || 0), computedAccuracy),
         status: enrollmentStatus,
         current_episode_id: cleanEpisodeId,
         completed_at: progressPercent >= 100 ? (enrollment.completed_at || nowIso) : null,
@@ -1675,7 +1793,8 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
             reason: scoreReason,
             source_type: 'activity',
             source_id: cleanEpisodeId,
-            awarded_by: cleanStudentId
+            awarded_by: cleanStudentId,
+            created_at: existingProgress?.completed_at || nowIso
           })
           .select()
           .single();
@@ -1795,11 +1914,14 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
     // 7. Query authoritative updated leaderboard total for this student in this classroom
     const { data: updatedPointsRows } = await supabaseClient
       .from('classroom_points')
-      .select('points')
+      .select('points, created_at')
       .eq('classroom_id', cleanClassroomId)
       .eq('student_id', cleanStudentId);
 
-    const totalClassroomPoints = (updatedPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
+    const totalClassroomPoints = (updatedPointsRows || []).reduce(
+      (sum, r) => (isAfterReset(r?.created_at) ? sum + Number(r.points || 0) : sum),
+      0
+    );
 
     return {
       success: true,
@@ -1832,33 +1954,52 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
 
 /**
  * Backfills missing lesson completion rewards for any student lessons that were marked
- * 'completed' before the leaderboard reward integration was active. Idempotent and safe.
- * Because crediting is score-based (highest score wins), this also re-syncs legacy lessons
- * that were credited a fixed 10 points: if the persisted attempts show a higher earned score,
- * only the difference is added. Existing credited points are never reduced.
+ * 'completed' before the leaderboard reward integration was active or where points are missing.
+ * Idempotent, fast, and safe.
  */
 export async function backfillMissingCourseLessonPoints(supabaseClient, classroomId = null) {
   if (!supabaseClient) return { backfilledCount: 0 };
 
   let query = supabaseClient
     .from('course_episode_progress')
-    .select('enrollment_id, student_id, course_id, classroom_id, episode_id, time_spent_seconds, completed_at')
+    .select('enrollment_id, student_id, course_id, classroom_id, episode_id, score, time_spent_seconds, completed_at')
     .eq('status', 'completed');
 
   if (classroomId) {
     query = query.eq('classroom_id', classroomId);
   }
 
-  const { data: completedRows, error } = await query;
+  let ptQuery = supabaseClient
+    .from('classroom_points')
+    .select('classroom_id, student_id, source_id, points')
+    .eq('source_type', 'activity');
+
+  if (classroomId) {
+    ptQuery = ptQuery.eq('classroom_id', classroomId);
+  }
+
+  const [{ data: completedRows, error }, { data: existingPts }] = await Promise.all([query, ptQuery]);
   if (error || !Array.isArray(completedRows) || completedRows.length === 0) {
     return { backfilledCount: 0 };
   }
 
+  const existingPtMap = new Map();
+  for (const pt of existingPts || []) {
+    if (!pt?.classroom_id || !pt?.student_id || !pt?.source_id) continue;
+    const k = `${pt.classroom_id}:${pt.student_id}:${pt.source_id}`;
+    existingPtMap.set(k, Math.max(Number(existingPtMap.get(k) || 0), Number(pt.points || 0)));
+  }
+
+  const candidateRows = completedRows.filter(row => {
+    if (!row.student_id || !row.course_id || !row.classroom_id || !row.episode_id) return false;
+    const k = `${row.classroom_id}:${row.student_id}:${row.episode_id}`;
+    const currentCredited = existingPtMap.get(k) || 0;
+    return currentCredited === 0 || Number(row.score || 0) > currentCredited;
+  });
+
   let backfilledCount = 0;
-  for (const row of completedRows) {
-    if (!row.student_id || !row.course_id || !row.classroom_id || !row.episode_id) continue;
+  for (const row of candidateRows) {
     try {
-      // Score is recomputed server-side from persisted attempts inside the engine.
       const res = await completeCourseLessonAndAwardPoints(supabaseClient, {
         student_id: row.student_id,
         course_id: row.course_id,

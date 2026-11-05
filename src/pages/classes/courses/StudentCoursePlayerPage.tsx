@@ -463,12 +463,28 @@ export const StudentCoursePlayerPage: React.FC = () => {
         await Promise.allSettled(Array.from(pendingAttemptsRef.current));
       }
 
-      // The server computes the authoritative earned score and max score from the
-      // persisted question attempts; no client score is submitted for crediting.
+      const episodeValidQuestions = getValidLessonQuestions(selectedEpisode.questions);
+      const episodeMaxScore = episodeValidQuestions.reduce(
+        (sum, q) => sum + Math.max(0, Number(q.points) || 10),
+        0
+      );
+      const episodeEarnedScore = episodeValidQuestions.reduce(
+        (sum, q) => sum + (Number(questionScores[q.id]) || 0),
+        0
+      );
+      const episodeAttempts = episodeValidQuestions
+        .map(q => attemptsByQuestionId[q.id])
+        .filter(Boolean);
+
+      // The server computes the authoritative earned score and max score from persisted
+      // question attempts (and validates/syncs episodeAttempts if any attempt request failed).
       const res = await courseStudioService.recordStudentProgress({
         course_id: courseId,
         classroom_id: classroomId,
         episode_id: epId,
+        score: episodeEarnedScore,
+        max_score: episodeMaxScore,
+        question_attempts: episodeAttempts,
         time_spent_seconds: (selectedEpisode.estimated_minutes || 15) * 60
       });
 

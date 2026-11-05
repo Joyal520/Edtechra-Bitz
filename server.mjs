@@ -7533,6 +7533,9 @@ app.get('/api/classes/:classroomId/courses', async (req, res) => {
       };
     }));
 
+    // Non-blocking background sync to ensure completed lessons have credited leaderboard points
+    backfillMissingCourseLessonPoints(serverSupabase, classroomId).catch(() => {});
+
     res.json({ success: true, courses: enriched });
   } catch (err) {
     console.error('Error in classroom courses:', err);
@@ -7569,7 +7572,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .maybeSingle(),
       serverSupabase
         .from('classrooms')
-        .select('id, teacher_id')
+        .select('id, teacher_id, leaderboard_reset_at')
         .eq('id', classroom_id)
         .maybeSingle(),
       serverSupabase
@@ -7587,7 +7590,7 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
         .maybeSingle(),
       serverSupabase
         .from('classroom_points')
-        .select('points')
+        .select('points, created_at')
         .eq('classroom_id', classroom_id)
         .eq('student_id', student_id),
       serverSupabase
@@ -7670,7 +7673,13 @@ app.get('/api/course-studio/student/progress', async (req, res) => {
       }
     }
 
-    const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => sum + Number(r.points || 0), 0);
+    const resetAtMs = classroomRow?.leaderboard_reset_at ? new Date(classroomRow.leaderboard_reset_at).getTime() : NaN;
+    const totalClassroomPoints = (studentPointsRows || []).reduce((sum, r) => {
+      if (!isNaN(resetAtMs) && r?.created_at && new Date(r.created_at).getTime() < resetAtMs) {
+        return sum;
+      }
+      return sum + Number(r.points || 0);
+    }, 0);
 
     res.json({
       success: true,
@@ -7697,9 +7706,17 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
     const authData = await verifyAuthUser(req);
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
-    // NOTE: client-supplied `score` / `max_score` are intentionally NOT used for crediting.
-    // The engine computes the authoritative earned score from persisted question attempts.
-    const { course_id, classroom_id, episode_id, time_spent_seconds = 0 } = req.body;
+    // The engine computes the authoritative earned score from persisted question attempts
+    // (and validates/backfills any submitted question_attempts that were not yet persisted).
+    const {
+      course_id,
+      classroom_id,
+      episode_id,
+      time_spent_seconds = 0,
+      score: client_score,
+      max_score: client_max_score,
+      question_attempts = []
+    } = req.body;
     const student_id = authData.user.id;
 
     if (!course_id || !classroom_id || !episode_id) {
@@ -7758,7 +7775,10 @@ app.post('/api/course-studio/student/progress', async (req, res) => {
       course_id,
       classroom_id,
       episode_id,
-      time_spent_seconds
+      time_spent_seconds,
+      client_score,
+      client_max_score,
+      question_attempts
     });
 
     res.json(result);
@@ -7896,7 +7916,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
     // (0 for incorrect answers or AI-flagged responses). The client cannot inflate a lesson score.
     const { data: questionRow } = await serverSupabase
       .from('course_questions')
-      .select('id, episode_id, course_id, points, question_type, min_words')
+      .select('id, episode_id, course_id, points, question_type')
       .eq('id', question_id)
       .maybeSingle();
 
@@ -7917,7 +7937,7 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       ? 0
       : clampQuestionPoints(questionRow, effectiveIsCorrect, points_awarded);
 
-    // Anti-Retry Protection: Reject duplicate submissions for the same question
+    // Anti-Retry Protection: If an attempt already exists, upgrade only when the new attempt improves upon a 0-point / retryable record
     const { data: existingAttempt } = await serverSupabase
       .from('course_question_attempts')
       .select('*')
@@ -7926,6 +7946,23 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       .maybeSingle();
 
     if (existingAttempt) {
+      if (validatedPointsAwarded > Number(existingAttempt.points_awarded || 0)) {
+        const { data: updatedAttempt } = await serverSupabase
+          .from('course_question_attempts')
+          .update({
+            student_answer: String(student_answer || ''),
+            is_correct: effectiveIsCorrect,
+            points_awarded: validatedPointsAwarded,
+            answered_at: new Date().toISOString()
+          })
+          .eq('id', existingAttempt.id)
+          .select()
+          .maybeSingle();
+        return res.json({
+          success: true,
+          attempt: updatedAttempt || existingAttempt
+        });
+      }
       return res.status(409).json({
         success: false,
         already_answered: true,
