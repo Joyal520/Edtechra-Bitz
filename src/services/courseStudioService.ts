@@ -636,6 +636,18 @@ export const courseStudioService = {
     skill?: string;
     concept?: string;
     difficulty?: string;
+    word_count?: number;
+    submission_status?: string;
+    ai_likelihood_percentage?: number;
+    ai_confidence?: string;
+    assessment_status?: string;
+    ai_explanation?: string;
+    ai_provider?: string;
+    ai_model?: string;
+    evaluation_feedback?: Record<string, any>;
+    typing_telemetry?: Record<string, any>;
+    evaluated_at?: string;
+    flagged_for_review?: boolean;
   }) {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/student/attempt`, {
@@ -644,7 +656,12 @@ export const courseStudioService = {
       body: JSON.stringify(payload)
     });
     const json = await res.json();
-    if (!res.ok || !json.success) throw new Error(json.error || 'Failed to record question attempt.');
+    if (!res.ok || !json.success) {
+      const err: any = new Error(json.error || 'Failed to record question attempt.');
+      err.already_answered = Boolean(json.already_answered);
+      err.attempt = json.attempt;
+      throw err;
+    }
     return json;
   },
 
@@ -663,7 +680,49 @@ export const courseStudioService = {
     return json.attempts || [];
   },
 
+  async saveVideoProgress(payload: {
+    course_id: string;
+    classroom_id?: string;
+    episode_id: string;
+    video_key?: string;
+    watched_seconds: number;
+    duration_seconds: number;
+    watched_percent: number;
+    watched_segments: Array<[number, number]>;
+    max_allowed_position?: number;
+    is_completed?: boolean;
+  }) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/student/video-progress`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Failed to save video progress.');
+    }
+    return json.video_progress;
+  },
+
+  async getVideoProgress(courseId: string, episodeId?: string) {
+    const headers = await getAuthHeader();
+    const params = new URLSearchParams({ course_id: courseId });
+    if (episodeId) params.append('episode_id', episodeId);
+
+    const res = await fetch(`${API_BASE}/student/video-progress?${params.toString()}`, {
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) return [];
+    return json.progress || [];
+  },
+
   async evaluateEssay(payload: {
+    course_id?: string;
+    classroom_id?: string;
+    episode_id?: string;
+    question_id?: string;
     question_text: string;
     student_response: string;
     image_url?: string;
@@ -671,6 +730,8 @@ export const courseStudioService = {
     min_words?: number;
     max_words?: number;
     evaluation_criteria?: string[];
+    typing_telemetry?: Record<string, any>;
+    ai_threshold?: number;
   }): Promise<EssayEvaluationResult> {
     const headers = await getAuthHeader();
     const res = await fetch(`${API_BASE}/essay-evaluate`, {
@@ -680,9 +741,48 @@ export const courseStudioService = {
     });
     const json = await res.json();
     if (!res.ok || !json.success) {
-      throw new Error(json.error || 'Failed to evaluate essay response.');
+      const err: any = new Error(json.error || 'Failed to evaluate essay response.');
+      err.provider_unavailable = Boolean(json.provider_unavailable);
+      err.duplicate_submission = Boolean(json.duplicate_submission || json.already_answered);
+      err.statusCode = res.status;
+      throw err;
     }
     return json.evaluation;
+  },
+
+  async getFlaggedWritingSubmissions(courseId: string) {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/courses/${courseId}/flagged-submissions`, {
+      headers
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) return [];
+    return json.submissions || [];
+  },
+
+  async reviewFlaggedWritingSubmission(
+    courseId: string,
+    submissionId: string,
+    payload: {
+      action: 'approve' | 'reject' | 'allow_retry';
+      approved_points?: number;
+      review_notes?: string;
+    }
+  ) {
+    const headers = await getAuthHeader();
+    const res = await fetch(
+      `${API_BASE}/courses/${courseId}/flagged-submissions/${submissionId}/review`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      }
+    );
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Failed to review submission.');
+    }
+    return json;
   },
 
   async evaluateQuestionAnswer(payload: {

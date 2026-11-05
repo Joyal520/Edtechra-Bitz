@@ -40,6 +40,7 @@ import { shuffleWordsGuaranteed } from '@/utils/questionSchemaValidator';
 import { LiquidButton, LiquidChip, LiquidOption } from '@/components/course-studio/liquid';
 import { DraggableOrderingQuestion } from './DraggableOrderingQuestion';
 import { ClozePassageQuestion } from './ClozePassageQuestion';
+import { EssayQuestion } from './EssayQuestion';
 import { CourseIllustrationGraphic } from './BrainIllustrations';
 
 interface SentenceToken {
@@ -173,7 +174,6 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
   const [shortAnswerInput, setShortAnswerInput] = useState<string>('');
   const [sentenceTokens, setSentenceTokens] = useState<SentenceToken[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<SentenceToken[]>([]);
-  const [openEndedText, setOpenEndedText] = useState<string>('');
   const [isEvaluatingAi, setIsEvaluatingAi] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isInputActive, setIsInputActive] = useState<boolean>(false);
@@ -241,7 +241,12 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     }
   }, [qId, qType, question, response]);
 
-  const isAnswered = Boolean(response && response.status !== 'unanswered');
+  const isAnswered = Boolean(
+    response &&
+      response.status !== 'unanswered' &&
+      response.status !== 'flagged_ai' &&
+      response.status !== 'provider_unavailable'
+  );
   const isCorrect = response?.status === 'correct';
 
   // --------------------------------------------------------------------------
@@ -279,68 +284,6 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
     onAnswerSubmit(result);
   };
 
-  // --------------------------------------------------------------------------
-  // 2. OPEN-ENDED AI EVALUATOR SUBMISSION (ESSAY)
-  // --------------------------------------------------------------------------
-  const handleEvaluateOpenEnded = async () => {
-    if (!openEndedText.trim()) return;
-
-    setIsEvaluatingAi(true);
-    setAiError(null);
-
-    try {
-      const evaluation = await courseStudioService.evaluateEssay({
-        question_text: question.question_text,
-        student_response: openEndedText.trim(),
-        image_url: question.image_url,
-        lesson_context: passageText || question.explanation || '',
-        min_words: question.min_words || 15,
-        max_words: question.max_words || 200,
-        evaluation_criteria: question.evaluation_criteria || ['grammar', 'vocabulary', 'relevance', 'completeness']
-      });
-
-      const maxScore = question.points || 10;
-      const rawScorePercent = evaluation.max_score > 0 ? evaluation.score / evaluation.max_score : 0.7;
-      const scaledScore = Math.round(rawScorePercent * maxScore);
-      const passed = scaledScore >= Math.round(maxScore * 0.6);
-
-      if (passed) {
-        courseAudio.playCorrectSound();
-        triggerConfettiBurst(null);
-      } else {
-        courseAudio.playIncorrectSound();
-      }
-
-      const formattedCriteria: OpenEndedRubricCriterion[] = Object.entries(
-        evaluation.criteria_scores || {}
-      ).map(([name, score]) => ({
-        name,
-        score: Math.round(((score as number) / 100) * 10),
-        maxScore: 10
-      }));
-
-      const res: StudentQuestionResponse = {
-        questionId: qId,
-        answer: openEndedText.trim(),
-        status: passed ? 'correct' : 'incorrect',
-        score: scaledScore,
-        maxScore,
-        feedback: evaluation.feedback || (passed ? 'Well done!' : 'Needs improvement.'),
-        strengths: evaluation.strengths || [],
-        improvements: evaluation.improvements || [],
-        criteria: formattedCriteria,
-        evaluatedAt: new Date().toISOString()
-      };
-
-      onAnswerSubmit(res);
-    } catch (err: any) {
-      setAiError(err.message || 'AI evaluation temporarily unavailable. Please retry.');
-    } finally {
-      setIsEvaluatingAi(false);
-    }
-  };
-
-  // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // 2B. SHORT ANSWER: DETERMINISTIC EVALUATOR (0 OR FULL MARKS, NO AI)
   // --------------------------------------------------------------------------
@@ -1464,39 +1407,87 @@ export const ComprehensiveQuestionRenderer: React.FC<ComprehensiveQuestionRender
       )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* TYPE 9B: ESSAY / EXTENDED RESPONSE                                  */}
+      {/* TYPE 9B: ESSAY / EXTENDED WRITING RESPONSE (TYPING-ONLY ENGINE)     */}
       {/* ------------------------------------------------------------------- */}
       {qType === 'essay' && (
-        <div className="space-y-3 pt-1">
-          <textarea
-            rows={5}
-            disabled={isAnswered || isEvaluatingAi}
-            value={openEndedText}
-            onChange={e => setOpenEndedText(e.target.value)}
-            placeholder="Write your essay response here (at least 50 words)..."
-            className="w-full p-3.5 liquid-textarea text-base font-sans leading-relaxed placeholder:text-slate-400"
-          />
+        <EssayQuestion
+          question={question}
+          courseId={question.course_id}
+          episodeId={question.episode_id}
+          lessonContext={passageText || question.explanation || ''}
+          isLocked={isAnswered}
+          isSubmitting={isEvaluatingAi}
+          selectedAnswer={typeof response?.answer === 'string' ? response.answer : undefined}
+          feedback={response ? { isCorrect, showExplanation: isAnswered } : null}
+          onEvaluateAnswer={(_q, ans, _targetEl, evaluationResult) => {
+            const maxScore = question.points || 10;
+            if (!evaluationResult) {
+              commitAnswer(ans, true, question.explanation || 'Essay submitted.');
+              return;
+            }
 
-          {aiError && (
-            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-              <span>{aiError}</span>
-            </div>
-          )}
+            if (evaluationResult.ai_flagged || evaluationResult.assessment_status === 'flagged_ai') {
+              onAnswerSubmit({
+                questionId: qId,
+                answer: ans,
+                status: 'flagged_ai',
+                score: 0,
+                maxScore,
+                feedback:
+                  evaluationResult.ai_detection_message ||
+                  evaluationResult.feedback ||
+                  'AI content detected. Marks have not been awarded.',
+                strengths: [],
+                improvements: evaluationResult.improvements || [],
+                aiLikelihoodPercentage: evaluationResult.ai_likelihood_percentage,
+                aiConfidence: evaluationResult.confidence,
+                assessmentStatus: 'flagged_ai',
+                aiExplanation: evaluationResult.explanation,
+                aiFlagged: true,
+                aiDetectionMessage: evaluationResult.ai_detection_message || evaluationResult.feedback,
+                aiProvider: evaluationResult.ai_provider,
+                aiModel: evaluationResult.model,
+                evaluatedAt: evaluationResult.evaluated_at || new Date().toISOString()
+              });
+              return;
+            }
 
-          {!isAnswered && (
-            <LiquidButton
-              variant="primary"
-              size="md"
-              disabled={!openEndedText.trim() || isEvaluatingAi}
-              loading={isEvaluatingAi}
-              onClick={handleEvaluateOpenEnded}
-              icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
-            >
-              {isEvaluatingAi ? 'AI Evaluating response...' : 'Submit for AI Evaluation'}
-            </LiquidButton>
-          )}
-        </div>
+            const rawScorePercent =
+              evaluationResult.max_score > 0
+                ? evaluationResult.score / evaluationResult.max_score
+                : 0.75;
+            const scaledScore = Math.round(rawScorePercent * maxScore);
+            const passed = scaledScore >= Math.round(maxScore * 0.5);
+
+            const formattedCriteria: OpenEndedRubricCriterion[] = Object.entries(
+              evaluationResult.criteria_scores || {}
+            ).map(([name, score]) => ({
+              name,
+              score: Math.round(((score as number) / 100) * 10),
+              maxScore: 10
+            }));
+
+            onAnswerSubmit({
+              questionId: qId,
+              answer: ans,
+              status: passed ? 'correct' : 'incorrect',
+              score: scaledScore,
+              maxScore,
+              feedback: evaluationResult.feedback || (passed ? 'Well done!' : 'Needs improvement.'),
+              strengths: evaluationResult.strengths || [],
+              improvements: evaluationResult.improvements || [],
+              criteria: formattedCriteria,
+              aiLikelihoodPercentage: evaluationResult.ai_likelihood_percentage,
+              aiConfidence: evaluationResult.confidence,
+              assessmentStatus: evaluationResult.assessment_status || 'passed',
+              aiExplanation: evaluationResult.explanation,
+              aiFlagged: false,
+              aiProvider: evaluationResult.ai_provider,
+              aiModel: evaluationResult.model,
+              evaluatedAt: evaluationResult.evaluated_at || new Date().toISOString()
+            });
+          }}
+        />
       )}
 
       {/* ------------------------------------------------------------------- */}

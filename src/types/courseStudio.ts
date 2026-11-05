@@ -103,7 +103,7 @@ export interface OpenEndedRubricCriterion {
 export interface StudentQuestionResponse {
   questionId: string;
   answer: any;
-  status: 'unanswered' | 'evaluating' | 'correct' | 'incorrect';
+  status: 'unanswered' | 'evaluating' | 'correct' | 'incorrect' | 'flagged_ai' | 'provider_unavailable';
   score: number;
   maxScore: number;
   feedback: string;
@@ -112,6 +112,16 @@ export interface StudentQuestionResponse {
   criteria?: OpenEndedRubricCriterion[];
   languageFeedback?: string | null;
   evaluatedAt?: string;
+  aiLikelihoodPercentage?: number;
+  aiConfidence?: 'low' | 'medium' | 'high' | 'uncertain';
+  assessmentStatus?: 'passed' | 'flagged_ai' | 'uncertain_passed' | 'provider_unavailable' | 'teacher_overridden';
+  aiExplanation?: string;
+  aiFlagged?: boolean;
+  aiDetectionMessage?: string;
+  aiProvider?: string;
+  aiModel?: string;
+  wordCount?: number;
+  typingTelemetry?: Record<string, any>;
 }
 
 export interface StudentAttemptSession {
@@ -158,8 +168,18 @@ export interface EssayEvaluationResult {
   strengths: string[];
   improvements: string[];
   criteria_scores: Record<string, number>;
-  ai_provider?: 'gemini' | 'openai_fallback' | 'deterministic_evaluator';
+  ai_provider?: 'gemini' | 'openai' | 'openai_fallback' | 'deterministic_evaluator' | string;
   model?: string;
+  ai_likelihood_percentage?: number;
+  confidence?: 'low' | 'medium' | 'high' | 'uncertain';
+  assessment_status?: 'passed' | 'flagged_ai' | 'uncertain_passed' | 'provider_unavailable' | 'teacher_overridden';
+  explanation?: string;
+  ai_flagged?: boolean;
+  ai_detection_message?: string;
+  provider_unavailable?: boolean;
+  word_count?: number;
+  evaluated_at?: string;
+  teacher_review_status?: 'pending' | 'approved' | 'rejected' | null;
 }
 
 // ----------------------------------------------------------------------------

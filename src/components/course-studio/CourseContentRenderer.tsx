@@ -22,7 +22,8 @@ import {
   Quote,
   Heading,
   Minus,
-  FileText
+  FileText,
+  Lock
 } from 'lucide-react';
 import {
   CourseBlock,
@@ -34,6 +35,12 @@ import {
 import { FormattedLessonText, TextScale } from '@/utils/courseTextFormatting';
 import { courseAudio } from '@/utils/courseAudio';
 import { ComprehensiveQuestionRenderer } from '@/components/course-studio/ComprehensiveQuestionRenderer';
+import { TrackedCourseVideoPlayer } from '@/components/course-studio/TrackedCourseVideoPlayer';
+import {
+  extractEpisodeRequiredVideos,
+  loadLocalVideoProgress,
+  VideoProgressState
+} from '@/utils/videoCompletionTracker';
 import { isExcludedStudentSection } from '@/components/course-studio/CreepyLegendsStudentView';
 import { CanvaInlineTextEditor } from '@/components/course-studio/CanvaInlineTextEditor';
 import { getThemePreset } from '@/utils/courseThemes';
@@ -61,15 +68,21 @@ interface Props {
   mode?: 'edit' | 'student';
   isStudentView?: boolean;
   textScale?: TextScale;
+  courseId?: string;
+  episodeId?: string;
+  courseTitle?: string;
+  lessonTitle?: string;
   onQuestionAnswer?: (
     questionId: string,
     answer: string,
     isCorrect: boolean,
     pointsAwarded: number,
-    question: CourseQuestion
+    question: CourseQuestion,
+    responseMeta?: StudentQuestionResponse
   ) => void;
   onCompleteLesson?: () => void;
   onProgressChange?: (answeredCount: number, totalCount: number) => void;
+  onVideoCompletionChange?: (status: { allCompleted: boolean; watchedPercent: number; totalVideos: number }) => void;
   userAnswers?: Record<string, string>;
   feedbackState?: Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>;
   // Edit mode props
@@ -104,6 +117,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
   onQuestionAnswer,
   onCompleteLesson: _onCompleteLesson,
   onProgressChange,
+  onVideoCompletionChange,
   userAnswers = {},
   feedbackState = {},
   isStudentView: _isStudentView = true,
@@ -116,6 +130,42 @@ export const CourseContentRenderer: React.FC<Props> = ({
 }) => {
   const isEditMode = mode === 'edit';
   const activeTheme = getThemePreset(themeId);
+
+  // Required lesson videos for engine-level 90% completion enforcement
+  const requiredVideos = React.useMemo(() => extractEpisodeRequiredVideos(blocks), [blocks]);
+
+  const [videoProgressMap, setVideoProgressMap] = useState<Record<string, VideoProgressState>>(() => {
+    const map: Record<string, VideoProgressState> = {};
+    const cId = blocks[0]?.course_id || questions[0]?.course_id || 'course';
+    const eId = blocks[0]?.episode_id || questions[0]?.episode_id || 'episode';
+    extractEpisodeRequiredVideos(blocks).forEach(v => {
+      const saved = loadLocalVideoProgress(cId, eId, v.videoKey);
+      if (saved) map[v.videoKey] = saved;
+    });
+    return map;
+  });
+
+  const allRequiredVideosCompleted = React.useMemo(() => {
+    if (isEditMode || requiredVideos.length === 0) return true;
+    return requiredVideos.every(v => Boolean(videoProgressMap[v.videoKey]?.isCompleted));
+  }, [isEditMode, requiredVideos, videoProgressMap]);
+
+  const avgVideoWatchedPercent = React.useMemo(() => {
+    if (requiredVideos.length === 0) return 100;
+    const totalPct = requiredVideos.reduce(
+      (sum, v) => sum + (videoProgressMap[v.videoKey]?.watchedPercent || 0),
+      0
+    );
+    return Math.round(totalPct / requiredVideos.length);
+  }, [requiredVideos, videoProgressMap]);
+
+  useEffect(() => {
+    onVideoCompletionChange?.({
+      allCompleted: allRequiredVideosCompleted,
+      watchedPercent: avgVideoWatchedPercent,
+      totalVideos: requiredVideos.length
+    });
+  }, [allRequiredVideosCompleted, avgVideoWatchedPercent, requiredVideos.length, onVideoCompletionChange]);
 
   // Unique canonical questions strictly belonging to this lesson instance
   const validQuestions = React.useMemo(() => getValidLessonQuestions(questions), [questions]);
@@ -213,6 +263,21 @@ export const CourseContentRenderer: React.FC<Props> = ({
       [res.questionId]: res
     }));
 
+    // If AI content screening flagged the response or provider is unavailable, do NOT mark as completed
+    if (res.status === 'flagged_ai' || res.status === 'provider_unavailable') {
+      if (onQuestionAnswer && res.status === 'flagged_ai') {
+        onQuestionAnswer(
+          res.questionId,
+          typeof res.answer === 'string' ? res.answer : JSON.stringify(res.answer),
+          false,
+          0,
+          q,
+          res
+        );
+      }
+      return;
+    }
+
     setLocalAnswers(prev => ({ ...prev, [res.questionId]: typeof res.answer === 'string' ? res.answer : JSON.stringify(res.answer) }));
     setLocalFeedback(prev => ({
       ...prev,
@@ -229,7 +294,8 @@ export const CourseContentRenderer: React.FC<Props> = ({
         typeof res.answer === 'string' ? res.answer : JSON.stringify(res.answer),
         res.status === 'correct',
         res.score,
-        q
+        q,
+        res
       );
     }
   };
@@ -479,6 +545,9 @@ export const CourseContentRenderer: React.FC<Props> = ({
 
   const answeredTotal = validQuestions.filter(q => {
     const resp = studentResponses[q.id];
+    if (resp && (resp.status === 'flagged_ai' || resp.status === 'provider_unavailable')) {
+      return false;
+    }
     const ans = localAnswers[q.id];
     const fb = localFeedback[q.id];
     const hasResp = Boolean(
@@ -930,15 +999,27 @@ export const CourseContentRenderer: React.FC<Props> = ({
                     {vidTitle}
                   </h3>
                 )}
-                {embedUrl && (
-                  <div className="video-container course-video-bleed sm:shadow-md">
-                    <iframe
-                      src={embedUrl}
-                      title={vidTitle}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  </div>
+                {vidUrl && (
+                  <TrackedCourseVideoPlayer
+                    url={vidUrl}
+                    title={vidTitle}
+                    courseId={block.course_id || questions[0]?.course_id || 'course'}
+                    episodeId={block.episode_id || questions[0]?.episode_id || 'episode'}
+                    videoKey={block.id || `video_${idx}`}
+                    isDark={activeTheme.isDark}
+                    onProgressUpdate={state => {
+                      setVideoProgressMap(prev => ({
+                        ...prev,
+                        [state.videoKey]: state
+                      }));
+                    }}
+                    onVideoCompleted={state => {
+                      setVideoProgressMap(prev => ({
+                        ...prev,
+                        [state.videoKey]: state
+                      }));
+                    }}
+                  />
                 )}
                 {studentBodyText && <FormattedLessonText text={studentBodyText} textScale={textScale} />}
                 {showTranscriptToStudents && vidTranscript && (
@@ -1661,7 +1742,23 @@ export const CourseContentRenderer: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Interactive Question Cards Stream */}
+          {/* Interactive Question Cards Stream (Gated by 90% Video Completion when lesson has video) */}
+          {!isEditMode && requiredVideos.length > 0 && !allRequiredVideosCompleted ? (
+            <div
+              data-testid="video-assessment-locked-gate"
+              className="w-full p-6 sm:p-8 rounded-3xl surface-card border-2 border-dashed border-amber-500/40 text-center space-y-3"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h4 className="text-base sm:text-lg font-black text-theme-primary">
+                Watch Lesson Video to Unlock Assessment
+              </h4>
+              <p className="text-xs sm:text-sm font-medium text-theme-secondary max-w-md mx-auto">
+                Please watch at least 90% of the lesson video above without skipping ahead to unlock the assessment questions (Currently watched: {avgVideoWatchedPercent}% / 90%).
+              </p>
+            </div>
+          ) : (
           <div className="w-full space-y-4 sm:space-y-5">
             {(isEditMode ? questions : validQuestions).map((q, qIndex, arr) => {
               const effectiveQId = q.id || `q_${qIndex}`;
@@ -1703,6 +1800,7 @@ export const CourseContentRenderer: React.FC<Props> = ({
               );
             })}
           </div>
+          )}
 
           {/* IN EDIT MODE: ADD QUESTION BUTTONS */}
           {isEditMode && (

@@ -695,6 +695,11 @@ export const CoursePreviewPage: React.FC = () => {
     : null;
 
   const [questionProgress, setQuestionProgress] = useState<{ answered: number; total: number }>({ answered: 0, total: 0 });
+  const [videoCompletionStatus, setVideoCompletionStatus] = useState<{ allCompleted: boolean; watchedPercent: number; totalVideos: number }>({
+    allCompleted: true,
+    watchedPercent: 100,
+    totalVideos: 0
+  });
 
   const handleProgressChange = React.useCallback((answered: number, total: number) => {
     setQuestionProgress({ answered, total });
@@ -711,10 +716,22 @@ export const CoursePreviewPage: React.FC = () => {
 
   const totalRequiredQuestions = getValidLessonQuestions(currentQuestions).length;
   const answeredQuestionsCount = Math.min(questionProgress.answered, totalRequiredQuestions);
-  const canCompleteLesson = isEditMode || totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions;
+  const areRequiredVideosCompleted =
+    isEditMode ||
+    videoCompletionStatus.totalVideos === 0 ||
+    videoCompletionStatus.allCompleted ||
+    (selectedEpisode ? completedEpisodeIds.has(selectedEpisode.id) : false);
+  const canCompleteLesson =
+    isEditMode ||
+    (areRequiredVideosCompleted &&
+      (totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions));
 
   const handleCompleteEpisode = () => {
     if (!selectedEpisode) return;
+    if (!isEditMode && !areRequiredVideosCompleted) {
+      showToast('Please watch at least 90% of the required lesson video before completing this lesson.');
+      return;
+    }
     if (!isEditMode && totalRequiredQuestions > 0 && answeredQuestionsCount < totalRequiredQuestions) {
       return;
     }
@@ -1624,8 +1641,13 @@ export const CoursePreviewPage: React.FC = () => {
                 mode={isEditMode ? 'edit' : 'student'}
                 isStudentView={!isEditMode}
                 textScale={textScale}
+                courseId={course.id}
+                episodeId={selectedEpisode.id}
+                courseTitle={course.title}
+                lessonTitle={selectedEpisode.title}
                 onCompleteLesson={handleCompleteEpisode}
                 onProgressChange={handleProgressChange}
+                onVideoCompletionChange={setVideoCompletionStatus}
                 onChangeBlocks={handleBlocksChange}
                 onChangeQuestions={handleQuestionsChange}
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}

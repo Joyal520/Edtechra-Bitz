@@ -6750,27 +6750,21 @@ app.post('/api/course-studio/courses/:id/questions', async (req, res) => {
   }
 });
 
+// In-flight idempotency locks to prevent concurrent duplicate writing evaluations
+const essayEvaluationLocks = new Set();
+
 // 14b. POST /api/course-studio/essay-evaluate - Evaluate student essay with Gemini/OpenAI
 app.post('/api/course-studio/essay-evaluate', async (req, res) => {
+  let lockKey = null;
   try {
     const authData = await verifyAuthUser(req);
     if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
 
     const {
-      question_text,
-      student_response,
-      image_url,
-      lesson_context,
-      min_words,
-      max_words,
-      evaluation_criteria
-    } = req.body;
-
-    if (!question_text || !student_response) {
-      return res.status(400).json({ success: false, error: 'question_text and student_response are required' });
-    }
-
-    const evaluation = await evaluateStudentEssay({
+      course_id,
+      classroom_id,
+      episode_id,
+      question_id,
       question_text,
       student_response,
       image_url,
@@ -6778,15 +6772,121 @@ app.post('/api/course-studio/essay-evaluate', async (req, res) => {
       min_words,
       max_words,
       evaluation_criteria,
+      typing_telemetry,
+      ai_threshold
+    } = req.body;
+
+    if (!question_text || !student_response || !String(student_response).trim()) {
+      return res.status(400).json({ success: false, error: 'question_text and student_response are required' });
+    }
+
+    const student_id = authData.user.id;
+    lockKey = `${student_id}:${episode_id || 'ep'}:${question_id || String(question_text).slice(0, 48)}`;
+
+    if (essayEvaluationLocks.has(lockKey)) {
+      return res.status(409).json({
+        success: false,
+        duplicate_submission: true,
+        error: 'A submission for this writing prompt is already being evaluated. Please wait.'
+      });
+    }
+    essayEvaluationLocks.add(lockKey);
+
+    // Check if student already has a finalized attempt for this question in this classroom
+    if (serverSupabase && course_id && classroom_id && question_id) {
+      const { data: existingEnrollment } = await serverSupabase
+        .from('course_enrollments')
+        .select('id')
+        .eq('course_id', course_id)
+        .eq('classroom_id', classroom_id)
+        .eq('student_id', student_id)
+        .maybeSingle();
+
+      if (existingEnrollment) {
+        const { data: existingAttempt } = await serverSupabase
+          .from('course_question_attempts')
+          .select('*')
+          .eq('enrollment_id', existingEnrollment.id)
+          .eq('question_id', question_id)
+          .maybeSingle();
+
+        if (existingAttempt && existingAttempt.submission_status !== 'flagged_ai') {
+          return res.status(409).json({
+            success: false,
+            already_answered: true,
+            duplicate_submission: true,
+            error: 'You have already submitted an answer for this writing assessment.',
+            attempt: existingAttempt
+          });
+        }
+      }
+    }
+
+    const effectiveMinWords = Number.isFinite(Number(min_words)) && Number(min_words) > 0 ? Number(min_words) : 45;
+    const effectiveMaxWords = Number.isFinite(Number(max_words)) && Number(max_words) >= effectiveMinWords ? Number(max_words) : 55;
+
+    const evaluation = await evaluateStudentEssay({
+      question_text,
+      student_response,
+      image_url,
+      lesson_context,
+      min_words: effectiveMinWords,
+      max_words: effectiveMaxWords,
+      evaluation_criteria,
+      typing_telemetry,
+      ai_threshold,
+      enforce_min_words: true,
       geminiApiKey: process.env.GEMINI_API_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
       serverOpenAI
     });
 
+    // Persist evaluation telemetry / flagged status in course_learning_events for audit & teacher review
+    if (serverSupabase && course_id) {
+      try {
+        await serverSupabase.from('course_learning_events').insert({
+          student_id,
+          course_id,
+          classroom_id: classroom_id || null,
+          episode_id: episode_id || null,
+          question_id: question_id || null,
+          event_type: evaluation.ai_flagged ? 'writing_flagged_ai' : 'writing_evaluated',
+          metadata: {
+            question_text,
+            student_response: String(student_response).trim(),
+            word_count: evaluation.word_count,
+            score: evaluation.score,
+            max_score: evaluation.max_score,
+            ai_likelihood_percentage: evaluation.ai_likelihood_percentage,
+            confidence: evaluation.confidence,
+            assessment_status: evaluation.assessment_status,
+            explanation: evaluation.explanation,
+            ai_provider: evaluation.ai_provider,
+            model: evaluation.model,
+            typing_telemetry: typing_telemetry || null,
+            teacher_review_status: evaluation.ai_flagged ? 'pending' : null,
+            evaluated_at: evaluation.evaluated_at || new Date().toISOString()
+          }
+        });
+      } catch (_logErr) {
+        // Non-blocking audit log
+      }
+    }
+
     res.json({ success: true, evaluation });
   } catch (err) {
     console.error('Error in POST /api/course-studio/essay-evaluate:', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to evaluate essay.' });
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).json({
+      success: false,
+      provider_unavailable: Boolean(err.provider_unavailable),
+      score: 0,
+      error: err.message || 'Failed to evaluate essay.'
+    });
+  } finally {
+    if (lockKey) {
+      essayEvaluationLocks.delete(lockKey);
+    }
   }
 });
 
@@ -7685,7 +7785,18 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       points_awarded = 0,
       skill,
       concept,
-      difficulty
+      difficulty,
+      word_count,
+      submission_status,
+      ai_likelihood_percentage,
+      ai_confidence,
+      assessment_status,
+      ai_explanation,
+      ai_provider,
+      ai_model,
+      evaluation_feedback,
+      typing_telemetry,
+      evaluated_at
     } = req.body;
 
     const student_id = authData.user.id;
@@ -7782,10 +7893,10 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
 
     // Server-side question validation: the question must belong to this lesson/course,
     // and the recorded points are clamped to the question's real point value
-    // (0 for incorrect answers). The client cannot inflate a lesson score.
+    // (0 for incorrect answers or AI-flagged responses). The client cannot inflate a lesson score.
     const { data: questionRow } = await serverSupabase
       .from('course_questions')
-      .select('id, episode_id, course_id, points')
+      .select('id, episode_id, course_id, points, question_type, min_words')
       .eq('id', question_id)
       .maybeSingle();
 
@@ -7793,7 +7904,18 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Question does not belong to this lesson.' });
     }
 
-    const validatedPointsAwarded = clampQuestionPoints(questionRow, Boolean(is_correct), points_awarded);
+    const aiThreshold = Number(process.env.AI_CONTENT_THRESHOLD || process.env.AI_DETECTION_THRESHOLD || 80);
+    const isAiFlagged =
+      assessment_status === 'flagged_ai' ||
+      submission_status === 'flagged_ai' ||
+      (Number(ai_likelihood_percentage) >= aiThreshold &&
+        ai_confidence !== 'low' &&
+        ai_confidence !== 'uncertain');
+
+    const effectiveIsCorrect = isAiFlagged ? false : Boolean(is_correct);
+    const validatedPointsAwarded = isAiFlagged
+      ? 0
+      : clampQuestionPoints(questionRow, effectiveIsCorrect, points_awarded);
 
     // Anti-Retry Protection: Reject duplicate submissions for the same question
     const { data: existingAttempt } = await serverSupabase
@@ -7812,26 +7934,61 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       });
     }
 
-    const { data: attempt, error: attErr } = await serverSupabase
+    const baseAttemptPayload = {
+      enrollment_id: enrollment.id,
+      student_id,
+      course_id,
+      classroom_id,
+      episode_id,
+      question_id,
+      student_answer: String(student_answer || ''),
+      is_correct: effectiveIsCorrect,
+      points_awarded: validatedPointsAwarded,
+      skill: skill || 'General',
+      concept: concept || 'General',
+      difficulty: difficulty || 'medium'
+    };
+
+    const extendedAttemptPayload = {
+      ...baseAttemptPayload,
+      ...(word_count !== undefined ? { word_count: Number(word_count) || 0 } : {}),
+      ...(submission_status || isAiFlagged
+        ? { submission_status: isAiFlagged ? 'flagged_ai' : submission_status || 'evaluated' }
+        : {}),
+      ...(ai_likelihood_percentage !== undefined
+        ? { ai_likelihood_percentage: Number(ai_likelihood_percentage) }
+        : {}),
+      ...(ai_confidence ? { ai_confidence: String(ai_confidence) } : {}),
+      ...(assessment_status || isAiFlagged
+        ? { assessment_status: isAiFlagged ? 'flagged_ai' : String(assessment_status) }
+        : {}),
+      ...(ai_explanation ? { ai_explanation: String(ai_explanation) } : {}),
+      ...(ai_provider ? { ai_provider: String(ai_provider) } : {}),
+      ...(ai_model ? { ai_model: String(ai_model) } : {}),
+      ...(evaluation_feedback ? { evaluation_feedback } : {}),
+      ...(typing_telemetry ? { typing_telemetry } : {}),
+      ...(evaluated_at ? { evaluated_at } : {}),
+      ...(isAiFlagged
+        ? { flagged_for_review: true, teacher_review_status: 'pending' }
+        : {})
+    };
+
+    let { data: attempt, error: attErr } = await serverSupabase
       .from('course_question_attempts')
-      .insert({
-        enrollment_id: enrollment.id,
-        student_id,
-        course_id,
-        classroom_id,
-        episode_id,
-        question_id,
-        student_answer: String(student_answer || ''),
-        is_correct: Boolean(is_correct),
-        points_awarded: validatedPointsAwarded,
-        skill: skill || 'General',
-        concept: concept || 'General',
-        difficulty: difficulty || 'medium'
-      })
+      .insert(extendedAttemptPayload)
       .select()
       .single();
 
-    if (attErr) throw attErr;
+    // Graceful fallback if the database has not yet run the additive columns migration
+    if (attErr) {
+      const { data: fbAttempt, error: fbErr } = await serverSupabase
+        .from('course_question_attempts')
+        .insert(baseAttemptPayload)
+        .select()
+        .single();
+      if (fbErr) throw fbErr;
+      attempt = fbAttempt;
+    }
 
     const { data: studentAttempts } = await serverSupabase
       .from('course_question_attempts')
@@ -7857,8 +8014,29 @@ app.post('/api/course-studio/student/attempt', async (req, res) => {
       classroom_id,
       episode_id,
       question_id,
-      event_type: is_correct ? 'question_correct' : 'question_wrong',
-      metadata: { student_answer, is_correct, concept, skill }
+      event_type: isAiFlagged
+        ? 'writing_flagged_ai'
+        : effectiveIsCorrect
+        ? 'question_correct'
+        : 'question_wrong',
+      metadata: {
+        student_answer,
+        is_correct: effectiveIsCorrect,
+        points_awarded: validatedPointsAwarded,
+        concept,
+        skill,
+        word_count: word_count ?? null,
+        ai_likelihood_percentage: ai_likelihood_percentage ?? null,
+        ai_confidence: ai_confidence ?? null,
+        assessment_status: isAiFlagged ? 'flagged_ai' : assessment_status ?? null,
+        ai_explanation: ai_explanation ?? null,
+        ai_provider: ai_provider ?? null,
+        ai_model: ai_model ?? null,
+        typing_telemetry: typing_telemetry ?? null,
+        flagged_for_review: isAiFlagged,
+        teacher_review_status: isAiFlagged ? 'pending' : null,
+        evaluated_at: evaluated_at || new Date().toISOString()
+      }
     });
 
     res.json({ success: true, attempt, accuracy_percent: accuracyPercent });
@@ -7893,6 +8071,350 @@ app.get('/api/course-studio/student/attempts', async (req, res) => {
   } catch (err) {
     console.error('Error fetching student attempts:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch attempts.' });
+  }
+});
+
+// 23c. POST /api/course-studio/student/video-progress - Server-verified video segment progress
+app.post('/api/course-studio/student/video-progress', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const {
+      course_id,
+      classroom_id = null,
+      episode_id,
+      video_key = 'default',
+      duration_seconds = 0,
+      watched_segments = [],
+      max_allowed_position = 0
+    } = req.body;
+
+    if (!course_id || !episode_id) {
+      return res.status(400).json({ success: false, error: 'course_id and episode_id are required.' });
+    }
+
+    const student_id = authData.user.id;
+    const safeDuration = Math.max(0, Number(duration_seconds) || 0);
+
+    // Server-side segment merge & verification: never trust client-supplied is_completed alone
+    const validSegments = [];
+    if (Array.isArray(watched_segments)) {
+      for (const seg of watched_segments) {
+        if (!Array.isArray(seg) || seg.length < 2) continue;
+        const s = Math.max(0, Number(seg[0]) || 0);
+        const e = safeDuration > 0 ? Math.min(safeDuration, Number(seg[1]) || 0) : Math.max(0, Number(seg[1]) || 0);
+        if (e > s) validSegments.push([Number(s.toFixed(2)), Number(e.toFixed(2))]);
+      }
+    }
+    validSegments.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+    const merged = [];
+    for (const seg of validSegments) {
+      if (merged.length === 0) {
+        merged.push([seg[0], seg[1]]);
+      } else {
+        const prev = merged[merged.length - 1];
+        if (seg[0] <= prev[1] + 0.75) {
+          prev[1] = Math.max(prev[1], seg[1]);
+        } else {
+          merged.push([seg[0], seg[1]]);
+        }
+      }
+    }
+
+    let watchedSeconds = 0;
+    let maxPos = 0;
+    for (const [s, e] of merged) {
+      watchedSeconds += Math.max(0, e - s);
+      if (e > maxPos) maxPos = e;
+    }
+    if (safeDuration > 0) {
+      watchedSeconds = Math.min(safeDuration, watchedSeconds);
+    }
+
+    const watchedPercent =
+      safeDuration > 0
+        ? Math.min(100, Number(((watchedSeconds / safeDuration) * 100).toFixed(1)))
+        : 0;
+    const verifiedCompleted = safeDuration > 0 && watchedPercent >= 90;
+    const nowIso = new Date().toISOString();
+
+    if (serverSupabase) {
+      // Try writing to course_video_progress table (if migration applied)
+      try {
+        await serverSupabase
+          .from('course_video_progress')
+          .upsert(
+            {
+              student_id,
+              course_id,
+              classroom_id,
+              episode_id,
+              video_key: String(video_key || 'default'),
+              watched_seconds: Math.round(watchedSeconds),
+              duration_seconds: Math.round(safeDuration),
+              watched_percent: watchedPercent,
+              watched_segments: merged,
+              max_allowed_position: Math.max(Number(max_allowed_position) || 0, maxPos),
+              is_completed: verifiedCompleted,
+              completed_at: verifiedCompleted ? nowIso : null,
+              updated_at: nowIso
+            },
+            { onConflict: 'student_id,episode_id,video_key' }
+          );
+      } catch (_tblErr) {
+        // Fallback if table not yet migrated
+      }
+
+      // Also log completion event in course_learning_events for universal persistence
+      if (verifiedCompleted) {
+        try {
+          await serverSupabase.from('course_learning_events').insert({
+            student_id,
+            course_id,
+            classroom_id,
+            episode_id,
+            event_type: 'video_completed_verified',
+            metadata: {
+              video_key,
+              watched_seconds: Math.round(watchedSeconds),
+              duration_seconds: Math.round(safeDuration),
+              watched_percent: watchedPercent,
+              watched_segments: merged,
+              completed_at: nowIso
+            }
+          });
+        } catch (_evErr) {
+          // Ignore
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      video_progress: {
+        video_key,
+        episode_id,
+        course_id,
+        watched_seconds: Math.round(watchedSeconds),
+        duration_seconds: Math.round(safeDuration),
+        watched_percent: watchedPercent,
+        watched_segments: merged,
+        max_allowed_position: Math.max(Number(max_allowed_position) || 0, maxPos),
+        is_completed: verifiedCompleted,
+        completed_at: verifiedCompleted ? nowIso : null
+      }
+    });
+  } catch (err) {
+    console.error('Error saving video progress:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to save video progress.' });
+  }
+});
+
+// 23d. GET /api/course-studio/student/video-progress - Retrieve persisted video progress
+app.get('/api/course-studio/student/video-progress', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { course_id, episode_id } = req.query;
+    const student_id = authData.user.id;
+
+    const progressList = [];
+    if (serverSupabase && course_id) {
+      try {
+        let query = serverSupabase
+          .from('course_video_progress')
+          .select('*')
+          .eq('student_id', student_id)
+          .eq('course_id', course_id);
+        if (episode_id) query = query.eq('episode_id', episode_id);
+        const { data: rows } = await query;
+        if (Array.isArray(rows)) progressList.push(...rows);
+      } catch (_tblErr) {
+        // Fallback to course_learning_events
+      }
+
+      if (progressList.length === 0) {
+        try {
+          let evQuery = serverSupabase
+            .from('course_learning_events')
+            .select('*')
+            .eq('student_id', student_id)
+            .eq('course_id', course_id)
+            .eq('event_type', 'video_completed_verified');
+          if (episode_id) evQuery = evQuery.eq('episode_id', episode_id);
+          const { data: evRows } = await evQuery;
+          for (const ev of evRows || []) {
+            progressList.push({
+              student_id,
+              course_id: ev.course_id,
+              episode_id: ev.episode_id,
+              video_key: ev.metadata?.video_key || 'default',
+              watched_seconds: ev.metadata?.watched_seconds || 0,
+              duration_seconds: ev.metadata?.duration_seconds || 0,
+              watched_percent: ev.metadata?.watched_percent || 100,
+              watched_segments: ev.metadata?.watched_segments || [],
+              is_completed: true,
+              completed_at: ev.created_at
+            });
+          }
+        } catch (_evErr) {
+          // Ignore
+        }
+      }
+    }
+
+    res.json({ success: true, progress: progressList });
+  } catch (err) {
+    console.error('Error loading video progress:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load video progress.' });
+  }
+});
+
+// 23e. GET /api/course-studio/courses/:id/flagged-submissions - Teacher review queue for AI-flagged writing
+app.get('/api/course-studio/courses/:id/flagged-submissions', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const courseId = req.params.id;
+    const submissions = [];
+
+    if (serverSupabase) {
+      // Load writing_flagged_ai and writing_evaluated events for this course
+      const { data: events } = await serverSupabase
+        .from('course_learning_events')
+        .select('*')
+        .eq('course_id', courseId)
+        .in('event_type', ['writing_flagged_ai', 'writing_evaluated'])
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      const studentIds = Array.from(new Set((events || []).map(e => e.student_id).filter(Boolean)));
+      const profileMap = new Map();
+      if (studentIds.length > 0) {
+        const { data: profiles } = await serverSupabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', studentIds);
+        for (const p of profiles || []) {
+          profileMap.set(p.id, p);
+        }
+      }
+
+      for (const ev of events || []) {
+        const meta = ev.metadata || {};
+        const prof = profileMap.get(ev.student_id);
+        submissions.push({
+          id: ev.id,
+          student_id: ev.student_id,
+          student_name: prof?.full_name || 'Student',
+          student_email: prof?.email || '',
+          course_id: ev.course_id,
+          classroom_id: ev.classroom_id,
+          episode_id: ev.episode_id,
+          question_id: ev.question_id,
+          question_text: meta.question_text || 'Writing Assessment',
+          student_response: meta.student_response || meta.student_answer || '',
+          word_count: meta.word_count || 0,
+          score: meta.score ?? meta.points_awarded ?? 0,
+          max_score: meta.max_score || 100,
+          ai_likelihood_percentage: meta.ai_likelihood_percentage ?? 0,
+          confidence: meta.confidence ?? meta.ai_confidence ?? 'medium',
+          assessment_status: meta.assessment_status || (ev.event_type === 'writing_flagged_ai' ? 'flagged_ai' : 'passed'),
+          explanation: meta.explanation || meta.ai_explanation || '',
+          ai_provider: meta.ai_provider || 'gemini',
+          model: meta.model || meta.ai_model || '',
+          typing_telemetry: meta.typing_telemetry || null,
+          teacher_review_status: meta.teacher_review_status || (ev.event_type === 'writing_flagged_ai' ? 'pending' : 'approved'),
+          teacher_review_notes: meta.teacher_review_notes || null,
+          evaluated_at: meta.evaluated_at || ev.created_at
+        });
+      }
+    }
+
+    res.json({ success: true, submissions });
+  } catch (err) {
+    console.error('Error loading flagged writing submissions:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load writing submissions.' });
+  }
+});
+
+// 23f. POST /api/course-studio/courses/:id/flagged-submissions/:submissionId/review - Teacher review action
+app.post('/api/course-studio/courses/:id/flagged-submissions/:submissionId/review', async (req, res) => {
+  try {
+    const authData = await verifyAuthUser(req);
+    if (!authData) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const { id: courseId, submissionId } = req.params;
+    const { action, approved_points = 10, review_notes = '' } = req.body;
+
+    if (!['approve', 'reject', 'allow_retry'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'action must be approve, reject, or allow_retry.' });
+    }
+
+    if (!serverSupabase) {
+      return res.status(500).json({ success: false, error: 'Database client unavailable.' });
+    }
+
+    const { data: ev } = await serverSupabase
+      .from('course_learning_events')
+      .select('*')
+      .eq('id', submissionId)
+      .eq('course_id', courseId)
+      .maybeSingle();
+
+    if (!ev) {
+      return res.status(404).json({ success: false, error: 'Submission record not found.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextMeta = {
+      ...(ev.metadata || {}),
+      teacher_review_status: action === 'approve' ? 'approved' : action === 'allow_retry' ? 'retry_allowed' : 'rejected',
+      teacher_reviewed_by: authData.user.id,
+      teacher_reviewed_at: nowIso,
+      teacher_review_notes: review_notes,
+      ...(action === 'approve' ? { score: Number(approved_points) || 10, assessment_status: 'teacher_overridden' } : {})
+    };
+
+    await serverSupabase
+      .from('course_learning_events')
+      .update({ metadata: nextMeta })
+      .eq('id', submissionId);
+
+    // Update or remove corresponding course_question_attempts row if present
+    if (ev.question_id && ev.student_id) {
+      if (action === 'allow_retry') {
+        await serverSupabase
+          .from('course_question_attempts')
+          .delete()
+          .eq('student_id', ev.student_id)
+          .eq('question_id', ev.question_id);
+      } else if (action === 'approve') {
+        await serverSupabase
+          .from('course_question_attempts')
+          .update({
+            is_correct: true,
+            points_awarded: Math.max(1, Number(approved_points) || 10)
+          })
+          .eq('student_id', ev.student_id)
+          .eq('question_id', ev.question_id);
+      }
+    }
+
+    res.json({
+      success: true,
+      submission_id: submissionId,
+      action,
+      teacher_review_status: nextMeta.teacher_review_status,
+      reviewed_at: nowIso
+    });
+  } catch (err) {
+    console.error('Error reviewing flagged submission:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to review submission.' });
   }
 });
 

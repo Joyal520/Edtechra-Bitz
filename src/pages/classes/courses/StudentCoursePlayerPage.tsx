@@ -76,6 +76,11 @@ export const StudentCoursePlayerPage: React.FC = () => {
   const [feedbackState, setFeedbackState] = useState<Record<string, { isCorrect: boolean; showExplanation: boolean; selected: string }>>({});
   const [attemptsByQuestionId, setAttemptsByQuestionId] = useState<Record<string, any>>({});
   const [questionProgress, setQuestionProgress] = useState<{ answered: number; total: number }>({ answered: 0, total: 0 });
+  const [videoCompletionStatus, setVideoCompletionStatus] = useState<{ allCompleted: boolean; watchedPercent: number; totalVideos: number }>({
+    allCompleted: true,
+    watchedPercent: 100,
+    totalVideos: 0
+  });
   const [coverModalOpen, setCoverModalOpen] = useState(false);
 
   // Celebration Modal State
@@ -344,13 +349,21 @@ export const StudentCoursePlayerPage: React.FC = () => {
     answer: string,
     isCorrect: boolean,
     pointsAwarded: number,
-    question: any
+    question: any,
+    extraData?: any
   ) => {
     if (!courseId || !classroomId || !selectedEpisode) return;
 
+    const effectivePoints =
+      extraData?.submission_status === 'flagged_ai' || extraData?.submission_status === 'provider_unavailable'
+        ? 0
+        : isCorrect
+        ? pointsAwarded
+        : 0;
+
     setQuestionScores(prev => ({
       ...prev,
-      [questionId]: isCorrect ? pointsAwarded : 0
+      [questionId]: effectivePoints
     }));
     setAttemptsByQuestionId(prev => ({
       ...prev,
@@ -358,7 +371,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
         question_id: questionId,
         student_answer: answer,
         is_correct: isCorrect,
-        points_awarded: isCorrect ? pointsAwarded : 0
+        points_awarded: effectivePoints,
+        ...(extraData || {})
       }
     }));
 
@@ -370,10 +384,22 @@ export const StudentCoursePlayerPage: React.FC = () => {
         question_id: questionId,
         student_answer: answer,
         is_correct: isCorrect,
-        points_awarded: pointsAwarded,
-        skill: question.skill,
-        concept: question.concept,
-        difficulty: question.difficulty
+        points_awarded: effectivePoints,
+        skill: question?.skill,
+        concept: question?.concept,
+        difficulty: question?.difficulty,
+        word_count: extraData?.word_count,
+        submission_status: extraData?.submission_status,
+        ai_likelihood_percentage: extraData?.ai_likelihood_percentage,
+        ai_confidence: extraData?.ai_confidence,
+        assessment_status: extraData?.assessment_status,
+        ai_explanation: extraData?.ai_explanation,
+        ai_provider: extraData?.ai_provider,
+        ai_model: extraData?.ai_model,
+        evaluation_feedback: extraData?.evaluation_feedback,
+        typing_telemetry: extraData?.typing_telemetry,
+        evaluated_at: extraData?.evaluated_at,
+        flagged_for_review: extraData?.flagged_for_review
       });
       pendingAttemptsRef.current.add(attemptPromise);
       try {
@@ -390,13 +416,21 @@ export const StudentCoursePlayerPage: React.FC = () => {
     ? getValidLessonQuestions(selectedEpisode.questions).length
     : questionProgress.total;
   const answeredQuestionsCount = Math.min(questionProgress.answered, totalRequiredQuestions);
-  const canCompleteLesson = totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions;
+  const areRequiredVideosCompleted = videoCompletionStatus.totalVideos === 0 || videoCompletionStatus.allCompleted || completedEpisodeIds.has(selectedEpisode?.id || '');
+  const canCompleteLesson =
+    areRequiredVideosCompleted &&
+    (totalRequiredQuestions === 0 || answeredQuestionsCount >= totalRequiredQuestions);
 
   const handleCompleteEpisode = async () => {
     if (!courseId || !classroomId || !selectedEpisode) return;
     if (completingEpisodeRef.current || completingEpisode) return;
 
-    // Strict business rule: do NOT allow lesson completion until ALL required questions are answered
+    // Enforce video completion & all required questions answered
+    if (!areRequiredVideosCompleted) {
+      setToastMessage('Please watch at least 90% of the required lesson video before completing this lesson.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
     if (totalRequiredQuestions > 0 && answeredQuestionsCount < totalRequiredQuestions) {
       return;
     }
@@ -820,8 +854,8 @@ export const StudentCoursePlayerPage: React.FC = () => {
               setSelectedEpisode(ep);
               mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            onRecordAttempt={(question, studentAnswer, isCorrect, pointsAwarded) =>
-              handleQuestionAnswer(question.id, studentAnswer, isCorrect, pointsAwarded, question)
+            onRecordAttempt={(question, studentAnswer, isCorrect, pointsAwarded, extraData) =>
+              handleQuestionAnswer(question.id, studentAnswer, isCorrect, pointsAwarded, question, extraData)
             }
             onCompleteLesson={handleCompleteEpisode}
             onProgressChange={handleProgressChange}
@@ -967,11 +1001,16 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   isStudentView={true}
                   textScale={textScale}
                   themeId={effectiveThemeId}
+                  courseId={course.id}
+                  episodeId={selectedEpisode.id}
+                  courseTitle={course.title}
+                  lessonTitle={selectedEpisode.title}
                   userAnswers={userAnswers}
                   feedbackState={feedbackState}
                   onQuestionAnswer={handleQuestionAnswer}
                   onCompleteLesson={handleCompleteEpisode}
                   onProgressChange={handleProgressChange}
+                  onVideoCompletionChange={setVideoCompletionStatus}
                   isCourseReader={isAnnabelleCourse}
                 />
 

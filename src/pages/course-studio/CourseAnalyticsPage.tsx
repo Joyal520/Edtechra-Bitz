@@ -15,7 +15,10 @@ import {
   AlertTriangle,
   Lightbulb,
   Search,
-  GraduationCap
+  GraduationCap,
+  ShieldAlert,
+  RotateCcw,
+  XCircle
 } from 'lucide-react';
 import { CourseAnalyticsSummary } from '@/types/courseStudio';
 import { courseStudioService } from '@/services/courseStudioService';
@@ -26,6 +29,8 @@ export const CourseAnalyticsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [analytics, setAnalytics] = useState<CourseAnalyticsSummary | null>(null);
+  const [flaggedSubmissions, setFlaggedSubmissions] = useState<any[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedClassroomId, setSelectedClassroomId] = useState<string>('all');
   const [studentSearch, setStudentSearch] = useState('');
@@ -39,12 +44,43 @@ export const CourseAnalyticsPage: React.FC = () => {
   const loadAnalytics = async (id: string) => {
     setLoading(true);
     try {
-      const data = await courseStudioService.getCourseAnalytics(id);
+      const [data, flagged] = await Promise.all([
+        courseStudioService.getCourseAnalytics(id),
+        courseStudioService.getFlaggedWritingSubmissions(id).catch(() => [])
+      ]);
       setAnalytics(data);
+      setFlaggedSubmissions(flagged || []);
     } catch (err) {
       console.error('Failed to load course analytics:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReviewFlaggedSubmission = async (
+    submissionId: string,
+    decision: 'approve' | 'reject' | 'allow_retry',
+    awardedScore?: number
+  ) => {
+    if (!courseId || reviewingId) return;
+    setReviewingId(submissionId);
+    try {
+      await courseStudioService.reviewFlaggedWritingSubmission(courseId, submissionId, {
+        action: decision,
+        approved_points: awardedScore,
+        review_notes:
+          decision === 'approve'
+            ? 'Teacher verified independent student writing and awarded marks.'
+            : decision === 'allow_retry'
+            ? 'Teacher cleared submission to allow student to write a new independent response.'
+            : 'Teacher confirmed AI-generated writing flag (0 marks).'
+      });
+      const updated = await courseStudioService.getFlaggedWritingSubmissions(courseId).catch(() => []);
+      setFlaggedSubmissions(updated || []);
+    } catch (err) {
+      console.error('Failed to review flagged submission:', err);
+    } finally {
+      setReviewingId(null);
     }
   };
 
@@ -320,6 +356,131 @@ export const CourseAnalyticsPage: React.FC = () => {
           </section>
 
         </div>
+
+        {/* TEACHER REVIEW QUEUE FOR FLAGGED AI WRITING SUBMISSIONS */}
+        <section
+          data-testid="teacher-flagged-writing-review-section"
+          className="bg-white rounded-[28px] p-6 border border-stone-200/80 shadow-xs space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  AI Content Screening • Teacher Review Queue ({flaggedSubmissions.length})
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  AI detection is probabilistic. Review flagged writing responses to approve marks, allow a retry, or confirm 0 marks.
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-black self-start sm:self-auto">
+              Threshold: 80% AI Likelihood
+            </span>
+          </div>
+
+          {flaggedSubmissions.length === 0 ? (
+            <div className="rounded-2xl bg-stone-50 border border-stone-200/70 p-6 text-center space-y-1">
+              <p className="text-xs font-extrabold text-slate-700">No Flagged Writing Submissions</p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                When a student writing response exceeds the 80% AI-likelihood threshold with medium/high confidence, it appears here for teacher review.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {flaggedSubmissions.map((sub: any) => {
+                const subId = sub.id || sub.question_id;
+                const studentName = sub.student?.full_name || sub.event_payload?.student_name || 'Student';
+                const studentEmail = sub.student?.email || '';
+                const answerText = sub.student_answer || sub.event_payload?.student_answer || '';
+                const aiPct = sub.ai_likelihood_percentage ?? sub.event_payload?.ai_likelihood_percentage ?? 0;
+                const confidence = sub.ai_confidence || sub.event_payload?.ai_confidence || 'medium';
+                const explanation = sub.ai_explanation || sub.event_payload?.ai_explanation || '';
+                const provider = sub.ai_provider || sub.event_payload?.ai_provider || 'gemini';
+                const reviewStatus = sub.teacher_review_status || 'pending';
+                const isBusy = reviewingId === subId;
+
+                return (
+                  <div
+                    key={subId}
+                    data-testid={`flagged-submission-card-${subId}`}
+                    className="rounded-2xl bg-stone-50 border border-stone-200 p-4 sm:p-5 space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs sm:text-sm font-black text-slate-900">{studentName}</span>
+                        {studentEmail && (
+                          <span className="text-xs text-slate-400 font-medium ml-2">({studentEmail})</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 text-[11px] font-black">
+                          AI Likelihood: {aiPct}% ({confidence} confidence)
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-200/80 text-slate-700 text-[10px] font-bold uppercase">
+                          Provider: {provider}
+                        </span>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+                            reviewStatus === 'approved_human'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : reviewStatus === 'rejected_ai'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {reviewStatus.replace('_', ' ')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white border border-stone-200 p-3.5 text-xs sm:text-sm text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
+                      {answerText}
+                    </div>
+
+                    {explanation && (
+                      <p className="text-xs text-slate-600 font-medium">
+                        <strong className="font-bold text-slate-800">Screening Note:</strong> {explanation}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleReviewFlaggedSubmission(subId, 'approve', 10)}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Approve & Award Marks</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleReviewFlaggedSubmission(subId, 'allow_retry')}
+                        className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Allow Student Retry</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleReviewFlaggedSubmission(subId, 'reject', 0)}
+                        className="px-3.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Confirm 0 Marks</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* STUDENT PERFORMANCE ROSTER */}
         <section className="bg-white rounded-[28px] p-6 border border-stone-200/80 shadow-xs space-y-5">

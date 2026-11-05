@@ -37,7 +37,8 @@ import {
   Course,
   CourseEpisode,
   CourseBlock,
-  CourseQuestion
+  CourseQuestion,
+  StudentQuestionResponse
 } from '@/types/courseStudio';
 import {
   normalizeQuestionOptions,
@@ -47,6 +48,16 @@ import {
 } from '@/utils/questionGrading';
 import { courseAudio } from '@/utils/courseAudio';
 import { parseCoverPosition } from '@/utils/courseCover';
+import {
+  VideoProgressState,
+  createInitialVideoProgressState,
+  processVideoPlaybackTick,
+  loadLocalVideoProgress,
+  saveLocalVideoProgress,
+  VIDEO_COMPLETION_THRESHOLD_PERCENT
+} from '@/utils/videoCompletionTracker';
+import { courseStudioService } from '@/services/courseStudioService';
+import { EssayQuestion } from './EssayQuestion';
 
 // Inline fill-in-the-blank sentence templates for Creepy Legends short-answer questions
 const INLINE_SENTENCE_TEMPLATES: Record<string, { before: string; after: string }> = {
@@ -356,7 +367,8 @@ interface CreepyLegendsStudentViewProps {
     question: CourseQuestion,
     studentAnswer: string,
     isCorrect: boolean,
-    pointsAwarded: number
+    pointsAwarded: number,
+    extraData?: Partial<StudentQuestionResponse>
   ) => Promise<void> | void;
   onCompleteLesson: () => Promise<void> | void;
   onProgressChange?: (answered: number, total: number) => void;
@@ -457,10 +469,41 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [videoStatus, setVideoStatus] = useState<'ready' | 'loading' | 'playing' | 'error' | 'completed'>('ready');
   const [videoRetryKey, setVideoRetryKey] = useState(0);
-  const [videoWatched, setVideoWatched] = useState(false);
+  const [videoProgressState, setVideoProgressState] = useState<VideoProgressState>(() => {
+    const vKey = videoBlock?.id || selectedEpisode.id;
+    const saved = loadLocalVideoProgress(course.id, selectedEpisode.id, vKey);
+    if (saved) return saved;
+    if (isCompleted) {
+      return {
+        videoKey: vKey,
+        courseId: course.id,
+        episodeId: selectedEpisode.id,
+        durationSeconds: 265,
+        watchedSegments: [[0, 265]],
+        watchedSeconds: 265,
+        watchedPercent: 100,
+        isCompleted: true,
+        maxAllowedPosition: 265,
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return createInitialVideoProgressState({
+      courseId: course.id,
+      episodeId: selectedEpisode.id,
+      videoKey: vKey,
+      durationSeconds: 265
+    });
+  });
+  const [videoSeekWarning, setVideoSeekWarning] = useState<string | null>(null);
+  const [isTabHidden, setIsTabHidden] = useState<boolean>(
+    typeof document !== 'undefined' ? document.hidden : false
+  );
   const [showTranscript, setShowTranscript] = useState(false);
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
   const htmlVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lastVideoTimeRef = useRef<number>(0);
+  const lastSyncedVideoPctRef = useRef<number>(0);
 
   // Level 2 On-Demand Learning Tools (Vocabulary Drawer, Study Tools Menu, Progress Popover, Notes & Help)
   const [isVocabDrawerOpen, setIsVocabDrawerOpen] = useState(false);
@@ -544,12 +587,14 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     tfQuestions,
     shortQuestions,
     orderingQuestions,
+    essayQuestions,
     allValidQuestions
   } = useMemo(() => {
     const mcqs: CourseQuestion[] = [];
     const tfs: CourseQuestion[] = [];
     const shorts: CourseQuestion[] = [];
     const orderings: CourseQuestion[] = [];
+    const essays: CourseQuestion[] = [];
 
     for (const q of rawQuestions) {
       const qt = String(q.question_type || 'multiple_choice').toLowerCase();
@@ -559,6 +604,8 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
         tfs.push(q);
       } else if (qt === 'sentence_builder' || qt === 'ordering' || qt === 'sentence_reordering' || qt === 'word_ordering' || qt === 'matching') {
         orderings.push(q);
+      } else if (qt === 'essay') {
+        essays.push(q);
       } else {
         shorts.push(q);
       }
@@ -569,7 +616,8 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
       tfQuestions: tfs,
       shortQuestions: shorts,
       orderingQuestions: orderings,
-      allValidQuestions: [...mcqs, ...tfs, ...shorts, ...orderings]
+      essayQuestions: essays,
+      allValidQuestions: [...mcqs, ...tfs, ...shorts, ...orderings, ...essays]
     };
   }, [rawQuestions]);
 
@@ -588,7 +636,39 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     setVideoPlaying(false);
     setVideoStatus('ready');
     setVideoRetryKey(0);
-    setVideoWatched(Boolean(isCompleted));
+    setVideoSeekWarning(null);
+    lastVideoTimeRef.current = 0;
+    lastSyncedVideoPctRef.current = 0;
+    const vKey = videoBlock?.id || selectedEpisode.id;
+    const savedVideoProgress = loadLocalVideoProgress(course.id, selectedEpisode.id, vKey);
+    if (savedVideoProgress) {
+      setVideoProgressState(savedVideoProgress);
+      lastSyncedVideoPctRef.current = savedVideoProgress.watchedPercent;
+    } else if (isCompleted) {
+      setVideoProgressState({
+        videoKey: vKey,
+        courseId: course.id,
+        episodeId: selectedEpisode.id,
+        durationSeconds: 265,
+        watchedSegments: [[0, 265]],
+        watchedSeconds: 265,
+        watchedPercent: 100,
+        isCompleted: true,
+        maxAllowedPosition: 265,
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      lastSyncedVideoPctRef.current = 100;
+    } else {
+      setVideoProgressState(
+        createInitialVideoProgressState({
+          courseId: course.id,
+          episodeId: selectedEpisode.id,
+          videoKey: vKey,
+          durationSeconds: 265
+        })
+      );
+    }
     setShowTranscript(false);
     setValidationError(null);
     setCollapsedSections({});
@@ -722,6 +802,9 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     (q: CourseQuestion): boolean => {
       if (evaluatedMap[q.id]) return true;
       const qt = String(q.question_type || '').toLowerCase();
+      if (qt === 'essay') {
+        return Boolean(evaluatedMap[q.id]);
+      }
       if (qt === 'sentence_builder' || qt === 'ordering' || qt === 'sentence_reordering' || qt === 'word_ordering') {
         const placed = orderingSlotsMap[q.id] || [];
         const rawTokens = extractOrderingTokens(q);
@@ -794,43 +877,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     return { isCorrect: evalRes.isCorrect, pointsAwarded: pts };
   };
 
-  // Handle "Submit Day X ->" button click
-  const handleSubmitLesson = async () => {
-    setValidationError(null);
-
-    // 1. Validate that all required questions have answers
-    const firstUnanswered = allValidQuestions.find(q => !isQuestionReadyOrAnswered(q));
-    if (firstUnanswered) {
-      const qIndex = allValidQuestions.findIndex(q => q.id === firstUnanswered.id) + 1;
-      const remaining = allValidQuestions.length - answeredCount;
-      setValidationError(
-        `Please complete all activities before submitting Day ${dayNumber}. You have ${remaining} unanswered ${
-          remaining === 1 ? 'question' : 'questions'
-        } (starting at Question #${qIndex}).`
-      );
-      const el = document.getElementById(`question-card-${firstUnanswered.id}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      return;
-    }
-
-    setSubmittingAll(true);
-    try {
-      // 2. Evaluate and persist any question that hasn't been evaluated yet
-      for (const q of allValidQuestions) {
-        if (!evaluatedMap[q.id]) {
-          await evaluateAndPersistQuestion(q);
-        }
-      }
-
-      // 3. Complete the lesson and award XP
-      await onCompleteLesson();
-    } finally {
-      setSubmittingAll(false);
-    }
-  };
-
   // Web Speech API helper for vocabulary & transcript
   const speakText = (text: string) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
@@ -869,6 +915,53 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
   );
   const directVideoUrl = !videoId && /^https?:\/\//i.test(rawVideoSourceUrl) ? rawVideoSourceUrl : null;
   const hasPlayableVideoSource = Boolean(videoId || directVideoUrl);
+  const videoWatched = !hasPlayableVideoSource || Boolean(isCompleted) || videoProgressState.isCompleted;
+
+  // Handle "Submit Day X ->" button click
+  const handleSubmitLesson = async () => {
+    setValidationError(null);
+
+    if (hasPlayableVideoSource && !videoWatched) {
+      setValidationError(
+        `Please watch at least ${VIDEO_COMPLETION_THRESHOLD_PERCENT}% of the story video before completing Day ${dayNumber} (currently ${videoProgressState.watchedPercent}% watched).`
+      );
+      const videoEl = document.querySelector('[data-testid="lesson-video-section"]');
+      videoEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // 1. Validate that all required questions have answers
+    const firstUnanswered = allValidQuestions.find(q => !isQuestionReadyOrAnswered(q));
+    if (firstUnanswered) {
+      const qIndex = allValidQuestions.findIndex(q => q.id === firstUnanswered.id) + 1;
+      const remaining = allValidQuestions.length - answeredCount;
+      setValidationError(
+        `Please complete all activities before submitting Day ${dayNumber}. You have ${remaining} unanswered ${
+          remaining === 1 ? 'question' : 'questions'
+        } (starting at Question #${qIndex}).`
+      );
+      const el = document.getElementById(`question-card-${firstUnanswered.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    setSubmittingAll(true);
+    try {
+      // 2. Evaluate and persist any question that hasn't been evaluated yet
+      for (const q of allValidQuestions) {
+        if (!evaluatedMap[q.id]) {
+          await evaluateAndPersistQuestion(q);
+        }
+      }
+
+      // 3. Complete the lesson and award XP
+      await onCompleteLesson();
+    } finally {
+      setSubmittingAll(false);
+    }
+  };
 
   const videoTranscript = String(
     vc.transcript ||
@@ -886,6 +979,31 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
     : coverImageUrl;
 
+  const syncVideoProgressToServer = useCallback(
+    (nextState: VideoProgressState) => {
+      const videoBlockKey = videoBlock?.id || selectedEpisode.id;
+      saveLocalVideoProgress(nextState);
+      const deltaPct = Math.abs(nextState.watchedPercent - lastSyncedVideoPctRef.current);
+      if (deltaPct >= 10 || (nextState.isCompleted && lastSyncedVideoPctRef.current < VIDEO_COMPLETION_THRESHOLD_PERCENT)) {
+        lastSyncedVideoPctRef.current = nextState.watchedPercent;
+        courseStudioService
+          .saveVideoProgress({
+            course_id: course.id,
+            episode_id: selectedEpisode.id,
+            video_key: videoBlockKey,
+            duration_seconds: nextState.durationSeconds,
+            watched_seconds: nextState.watchedSeconds,
+            watched_percent: nextState.watchedPercent,
+            watched_segments: nextState.watchedSegments,
+            max_allowed_position: nextState.maxAllowedPosition,
+            is_completed: nextState.isCompleted
+          })
+          .catch(() => {});
+      }
+    },
+    [course.id, selectedEpisode.id, videoBlock?.id]
+  );
+
   // Send playVideo command & subscribe to YouTube IFrame API events via postMessage
   const triggerYouTubePlayCommand = useCallback(() => {
     const win = ytIframeRef.current?.contentWindow;
@@ -897,6 +1015,34 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
       // ignore cross-origin postMessage errors
     }
   }, []);
+
+  const pauseActiveVideoPlayback = useCallback(() => {
+    if (htmlVideoRef.current && !htmlVideoRef.current.paused) {
+      htmlVideoRef.current.pause();
+    }
+    const win = ytIframeRef.current?.contentWindow;
+    if (win) {
+      try {
+        win.postMessage(JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*');
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Pause video playback and progress tracking when browser tab becomes hidden
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibilityChange = () => {
+      const hidden = document.hidden;
+      setIsTabHidden(hidden);
+      if (hidden) {
+        pauseActiveVideoPlayback();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pauseActiveVideoPlayback]);
 
   useEffect(() => {
     if (!videoPlaying || !videoId) return;
@@ -921,16 +1067,56 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
               : undefined;
 
           if (playerState === 1) {
-            // YT.PlayerState.PLAYING
             setVideoStatus('playing');
-            setVideoWatched(true);
           } else if (playerState === 2) {
-            // YT.PlayerState.PAUSED
             setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
           } else if (playerState === 0) {
-            // YT.PlayerState.ENDED
             setVideoStatus('completed');
-            setVideoWatched(true);
+          }
+
+          const currentTime =
+            typeof data.info?.currentTime === 'number' ? data.info.currentTime : undefined;
+          const duration =
+            typeof data.info?.duration === 'number' && data.info.duration > 0
+              ? data.info.duration
+              : undefined;
+
+          if (typeof currentTime === 'number') {
+            const prevTime = lastVideoTimeRef.current;
+            setVideoProgressState(prev => {
+              const tick = processVideoPlaybackTick(prev, {
+                currentTime,
+                previousTime: prevTime,
+                durationSeconds: duration ?? prev.durationSeconds,
+                isPlaying: playerState === 1 || playerState === undefined,
+                isTabVisible: typeof document !== 'undefined' ? !document.hidden : true
+              });
+              if (tick.seekBlocked && tick.snapBackTime !== null) {
+                setVideoSeekWarning(
+                  'Skipping ahead to unwatched sections is disabled. Please watch the video sequentially.'
+                );
+                lastVideoTimeRef.current = tick.snapBackTime;
+                const win = ytIframeRef.current?.contentWindow;
+                if (win) {
+                  try {
+                    win.postMessage(
+                      JSON.stringify({
+                        event: 'command',
+                        func: 'seekTo',
+                        args: [tick.snapBackTime, true]
+                      }),
+                      '*'
+                    );
+                  } catch {
+                    // ignore
+                  }
+                }
+              } else {
+                lastVideoTimeRef.current = currentTime;
+              }
+              syncVideoProgressToServer(tick.nextState);
+              return tick.nextState;
+            });
           }
         } else if (data.event === 'onError' || (data.info && typeof data.info.errorCode === 'number')) {
           setVideoStatus('error');
@@ -942,7 +1128,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
 
     window.addEventListener('message', handleYouTubeMessage);
     return () => window.removeEventListener('message', handleYouTubeMessage);
-  }, [videoPlaying, videoId, triggerYouTubePlayCommand]);
+  }, [videoPlaying, videoId, triggerYouTubePlayCommand, syncVideoProgressToServer]);
 
   const handleStartVideoPlayback = () => {
     if (!hasPlayableVideoSource) {
@@ -952,7 +1138,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     }
     setVideoPlaying(true);
     setVideoStatus('loading');
-    setVideoWatched(true);
   };
 
   const handleRetryVideoPlayback = () => {
@@ -965,22 +1150,24 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
     setVideoStatus('loading');
   };
 
-  // Section numbering (1 = Watch the Story, 2 = MCQs, 3 = Very Short Questions, 4 = Short Answer, 5 = Put the Events in Order)
+  // Section numbering (1 = Watch the Story, 2 = MCQs, 3 = Very Short Questions, 4 = Short Answer, 5 = Put the Events in Order, 6 = Writing)
   let sectionCounter = 1; // 1 is Watch the Story
   const mcqSectionNum = mcqQuestions.length > 0 ? ++sectionCounter : 0;
   const tfSectionNum = tfQuestions.length > 0 ? ++sectionCounter : 0;
   const shortSectionNum = shortQuestions.length > 0 ? ++sectionCounter : 0;
   const orderingSectionNum = orderingQuestions.length > 0 ? ++sectionCounter : 0;
+  const essaySectionNum = essayQuestions.length > 0 ? ++sectionCounter : 0;
 
   // Today's Objectives Live Checklist
   const allMcqsDone = mcqQuestions.length > 0 && mcqQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allTfsDone = tfQuestions.length > 0 && tfQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allShortsDone = shortQuestions.length > 0 && shortQuestions.every(q => isQuestionReadyOrAnswered(q));
   const allOrderingsDone = orderingQuestions.length > 0 && orderingQuestions.every(q => isQuestionReadyOrAnswered(q));
+  const allEssaysDone = essayQuestions.length > 0 && essayQuestions.every(q => isQuestionReadyOrAnswered(q));
 
   const objectivesList = useMemo(() => {
     return [
-      { label: 'Watch and understand the video', done: videoWatched || Boolean(isCompleted) },
+      { label: `Watch and understand the video (${VIDEO_COMPLETION_THRESHOLD_PERCENT}% required)`, done: videoWatched || Boolean(isCompleted) },
       ...(mcqQuestions.length > 0
         ? [{ label: `Answer ${mcqQuestions.length} MCQs`, done: allMcqsDone || Boolean(isCompleted) }]
         : []),
@@ -992,9 +1179,12 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
         : []),
       ...(orderingQuestions.length > 0
         ? [{ label: 'Put the events in correct order', done: allOrderingsDone || Boolean(isCompleted) }]
+        : []),
+      ...(essayQuestions.length > 0
+        ? [{ label: `Complete ${essayQuestions.length} writing assessment`, done: allEssaysDone || Boolean(isCompleted) }]
         : [])
     ];
-  }, [videoWatched, isCompleted, mcqQuestions, tfQuestions, shortQuestions, orderingQuestions, allMcqsDone, allTfsDone, allShortsDone, allOrderingsDone]);
+  }, [videoWatched, isCompleted, mcqQuestions, tfQuestions, shortQuestions, orderingQuestions, essayQuestions, allMcqsDone, allTfsDone, allShortsDone, allOrderingsDone, allEssaysDone]);
 
   const objectivesCompletedCount = useMemo(() => objectivesList.filter(o => o.done).length, [objectivesList]);
   const totalObjectivesCount = objectivesList.length;
@@ -1513,7 +1703,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       type="button"
                       onClick={() => {
                         setShowTranscript(prev => !prev);
-                        setVideoWatched(true);
                       }}
                       className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                         showTranscript
@@ -1562,7 +1751,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                             href={`https://www.youtube.com/watch?v=${videoId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={() => setVideoWatched(true)}
                             className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-sky-200 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 transition-all"
                           >
                             <span>Watch on YouTube</span>
@@ -1593,7 +1781,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         allowFullScreen
                         onLoad={() => {
                           setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
-                          setVideoWatched(true);
                           triggerYouTubePlayCommand();
                           setTimeout(triggerYouTubePlayCommand, 200);
                         }}
@@ -1622,16 +1809,77 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         playsInline
                         preload="auto"
                         onLoadStart={() => setVideoStatus('loading')}
-                        onLoadedMetadata={() => setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev))}
+                        onLoadedMetadata={e => {
+                          const v = e.currentTarget;
+                          setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev));
+                          if (Number.isFinite(v.duration) && v.duration > 0) {
+                            setVideoProgressState(prev => {
+                              const tick = processVideoPlaybackTick(prev, {
+                                currentTime: v.currentTime || 0,
+                                previousTime: lastVideoTimeRef.current,
+                                durationSeconds: v.duration,
+                                isPlaying: !v.paused,
+                                isTabVisible: typeof document !== 'undefined' ? !document.hidden : true
+                              });
+                              syncVideoProgressToServer(tick.nextState);
+                              return tick.nextState;
+                            });
+                          }
+                        }}
                         onCanPlay={() => setVideoStatus(prev => (prev === 'loading' ? 'playing' : prev))}
                         onPlaying={() => {
                           setVideoStatus('playing');
-                          setVideoWatched(true);
+                        }}
+                        onTimeUpdate={e => {
+                          const v = e.currentTarget;
+                          const prevTime = lastVideoTimeRef.current;
+                          setVideoProgressState(prev => {
+                            const tick = processVideoPlaybackTick(prev, {
+                              currentTime: v.currentTime,
+                              previousTime: prevTime,
+                              durationSeconds: v.duration || prev.durationSeconds,
+                              isPlaying: !v.paused,
+                              isTabVisible: typeof document !== 'undefined' ? !document.hidden : true
+                            });
+                            if (tick.seekBlocked && tick.snapBackTime !== null) {
+                              setVideoSeekWarning(
+                                'Skipping ahead to unwatched sections is disabled. Please watch the video sequentially.'
+                              );
+                              lastVideoTimeRef.current = tick.snapBackTime;
+                              v.currentTime = tick.snapBackTime;
+                            } else {
+                              lastVideoTimeRef.current = v.currentTime;
+                            }
+                            syncVideoProgressToServer(tick.nextState);
+                            return tick.nextState;
+                          });
+                        }}
+                        onSeeking={e => {
+                          const v = e.currentTarget;
+                          if (!videoProgressState.isCompleted && v.currentTime > videoProgressState.maxAllowedPosition + 2.5) {
+                            setVideoSeekWarning(
+                              'Skipping ahead to unwatched sections is disabled. Please watch the video sequentially.'
+                            );
+                            v.currentTime = videoProgressState.maxAllowedPosition;
+                          }
                         }}
                         onWaiting={() => setVideoStatus('loading')}
-                        onEnded={() => {
+                        onEnded={e => {
+                          const v = e.currentTarget;
                           setVideoStatus('completed');
-                          setVideoWatched(true);
+                          setVideoProgressState(prev => {
+                            const dur = v.duration || prev.durationSeconds;
+                            const tick = processVideoPlaybackTick(prev, {
+                              currentTime: dur,
+                              previousTime: lastVideoTimeRef.current,
+                              durationSeconds: dur,
+                              isPlaying: true,
+                              isTabVisible: typeof document !== 'undefined' ? !document.hidden : true
+                            });
+                            lastVideoTimeRef.current = dur;
+                            syncVideoProgressToServer(tick.nextState);
+                            return tick.nextState;
+                          });
                         }}
                         onError={() => setVideoStatus('error')}
                         className="w-full h-full object-contain bg-black"
@@ -1672,10 +1920,13 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       <div className="absolute bottom-0 inset-x-0 px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent flex items-center gap-3">
                         <Play className="w-4 h-4 text-white fill-current shrink-0" />
                         <div className="flex-1 h-1.5 rounded-full bg-white/25 overflow-hidden flex items-center">
-                          <div className="w-1/4 h-full bg-[#1d6ef2] rounded-full" />
+                          <div
+                            className="h-full bg-[#1d6ef2] rounded-full transition-all"
+                            style={{ width: `${Math.min(100, videoProgressState.watchedPercent)}%` }}
+                          />
                         </div>
                         <span className="text-[11px] font-mono text-slate-200 shrink-0">
-                          00:00 / 04:25
+                          {videoProgressState.watchedPercent}% / {VIDEO_COMPLETION_THRESHOLD_PERCENT}%
                         </span>
                         <Volume2 className="w-4 h-4 text-slate-200 shrink-0 hidden xs:block" />
                         <Maximize2 className="w-4 h-4 text-slate-200 shrink-0" />
@@ -1683,6 +1934,77 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                     </button>
                   )}
                 </div>
+
+                {/* Video Completion Enforcement Bar & Status Indicator */}
+                {hasPlayableVideoSource && (
+                  <div
+                    data-testid="video-completion-indicator"
+                    className="mx-3.5 sm:mx-0 mt-2 sm:mt-0 rounded-xl bg-[#081529]/90 border border-sky-400/25 px-3.5 py-2.5 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        {videoWatched ? (
+                          <span
+                            data-testid="video-completed-badge"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-black"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>
+                              Video Completed ({Math.max(videoProgressState.watchedPercent, VIDEO_COMPLETION_THRESHOLD_PERCENT)}% watched) • Assessment Unlocked
+                            </span>
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="video-progress-badge"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-200 font-bold"
+                          >
+                            <Lock className="w-3.5 h-3.5 text-amber-400" />
+                            <span>
+                              Watched: {videoProgressState.watchedPercent}% / {VIDEO_COMPLETION_THRESHOLD_PERCENT}% required to unlock activities
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-bold text-sky-200/80">
+                        {Math.round(videoProgressState.watchedSeconds)}s / {Math.round(videoProgressState.durationSeconds)}s verified
+                      </span>
+                    </div>
+
+                    <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden relative">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          videoWatched ? 'bg-emerald-500' : 'bg-gradient-to-r from-sky-500 to-blue-500'
+                        }`}
+                        style={{ width: `${Math.min(100, videoProgressState.watchedPercent)}%` }}
+                      />
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-amber-400/90"
+                        style={{ left: `${VIDEO_COMPLETION_THRESHOLD_PERCENT}%` }}
+                        title={`${VIDEO_COMPLETION_THRESHOLD_PERCENT}% required`}
+                      />
+                    </div>
+
+                    {videoSeekWarning && (
+                      <div
+                        data-testid="video-seek-blocked-banner"
+                        className="flex items-center gap-2 text-xs font-bold text-amber-200 bg-amber-500/15 border border-amber-400/35 rounded-lg px-3 py-1.5"
+                      >
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>{videoSeekWarning}</span>
+                      </div>
+                    )}
+
+                    {isTabHidden && (
+                      <div
+                        data-testid="video-tab-hidden-banner"
+                        className="flex items-center gap-2 text-xs font-bold text-sky-200 bg-sky-500/15 border border-sky-400/35 rounded-lg px-3 py-1.5"
+                      >
+                        <AlertCircle className="w-4 h-4 text-sky-400 shrink-0" />
+                        <span>Playback and progress tracking paused while browser tab is hidden.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Single Concise Video Footer Helper & Secondary YouTube Link */}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-sky-200/85 px-3.5 py-3 sm:px-1 sm:py-0">
@@ -1701,7 +2023,6 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                       href={`https://www.youtube.com/watch?v=${videoId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={() => setVideoWatched(true)}
                       className="inline-flex items-center gap-1 text-sky-300 hover:text-white font-bold underline-offset-2 hover:underline shrink-0"
                     >
                       <span>Watch on YouTube</span>
@@ -1737,6 +2058,26 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
               </div>
             </section>
 
+            {/* ============================================================ */}
+            {/* VIDEO COMPLETION GATE FOR LESSON ASSESSMENTS                 */}
+            {/* ============================================================ */}
+            {hasPlayableVideoSource && !videoWatched && allValidQuestions.length > 0 ? (
+              <section
+                data-testid="video-assessment-locked-gate"
+                className="rounded-2xl bg-[#0b1d38] border-2 border-amber-400/40 p-6 sm:p-8 text-center space-y-3 shadow-xl"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-white">
+                  Activities Locked — Watch the Story Video First
+                </h3>
+                <p className="text-xs sm:text-sm text-sky-200/85 font-medium max-w-lg mx-auto">
+                  Please watch at least {VIDEO_COMPLETION_THRESHOLD_PERCENT}% of the required story video above to unlock Day {dayNumber} activities and assessments (currently {videoProgressState.watchedPercent}% watched).
+                </p>
+              </section>
+            ) : (
+              <>
             {/* ============================================================ */}
             {/* SECTION 2: MULTIPLE CHOICE QUESTIONS                         */}
             {/* ============================================================ */}
@@ -2564,6 +2905,119 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
               </section>
             )}
 
+            {/* ============================================================ */}
+            {/* SECTION 8: WRITING / ESSAY ASSESSMENT                        */}
+            {/* ============================================================ */}
+            {essayQuestions.length > 0 && (
+              <section
+                data-testid="section-essay"
+                className="rounded-2xl bg-white text-slate-900 border border-slate-200/90 shadow-xl overflow-hidden"
+              >
+                <div
+                  onClick={() => toggleSection('essay')}
+                  className="px-4 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer sm:cursor-default"
+                >
+                  <div className="flex items-start sm:items-center justify-between gap-3 min-w-0">
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-[#13294b] text-white font-black text-sm flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 shadow-xs">
+                        {essaySectionNum}
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-snug">
+                          Writing Assessment
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5 leading-snug">
+                          Type your response independently (45–55 words required; pasting is disabled)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+                    <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[#0c2d57] text-xs font-extrabold">
+                      {essayQuestions.reduce((s, q) => s + (Number(q.points) || 20), 0)} marks
+                    </span>
+                  </div>
+                </div>
+
+                {!collapsedSections['essay'] && (
+                  <div className="p-4 sm:p-6 space-y-6">
+                    {essayQuestions.map(q => (
+                      <div key={q.id} id={`question-card-${q.id}`}>
+                        <EssayQuestion
+                          question={q}
+                          courseId={course.id}
+                          episodeId={selectedEpisode.id}
+                          lessonContext={cleanLessonTitle}
+                          selectedAnswer={draftAnswers[q.id] || (attemptsMap[q.id]?.student_answer ? String(attemptsMap[q.id].student_answer) : '')}
+                          feedback={
+                            evaluatedMap[q.id]
+                              ? { isCorrect: evaluatedMap[q.id].isCorrect, showExplanation: true }
+                              : null
+                          }
+                          onEvaluateAnswer={(_question, answer, _targetEl, evaluationResult, typingTelemetry) => {
+                            const maxScore = Number(q.points || 20);
+                            const isFlaggedAi =
+                              evaluationResult?.ai_flagged === true ||
+                              evaluationResult?.assessment_status === 'flagged_ai';
+                            const isProviderUnavailable =
+                              evaluationResult?.provider_unavailable === true ||
+                              evaluationResult?.assessment_status === 'provider_unavailable';
+                            const rawPct =
+                              evaluationResult && evaluationResult.max_score > 0
+                                ? evaluationResult.score / evaluationResult.max_score
+                                : 0;
+                            const scaledScore = isFlaggedAi || isProviderUnavailable ? 0 : Math.round(rawPct * maxScore);
+                            const passed = !isFlaggedAi && !isProviderUnavailable && scaledScore >= Math.round(maxScore * 0.6);
+
+                            if (!isFlaggedAi && !isProviderUnavailable) {
+                              setDraftAnswers(prev => ({ ...prev, [q.id]: answer }));
+                              setEvaluatedMap(prev => ({
+                                ...prev,
+                                [q.id]: {
+                                  isCorrect: passed,
+                                  pointsAwarded: scaledScore,
+                                  feedback: evaluationResult?.feedback || 'Evaluated',
+                                  submittedAnswer: answer
+                                }
+                              }));
+                            }
+
+                            if (onRecordAttempt) {
+                              onRecordAttempt(q, answer, passed, scaledScore, {
+                                questionId: q.id,
+                                answer,
+                                status: isFlaggedAi
+                                  ? 'flagged_ai'
+                                  : isProviderUnavailable
+                                  ? 'provider_unavailable'
+                                  : passed
+                                  ? 'correct'
+                                  : 'incorrect',
+                                score: scaledScore,
+                                maxScore,
+                                feedback: evaluationResult?.feedback || '',
+                                wordCount: evaluationResult?.word_count,
+                                aiLikelihoodPercentage: evaluationResult?.ai_likelihood_percentage,
+                                aiConfidence: evaluationResult?.confidence,
+                                assessmentStatus: evaluationResult?.assessment_status,
+                                aiExplanation: evaluationResult?.explanation,
+                                aiProvider: evaluationResult?.ai_provider,
+                                aiModel: evaluationResult?.model,
+                                typingTelemetry: typingTelemetry as unknown as Record<string, any>,
+                                evaluatedAt: evaluationResult?.evaluated_at
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+              </>
+            )}
+
             {/* Any extra custom teacher blocks (if added in studio) */}
             {extraBlocks.length > 0 && (
               <div className="space-y-4">
@@ -2594,14 +3048,14 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
             <section
               data-testid="section-submit-day"
               className={`rounded-2xl border-2 p-5 sm:p-7 shadow-2xl space-y-4 transition-all ${
-                answeredCount >= allValidQuestions.length && allValidQuestions.length > 0
+                videoWatched && answeredCount >= allValidQuestions.length && allValidQuestions.length > 0
                   ? 'bg-gradient-to-r from-[#0d2e29] via-[#0f3d36] to-[#0d2e29] border-emerald-400/40 shadow-[0_0_30px_rgba(16,185,129,0.15)]'
                   : 'bg-gradient-to-r from-[#0e2344] via-[#122b52] to-[#0e2344] border-sky-400/30'
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  {answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
+                  {videoWatched && answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-xs font-black uppercase tracking-wider">
@@ -2630,10 +3084,14 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
                         </span>
                       </div>
                       <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                        Complete all activities to finish Day {dayNumber}
+                        {!videoWatched && hasPlayableVideoSource
+                          ? `Watch at least ${VIDEO_COMPLETION_THRESHOLD_PERCENT}% of the video to unlock Day ${dayNumber}`
+                          : `Complete all activities to finish Day ${dayNumber}`}
                       </h3>
                       <p className="text-xs sm:text-sm text-sky-200/80 font-medium">
-                        {allValidQuestions.length - answeredCount === 1
+                        {!videoWatched && hasPlayableVideoSource
+                          ? `Video progress: ${videoProgressState.watchedPercent}% / ${VIDEO_COMPLETION_THRESHOLD_PERCENT}% required.`
+                          : allValidQuestions.length - answeredCount === 1
                           ? '1 activity remaining above.'
                           : `${allValidQuestions.length - answeredCount} activities remaining above.`}
                       </p>
@@ -2661,7 +3119,7 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
               )}
 
               {/* Submit Day Button (Two states: Complete vs Incomplete) */}
-              {answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
+              {videoWatched && answeredCount >= allValidQuestions.length && allValidQuestions.length > 0 ? (
                 <button
                   type="button"
                   data-testid="submit-day-button"
@@ -2704,8 +3162,10 @@ export const CreepyLegendsStudentView: React.FC<CreepyLegendsStudentViewProps> =
 
               <div className="flex items-center justify-between px-2 text-[11px] font-semibold text-sky-200/75">
                 <span>
-                  {answeredCount >= allValidQuestions.length
+                  {videoWatched && answeredCount >= allValidQuestions.length
                     ? 'All activities ready for submission'
+                    : !videoWatched && hasPlayableVideoSource
+                    ? `Watch ${VIDEO_COMPLETION_THRESHOLD_PERCENT}% of the video to unlock submission`
                     : `${allValidQuestions.length - answeredCount} activities left to complete`}
                 </span>
                 <span>

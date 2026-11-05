@@ -1260,6 +1260,9 @@ export function computeLessonScoreFromAttempts(questions, attempts) {
 
     const att = latestAttemptByQuestion.get(q.id);
     if (!att) continue;
+    if (att.submission_status === 'flagged_ai' || att.submission_status === 'provider_unavailable') {
+      continue;
+    }
     answeredCount++;
     if (att.is_correct) correctCount++;
     earnedScore += clampQuestionPoints(q, Boolean(att.is_correct), att.points_awarded);
@@ -1553,6 +1556,39 @@ export async function completeCourseLessonAndAwardPoints(supabaseClient, {
         lockErr.statusCode = 403;
         lockErr.dailyReleaseLocked = true;
         throw lockErr;
+      }
+    }
+
+    // 3b. Enforce server-side video completion if video progress records exist and are incomplete (< 90%)
+    if (existingProgress?.status !== 'completed') {
+      try {
+        const { data: videoRows } = await supabaseClient
+          .from('course_video_progress')
+          .select('video_block_id, watched_percent, completed')
+          .eq('student_id', cleanStudentId)
+          .eq('course_id', cleanCourseId)
+          .eq('episode_id', cleanEpisodeId);
+
+        if (Array.isArray(videoRows) && videoRows.length > 0) {
+          const incompleteVideo = videoRows.find(
+            row => !row.completed && Number(row.watched_percent || 0) < 90
+          );
+          if (incompleteVideo) {
+            const vidErr = new Error(
+              `Please watch at least 90% of the required lesson video before completing this lesson (currently ${Math.round(
+                Number(incompleteVideo.watched_percent || 0)
+              )}% watched).`
+            );
+            vidErr.statusCode = 403;
+            vidErr.videoCompletionRequired = true;
+            throw vidErr;
+          }
+        }
+      } catch (vidCheckErr) {
+        if (vidCheckErr?.videoCompletionRequired) {
+          throw vidCheckErr;
+        }
+        // Ignore if course_video_progress table is not yet migrated
       }
     }
 
