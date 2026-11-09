@@ -633,9 +633,16 @@ export const StudentCoursePlayerPage: React.FC = () => {
       (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
   );
 
+  const isBitzShortsCourse = Boolean(
+    course.id === 'e10c7ee9-0010-4000-8000-000000000010' ||
+      course.title?.toLowerCase().includes('strange mysteries') ||
+      isLearnWithShortsLesson
+  );
+
+  const useCinematicHeaderCourse = isAnnabelleCourse || isBitzShortsCourse;
+
   const isCreepyLegendsOrVideoCourse = Boolean(
-    !isAnnabelleCourse &&
-      !isLearnWithShortsLesson && (
+    !useCinematicHeaderCourse && (
         course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
           course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
           course.title?.toLowerCase().includes('creepy legends') ||
@@ -852,7 +859,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
         className={`course-reader-scroll flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden scroll-smooth box-border ${
           viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && !isCurrentEpisodeLocked
             ? 'bg-[#071326] p-0'
-            : viewMode === 'lesson' && isAnnabelleCourse
+            : viewMode === 'lesson' && useCinematicHeaderCourse
             ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
             : 'px-4 sm:px-6 md:px-8 pt-6 pb-24 sm:py-10 [--reader-gutter:1rem] sm:[--reader-gutter:1.5rem]'
         }`}
@@ -899,20 +906,20 @@ export const StudentCoursePlayerPage: React.FC = () => {
         ) : (
           <div
             className={
-              isAnnabelleCourse
+              useCinematicHeaderCourse
                 ? 'container-fluid course-reader px-0 pb-8'
                 : 'w-full max-w-[760px] mx-auto space-y-6 sm:space-y-8 pb-8 box-border min-w-0'
             }
           >
-            <div className={isAnnabelleCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
-            {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
-            {isAnnabelleCourse ? (
+            <div className={useCinematicHeaderCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
+            {/* ESTABLISHED CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
+            {useCinematicHeaderCourse ? (
               <AnnabelleCinematicHeader
                 course={course}
                 selectedEpisode={selectedEpisode}
                 allEpisodes={episodeNavItems}
                 completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
-                totalCount={roadmapData?.totalLessons || allEpisodes.length || 7}
+                totalCount={roadmapData?.totalLessons || allEpisodes.length || (isBitzShortsCourse ? 10 : 7)}
                 progressPercent={roadmapData?.progressPercent || 0}
                 onSelectEpisode={(ep, locked, unlockMsg) => {
                   if (locked && !isTeacherPreview) {
@@ -940,7 +947,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
             <article
               className={
-                isAnnabelleCourse
+                useCinematicHeaderCourse
                   ? 'course-reader__lesson w-full space-y-6 sm:space-y-8 box-border min-w-0'
                   : 'w-full mx-auto space-y-6 sm:space-y-10 box-border min-w-0'
               }
@@ -950,14 +957,14 @@ export const StudentCoursePlayerPage: React.FC = () => {
             <header
               id="student-lesson-header"
               className={
-                isAnnabelleCourse
+                useCinematicHeaderCourse
                   ? 'course-reader__header w-full text-left'
                   : 'w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-[var(--theme-border-subtle)] text-left'
               }
             >
               <div
                 className={
-                  isAnnabelleCourse
+                  useCinematicHeaderCourse
                     ? 'course-reader__meta flex flex-wrap items-center gap-2'
                     : 'flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-theme-accent reader-meta'
                 }
@@ -983,7 +990,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
 
               <h1
                 className={
-                  isAnnabelleCourse
+                  useCinematicHeaderCourse
                     ? 'course-reader__title text-left'
                     : 'font-extrabold tracking-tight text-theme-primary leading-[1.15] text-left reader-title'
                 }
@@ -991,7 +998,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                 {selectedEpisode.title}
               </h1>
 
-              {course.short_description && (
+              {course.short_description && !isBitzShortsCourse && (
                 <p
                   className={
                     isAnnabelleCourse
@@ -1061,7 +1068,7 @@ export const StudentCoursePlayerPage: React.FC = () => {
                   isLessonCompleted={isEpisodeCompleted}
                   onProgressChange={handleProgressChange}
                   onVideoCompletionChange={setVideoCompletionStatus}
-                  isCourseReader={isAnnabelleCourse}
+                  isCourseReader={useCinematicHeaderCourse}
                 />
 
             {/* ============================================================== */}

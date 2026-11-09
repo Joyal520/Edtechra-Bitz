@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Course, CourseEpisode } from '@/types/courseStudio';
 import { EpisodeNavItem } from '@/components/course-studio/CreepyLegendsStudentView';
+import { parseCoverPosition } from '@/utils/courseCover';
 
 interface AnnabelleCinematicHeaderProps {
   course: Course;
@@ -47,9 +48,18 @@ export const AnnabelleCinematicHeader: React.FC<AnnabelleCinematicHeaderProps> =
   const currentDayNumber = currentNav?.dayNumber || selectedEpisode.position || 1;
   const cleanLessonTitle = currentNav?.cleanTitle || selectedEpisode.title.replace(/^Day\s+\d+\s*:\s*/i, '');
 
-  const coverImageUrl =
+  const isBitzShortsCourse = Boolean(
+    course.id === 'e10c7ee9-0010-4000-8000-000000000010' ||
+      course.title?.toLowerCase().includes('strange mysteries')
+  );
+
+  const rawCoverUrl =
     course.cover_image_url ||
     '/courses/annabelle/annabelle-cover.png';
+  const hasExplicitPosition =
+    rawCoverUrl.includes('#pos=') || Boolean((course as any)?.cover_object_position);
+  const coverPos = parseCoverPosition(rawCoverUrl, (course as any)?.cover_object_position);
+  const coverImageUrl = coverPos.cleanUrl || rawCoverUrl;
 
   // Scroll active day pill into view smoothly
   useEffect(() => {
@@ -91,6 +101,7 @@ export const AnnabelleCinematicHeader: React.FC<AnnabelleCinematicHeaderProps> =
             alt={course.title}
             loading="eager"
             fetchPriority="high"
+            style={hasExplicitPosition ? { objectPosition: coverPos.objectPosition } : undefined}
             onError={e => {
               const target = e.currentTarget;
               if (!target.src.includes('annabelle-cover.png')) {
@@ -109,17 +120,17 @@ export const AnnabelleCinematicHeader: React.FC<AnnabelleCinematicHeaderProps> =
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full bg-slate-950/70 border border-sky-400/40 text-sky-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Interactive English Course</span>
+                <span>{isBitzShortsCourse ? 'Interactive Learning' : 'Interactive English Course'}</span>
               </span>
               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-950/70 border border-amber-300/45 text-amber-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs">
-                {course.grade_level || 'A1–A2'}
+                {isBitzShortsCourse ? 'English (A1–A2)' : course.grade_level || 'A1–A2'}
               </span>
               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-950/70 border border-indigo-400/40 text-indigo-200 text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-md shadow-xs">
-                7 Days
+                {isBitzShortsCourse ? `${totalCount || 10} Micro Lessons` : '7 Days'}
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-950/70 border border-emerald-400/40 text-emerald-200 text-[10px] sm:text-[11px] font-black backdrop-blur-md shadow-xs">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span>100 Marks / 400 Pts</span>
+                <span>{isBitzShortsCourse ? 'Mysteries & Science' : '100 Marks / 400 Pts'}</span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-950/70 border border-sky-400/35 text-sky-200 text-[10px] sm:text-[11px] font-black backdrop-blur-md shadow-xs">
                 <span>{completedCount}/{totalCount} Completed ({progressPercent}%)</span>
@@ -143,14 +154,18 @@ export const AnnabelleCinematicHeader: React.FC<AnnabelleCinematicHeaderProps> =
           <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 pt-5 sm:pt-8">
             <div className="space-y-1.5 max-w-2xl text-left">
               <p className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-sky-300 drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)]">
-                {course.subject || 'English Language'} • {totalCount} Days
+                {isBitzShortsCourse
+                  ? `English (A1–A2) • ${totalCount || 10} Micro Lessons • Mysteries & Science`
+                  : `${course.subject || 'English Language'} • ${totalCount} Days`}
               </p>
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] leading-[1.15]">
                 {course.title}
               </h1>
               <p className="text-xs sm:text-sm md:text-base text-slate-100 font-medium max-w-xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] leading-relaxed">
                 {course.short_description ||
-                  'Master the Simple Past Tense through the mystery of Annabelle. 7 days of grammar, stories, listening, video, and writing.'}
+                  (isBitzShortsCourse
+                    ? 'Explore ten mysterious stories, strange events and fascinating phenomena through short videos, simple English reading passages and interactive challenges.'
+                    : 'Master the Simple Past Tense through the mystery of Annabelle. 7 days of grammar, stories, listening, video, and writing.')}
               </p>
             </div>
 

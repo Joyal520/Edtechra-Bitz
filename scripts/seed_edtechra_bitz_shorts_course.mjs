@@ -910,6 +910,11 @@ async function seedCourse() {
         grade_level: 'A1–A2',
         course_type: 'full',
         status: 'published',
+        cover_image_url:
+          'https://pub-5b308f0d53ca4cf3bf3ad3630d2b86d5.r2.dev/courses/e10c7ee9-0010-4000-8000-000000000010/covers/548eea36-a825-4c69-9ca3-89fc06218c39/1794204587944_6bf46262.webp#pos=50,38',
+        cover_image_key:
+          'courses/e10c7ee9-0010-4000-8000-000000000010/covers/548eea36-a825-4c69-9ca3-89fc06218c39/1794204587944_6bf46262.webp',
+        cover_aspect_ratio: '16:9',
         estimated_hours: 3,
         daily_release_enabled: false,
         updated_at: new Date().toISOString()

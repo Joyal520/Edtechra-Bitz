@@ -829,9 +829,16 @@ export const CoursePreviewPage: React.FC = () => {
       (b.block_type === 'youtube_short' && Boolean((b.content as any)?.is_learn_with_shorts))
   );
 
+  const isBitzShortsCourse = Boolean(
+    course.id === 'e10c7ee9-0010-4000-8000-000000000010' ||
+      course.title?.toLowerCase().includes('strange mysteries') ||
+      isLearnWithShortsLesson
+  );
+
+  const useCinematicHeaderCourse = isAnnabelleCourse || isBitzShortsCourse;
+
   const isCreepyLegendsOrVideoCourse = Boolean(
-    !isAnnabelleCourse &&
-      !isLearnWithShortsLesson && (
+    !useCinematicHeaderCourse && (
         course.id === 'e10c7ee9-0012-4000-8000-000000000012' ||
           course.id === 'ca2e41a8-e929-43a6-940b-ab5ab00bc535' ||
           course.title?.toLowerCase().includes('creepy legends') ||
@@ -1445,10 +1452,10 @@ export const CoursePreviewPage: React.FC = () => {
       {/* 3. TWO-COLUMN LAYOUT: COURSE OUTLINE SIDEBAR (DESKTOP) + MAIN VIEWPORT */}
       <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
         {/* Course Studio Workspace Background Visual */}
-        <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} hideWatermarks={isAnnabelleCourse} />
+        <CourseStudioWorkspaceBackground isDark={activeTheme.isDark} hideWatermarks={useCinematicHeaderCourse} />
 
-        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy/non-Annabelle student mode) */}
-        {(isEditMode || (!isCreepyLegendsOrVideoCourse && !isAnnabelleCourse) || viewMode === 'roadmap') && (
+        {/* DESKTOP COURSE OUTLINE SIDEBAR (lg:flex in Edit mode or non-Creepy/non-Cinematic student mode) */}
+        {(isEditMode || (!isCreepyLegendsOrVideoCourse && !useCinematicHeaderCourse) || viewMode === 'roadmap') && (
           <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-[var(--theme-border-subtle)] bg-[var(--theme-surface-subtle)]/30 h-full overflow-hidden relative z-1">
             {renderCourseOutline(false)}
           </aside>
@@ -1461,7 +1468,7 @@ export const CoursePreviewPage: React.FC = () => {
           className={`course-reader-scroll flex-1 min-h-0 h-full overflow-y-auto overflow-x-hidden scroll-smooth box-border relative z-1 ${
             !isEditMode && viewMode === 'lesson' && isCreepyLegendsOrVideoCourse && selectedEpisode
               ? 'bg-[#071326] p-0'
-              : !isEditMode && viewMode === 'lesson' && isAnnabelleCourse && selectedEpisode
+              : !isEditMode && viewMode === 'lesson' && useCinematicHeaderCourse && selectedEpisode
               ? 'px-0 pt-4 pb-24 sm:py-7 md:py-9 [--reader-gutter:1.125rem] sm:[--reader-gutter:2rem]'
               : 'px-3 sm:px-6 md:px-8 pt-5 pb-24 sm:py-8 md:py-10 [--reader-gutter:0.75rem] sm:[--reader-gutter:1.5rem]'
           }`}
@@ -1525,14 +1532,14 @@ export const CoursePreviewPage: React.FC = () => {
           ) : (
             <div
               className={
-                !isEditMode && isAnnabelleCourse
+                !isEditMode && useCinematicHeaderCourse
                   ? 'container-fluid course-reader px-0'
-                  : `w-full ${isAnnabelleCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`
+                  : `w-full ${useCinematicHeaderCourse ? 'max-w-[1280px]' : 'max-w-[760px]'} mx-auto space-y-6 sm:space-y-8 box-border min-w-0`
               }
             >
-              <div className={!isEditMode && isAnnabelleCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
-              {/* ANNABELLE CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
-              {isAnnabelleCourse && selectedEpisode ? (
+              <div className={!isEditMode && useCinematicHeaderCourse ? 'course-reader__content space-y-6 sm:space-y-8' : 'space-y-6 sm:space-y-8'}>
+              {/* ESTABLISHED CINEMATIC HERO & DAY NAVIGATION OR STANDARD HERO BANNER */}
+              {useCinematicHeaderCourse && selectedEpisode ? (
                 <AnnabelleCinematicHeader
                   course={course}
                   selectedEpisode={{
@@ -1542,7 +1549,7 @@ export const CoursePreviewPage: React.FC = () => {
                   }}
                   allEpisodes={episodeNavItems}
                   completedCount={roadmapData?.completedLessons || completedEpisodeIds.size}
-                  totalCount={roadmapData?.totalLessons || allEpisodes.length || 7}
+                  totalCount={roadmapData?.totalLessons || allEpisodes.length || (isBitzShortsCourse ? 10 : 7)}
                   progressPercent={roadmapData?.progressPercent || 0}
                   onSelectEpisode={(ep, locked, unlockMsg) => {
                     if (locked) {
@@ -1569,9 +1576,9 @@ export const CoursePreviewPage: React.FC = () => {
 
               <article
                 className={
-                  !isEditMode && isAnnabelleCourse
+                  !isEditMode && useCinematicHeaderCourse
                     ? 'course-reader__lesson w-full space-y-6 sm:space-y-8 box-border min-w-0'
-                    : `w-full ${isAnnabelleCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`
+                    : `w-full ${useCinematicHeaderCourse ? 'max-w-[840px]' : 'w-full'} mx-auto space-y-6 sm:space-y-10 box-border min-w-0`
                 }
               >
 
@@ -1579,14 +1586,14 @@ export const CoursePreviewPage: React.FC = () => {
               <header
                 id="lesson-content-anchor"
                 className={
-                  !isEditMode && isAnnabelleCourse
+                  !isEditMode && useCinematicHeaderCourse
                     ? 'course-reader__header w-full text-left'
                     : 'w-full space-y-2 sm:space-y-3 pb-4 sm:pb-6 border-b border-current/15 text-left'
                 }
               >
                 <div
                   className={
-                    !isEditMode && isAnnabelleCourse
+                    !isEditMode && useCinematicHeaderCourse
                       ? 'course-reader__meta flex flex-wrap items-center gap-2'
                       : 'flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#026fc3] reader-meta'
                   }
@@ -1638,7 +1645,7 @@ export const CoursePreviewPage: React.FC = () => {
                 ) : (
                   <h1
                     className={
-                      !isEditMode && isAnnabelleCourse
+                      !isEditMode && useCinematicHeaderCourse
                         ? 'course-reader__title text-left'
                         : 'font-extrabold tracking-tight text-inherit leading-[1.15] text-left reader-title'
                     }
@@ -1647,7 +1654,7 @@ export const CoursePreviewPage: React.FC = () => {
                   </h1>
                 )}
 
-                {course.short_description && (
+                {course.short_description && !isBitzShortsCourse && (
                   <p
                     className={
                       !isEditMode && isAnnabelleCourse
@@ -1694,7 +1701,7 @@ export const CoursePreviewPage: React.FC = () => {
                 onOpenAiAssistant={() => setAiAssistantOpen(true)}
                 onOpenAddQuestions={() => setAddQuestionsModalOpen(true)}
                 themeId={effectiveThemeId}
-                isCourseReader={!isEditMode && isAnnabelleCourse}
+                isCourseReader={!isEditMode && useCinematicHeaderCourse}
               />
 
               {/* ============================================================== */}
